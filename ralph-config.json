@@ -1,0 +1,29 @@
+{
+  "prompt_file": "PROMPT.md",
+  "claude_args": [
+    "--output-format", "text"
+  ],
+  "user_defined_steps": {
+    "enabled": true,
+    "steps_file": "user-steps.md",
+    "append_to_prompt": true
+  },
+  "completion_criteria": {
+    "patterns": [
+      "<promise>COMPLETE</promise>",
+      "<status>DONE</status>",
+      "<finished>true</finished>"
+    ],
+    "user_defined_file": "completion-check.ps1"
+  },
+  "feedback": {
+    "enabled": true,
+    "feedback_file": "feedback.md",
+    "append_after_iteration": true
+  },
+  "logging": {
+    "enabled": true,
+    "log_dir": "logs",
+    "save_iterations": true
+  }
+}
