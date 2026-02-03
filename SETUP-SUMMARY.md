@@ -2,7 +2,7 @@
 
 ## 📋 Какво беше направено
 
-Ralph Wiggum структурата в `.claude/` папка беше адаптирана за **Test-Driven Development (TDD)** workflow с **visual feedback** чрез Playwright MCP.
+Ralph Wiggum структурата в `.claude/` папка беше адаптирана за **Test-Driven Development (TDD)** workflow с **visual feedback** чрез cursor-ide-browser MCP (Chrome DevTools Protocol).
 
 **Дата:** 2026-02-03
 
@@ -16,7 +16,7 @@ Ralph Wiggum структурата в `.claude/` папка беше адапт
 
 **Сега:** TDD-specific prompt с:
 - RED → GREEN → VISUAL → REFACTOR → DONE workflow
-- Playwright MCP instructions (cursor-ide-browser)
+- cursor-ide-browser MCP instructions (Chrome DevTools Protocol browser automation)
 - localStorage mock backend guidelines
 - Step-by-step execution (ONE step at a time)
 - Verification loop (iterate until tests pass AND design matches)
@@ -33,7 +33,7 @@ Ralph Wiggum структурата в `.claude/` папка беше адапт
 **Преди:** Generic user steps template
 
 **Сега:** Visual testing specifics:
-- Playwright MCP setup и usage
+- cursor-ide-browser MCP setup и usage (browser automation)
 - Visual Comparison Checklist (от design-mapping.json)
 - Common design fixes (colors, spacing, typography)
 - Testing Loop instructions (unit, E2E, linter, TypeScript)
@@ -209,7 +209,7 @@ Ralph сега следва този процес за всеки UI таsk:
 
    VISUAL Phase:
    └─ Start dev server
-   └─ Playwright MCP screenshot
+   └─ cursor-ide-browser MCP screenshot
    └─ Compare с designs/{id}.png
 
    REFACTOR Phase:
@@ -248,7 +248,7 @@ Ralph сега следва този процес за всеки UI таsk:
 1. Start dev server
    npm run dev → http://localhost:5173
 
-2. Navigate with Playwright MCP
+2. Navigate with cursor-ide-browser MCP
    CallMcpTool({
      server: "cursor-ide-browser",
      toolName: "browser_navigate",
@@ -320,7 +320,7 @@ Ralph mark-ва task като `"passes": true` САМО когато:
    - `npx playwright test` → all green
 
 2. ✅ **Visual match** (ако има `designReference`)
-   - Playwright MCP screenshot
+   - cursor-ide-browser MCP screenshot
    - Compare със `designs/{task_id}.png`
    - Layout ✅ Colors ✅ Typography ✅ Spacing ✅
 
@@ -330,8 +330,10 @@ Ralph mark-ва task като `"passes": true` САМО когато:
 4. ✅ **TypeScript compiles**
    - `npm run type-check` → no errors
 
-5. ✅ **Git committed**
-   - `git commit -m "feat(compositions): ..."`
+5. ✅ **Git committed with exact task description**
+   - Format: `git commit -m "feat(compositions): {task.description}"`
+   - Example: `git commit -m "feat(compositions): Create Dashboard List Page with compositions table"`
+   - Must use EXACT description from tasks.json!
 
 6. ✅ **Logged in activity.md**
    - TDD phases documented
@@ -470,9 +472,11 @@ compositionsApi.getAll() // → reads localStorage
 compositionsApi.create(data) // → writes localStorage
 ```
 
-### Playwright MCP
+### cursor-ide-browser MCP (Browser Automation)
 
 **Server name:** `cursor-ide-browser` (НЕ cursor-browser-extension!)
+**Technology:** Chrome DevTools Protocol
+**Purpose:** Browser automation, screenshots, interaction
 
 **Tools:**
 - `browser_navigate` - Navigate to URL

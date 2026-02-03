@@ -34,7 +34,8 @@ Ralph автономно работи върху 30 tasks за Compositions мо
 
 ✅ Пише failing tests (RED)
 ✅ Имплементира код (GREEN)  
-✅ Прави screenshot и сравнява с дизайн (VISUAL)
+✅ Прави screenshot с cursor-ide-browser MCP (VISUAL)
+✅ Сравнява с дизайн mockup (VISUAL)
 ✅ Итерира докато не съвпада (REFACTOR)
 ✅ Верифицира всичко и commit-ва (DONE)
 
@@ -82,7 +83,9 @@ Ralph маркира task като завършен САМО когато:
   ✅ Visual match (screenshot съвпада с design)
   ✅ Linter pass (npm run lint)
   ✅ TypeScript compiles (npm run type-check)
-  ✅ Git committed
+  ✅ Git committed С ТОЧНОТО ИМЕ НА FEATURE-А
+      Format: git commit -m "feat(compositions): {task description}"
+      Example: Task #11 → "feat(compositions): Create Dashboard List Page"
   ✅ Logged in activity.md
 
 

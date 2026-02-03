@@ -19,7 +19,7 @@
 **Remember:**
 - Execute steps ONE BY ONE
 - Follow TDD phases (RED → GREEN → VISUAL → REFACTOR → DONE)
-- Use Playwright MCP for screenshot comparison
+- Use cursor-ide-browser MCP for screenshot comparison
 - Iterate until tests pass AND design matches
 - Only mark `"passes": true` when ALL criteria met
 

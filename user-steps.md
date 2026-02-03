@@ -6,9 +6,10 @@
 
 ## 🎯 Visual Feedback Loop (КРИТИЧНО!)
 
-### Playwright MCP Setup
+### cursor-ide-browser MCP Setup
 
-**Server:** `cursor-ide-browser` (вече инсталиран)
+**Server:** `cursor-ide-browser` (Chrome DevTools Protocol browser automation)
+**Purpose:** Navigate pages, take screenshots, interact with UI
 
 ### Visual Testing Workflow
 
@@ -192,7 +193,7 @@ Verify: TEST PASSES ✅
   ↓
 Step 11.11 (VISUAL): Start dev server
   ↓
-Step 11.12 (VISUAL): Navigate with Playwright MCP
+Step 11.12 (VISUAL): Navigate with cursor-ide-browser MCP
   ↓
 Step 11.13 (VISUAL): Screenshot
   ↓
@@ -249,7 +250,14 @@ Step 11.17 (DONE): Final verification
 7. Did npm run type-check pass?
 8. Did I update tasks.json ("passes": true)?
 9. Did I log in activity.md?
-10. Did I git commit?
+10. Did I git commit with **EXACT task description** as commit message?
+
+**Git Commit Format:**
+```bash
+git commit -m "feat(compositions): {exact task.description from tasks.json}"
+```
+
+**Example:** Task #11 → `git commit -m "feat(compositions): Create Dashboard List Page with compositions table"`
 
 **IF ANY ANSWER IS NO → DO NOT MARK COMPLETE!**
 
@@ -328,9 +336,11 @@ Step 11.17 (DONE): Final verification
 ```xml
 <task-complete>
   <task-id>11</task-id>
+  <description>Create Dashboard List Page with compositions table</description>
   <tests>PASSED</tests>
   <visual>MATCHED</visual>
   <committed>YES</committed>
+  <commit-message>feat(compositions): Create Dashboard List Page with compositions table</commit-message>
 </task-complete>
 
 <status>CONTINUE</status>

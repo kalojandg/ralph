@@ -6,8 +6,9 @@
 
 1. ✅ Node.js and npm installed
 2. ✅ Claude CLI installed and configured (`claude --version`)
-3. ✅ Playwright MCP (cursor-ide-browser) configured
+3. ✅ cursor-ide-browser MCP configured (Chrome DevTools Protocol browser automation)
 4. ✅ Project dependencies installed (`npm install`)
+5. ✅ Model configured: Claude Opus 4 (see MODEL-INFO.md)
 
 ### Run Ralph Wiggum
 
@@ -144,9 +145,9 @@ Back to ralph.ps1 (next iteration or complete)
 
 ## 🎨 Visual Testing
 
-### Playwright MCP Usage
+### cursor-ide-browser MCP Usage
 
-Ralph will use `cursor-ide-browser` MCP to:
+Ralph will use `cursor-ide-browser` MCP (Chrome DevTools Protocol) to:
 
 1. **Navigate**: `browser_navigate` → http://localhost:5173/...
 2. **Screenshot**: `browser_screenshot` → auto-saved
@@ -255,8 +256,15 @@ Ralph marks `"passes": true` ONLY when:
 2. ✅ Visual match (screenshot comparison) - if designReference
 3. ✅ Linter passes (npm run lint)
 4. ✅ TypeScript compiles (npm run type-check)
-5. ✅ Git committed
+5. ✅ Git committed **with exact task description as commit message**
 6. ✅ Logged in activity.md
+
+**Git Commit Format:**
+```bash
+git commit -m "feat(compositions): {exact task.description from tasks.json}"
+```
+
+**Example:** Task #11 → `git commit -m "feat(compositions): Create Dashboard List Page with compositions table"`
 
 ### Overall Completion
 

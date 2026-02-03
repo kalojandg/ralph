@@ -5,7 +5,7 @@
 Автономен TDD (Test-Driven Development) workflow за Ralph Wiggum агента, специално конфигуриран за имплементация на БДЖ Compositions модул с:
 
 - ✅ **TDD Workflow**: RED → GREEN → VISUAL → REFACTOR → DONE
-- ✅ **Visual Testing**: Playwright MCP screenshot comparison с design mockups
+- ✅ **Visual Testing**: cursor-ide-browser MCP screenshot comparison с design mockups
 - ✅ **localStorage Mock Backend**: Няма реален API, всичко е в localStorage
 - ✅ **Step-by-step Execution**: Всяка стъпка се изпълнява поотделно с verification
 - ✅ **Fresh Context**: Всяка итерация с нов контекст (no bloat)
@@ -71,8 +71,11 @@ notepad ..\docs\composition\activity.md
 
 | Файл | Действие |
 |------|----------|
-| `START-RALPH-TDD.bat` | ⭐ Старт с 20 iterations |
+| `START-RALPH-TDD.bat` | ⭐ Старт с 20 iterations (всички tasks) |
 | `ralph-quick.bat` | Бързо тестване (10 iterations) |
+| `TEST-SINGLE-FEATURE.bat` | 🎯 Test ЕДИН фийчър (10-20 attempts) |
+| `QUICK-TEST-TASK-1.bat` | ⚡ Quick test Task #1 |
+| `TEST-PERFORMANCE.ps1` | 📊 Performance check (1 iteration) |
 | `CHECK-PROGRESS.bat` | Виж прогрес |
 | `VIEW-LOGS.bat` | Виж последния log |
 | `RESET-TASKS.bat` | ⚠️ Reset всички tasks (testing only) |
@@ -103,7 +106,7 @@ Ralph следва този цикъл за всеки UI таск:
 
 3. VISUAL Phase
    └─ Start dev server (npm run dev)
-   └─ Playwright MCP screenshot
+   └─ cursor-ide-browser MCP screenshot
    └─ Compare с designs/{task_id}.png
 
 4. REFACTOR Phase
@@ -132,13 +135,13 @@ Ralph следва този цикъл за всеки UI таск:
 | E2E | `npx playwright test` | User flows |
 | Linter | `npm run lint` | Code quality |
 | TypeScript | `npm run type-check` | Type safety |
-| Visual | Playwright MCP | Design match |
+| Visual | cursor-ide-browser MCP | Design match |
 
 ---
 
 ## 🎨 Visual Testing
 
-### Playwright MCP
+### cursor-ide-browser MCP (Browser Automation)
 
 Ralph използва `cursor-ide-browser` MCP за:
 
@@ -165,8 +168,15 @@ Ralph маркира `"passes": true` САМО когато:
 2. ✅ Visual match (screenshot comparison) - ако има designReference
 3. ✅ Linter passes (npm run lint)
 4. ✅ TypeScript compiles (npm run type-check)
-5. ✅ Git committed
+5. ✅ Git committed **с точното име на feature-а** (task description)
 6. ✅ Logged in activity.md
+
+**Git Commit Format:**
+```bash
+git commit -m "feat(compositions): {task.description from tasks.json}"
+```
+
+**Example:** Task #11 → `git commit -m "feat(compositions): Create Dashboard List Page with compositions table"`
 
 ---
 

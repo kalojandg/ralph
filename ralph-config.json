@@ -1,7 +1,9 @@
 {
   "prompt_file": "PROMPT.md",
   "claude_args": [
-    "--output-format", "text"
+    "--output-format", "text",
+    "--model", "claude-sonnet-4-20250514",
+    "--dangerously-skip-permissions"
   ],
   "user_defined_steps": {
     "enabled": true,
@@ -10,7 +12,9 @@
   },
   "completion_criteria": {
     "patterns": [
-      "<promise>COMPLETE</promise>",
+      "<promise>COMPLETE</promise>"
+    ],
+    "continue_patterns": [
       "<task-complete>",
       "<status>CONTINUE</status>"
     ],
