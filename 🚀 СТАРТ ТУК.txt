@@ -1,0 +1,137 @@
+╔═══════════════════════════════════════════════════════════╗
+║                                                           ║
+║   🚀 RALPH WIGGUM TDD - БДЖ COMPOSITIONS MODULE 🚀       ║
+║                                                           ║
+║   Test-Driven Development + Visual Feedback               ║
+║                                                           ║
+╚═══════════════════════════════════════════════════════════╝
+
+
+📋 БЪРЗО СТАРТИРАНЕ
+═══════════════════════════════════════════════════════════
+
+1️⃣  ДВОЙНО КЛИКНИ:
+
+    ⭐ START-RALPH-TDD.bat     (20 iterations - препоръчително)
+    
+    или
+    
+    ⚡ ralph-quick.bat          (10 iterations - бързо тестване)
+
+
+2️⃣  ПРОСЛЕДИ ПРОГРЕСА:
+
+    📊 CHECK-PROGRESS.bat      (Колко tasks са готови)
+    
+    📝 VIEW-LOGS.bat           (Последната итерация)
+
+
+═══════════════════════════════════════════════════════════
+🎯 КАКВО ПРАВИ RALPH?
+═══════════════════════════════════════════════════════════
+
+Ralph автономно работи върху 30 tasks за Compositions модул:
+
+✅ Пише failing tests (RED)
+✅ Имплементира код (GREEN)  
+✅ Прави screenshot и сравнява с дизайн (VISUAL)
+✅ Итерира докато не съвпада (REFACTOR)
+✅ Верифицира всичко и commit-ва (DONE)
+
+Всяка итерация = нов контекст → no bloat!
+
+
+═══════════════════════════════════════════════════════════
+📂 ВАЖНИ ФАЙЛОВЕ
+═══════════════════════════════════════════════════════════
+
+Конфигурация:
+  - PROMPT.md               (Main TDD instructions)
+  - user-steps.md           (Visual feedback details)
+  - ralph-config.json       (TDD configuration)
+
+Tasks & Progress:
+  - ..\docs\composition\tasks.json      (30 tasks)
+  - ..\docs\composition\activity.md     (Ralph updates)
+  - logs\                               (Iteration logs)
+
+Design Mockups:
+  - ..\docs\composition\designs\        (UI mockups)
+
+
+═══════════════════════════════════════════════════════════
+🧪 TDD WORKFLOW
+═══════════════════════════════════════════════════════════
+
+За всеки UI таск:
+
+  1. RED      → Write failing test
+  2. GREEN    → Implement code
+  3. VISUAL   → Screenshot + compare с mockup
+  4. REFACTOR → Iterate until matches
+  5. DONE     → Verify all + commit
+
+
+═══════════════════════════════════════════════════════════
+✅ SUCCESS CRITERIA
+═══════════════════════════════════════════════════════════
+
+Ralph маркира task като завършен САМО когато:
+
+  ✅ Tests pass (npm test + npx playwright test)
+  ✅ Visual match (screenshot съвпада с design)
+  ✅ Linter pass (npm run lint)
+  ✅ TypeScript compiles (npm run type-check)
+  ✅ Git committed
+  ✅ Logged in activity.md
+
+
+═══════════════════════════════════════════════════════════
+🚨 TROUBLESHOOTING
+═══════════════════════════════════════════════════════════
+
+Ако нещо не върви:
+
+  1. Спри Ralph (Ctrl+C)
+  2. Виж logs: VIEW-LOGS.bat
+  3. Виж прогрес: CHECK-PROGRESS.bat
+  4. Fix manually ако трябва
+  5. Restart: START-RALPH-TDD.bat
+
+
+═══════════════════════════════════════════════════════════
+📚 ДОКУМЕНТАЦИЯ
+═══════════════════════════════════════════════════════════
+
+  📖 README.md              (Тази папка - кратко guide)
+  📖 README-TDD.md          (Детайлно TDD guide)
+  📖 ..\docs\composition\   (Пълна документация)
+
+
+═══════════════════════════════════════════════════════════
+🎉 ГОТОВО!
+═══════════════════════════════════════════════════════════
+
+Двойно кликни на START-RALPH-TDD.bat и Ralph ще започне!
+
+Очаквай:
+  ⏱️  Време: ~30-40 часа работа
+  📊 Tasks: 30 total
+  🎨 Design: 10 UI mockups
+  🧪 Tests: Unit + E2E + Visual
+  💾 Backend: localStorage mock
+
+Ralph ще работи автономно докато:
+  - Всички 30 tasks са готови
+  - Всички tests минават
+  - Всички дизайни съвпадат
+  - Всички commits са направени
+
+Тогава ще видиш: <promise>COMPLETE</promise>
+
+
+═══════════════════════════════════════════════════════════
+
+HAPPY CODING! 🚀
+
+═══════════════════════════════════════════════════════════

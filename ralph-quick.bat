@@ -1,17 +1,23 @@
 @echo off
-REM Quick launch with default 10 iterations
+REM Quick TDD launch with 10 iterations (for testing)
 REM Double-click this file to start immediately
 
-echo ========================================
-echo Ralph Wiggum Algorithm (Quick Launch)
+echo.
+echo ╔════════════════════════════════════════════════════╗
+echo ║   Ralph Wiggum TDD (Quick Test - 10 iterations)   ║
+echo ╚════════════════════════════════════════════════════╝
+echo.
 echo Starting with 10 iterations...
-echo ========================================
+echo TDD: RED → GREEN → VISUAL → REFACTOR → DONE
 echo.
 
 powershell.exe -ExecutionPolicy Bypass -NoProfile -File "%~dp0ralph.ps1" 10
 
 echo.
-echo ========================================
-echo Execution completed
-echo ========================================
+echo ╔════════════════════════════════════════════════════╗
+echo ║              Quick Test Complete                   ║
+echo ╚════════════════════════════════════════════════════╝
+echo.
+echo Check: ..\docs\composition\activity.md for results
+echo.
 pause

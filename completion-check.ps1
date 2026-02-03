@@ -3,55 +3,54 @@ param(
     [string]$result
 )
 
-# Custom completion check logic
-# Return "COMPLETE" if done, "CONTINUE" if not
+# Check for completion promise
+if ($result -match '<promise>COMPLETE</promise>') {
+    Write-Output "COMPLETE"
+    exit 0
+}
 
-# Example 1: Check for specific keywords
-$completeKeywords = @(
-    "all tests passing",
-    "deployment successful",
-    "no errors found",
-    "task completed successfully"
-)
-
-foreach ($keyword in $completeKeywords) {
-    if ($result -match [regex]::Escape($keyword)) {
-        Write-Host "✓ Found completion keyword: $keyword" -ForegroundColor Green
-        Write-Output "COMPLETE"
-        exit 0
+# Check if tasks.json exists and all tasks have passes: true
+$tasksFile = "docs/composition/tasks.json"
+if (Test-Path $tasksFile) {
+    try {
+        $tasks = Get-Content $tasksFile -Raw | ConvertFrom-Json
+        
+        # Count total tasks
+        $totalTasks = $tasks.Count
+        
+        # Count completed tasks (passes: true)
+        $completedTasks = ($tasks | Where-Object { $_.passes -eq $true }).Count
+        
+        Write-Host "Progress: $completedTasks / $totalTasks tasks complete" -ForegroundColor Cyan
+        
+        # If all tasks complete
+        if ($completedTasks -eq $totalTasks) {
+            Write-Host "✓ All tasks marked as passes: true!" -ForegroundColor Green
+            Write-Output "COMPLETE"
+            exit 0
+        }
+        
+        # Find next incomplete task
+        $nextTask = $tasks | Where-Object { $_.passes -eq $false } | Select-Object -First 1
+        if ($nextTask) {
+            Write-Host "Next task: #$($nextTask.id) - $($nextTask.description)" -ForegroundColor Yellow
+        }
+        
+    } catch {
+        Write-Host "⚠️ Error reading tasks.json: $_" -ForegroundColor Yellow
     }
 }
 
-# Example 2: Check for error indicators (if found, NOT complete)
-$errorKeywords = @(
-    "error:",
-    "failed:",
-    "exception:",
-    "critical:"
-)
-
-foreach ($keyword in $errorKeywords) {
-    if ($result -match [regex]::Escape($keyword)) {
-        Write-Host "✗ Found error indicator: $keyword" -ForegroundColor Red
-        Write-Output "CONTINUE"
-        exit 0
-    }
+# Check for task-complete XML tag
+if ($result -match '<task-complete>') {
+    Write-Host "✓ Task completed in this iteration" -ForegroundColor Green
 }
 
-# Example 3: Check file existence (custom logic)
-# if (Test-Path "deployment-complete.flag") {
-#     Write-Output "COMPLETE"
-#     exit 0
-# }
+# Check for status tags
+if ($result -match '<status>CONTINUE</status>') {
+    Write-Host "Status: CONTINUE - more tasks remaining" -ForegroundColor Cyan
+}
 
-# Example 4: Call external API or service
-# $status = Invoke-RestMethod "http://localhost:3000/status"
-# if ($status.complete -eq $true) {
-#     Write-Output "COMPLETE"
-#     exit 0
-# }
-
-# Default: Continue
-Write-Host "⚠️ No completion criteria met" -ForegroundColor Yellow
+# Not complete - continue iterations
 Write-Output "CONTINUE"
-exit 0
+exit 1

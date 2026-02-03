@@ -1,25 +1,36 @@
 # Feedback from Previous Iteration
 
-(Този файл се попълва автоматично или ръчно след всяка итерация)
+<!-- This file will be auto-updated after each iteration -->
 
-## Status
+## Last Iteration Summary
 
-- [ ] Основната задача завършена
-- [ ] Тестовете минават
-- [ ] Документацията обновена
-
-## Observations
-
-(Какво забеляза от предишната итерация?)
-
-## Issues Found
-
-(Проблеми които трябва да се коригират)
-
-## Next Steps
-
-(Какво трябва да се направи в следващата итерация?)
+**Iteration:** [Auto-filled]  
+**Task Worked On:** [Auto-filled]  
+**Status:** [Auto-filled]
 
 ---
 
-💡 **Съвет**: Редактирай това ръчно между итерации за по-добър контрол!
+## Feedback for Next Iteration
+
+<!-- Ralph will read this before next iteration -->
+
+**Continue with:** Next task with `"passes": false` from tasks.json
+
+**Remember:**
+- Execute steps ONE BY ONE
+- Follow TDD phases (RED → GREEN → VISUAL → REFACTOR → DONE)
+- Use Playwright MCP for screenshot comparison
+- Iterate until tests pass AND design matches
+- Only mark `"passes": true` when ALL criteria met
+
+---
+
+## Issues from Last Iteration
+
+<!-- If there were any issues, they will be noted here -->
+
+[None yet]
+
+---
+
+**Next Action:** Find next task with `"passes": false` and start TDD cycle.

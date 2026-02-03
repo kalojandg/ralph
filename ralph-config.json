@@ -11,8 +11,8 @@
   "completion_criteria": {
     "patterns": [
       "<promise>COMPLETE</promise>",
-      "<status>DONE</status>",
-      "<finished>true</finished>"
+      "<task-complete>",
+      "<status>CONTINUE</status>"
     ],
     "user_defined_file": "completion-check.ps1"
   },
@@ -25,5 +25,23 @@
     "enabled": true,
     "log_dir": "logs",
     "save_iterations": true
+  },
+  "tdd": {
+    "enabled": true,
+    "test_commands": {
+      "unit": "npm test",
+      "e2e": "npx playwright test",
+      "lint": "npm run lint",
+      "typecheck": "npm run type-check"
+    },
+    "visual_testing": {
+      "mcp_server": "cursor-ide-browser",
+      "dev_server": "npm run dev",
+      "designs_folder": "docs/composition/designs"
+    },
+    "mock_backend": {
+      "type": "localStorage",
+      "storage_key": "bdz_mockups"
+    }
   }
 }
