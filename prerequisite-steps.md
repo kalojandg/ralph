@@ -1,69 +1,47 @@
 # Prerequisite Steps — Прочети ПРЕДИ имплементация
 
-Тези стъпки се изпълняват **ПРЕДИ** да започнеш да пишеш код по таска.
+След като избереш таск, но **ПРЕДИ** да пишеш код — изпълни тези стъпки.
 
 ---
 
-## Стъпка 0: Определи репото на таска
+## Стъпка 1: Определи repo на таска
 
-Всеки таск в `tasks.json` трябва да има поле `"repo"`:
+Погледни полето `"repo"` в таска от `tasks.json`:
 
-| repo стойност | Какво е | Working Directory |
-|---------------|---------|-------------------|
+| repo | Какво е | Working Directory |
+|------|---------|-------------------|
 | `frontend` | React Admin-App | `C:\Projects\BDZ Project\Admin-App` |
 | `backend` | .NET RailRunService | `C:\Projects\BDZ Project\OSDM-Src\DotNetServices\RailRunService` |
 | `database` | SQL seed data & schema | `C:\Projects\BDZ Project\OSDM-Src\SQLProjects\RailRunServiceSQL` |
 
-Ако `"repo"` липсва — определи го от описанието:
+Ако `"repo"` липсва — определи от описанието на таска:
 - UI компонент, страница, React тест → `frontend`
 - Endpoint, command, query, DTO, C# → `backend`
 - Seed data, миграция, SQL скрипт → `database`
 
 ---
 
-## Стъпка 1: Прочети САМО релевантния structure файл
+## Стъпка 2: Прочети САМО файла за твоето repo
 
-**КРИТИЧНО: Прочети ЕДИН файл — този, който отговаря на `repo`!**
+**НЕ чети другите! Прочети ЕДИНСТВЕНО файла, който съответства на `repo`:**
 
-| Ако `repo` е | Прочети този файл |
-|---------------|-------------------|
-| `frontend` | `C:/Projects/admin-app-frontend-structure.md` |
-| `backend` | `C:/Projects/railrun-backend-structure.md` |
-| `database` | `C:/Projects/railrun-database-guide.md` |
+- Ако `repo` = **frontend** →
+  ```bash
+  cat C:/Projects/admin-app-frontend-structure.md
+  ```
 
-```bash
-# Пример: таскът е frontend
-cat C:/Projects/admin-app-frontend-structure.md
-```
+- Ако `repo` = **backend** →
+  ```bash
+  cat C:/Projects/railrun-backend-structure.md
+  ```
 
----
-
-## Стъпка 2: Запомни ключовите конвенции
-
-### За `frontend`:
-- Imports: `@/` alias, никога `../../`
-- Компоненти: PascalCase `.tsx`, функционални, MUI
-- API response: `response.data.data` (double-wrap), exception: stationsApi → `response.data`
-- Тестове: `vi.mock('@/hooks/useTranslation')`, mock double-wrap
-- i18n: `t('domain.component.element')`, добави в **bg.json И en.json**
-- State: React Query за сървърни данни, Zustand за auth/i18n, Redux за UI, useState за локално
-
-### За `backend`:
-- Command + Handler в **един файл**
-- Return: `Result<T>.Ok(data)` или `Result<T>.Fail(msg, ErrorKind.NotFound)`
-- Controller наследява `RailRunControllerBase`, ползва `HandleResult(result)`
-- Status стрингове: **UPPERCASE** — `"DRAFT"`, `"ACTIVE"`, `"ARCHIVED"`
-- Нов feature: Domain Entity → EF Config → DTO → Command/Query → Controller → DI
-
-### За `database`:
-- `IsPhysicallyPresent = 1` за реални места, `0` за структурни елементи (стени, коридор)
-- Attributes: JSON array `["WINDOW","FACING_LEFT"]`
-- RendererType: `ROWS` (безкупеен), `CABIN` (спален), `COMPARTMENT` (купеен)
-- GridX/GridY трябва да са в рамките на CoachLayout.GridWidth / GridLength
-- `DefaultCapacity` = COUNT(IsPhysicallyPresent=1 AND type IN (SEAT, BERTH, COUCHETTE, WHEELCHAIR_SPACE))
+- Ако `repo` = **database** →
+  ```bash
+  cat C:/Projects/railrun-database-guide.md
+  ```
 
 ---
 
-## Стъпка 3: Премини към имплементация
+## Стъпка 3: Имплементирай
 
-Едва след като си прочел structure файла, започни TDD цикъла (RED → GREEN → VISUAL → REFACTOR) по стъпките в таска.
+Спазвай конвенциите от файла, който прочете. Започни TDD цикъла по стъпките в таска.
