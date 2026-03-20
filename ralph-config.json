@@ -5,6 +5,10 @@
     "--model", "claude-sonnet-4-20250514",
     "--dangerously-skip-permissions"
   ],
+  "prerequisite_steps": {
+    "enabled": true,
+    "steps_file": "prerequisite-steps.md"
+  },
   "user_defined_steps": {
     "enabled": true,
     "steps_file": "user-steps.md",
