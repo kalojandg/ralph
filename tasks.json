@@ -1,0 +1,2502 @@
+[
+  {
+    "id": 1,
+    "category": "setup",
+    "description": "Install @dnd-kit packages for drag-and-drop functionality",
+    "steps": [
+      {
+        "id": "1.1",
+        "action": "Run: npm install @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities"
+      },
+      {
+        "id": "1.2",
+        "action": "Verify packages load correctly in package.json"
+      },
+      {
+        "id": "1.3",
+        "action": "Test import: import { DndContext } from '@dnd-kit/core'"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 2,
+    "category": "setup",
+    "description": "Setup Playwright and Playwright MCP for E2E and visual testing",
+    "steps": [
+      {
+        "id": "2.1",
+        "action": "Run: npm install -D @playwright/test playwright"
+      },
+      {
+        "id": "2.2",
+        "action": "Run: npx playwright install chromium"
+      },
+      {
+        "id": "2.3",
+        "action": "Create playwright.config.ts with baseURL: http://localhost:5173"
+      },
+      {
+        "id": "2.4",
+        "action": "Verify Playwright MCP (cursor-ide-browser) is available in MCP servers"
+      },
+      {
+        "id": "2.5",
+        "action": "Test: Run simple Playwright test to verify setup"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 3,
+    "category": "setup",
+    "description": "Create localStorage mock backend service",
+    "steps": [
+      {
+        "id": "3.1",
+        "action": "Create src/services/mockBackend/mockStorage.ts"
+      },
+      {
+        "id": "3.2",
+        "action": "Implement MockStorageService class with methods: get, set, clear, seed"
+      },
+      {
+        "id": "3.3",
+        "action": "Create src/services/mockBackend/seedData.ts with sample compositions, wagons, wagonTypes, trains, stations"
+      },
+      {
+        "id": "3.4",
+        "action": "Implement auto-seed on first load (check if localStorage['bdz_mockups'] exists)"
+      },
+      {
+        "id": "3.5",
+        "action": "Export mockStorageService instance"
+      },
+      {
+        "id": "3.6",
+        "action": "Test: Clear localStorage, reload app, verify seed data loaded"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 4,
+    "category": "setup",
+    "description": "Create folder structure for compositions feature",
+    "steps": [
+      {
+        "id": "4.1",
+        "action": "Create src/app/features/compositions/ folder"
+      },
+      {
+        "id": "4.2",
+        "action": "Create subfolders: pages/, components/, hooks/, types/"
+      },
+      {
+        "id": "4.3",
+        "action": "Create src/api/compositions/ folder"
+      },
+      {
+        "id": "4.4",
+        "action": "Create __tests__/ folders for each: pages/__tests__, components/__tests__, hooks/__tests__"
+      },
+      {
+        "id": "4.5",
+        "action": "Verify folder structure matches frontend-requirements.md"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 5,
+    "category": "setup",
+    "description": "Create TypeScript types and interfaces",
+    "steps": [
+      {
+        "id": "5.1",
+        "action": "Create src/api/compositions/compositions.types.ts"
+      },
+      {
+        "id": "5.2",
+        "action": "Define interfaces: Composition, Wagon, WagonType, Train, Station"
+      },
+      {
+        "id": "5.3",
+        "action": "Define DTOs: CreateCompositionDto, UpdateCompositionDto, AddWagonDto, UpdateWagonDto"
+      },
+      {
+        "id": "5.4",
+        "action": "Define response types: CompositionsResponse, WagonsResponse"
+      },
+      {
+        "id": "5.5",
+        "action": "Create src/app/features/compositions/types/composition.types.ts for frontend-specific types"
+      },
+      {
+        "id": "5.6",
+        "action": "Export all types with proper TypeScript syntax"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 6,
+    "category": "setup",
+    "description": "Setup API layer with localStorage mock implementation",
+    "steps": [
+      {
+        "id": "6.1",
+        "action": "Create src/api/compositions/compositions.api.ts"
+      },
+      {
+        "id": "6.2",
+        "action": "Import mockStorageService from src/services/mockBackend/mockStorage.ts"
+      },
+      {
+        "id": "6.3",
+        "action": "Implement compositionsApi object with methods using localStorage: getAll, getById, create, update, delete, activate"
+      },
+      {
+        "id": "6.4",
+        "action": "Create src/api/compositions/wagons.api.ts"
+      },
+      {
+        "id": "6.5",
+        "action": "Implement wagonsApi object with localStorage methods: getAll, add, update, delete, reorder"
+      },
+      {
+        "id": "6.6",
+        "action": "Add proper TypeScript return types to all functions"
+      },
+      {
+        "id": "6.7",
+        "action": "Test: Call API methods, verify data persists in localStorage"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 7,
+    "category": "setup",
+    "description": "Setup Redux Toolkit slice for compositions",
+    "steps": [
+      {
+        "id": "7.1",
+        "action": "Create src/store/slices/compositions.slice.ts"
+      },
+      {
+        "id": "7.2",
+        "action": "Define initial state with: list, current, loading, error"
+      },
+      {
+        "id": "7.3",
+        "action": "Create async thunks: fetchCompositions, fetchCompositionById, createComposition, updateComposition, deleteComposition"
+      },
+      {
+        "id": "7.4",
+        "action": "Add reducers and extraReducers for async states"
+      },
+      {
+        "id": "7.5",
+        "action": "Export reducer and actions"
+      },
+      {
+        "id": "7.6",
+        "action": "Register slice in src/store/store.ts"
+      },
+      {
+        "id": "7.7",
+        "action": "Write unit test: src/store/slices/__tests__/compositions.slice.test.ts"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 8,
+    "category": "setup",
+    "description": "Setup Zustand store for UI state",
+    "steps": [
+      {
+        "id": "8.1",
+        "action": "Create src/store/compositions.store.ts"
+      },
+      {
+        "id": "8.2",
+        "action": "Define state: isDirty, draftWagons, selectedWagonId, isPropertiesPanelOpen, draggedWagonId"
+      },
+      {
+        "id": "8.3",
+        "action": "Define actions: setDirty, setDraftWagons, selectWagon, openPropertiesPanel, closePropertiesPanel, setDraggedWagon, reset"
+      },
+      {
+        "id": "8.4",
+        "action": "Export useCompositionEditorStore hook"
+      },
+      {
+        "id": "8.5",
+        "action": "Write unit test: src/store/__tests__/compositions.store.test.ts"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 9,
+    "category": "setup",
+    "description": "Add i18n keys for compositions module",
+    "steps": [
+      {
+        "id": "9.1",
+        "action": "Open src/locales/bg.json"
+      },
+      {
+        "id": "9.2",
+        "action": "Add 'compositions' namespace with keys from PRD.json i18nKeys section"
+      },
+      {
+        "id": "9.3",
+        "action": "Open src/locales/en.json"
+      },
+      {
+        "id": "9.4",
+        "action": "Add same keys with English translations"
+      },
+      {
+        "id": "9.5",
+        "action": "Test: import useTranslation and call t('compositions.title')"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 10,
+    "category": "setup",
+    "description": "Setup routing for compositions pages",
+    "steps": [
+      {
+        "id": "10.1",
+        "action": "Open src/app/routes/router.tsx"
+      },
+      {
+        "id": "10.2",
+        "action": "Add route: /compositions with index: true pointing to CompositionsListPage"
+      },
+      {
+        "id": "10.3",
+        "action": "Add route: /compositions/new pointing to CompositionEditorPage"
+      },
+      {
+        "id": "10.4",
+        "action": "Add route: /compositions/:id/edit pointing to CompositionEditorPage"
+      },
+      {
+        "id": "10.5",
+        "action": "Test navigation by manually entering URLs in browser"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 11,
+    "category": "feature",
+    "description": "Create Dashboard List Page component (TDD)",
+    "designReference": "docs/composition/designs/9.png",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "11.1",
+        "phase": "RED",
+        "action": "Write failing E2E test: tests/compositions/list-page.spec.ts - test that page renders title 'Композиции', 'Нова композиция' button exists, table visible"
+      },
+      {
+        "id": "11.2",
+        "phase": "RED",
+        "action": "Run test: npx playwright test - verify it FAILS"
+      },
+      {
+        "id": "11.3",
+        "phase": "GREEN",
+        "action": "Create src/app/features/compositions/pages/CompositionsListPage.tsx"
+      },
+      {
+        "id": "11.4",
+        "phase": "GREEN",
+        "action": "Import useTranslation, useNavigate, useSearchParams"
+      },
+      {
+        "id": "11.5",
+        "phase": "GREEN",
+        "action": "Create layout: Container with Paper, Typography for title, Button for 'New Composition'"
+      },
+      {
+        "id": "11.6",
+        "phase": "GREEN",
+        "action": "Add state for filters: trainId, dateFrom, dateTo, status"
+      },
+      {
+        "id": "11.7",
+        "phase": "GREEN",
+        "action": "Fetch compositions using React Query (from localStorage mock)"
+      },
+      {
+        "id": "11.8",
+        "phase": "GREEN",
+        "action": "Add loading skeleton using MUI Skeleton"
+      },
+      {
+        "id": "11.9",
+        "phase": "GREEN",
+        "action": "Add empty state: Box with icon + text + 'Create First Composition' button"
+      },
+      {
+        "id": "11.10",
+        "phase": "GREEN",
+        "action": "Run test: npx playwright test - verify it PASSES"
+      },
+      {
+        "id": "11.11",
+        "phase": "VISUAL",
+        "action": "Start dev server: npm run dev"
+      },
+      {
+        "id": "11.12",
+        "phase": "VISUAL",
+        "action": "Use Playwright MCP: browser_navigate to http://localhost:5173/compositions"
+      },
+      {
+        "id": "11.13",
+        "phase": "VISUAL",
+        "action": "Use Playwright MCP: browser_screenshot and save as screenshots/task-11-current.png"
+      },
+      {
+        "id": "11.14",
+        "phase": "VISUAL",
+        "action": "Compare screenshots/task-11-current.png with @docs/composition/designs/9.png visually"
+      },
+      {
+        "id": "11.15",
+        "phase": "REFACTOR",
+        "action": "If design doesn't match: adjust layout, colors, spacing, typography to match design"
+      },
+      {
+        "id": "11.16",
+        "phase": "REFACTOR",
+        "action": "Re-screenshot and compare until design matches"
+      },
+      {
+        "id": "11.17",
+        "phase": "DONE",
+        "action": "Verify: Tests pass AND design matches"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 12,
+    "category": "feature",
+    "description": "Create Composition List component with table (TDD)",
+    "designReference": "docs/composition/designs/10.png",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "12.1",
+        "phase": "RED",
+        "action": "Write failing component test: src/app/features/compositions/components/__tests__/CompositionList.test.tsx - test columns render, data displays, status chips correct"
+      },
+      {
+        "id": "12.2",
+        "phase": "RED",
+        "action": "Run test: npm test - verify it FAILS"
+      },
+      {
+        "id": "12.3",
+        "phase": "GREEN",
+        "action": "Create src/app/features/compositions/components/CompositionList.tsx"
+      },
+      {
+        "id": "12.4",
+        "phase": "GREEN",
+        "action": "Use MUI Table with columns: Train, Period, Status, Wagons, Actions"
+      },
+      {
+        "id": "12.5",
+        "phase": "GREEN",
+        "action": "Map over compositions array and render TableRow for each"
+      },
+      {
+        "id": "12.6",
+        "phase": "GREEN",
+        "action": "Add status badge using MUI Chip with color coding: gray (Draft), green (Active), default (Archived)"
+      },
+      {
+        "id": "12.7",
+        "phase": "GREEN",
+        "action": "Add action buttons: Edit (icon), Activate (button for Draft only), Delete (icon for Draft only)"
+      },
+      {
+        "id": "12.8",
+        "phase": "GREEN",
+        "action": "Implement onClick handlers: Edit navigates to /compositions/:id/edit"
+      },
+      {
+        "id": "12.9",
+        "phase": "GREEN",
+        "action": "Run test: npm test - verify it PASSES"
+      },
+      {
+        "id": "12.10",
+        "phase": "VISUAL",
+        "action": "Use Playwright MCP: browser_navigate to list page, browser_screenshot"
+      },
+      {
+        "id": "12.11",
+        "phase": "VISUAL",
+        "action": "Compare with @docs/composition/designs/10.png"
+      },
+      {
+        "id": "12.12",
+        "phase": "REFACTOR",
+        "action": "Adjust table styling to match design (colors, spacing, chip styles)"
+      },
+      {
+        "id": "12.13",
+        "phase": "DONE",
+        "action": "Verify: Tests pass AND design matches"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 13,
+    "category": "feature",
+    "description": "Create Composition Filters component (TDD)",
+    "designReference": "docs/composition/designs/11.png",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "13.1",
+        "phase": "RED",
+        "action": "Write failing test: test filters render, autocomplete works, date pickers work, status dropdown works"
+      },
+      {
+        "id": "13.2",
+        "phase": "GREEN",
+        "action": "Create CompositionFilters.tsx with MUI Autocomplete for train, DatePickers for dates, Select for status"
+      },
+      {
+        "id": "13.3",
+        "phase": "GREEN",
+        "action": "Connect filters to searchParams"
+      },
+      {
+        "id": "13.4",
+        "phase": "GREEN",
+        "action": "Run test: verify PASSES"
+      },
+      {
+        "id": "13.5",
+        "phase": "VISUAL",
+        "action": "Screenshot and compare with design 11.png"
+      },
+      {
+        "id": "13.6",
+        "phase": "REFACTOR",
+        "action": "Adjust layout to horizontal row, proper spacing"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 14,
+    "category": "feature",
+    "description": "Add Pagination to list page (TDD)",
+    "steps": [
+      {
+        "id": "14.1",
+        "phase": "RED",
+        "action": "Write test: pagination component renders, page changes work"
+      },
+      {
+        "id": "14.2",
+        "phase": "GREEN",
+        "action": "Import Pagination component, add pagination state, connect to API"
+      },
+      {
+        "id": "14.3",
+        "phase": "GREEN",
+        "action": "Run test: verify PASSES"
+      },
+      {
+        "id": "14.4",
+        "phase": "E2E",
+        "action": "Write E2E test: navigate to page 2, verify different data"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 15,
+    "category": "feature",
+    "description": "Create Create Composition Modal (TDD)",
+    "designReference": "docs/composition/designs/13.png",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "15.1",
+        "phase": "RED",
+        "action": "Write failing test: modal opens, form fields render, validation works, submit creates composition"
+      },
+      {
+        "id": "15.2",
+        "phase": "GREEN",
+        "action": "Create CreateCompositionModal.tsx with Dialog, form fields, validation"
+      },
+      {
+        "id": "15.3",
+        "phase": "GREEN",
+        "action": "Implement onSubmit: call compositionsApi.create, save to localStorage, navigate to editor"
+      },
+      {
+        "id": "15.4",
+        "phase": "GREEN",
+        "action": "Run test: verify PASSES"
+      },
+      {
+        "id": "15.5",
+        "phase": "VISUAL",
+        "action": "Screenshot modal and compare with design 13.png"
+      },
+      {
+        "id": "15.6",
+        "phase": "REFACTOR",
+        "action": "Adjust form layout, button placement, spacing"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 16,
+    "category": "feature",
+    "description": "Create Composition Editor Page layout (TDD)",
+    "designReference": "docs/composition/designs/14.png",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "16.1",
+        "phase": "RED",
+        "action": "Write E2E test: editor page loads, header visible, sidebar visible, canvas visible"
+      },
+      {
+        "id": "16.2",
+        "phase": "GREEN",
+        "action": "Create CompositionEditorPage.tsx with Grid layout: EditorHeader, WagonPalette (sidebar), WagonCanvas (main)"
+      },
+      {
+        "id": "16.3",
+        "phase": "GREEN",
+        "action": "Fetch composition by ID from localStorage mock"
+      },
+      {
+        "id": "16.4",
+        "phase": "GREEN",
+        "action": "Run test: verify PASSES"
+      },
+      {
+        "id": "16.5",
+        "phase": "VISUAL",
+        "action": "Use Playwright MCP: navigate to /compositions/1/edit, screenshot"
+      },
+      {
+        "id": "16.6",
+        "phase": "VISUAL",
+        "action": "Compare with design 14.png - check sidebar width (25%), canvas width (75%), layout"
+      },
+      {
+        "id": "16.7",
+        "phase": "REFACTOR",
+        "action": "Adjust Grid proportions, spacing to match design"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 17,
+    "category": "feature",
+    "description": "Create Editor Header component (TDD)",
+    "designReference": "docs/composition/designs/15.png",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "17.1",
+        "phase": "RED",
+        "action": "Write test: header displays train info, buttons render, Save/Activate handlers work"
+      },
+      {
+        "id": "17.2",
+        "phase": "GREEN",
+        "action": "Create EditorHeader.tsx with composition info, Back/Save/Activate buttons"
+      },
+      {
+        "id": "17.3",
+        "phase": "GREEN",
+        "action": "Run test: verify PASSES"
+      },
+      {
+        "id": "17.4",
+        "phase": "VISUAL",
+        "action": "Screenshot and compare with design 15.png - check alignment, button colors"
+      },
+      {
+        "id": "17.5",
+        "phase": "REFACTOR",
+        "action": "Adjust button spacing, typography"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 18,
+    "category": "feature",
+    "description": "Create Wagon Palette sidebar (TDD)",
+    "designReference": "docs/composition/designs/16.png",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "18.1",
+        "phase": "RED",
+        "action": "Write test: palette renders, wagon types display, filters work, drag works"
+      },
+      {
+        "id": "18.2",
+        "phase": "GREEN",
+        "action": "Create WagonPalette.tsx with wagon types from localStorage, filter dropdowns, drag source"
+      },
+      {
+        "id": "18.3",
+        "phase": "GREEN",
+        "action": "Run test: verify PASSES"
+      },
+      {
+        "id": "18.4",
+        "phase": "VISUAL",
+        "action": "Screenshot and compare with design 16.png - check card colors, layout"
+      },
+      {
+        "id": "18.5",
+        "phase": "REFACTOR",
+        "action": "Adjust card backgrounds (blue/purple/yellow), spacing"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 19,
+    "category": "feature",
+    "description": "Create Wagon Canvas drop zone (TDD)",
+    "designReference": "docs/composition/designs/17.png",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "19.1",
+        "phase": "RED",
+        "action": "Write E2E test: drag wagon from palette to canvas, verify wagon added"
+      },
+      {
+        "id": "19.2",
+        "phase": "GREEN",
+        "action": "Create WagonCanvas.tsx with DndContext, locomotive card, wagon cards, empty state"
+      },
+      {
+        "id": "19.3",
+        "phase": "GREEN",
+        "action": "Implement onDragEnd: add wagon to draftWagons in Zustand"
+      },
+      {
+        "id": "19.4",
+        "phase": "GREEN",
+        "action": "Run test: verify PASSES"
+      },
+      {
+        "id": "19.5",
+        "phase": "VISUAL",
+        "action": "Screenshot and compare with design 17.png - check locomotive position, wagon spacing"
+      },
+      {
+        "id": "19.6",
+        "phase": "REFACTOR",
+        "action": "Adjust horizontal layout, card spacing (16px gaps)"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 20,
+    "category": "feature",
+    "description": "Create Wagon Card component (TDD)",
+    "designReference": "docs/composition/designs/18.png",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "20.1",
+        "phase": "RED",
+        "action": "Write test: card renders with placard, type, capacity, status chip, menu icon"
+      },
+      {
+        "id": "20.2",
+        "phase": "GREEN",
+        "action": "Create WagonCard.tsx with MUI Card, color coding for borders and backgrounds"
+      },
+      {
+        "id": "20.3",
+        "phase": "GREEN",
+        "action": "Run test: verify PASSES"
+      },
+      {
+        "id": "20.4",
+        "phase": "VISUAL",
+        "action": "Screenshot and compare with design 18.png - check border colors (green/gray), backgrounds"
+      },
+      {
+        "id": "20.5",
+        "phase": "REFACTOR",
+        "action": "Adjust card dimensions (200x140px), left border thickness (4px), colors"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 21,
+    "category": "feature",
+    "description": "Implement drag-to-reorder wagons (TDD)",
+    "steps": [
+      {
+        "id": "21.1",
+        "phase": "RED",
+        "action": "Write E2E test: drag wagon #2 to position #1, verify order changed in Zustand"
+      },
+      {
+        "id": "21.2",
+        "phase": "GREEN",
+        "action": "Wrap wagon list in SortableContext, use useSortable in WagonCard"
+      },
+      {
+        "id": "21.3",
+        "phase": "GREEN",
+        "action": "Implement onDragEnd: update order in draftWagons"
+      },
+      {
+        "id": "21.4",
+        "phase": "GREEN",
+        "action": "Run test: verify PASSES"
+      },
+      {
+        "id": "21.5",
+        "phase": "PERFORMANCE",
+        "action": "Test drag-to-reorder performance: should be smooth 60 FPS"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 22,
+    "category": "feature",
+    "description": "Create Wagon Properties Panel drawer (TDD)",
+    "designReference": "docs/composition/designs/20.png",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "22.1",
+        "phase": "RED",
+        "action": "Write test: drawer opens on wagon click, form fields render, validation works, Save/Delete work"
+      },
+      {
+        "id": "22.2",
+        "phase": "GREEN",
+        "action": "Create WagonPropertiesPanel.tsx with MUI Drawer, React Hook Form, Zod validation"
+      },
+      {
+        "id": "22.3",
+        "phase": "GREEN",
+        "action": "Implement Save: update wagon in draftWagons, close drawer"
+      },
+      {
+        "id": "22.4",
+        "phase": "GREEN",
+        "action": "Implement Delete: show confirmation, remove from draftWagons"
+      },
+      {
+        "id": "22.5",
+        "phase": "GREEN",
+        "action": "Run test: verify PASSES"
+      },
+      {
+        "id": "22.6",
+        "phase": "VISUAL",
+        "action": "Screenshot drawer and compare with design 20.png - check width (400px), form layout"
+      },
+      {
+        "id": "22.7",
+        "phase": "REFACTOR",
+        "action": "Adjust drawer width, form field spacing, button placement"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 23,
+    "category": "feature",
+    "description": "Implement Save Changes logic (TDD)",
+    "steps": [
+      {
+        "id": "23.1",
+        "phase": "RED",
+        "action": "Write E2E test: add wagon, edit wagon, delete wagon, click Save, verify localStorage updated"
+      },
+      {
+        "id": "23.2",
+        "phase": "GREEN",
+        "action": "In EditorHeader Save handler: diff draftWagons vs original, call API methods"
+      },
+      {
+        "id": "23.3",
+        "phase": "GREEN",
+        "action": "On success: refetch from localStorage, reset Zustand, setDirty(false)"
+      },
+      {
+        "id": "23.4",
+        "phase": "GREEN",
+        "action": "Run test: verify PASSES"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 24,
+    "category": "feature",
+    "description": "Implement Activate Composition (TDD)",
+    "steps": [
+      {
+        "id": "24.1",
+        "phase": "RED",
+        "action": "Write test: click Activate button, confirmation dialog appears, composition status changes to Active"
+      },
+      {
+        "id": "24.2",
+        "phase": "GREEN",
+        "action": "Implement Activate handler with validation, update status in localStorage"
+      },
+      {
+        "id": "24.3",
+        "phase": "GREEN",
+        "action": "Run test: verify PASSES"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 25,
+    "category": "feature",
+    "description": "Implement Unsaved Changes Warning (TDD)",
+    "steps": [
+      {
+        "id": "25.1",
+        "phase": "RED",
+        "action": "Write test: make changes, try to navigate away, warning dialog appears"
+      },
+      {
+        "id": "25.2",
+        "phase": "GREEN",
+        "action": "Use useBeforeUnload and useBlocker, show confirmation dialog"
+      },
+      {
+        "id": "25.3",
+        "phase": "GREEN",
+        "action": "Run test: verify PASSES"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 26,
+    "category": "testing",
+    "description": "Create comprehensive E2E test suite",
+    "steps": [
+      {
+        "id": "26.1",
+        "action": "Write E2E test: Full flow - create composition, add wagons, reorder, edit, save, activate"
+      },
+      {
+        "id": "26.2",
+        "action": "Write E2E test: Filter compositions by train, date, status"
+      },
+      {
+        "id": "26.3",
+        "action": "Write E2E test: Delete composition (Draft only)"
+      },
+      {
+        "id": "26.4",
+        "action": "Write E2E test: Validation errors (duplicate placard, invalid dates)"
+      },
+      {
+        "id": "26.5",
+        "action": "Run full E2E suite: npx playwright test --project=chromium"
+      },
+      {
+        "id": "26.6",
+        "action": "Generate Playwright HTML report: npx playwright show-report"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 27,
+    "category": "testing",
+    "description": "Visual regression testing with Playwright",
+    "steps": [
+      {
+        "id": "27.1",
+        "action": "For each UI component (tasks 11-22), take reference screenshot using Playwright MCP"
+      },
+      {
+        "id": "27.2",
+        "action": "Store screenshots in tests/screenshots/baseline/"
+      },
+      {
+        "id": "27.3",
+        "action": "Create Playwright visual regression test that compares current vs baseline"
+      },
+      {
+        "id": "27.4",
+        "action": "Run visual tests: npx playwright test --grep @visual"
+      },
+      {
+        "id": "27.5",
+        "action": "Review diffs in tests/screenshots/diff/ folder"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 28,
+    "category": "polish",
+    "description": "Optimize performance and accessibility",
+    "steps": [
+      {
+        "id": "28.1",
+        "action": "Add React.memo to expensive components (WagonCard, WagonCanvas)"
+      },
+      {
+        "id": "28.2",
+        "action": "Test drag-and-drop performance: verify 60 FPS (use browser DevTools Performance)"
+      },
+      {
+        "id": "28.3",
+        "action": "Add ARIA labels to all interactive elements"
+      },
+      {
+        "id": "28.4",
+        "action": "Test keyboard navigation: Tab through all controls, Enter/Space activate"
+      },
+      {
+        "id": "28.5",
+        "action": "Test Escape key: closes modals/drawers"
+      },
+      {
+        "id": "28.6",
+        "action": "Run Lighthouse audit: aim for >90 Accessibility score"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 29,
+    "category": "polish",
+    "description": "Final visual polish and consistency check",
+    "steps": [
+      {
+        "id": "29.1",
+        "action": "Review all components against design mockups (docs/composition/designs/)"
+      },
+      {
+        "id": "29.2",
+        "action": "Verify color consistency: status badges, wagon borders, backgrounds match design-mapping.json"
+      },
+      {
+        "id": "29.3",
+        "action": "Verify typography: h4, h6, body1, caption sizes match designs"
+      },
+      {
+        "id": "29.4",
+        "action": "Verify spacing: 16px gaps, proper padding, drawer width 400px"
+      },
+      {
+        "id": "29.5",
+        "action": "Test responsive behavior: desktop (1280px+), tablet (960-1279px)"
+      },
+      {
+        "id": "29.6",
+        "action": "Take final screenshots of all pages for documentation"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 30,
+    "category": "documentation",
+    "description": "Update documentation with implementation details",
+    "steps": [
+      {
+        "id": "30.1",
+        "action": "Update activity.md with all completed tasks"
+      },
+      {
+        "id": "30.2",
+        "action": "Document localStorage schema in docs/composition/localStorage-schema.md"
+      },
+      {
+        "id": "30.3",
+        "action": "Document test coverage: unit tests, E2E tests, visual tests"
+      },
+      {
+        "id": "30.4",
+        "action": "Create docs/composition/TESTING.md with instructions to run tests"
+      },
+      {
+        "id": "30.5",
+        "action": "Update README.md with completed features and screenshots"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 31,
+    "description": "Create Seat Management data types and interfaces",
+    "priority": "high",
+    "tddWorkflow": false,
+    "designReference": null,
+    "steps": [
+      {
+        "id": "31.1",
+        "action": "Create src/app/features/compositions/types/seat.types.ts with Seat, CoachLayout, SeatStatus, SeatProperties"
+      },
+      {
+        "id": "31.2",
+        "action": "Add OSDM-compliant AccommodationType enum (SEAT, BERTH, COUCHETTE, WHEELCHAIR)"
+      },
+      {
+        "id": "31.3",
+        "action": "Define Seat entity: { id, number, coordinates: {x, y}, type, properties[], status, wagonId }"
+      },
+      {
+        "id": "31.4",
+        "action": "Define CoachLayout entity: { id, seriesName, class, capacity, layoutData, missingSeats[] }"
+      },
+      {
+        "id": "31.5",
+        "action": "Add seat status enum: AVAILABLE, BOOKED, BLOCKED, LOCKED"
+      },
+      {
+        "id": "31.6",
+        "action": "Add seat properties enum: WINDOW, AISLE, TABLE, FACING, QUIET_ZONE, POWER_SOCKET"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 32,
+    "description": "Create Coach Layout seed data for common wagon series",
+    "priority": "high",
+    "tddWorkflow": false,
+    "designReference": null,
+    "steps": [
+      {
+        "id": "32.1",
+        "action": "Create src/services/mockBackend/coachLayouts.data.ts"
+      },
+      {
+        "id": "32.2",
+        "action": "Add Series 21-43 layout (2nd class, 83 seats, missing: 32, 45, 48, 82, 95)"
+      },
+      {
+        "id": "32.3",
+        "action": "Add Series 15-63 layout (1st class, 58 seats, missing: 13, 104)"
+      },
+      {
+        "id": "32.4",
+        "action": "Add Series 70-71 WLAB sleeper layout (30 berths, 10 cabins × 3)"
+      },
+      {
+        "id": "32.5",
+        "action": "Define seat coordinates (x, y) for visual rendering in landscape mode"
+      },
+      {
+        "id": "32.6",
+        "action": "Update mockStorage.ts to include coachLayouts in seed data"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 33,
+    "description": "Create Seat Map Canvas component (TDD)",
+    "priority": "high",
+    "tddWorkflow": true,
+    "designReference": "docs/composition/designs/33.png",
+    "steps": [
+      {
+        "id": "33.1",
+        "phase": "RED",
+        "action": "Write failing test in src/app/features/compositions/components/__tests__/SeatMapCanvas.test.tsx"
+      },
+      {
+        "id": "33.2",
+        "phase": "RED",
+        "action": "Test cases: renders coach layout, displays seats with correct coordinates, shows seat numbers, handles seat click events"
+      },
+      {
+        "id": "33.3",
+        "phase": "GREEN",
+        "action": "Create src/app/features/compositions/components/SeatMapCanvas.tsx"
+      },
+      {
+        "id": "33.4",
+        "phase": "GREEN",
+        "action": "Render SVG/Canvas with seats positioned according to (x, y) coordinates"
+      },
+      {
+        "id": "33.5",
+        "phase": "GREEN",
+        "action": "Display seat icons based on AccommodationType (seat/berth/wheelchair)"
+      },
+      {
+        "id": "33.6",
+        "phase": "GREEN",
+        "action": "Show seat numbers on each seat icon"
+      },
+      {
+        "id": "33.7",
+        "phase": "GREEN",
+        "action": "Add onClick handler for seat selection"
+      },
+      {
+        "id": "33.8",
+        "phase": "VISUAL",
+        "action": "Start dev server and navigate to seat map test page"
+      },
+      {
+        "id": "33.9",
+        "phase": "VISUAL",
+        "action": "Take screenshot with cursor-ide-browser MCP and compare with design mockup"
+      },
+      {
+        "id": "33.10",
+        "phase": "REFACTOR",
+        "action": "Adjust layout to match design (seat size, spacing, alignment)"
+      },
+      {
+        "id": "33.11",
+        "phase": "DONE",
+        "action": "Verify all tests pass, visual match confirmed, lint passes"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 34,
+    "description": "Implement seat status indicators and legend (TDD)",
+    "priority": "high",
+    "tddWorkflow": true,
+    "designReference": "docs/composition/designs/34.png",
+    "steps": [
+      {
+        "id": "34.1",
+        "phase": "RED",
+        "action": "Write failing test in src/app/features/compositions/components/__tests__/SeatMapCanvas.test.tsx"
+      },
+      {
+        "id": "34.2",
+        "phase": "RED",
+        "action": "Test cases: seats render with correct status colors, legend displays all statuses, status changes reflect in UI"
+      },
+      {
+        "id": "34.3",
+        "phase": "GREEN",
+        "action": "Add color mapping: AVAILABLE=green, BOOKED=red, BLOCKED=gray, LOCKED=blue"
+      },
+      {
+        "id": "34.4",
+        "phase": "GREEN",
+        "action": "Apply status colors to seat icons in SeatMapCanvas"
+      },
+      {
+        "id": "34.5",
+        "phase": "GREEN",
+        "action": "Create SeatLegend component showing all status types with colors"
+      },
+      {
+        "id": "34.6",
+        "phase": "GREEN",
+        "action": "Add seat property icons (window, power socket, table) as overlays"
+      },
+      {
+        "id": "34.7",
+        "phase": "VISUAL",
+        "action": "Screenshot comparison with design mockup 34.png"
+      },
+      {
+        "id": "34.8",
+        "phase": "REFACTOR",
+        "action": "Match exact colors from design (green=#4caf50, red=#f44336, gray=#9e9e9e, blue=#2196f3)"
+      },
+      {
+        "id": "34.9",
+        "phase": "DONE",
+        "action": "Verify tests pass and visual design matches"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 35,
+    "description": "Add seat selection and blocking operations (TDD)",
+    "priority": "high",
+    "tddWorkflow": true,
+    "designReference": "docs/composition/designs/35.png",
+    "steps": [
+      {
+        "id": "35.1",
+        "phase": "RED",
+        "action": "Write failing E2E test in tests/seat-management/seat-blocking.spec.ts"
+      },
+      {
+        "id": "35.2",
+        "phase": "RED",
+        "action": "Test: admin can select seat, click 'Block' button, enter reason, seat becomes BLOCKED"
+      },
+      {
+        "id": "35.3",
+        "phase": "GREEN",
+        "action": "Add seat selection state management (Zustand store)"
+      },
+      {
+        "id": "35.4",
+        "phase": "GREEN",
+        "action": "Create SeatActionsToolbar component with Block/Unblock buttons"
+      },
+      {
+        "id": "35.5",
+        "phase": "GREEN",
+        "action": "Add BlockSeatDialog modal requiring reason input"
+      },
+      {
+        "id": "35.6",
+        "phase": "GREEN",
+        "action": "Implement seatsApi.blockSeat(wagonId, seatNumber, reason) in API layer"
+      },
+      {
+        "id": "35.7",
+        "phase": "GREEN",
+        "action": "Add validation: cannot block BOOKED seats (show error dialog)"
+      },
+      {
+        "id": "35.8",
+        "phase": "GREEN",
+        "action": "Implement multi-select (Shift+Click, Ctrl+Click) for batch blocking"
+      },
+      {
+        "id": "35.9",
+        "phase": "VISUAL",
+        "action": "Screenshot comparison with design mockup 35.png"
+      },
+      {
+        "id": "35.10",
+        "phase": "DONE",
+        "action": "Verify E2E tests pass, operations work correctly"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 36,
+    "description": "Implement 70% filling algorithm",
+    "priority": "high",
+    "tddWorkflow": false,
+    "designReference": null,
+    "steps": [
+      {
+        "id": "36.1",
+        "action": "Create src/services/seatAllocation/allocationAlgorithm.ts"
+      },
+      {
+        "id": "36.2",
+        "action": "Implement calculateWagonOccupancy(wagonId): number (returns 0-100%)"
+      },
+      {
+        "id": "36.3",
+        "action": "Implement getNextAvailableSeat(compositionId, classType): Seat | null"
+      },
+      {
+        "id": "36.4",
+        "action": "Apply 70% rule: if current wagon < 70%, allocate there; else open next wagon"
+      },
+      {
+        "id": "36.5",
+        "action": "Write unit tests in __tests__/allocationAlgorithm.test.ts"
+      },
+      {
+        "id": "36.6",
+        "action": "Test scenarios: first wagon filling, threshold crossing, all wagons full"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 37,
+    "description": "Add seat allocation validation rules",
+    "priority": "high",
+    "tddWorkflow": false,
+    "designReference": null,
+    "steps": [
+      {
+        "id": "37.1",
+        "action": "Create src/services/seatAllocation/validationRules.ts"
+      },
+      {
+        "id": "37.2",
+        "action": "Implement validateSeatBlocking(seatId): {valid: boolean, reason?: string}"
+      },
+      {
+        "id": "37.3",
+        "action": "Rule: Cannot block BOOKED seats"
+      },
+      {
+        "id": "37.4",
+        "action": "Rule: Cannot book BLOCKED seats"
+      },
+      {
+        "id": "37.5",
+        "action": "Rule: Missing seat numbers cannot be allocated (check missingSeats[] array)"
+      },
+      {
+        "id": "37.6",
+        "action": "Rule: Sleeper gender validation (enforce gender segregation in shared cabins)"
+      },
+      {
+        "id": "37.7",
+        "action": "Write unit tests for all validation rules"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 38,
+    "description": "Create seat segment prioritization logic",
+    "priority": "medium",
+    "tddWorkflow": false,
+    "designReference": null,
+    "steps": [
+      {
+        "id": "38.1",
+        "action": "Create src/services/seatAllocation/segmentPrioritization.ts"
+      },
+      {
+        "id": "38.2",
+        "action": "Implement matchWagonToRoute(wagonSegment, passengerRoute): number (score 0-100)"
+      },
+      {
+        "id": "38.3",
+        "action": "Algorithm: prioritize wagons where wagonSegment === passengerRoute exactly"
+      },
+      {
+        "id": "38.4",
+        "action": "Algorithm: deprioritize wagons that detach before passenger destination"
+      },
+      {
+        "id": "38.5",
+        "action": "Integrate with allocation algorithm: sort wagons by segment match score"
+      },
+      {
+        "id": "38.6",
+        "action": "Write unit tests with segment scenarios (Sofia-Plovdiv detach, full route wagons)"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 39,
+    "description": "Integrate Seat Management with Composition Editor (TDD)",
+    "priority": "high",
+    "tddWorkflow": true,
+    "designReference": "docs/composition/designs/39.png",
+    "steps": [
+      {
+        "id": "39.1",
+        "phase": "RED",
+        "action": "Write E2E test in tests/seat-management/editor-integration.spec.ts"
+      },
+      {
+        "id": "39.2",
+        "phase": "RED",
+        "action": "Test: click wagon in composition canvas, seat map opens in side panel"
+      },
+      {
+        "id": "39.3",
+        "phase": "GREEN",
+        "action": "Add 'View Seats' button on each wagon in WagonCanvas"
+      },
+      {
+        "id": "39.4",
+        "phase": "GREEN",
+        "action": "Create SeatManagementPanel drawer component (400px width)"
+      },
+      {
+        "id": "39.5",
+        "phase": "GREEN",
+        "action": "Load wagon's seat layout when drawer opens (fetch coachLayout by wagonTypeId)"
+      },
+      {
+        "id": "39.6",
+        "phase": "GREEN",
+        "action": "Display SeatMapCanvas + SeatLegend + SeatActionsToolbar in drawer"
+      },
+      {
+        "id": "39.7",
+        "phase": "GREEN",
+        "action": "Show wagon info header: Wagon #{placardNumber}, Type: {type}, Capacity: {X}/{total}"
+      },
+      {
+        "id": "39.8",
+        "phase": "VISUAL",
+        "action": "Screenshot comparison with design mockup 39.png"
+      },
+      {
+        "id": "39.9",
+        "phase": "REFACTOR",
+        "action": "Adjust drawer layout, spacing, and styling to match design"
+      },
+      {
+        "id": "39.10",
+        "phase": "DONE",
+        "action": "Verify E2E tests pass and UI matches design"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 40,
+    "description": "E2E tests for complete seat allocation scenarios",
+    "priority": "high",
+    "tddWorkflow": true,
+    "designReference": null,
+    "steps": [
+      {
+        "id": "40.1",
+        "action": "Create tests/seat-management/seat-allocation-flows.spec.ts"
+      },
+      {
+        "id": "40.2",
+        "action": "Test: 70% filling algorithm scenario (fill first wagon to 70%, next opens)"
+      },
+      {
+        "id": "40.3",
+        "action": "Test: Block seat, verify not available for booking"
+      },
+      {
+        "id": "40.4",
+        "action": "Test: Try to block booked seat, verify error message"
+      },
+      {
+        "id": "40.5",
+        "action": "Test: Segment prioritization (wagon detaches, passenger gets correct wagon)"
+      },
+      {
+        "id": "40.6",
+        "action": "Test: Missing seat numbers (13, 104) cannot be allocated"
+      },
+      {
+        "id": "40.7",
+        "action": "Test: Multi-select seats and bulk block operation"
+      },
+      {
+        "id": "40.8",
+        "action": "Test: Unblock seat, verify returns to AVAILABLE"
+      },
+      {
+        "id": "40.9",
+        "action": "Run all E2E tests: npx playwright test tests/seat-management/"
+      },
+      {
+        "id": "40.10",
+        "action": "Verify all scenarios pass and coverage is complete"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 41,
+    "description": "Final UI refactoring to match designs 100%",
+    "priority": "high",
+    "tddWorkflow": true,
+    "designReference": "docs/composition/designs/*.png",
+    "steps": [
+      {
+        "id": "41.1",
+        "phase": "AUDIT",
+        "action": "Review ALL design files: 9.png, 10.png, 11.png, 13.png, 14.png, 15.png, 16.png, 17.png, 18.png, 20.png, 33.png, 34.png, 35.png, 39.png"
+      },
+      {
+        "id": "41.2",
+        "phase": "AUDIT",
+        "action": "Open app in browser and compare each component side-by-side with design mockup"
+      },
+      {
+        "id": "41.3",
+        "phase": "AUDIT",
+        "action": "Create checklist of visual discrepancies: colors, spacing, typography, icons, shadows, borders"
+      },
+      {
+        "id": "41.4",
+        "phase": "REFACTOR",
+        "action": "Fix color palette: Verify primary=#2e7d32 (dark green), active badges=#2e7d32, available seats=#4caf50"
+      },
+      {
+        "id": "41.5",
+        "phase": "REFACTOR",
+        "action": "Fix wagon cards: Yellow #fff9c4 (Bistro), Light Blue #e3f2fd (Comp), Light Purple #f3e5f5 (Sleep), Red #c62828 (Locomotive)"
+      },
+      {
+        "id": "41.6",
+        "phase": "REFACTOR",
+        "action": "Fix Active badges: Must be dark green (#2e7d32) with white text, rounded corners"
+      },
+      {
+        "id": "41.7",
+        "phase": "REFACTOR",
+        "action": "Fix wagon borders: Active wagons green (#2e7d32) 3px left border, inactive gray (#bdbdbd)"
+      },
+      {
+        "id": "41.8",
+        "phase": "REFACTOR",
+        "action": "Fix typography: Verify Placard numbers (h6), Type (body1), Capacity (caption) match designs"
+      },
+      {
+        "id": "41.9",
+        "phase": "REFACTOR",
+        "action": "Fix spacing: WagonCanvas gap 16px, WagonPalette item gap 12px, Filter gap 16px"
+      },
+      {
+        "id": "41.10",
+        "phase": "REFACTOR",
+        "action": "Fix SeatMapCanvas: Dark green header (#2e7d32), bright green seats (#4caf50), rounded rectangles for seats"
+      },
+      {
+        "id": "41.11",
+        "phase": "REFACTOR",
+        "action": "Fix SeatLegend: Green icons for properties, larger status circles, 200px width"
+      },
+      {
+        "id": "41.12",
+        "phase": "REFACTOR",
+        "action": "Fix BlockSeatDialog: Dark green Блокиране button (#2e7d32), 400px width, rounded corners"
+      },
+      {
+        "id": "41.13",
+        "phase": "REFACTOR",
+        "action": "Fix SeatManagementPanel drawer: INCREASE to 800px width (беше 600px), dark green header (#2e7d32), add zoom controls (+/- buttons)"
+      },
+      {
+        "id": "41.13b",
+        "phase": "REFACTOR",
+        "action": "Fix seat size: INCREASE to 32x32px минимум (беше ~20px), add 4px spacing между места"
+      },
+      {
+        "id": "41.13c",
+        "phase": "REFACTOR",
+        "action": "Fix split layout: Change to 50/50 (composition canvas / seat drawer) from 60/40"
+      },
+      {
+        "id": "41.14",
+        "phase": "REFACTOR",
+        "action": "Fix shadows and elevations: MUI elevation levels match designs (Cards: 2, Dialogs: 24, Drawers: 16)"
+      },
+      {
+        "id": "41.15",
+        "phase": "REFACTOR",
+        "action": "Fix icons: Verify all icons match design (EventSeatIcon, VisibilityIcon, BlockIcon, etc.)"
+      },
+      {
+        "id": "41.16",
+        "phase": "REFACTOR",
+        "action": "Fix responsive behavior: Verify layout works on different screen sizes"
+      },
+      {
+        "id": "41.17",
+        "phase": "VISUAL",
+        "action": "Visual test: Take screenshots of CompositionsListPage and compare with 9.png"
+      },
+      {
+        "id": "41.18",
+        "phase": "VISUAL",
+        "action": "Visual test: Take screenshots of CompositionEditorPage and compare with 14.png, 17.png"
+      },
+      {
+        "id": "41.19",
+        "phase": "VISUAL",
+        "action": "Visual test: Take screenshots of SeatMapCanvas and compare with 33.png"
+      },
+      {
+        "id": "41.20",
+        "phase": "VISUAL",
+        "action": "Visual test: Take screenshots of SeatManagementPanel integration and compare with 39.png"
+      },
+      {
+        "id": "41.21",
+        "phase": "VISUAL",
+        "action": "Visual test: Verify all 14 design files have 95%+ visual match"
+      },
+      {
+        "id": "41.22",
+        "phase": "DONE",
+        "action": "Run all tests: npm test && npx playwright test - verify nothing broke"
+      },
+      {
+        "id": "41.23",
+        "phase": "DONE",
+        "action": "Final visual inspection: Open each page and verify matches design mockups"
+      },
+      {
+        "id": "41.24",
+        "phase": "DONE",
+        "action": "Update activity.md with final UI refactoring notes"
+      },
+      {
+        "id": "41.25",
+        "phase": "DONE",
+        "action": "Mark task complete and commit: 'refactor(ui): Final UI polish to match design mockups 100%'"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 42,
+    "description": "CRITICAL FIX: Seat Map physical structure to match design 33.png EXACTLY",
+    "priority": "critical",
+    "tddWorkflow": false,
+    "designReference": "docs/composition/designs/33.png",
+    "notes": "Ralph completed functionality but DID NOT match visual design. SeatMapCanvas shows generic grid but design shows PHYSICAL wagon structure with windows, doors, aisles. This task FIXES that by implementing EXACT visual structure from design.",
+    "steps": [
+      {
+        "id": "42.1",
+        "phase": "AUDIT",
+        "action": "READ @docs/composition/DESIGN-COMPLIANCE-STRICT.md COMPLETELY - understand what 'match design' actually means"
+      },
+      {
+        "id": "42.2",
+        "phase": "AUDIT",
+        "action": "Open design 33.png and current SeatMapCanvas side-by-side in browser"
+      },
+      {
+        "id": "42.3",
+        "phase": "AUDIT",
+        "action": "Create detailed discrepancy list: Current app vs Design 33.png (structure, icons, layout, colors, spacing)"
+      },
+      {
+        "id": "42.4",
+        "phase": "AUDIT",
+        "action": "Identify CRITICAL issues: Missing window icons (7 top, 8 bottom), missing door icons (2 double doors), seats in wrong layout (overlapping vs clean LEFT|AISLE|RIGHT structure)"
+      },
+      {
+        "id": "42.5",
+        "phase": "REFACTOR",
+        "action": "Add WindowIcon component: 7 icons evenly spaced along TOP edge, 8 icons along BOTTOM edge (simple rectangles with diagonal)"
+      },
+      {
+        "id": "42.6",
+        "phase": "REFACTOR",
+        "action": "Add DoorIcon component: 2 DOUBLE door icons in center (one left of aisle, one right of aisle)"
+      },
+      {
+        "id": "42.7",
+        "phase": "REFACTOR",
+        "action": "Add central aisle: CLEAR vertical separator in middle, ~80px wide, light gray background (#e0e0e0)"
+      },
+      {
+        "id": "42.8",
+        "phase": "REFACTOR",
+        "action": "FIX seat layout: LEFT section (3 cols × 13 rows, seats 11-43) | AISLE | RIGHT section (3 cols × 13 rows, seats 51-83) - SEQUENTIAL numbering, NO overlapping!"
+      },
+      {
+        "id": "42.9",
+        "phase": "REFACTOR",
+        "action": "Update CoachLayout seed data: Add window positions [{x, y}], door positions [{x, y}], aisle definition"
+      },
+      {
+        "id": "42.10",
+        "phase": "REFACTOR",
+        "action": "Change SeatMapCanvas from CSS Grid to SVG/Canvas with absolute positioning based on coordinates"
+      },
+      {
+        "id": "42.11",
+        "phase": "REFACTOR",
+        "action": "Position seats by exact coordinates: Left section starts at x:50, Right section starts at x:1280, rows spaced by 36px"
+      },
+      {
+        "id": "42.12",
+        "phase": "REFACTOR",
+        "action": "Verify seat visual: 32x32px, rounded corners (border-radius: 6px), numbers INSIDE seats (centered, white text)"
+      },
+      {
+        "id": "42.13",
+        "phase": "REFACTOR",
+        "action": "Add grid background pattern: Light gray (#fafafa) with subtle grid lines every 50px"
+      },
+      {
+        "id": "42.14",
+        "phase": "REFACTOR",
+        "action": "Fix Legend panel: Must be floating overlay (position: absolute, top-right), NOT inline in layout"
+      },
+      {
+        "id": "42.15",
+        "phase": "VISUAL",
+        "action": "Start dev server, navigate to seat map, take screenshot"
+      },
+      {
+        "id": "42.16",
+        "phase": "VISUAL",
+        "action": "Compare screenshot with 33.png side-by-side: Check window icons (7 top + 8 bottom = 15 present?), door icons (2 double doors present?)"
+      },
+      {
+        "id": "42.17",
+        "phase": "VISUAL",
+        "action": "Verify physical structure: Central aisle visible? Seats in LEFT/RIGHT sections? Not simple grid?"
+      },
+      {
+        "id": "42.18",
+        "phase": "VISUAL",
+        "action": "Measure elements: Seats are 32px? Spacing is 4px? Aisle is ~80px? Match design measurements"
+      },
+      {
+        "id": "42.19",
+        "phase": "VISUAL",
+        "action": "Color verification: Available=#4caf50 (bright green), Booked=#f44336 (red), Blocked=#9e9e9e (gray) - EXACT hex codes"
+      },
+      {
+        "id": "42.20",
+        "phase": "VISUAL",
+        "action": "Create overlay comparison: Use image editing tool to overlay screenshot on design 33.png - verify 95%+ match"
+      },
+      {
+        "id": "42.21",
+        "phase": "REFACTOR",
+        "action": "Fix ANY remaining discrepancies found in steps 42.15-42.20 - iterate until PERFECT match"
+      },
+      {
+        "id": "42.22",
+        "phase": "VISUAL",
+        "action": "Check design 39.png (integration): Drawer is 800px wide? Split is 50/50? Seat map integrated correctly?"
+      },
+      {
+        "id": "42.23",
+        "phase": "VISUAL",
+        "action": "Final verification checklist: Window icons (15) ✓, Door icons (2 double) ✓, Aisle ✓, LEFT|AISLE|RIGHT structure ✓, Sequential numbering ✓, NO overlapping ✓, Legend floating ✓, Colors exact ✓"
+      },
+      {
+        "id": "42.24",
+        "phase": "DONE",
+        "action": "Run all tests: npm test - verify nothing broke with visual changes"
+      },
+      {
+        "id": "42.25",
+        "phase": "DONE",
+        "action": "MANDATORY: Show screenshot proof that design 33.png matches current implementation 95%+ before marking complete"
+      },
+      {
+        "id": "42.26",
+        "phase": "DONE",
+        "action": "Update activity.md: Document what was wrong and what was fixed"
+      },
+      {
+        "id": "42.27",
+        "phase": "DONE",
+        "action": "Commit: 'fix(seat-map): Implement physical wagon structure to match design 33.png exactly (windows, doors, aisle, physical layout)'"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 43,
+    "description": "UX Fixes: Drawer size (800px) and zoom controls positioning",
+    "priority": "high",
+    "tddWorkflow": false,
+    "designReference": "docs/composition/designs/39.png",
+    "notes": "User feedback: Drawer too narrow, zoom controls below header. Fix: 800px drawer, zoom in header.",
+    "steps": [
+      {
+        "id": "43.1",
+        "phase": "RESEARCH",
+        "action": "READ docs/composition/BDZ-WAGON-21-43-REAL-STRUCTURE.md - understand БДЖ structure"
+      },
+      {
+        "id": "43.2",
+        "phase": "AUDIT",
+        "action": "Measure current drawer width and zoom controls position"
+      },
+      {
+        "id": "43.3",
+        "phase": "FIX",
+        "action": "Update SeatManagementPanel drawer width to 800px"
+      },
+      {
+        "id": "43.4",
+        "phase": "FIX",
+        "action": "Move zoom controls into header (flex layout)"
+      },
+      {
+        "id": "43.5",
+        "phase": "VISUAL",
+        "action": "Compare with design 39.png - drawer 800px, zoom in header"
+      },
+      {
+        "id": "43.6",
+        "phase": "DONE",
+        "action": "Commit: 'fix(seat-management): Drawer 800px, zoom controls in header'"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 44,
+    "description": "Implement Block/Unblock Seat functionality",
+    "priority": "high",
+    "tddWorkflow": true,
+    "designReference": null,
+    "notes": "From NotebookLM: Blocking types - Служебно, Техническо, Временно, Административно. Must require reason.",
+    "steps": [
+      {
+        "id": "44.1",
+        "phase": "RED",
+        "action": "Write test: blockSeat() updates status to 'blocked' with reason in localStorage"
+      },
+      {
+        "id": "44.2",
+        "phase": "RED",
+        "action": "Write test: unblockSeat() updates status to 'available'"
+      },
+      {
+        "id": "44.3",
+        "phase": "RED",
+        "action": "Write test: Cannot block 'sold' seat - validation error"
+      },
+      {
+        "id": "44.4",
+        "phase": "GREEN",
+        "action": "Implement blockSeat(coachId, seatNumber, reason, type)"
+      },
+      {
+        "id": "44.5",
+        "phase": "GREEN",
+        "action": "Implement unblockSeat(coachId, seatNumber)"
+      },
+      {
+        "id": "44.6",
+        "phase": "GREEN",
+        "action": "Add validation: prevent blocking if status='sold'"
+      },
+      {
+        "id": "44.7",
+        "phase": "VISUAL",
+        "action": "Add 'Block' button to context menu (right-click)"
+      },
+      {
+        "id": "44.8",
+        "phase": "VISUAL",
+        "action": "Create BlockSeatDialog with reason dropdown and details field"
+      },
+      {
+        "id": "44.9",
+        "phase": "VISUAL",
+        "action": "Test: Block seat → turns gray, Unblock → turns green"
+      },
+      {
+        "id": "44.10",
+        "phase": "DONE",
+        "action": "Verify localStorage: blockReason, blockedBy, blockedAt fields"
+      },
+      {
+        "id": "44.11",
+        "phase": "DONE",
+        "action": "Commit: 'feat(seat-management): Block/unblock with reason tracking'"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 45,
+    "description": "Implement Mark as Sold functionality",
+    "priority": "high",
+    "tddWorkflow": true,
+    "designReference": null,
+    "notes": "From NotebookLM: Sold status (red), cannot duplicate. Requires ticket number and passenger.",
+    "steps": [
+      {
+        "id": "45.1",
+        "phase": "RED",
+        "action": "Write test: markAsSold() updates status with ticket and passenger data"
+      },
+      {
+        "id": "45.2",
+        "phase": "RED",
+        "action": "Write test: Cannot mark as sold if already 'sold' or 'blocked'"
+      },
+      {
+        "id": "45.3",
+        "phase": "GREEN",
+        "action": "Implement markAsSold(coachId, seatNumber, ticketData)"
+      },
+      {
+        "id": "45.4",
+        "phase": "GREEN",
+        "action": "Add validation: prevent if 'sold' or 'blocked'"
+      },
+      {
+        "id": "45.5",
+        "phase": "VISUAL",
+        "action": "Add 'Mark as Sold' to context menu"
+      },
+      {
+        "id": "45.6",
+        "phase": "VISUAL",
+        "action": "Create MarkAsSoldDialog (ticket number, passenger name, route)"
+      },
+      {
+        "id": "45.7",
+        "phase": "VISUAL",
+        "action": "Test: Mark as sold → turns red, hover shows ticket info"
+      },
+      {
+        "id": "45.8",
+        "phase": "DONE",
+        "action": "Verify localStorage: status='sold', ticketNumber, passengerName"
+      },
+      {
+        "id": "45.9",
+        "phase": "DONE",
+        "action": "Commit: 'feat(seat-management): Mark as sold with ticket tracking'"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 46,
+    "description": "Implement Release Seat (Free) functionality",
+    "priority": "high",
+    "tddWorkflow": true,
+    "designReference": null,
+    "notes": "From NotebookLM: Release after ticket cancellation. Status 'sold' → 'available'. Requires confirmation.",
+    "steps": [
+      {
+        "id": "46.1",
+        "phase": "RED",
+        "action": "Write test: releaseSeat() updates 'sold' → 'available', clears ticket data"
+      },
+      {
+        "id": "46.2",
+        "phase": "RED",
+        "action": "Write test: Cannot release non-'sold' seat"
+      },
+      {
+        "id": "46.3",
+        "phase": "GREEN",
+        "action": "Implement releaseSeat(coachId, seatNumber, reason)"
+      },
+      {
+        "id": "46.4",
+        "phase": "GREEN",
+        "action": "Clear ticket data from localStorage"
+      },
+      {
+        "id": "46.5",
+        "phase": "GREEN",
+        "action": "Add audit log entry (timestamp, user, reason)"
+      },
+      {
+        "id": "46.6",
+        "phase": "VISUAL",
+        "action": "Add 'Release' to context menu (only if 'sold')"
+      },
+      {
+        "id": "46.7",
+        "phase": "VISUAL",
+        "action": "Create ReleaseSeatDialog with confirmation and reason"
+      },
+      {
+        "id": "46.8",
+        "phase": "VISUAL",
+        "action": "Test: Release sold seat → turns green"
+      },
+      {
+        "id": "46.9",
+        "phase": "DONE",
+        "action": "Verify localStorage: status='available', ticket fields null"
+      },
+      {
+        "id": "46.10",
+        "phase": "DONE",
+        "action": "Commit: 'feat(seat-management): Release seat with audit logging'"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 47,
+    "description": "Implement Context Menu for Seat Actions",
+    "priority": "medium",
+    "tddWorkflow": false,
+    "designReference": null,
+    "notes": "Right-click shows actions based on status: Available→[Sell,Block], Sold→[Release,Details], Blocked→[Unblock,Details]",
+    "steps": [
+      {
+        "id": "47.1",
+        "phase": "DESIGN",
+        "action": "Design menu structure based on seat status"
+      },
+      {
+        "id": "47.2",
+        "phase": "IMPLEMENT",
+        "action": "Create SeatContextMenu component (MUI Menu)"
+      },
+      {
+        "id": "47.3",
+        "phase": "IMPLEMENT",
+        "action": "Add onContextMenu handler to seats"
+      },
+      {
+        "id": "47.4",
+        "phase": "IMPLEMENT",
+        "action": "Dynamic menu items based on seat.status"
+      },
+      {
+        "id": "47.5",
+        "phase": "VISUAL",
+        "action": "Test: Right-click available → shows Sell, Block"
+      },
+      {
+        "id": "47.6",
+        "phase": "VISUAL",
+        "action": "Test: Right-click sold → shows Release, Details only"
+      },
+      {
+        "id": "47.7",
+        "phase": "DONE",
+        "action": "Commit: 'feat(seat-management): Context menu for seat actions'"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 48,
+    "description": "Implement Multi-Select Seats (Ctrl+Click, Shift+Click, Ctrl+A)",
+    "priority": "medium",
+    "tddWorkflow": false,
+    "designReference": null,
+    "notes": "From NotebookLM: Batch operations. Ctrl+Click adds, Shift+Click range, Ctrl+A all available.",
+    "steps": [
+      {
+        "id": "48.1",
+        "phase": "DESIGN",
+        "action": "Define multi-select UX: Ctrl+Click, Shift+Click, Ctrl+A, orange border"
+      },
+      {
+        "id": "48.2",
+        "phase": "IMPLEMENT",
+        "action": "Create selectedSeats state (Set)"
+      },
+      {
+        "id": "48.3",
+        "phase": "IMPLEMENT",
+        "action": "Implement Ctrl+Click: toggle selection"
+      },
+      {
+        "id": "48.4",
+        "phase": "IMPLEMENT",
+        "action": "Implement Shift+Click: select range"
+      },
+      {
+        "id": "48.5",
+        "phase": "IMPLEMENT",
+        "action": "Implement Ctrl+A: select all available"
+      },
+      {
+        "id": "48.6",
+        "phase": "IMPLEMENT",
+        "action": "Add selection toolbar: 'X selected' with 'Block All', 'Clear'"
+      },
+      {
+        "id": "48.7",
+        "phase": "VISUAL",
+        "action": "Test: Multi-select works, batch block applies to all"
+      },
+      {
+        "id": "48.8",
+        "phase": "DONE",
+        "action": "Commit: 'feat(seat-management): Multi-select with batch operations'"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 49,
+    "description": "Implement Seat Details Dialog",
+    "priority": "low",
+    "tddWorkflow": false,
+    "designReference": null,
+    "notes": "Shows full info: number, status, attributes, ticket/block details, history.",
+    "steps": [
+      {
+        "id": "49.1",
+        "phase": "DESIGN",
+        "action": "Design dialog: Status, Attributes, Ticket/Block info, History tab"
+      },
+      {
+        "id": "49.2",
+        "phase": "IMPLEMENT",
+        "action": "Create SeatDetailsDialog component"
+      },
+      {
+        "id": "49.3",
+        "phase": "IMPLEMENT",
+        "action": "Display attributes: window/aisle, table, orientation, class"
+      },
+      {
+        "id": "49.4",
+        "phase": "IMPLEMENT",
+        "action": "Show ticket/block info based on status"
+      },
+      {
+        "id": "49.5",
+        "phase": "IMPLEMENT",
+        "action": "Add History tab from audit log"
+      },
+      {
+        "id": "49.6",
+        "phase": "VISUAL",
+        "action": "Test: Double-click OR View Details → dialog shows correct info"
+      },
+      {
+        "id": "49.7",
+        "phase": "DONE",
+        "action": "Commit: 'feat(seat-management): Seat details dialog with history'"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 50,
+    "description": "Implement Audit History Log for Seats",
+    "priority": "low",
+    "tddWorkflow": true,
+    "designReference": null,
+    "notes": "From NotebookLM: Track who, when, what for all actions. localStorage persistence.",
+    "steps": [
+      {
+        "id": "50.1",
+        "phase": "RED",
+        "action": "Write test: logSeatAction() adds entry with timestamp, user, action"
+      },
+      {
+        "id": "50.2",
+        "phase": "RED",
+        "action": "Write test: getSeatHistory(seatNumber) returns action array"
+      },
+      {
+        "id": "50.3",
+        "phase": "GREEN",
+        "action": "Implement logSeatAction() and store in localStorage"
+      },
+      {
+        "id": "50.4",
+        "phase": "GREEN",
+        "action": "Implement getSeatHistory() filter function"
+      },
+      {
+        "id": "50.5",
+        "phase": "INTEGRATE",
+        "action": "Add logSeatAction() to all operations: block, unblock, sell, release"
+      },
+      {
+        "id": "50.6",
+        "phase": "VISUAL",
+        "action": "Display history in SeatDetailsDialog"
+      },
+      {
+        "id": "50.7",
+        "phase": "DONE",
+        "action": "Verify localStorage: seatAuditLog array has entries"
+      },
+      {
+        "id": "50.8",
+        "phase": "DONE",
+        "action": "Commit: 'feat(seat-management): Audit history log for seats'"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 51,
+    "category": "wagon-migration",
+    "repo": "database",
+    "migrationRef": "02_series_15-63.md",
+    "description": "Add post-deployment SQL script with OSDM internals/signs data for series 15-63 wagon layout",
+    "tddWorkflow": false,
+    "steps": [
+      {
+        "id": "51.1",
+        "phase": "RED",
+        "action": "Read existing seed data for wagon_type_id=2 (series 15-63) to understand current DB structure"
+      },
+      {
+        "id": "51.2",
+        "phase": "RED",
+        "action": "Read _COMMON_REFERENCE.md and 02_series_15-63.md to get exact OSDM icon codes and grid positions"
+      },
+      {
+        "id": "51.3",
+        "phase": "GREEN",
+        "action": "Create NEW post-deployment script (DO NOT modify existing scripts). Insert OSDM internals array (WC icon=115, tables icon=20, zone labels icon=101) with correct grid coords into osdm_layout_json column"
+      },
+      {
+        "id": "51.4",
+        "phase": "GREEN",
+        "action": "Insert OSDM signs array (doors icon=179, windows icon=135/174) with correct grid coords into osdm_layout_json column"
+      },
+      {
+        "id": "51.5",
+        "phase": "GREEN",
+        "action": "Script MUST be idempotent (use IF NOT EXISTS / MERGE pattern). Add PRINT statement for traceability"
+      },
+      {
+        "id": "51.6",
+        "phase": "GREEN",
+        "action": "Register new script in PostDeployment/Script.PostDeployment.sql with :r syntax"
+      },
+      {
+        "id": "51.7",
+        "phase": "DONE",
+        "action": "Verify script parses without errors: sqlcmd dry-run or manual review of JSON validity"
+      },
+      {
+        "id": "51.8",
+        "phase": "DONE",
+        "action": "Commit: feat(db): Add OSDM layout data for series 15-63 via post-deployment script"
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 52,
+    "category": "wagon-migration",
+    "repo": "frontend",
+    "migrationRef": "02_series_15-63.md",
+    "description": "Add OSDM icon registry and data-driven rendering support to OpenSaloonLayout",
+    "tddWorkflow": true,
+    "passes": true,
+    "steps": [
+      {
+        "id": "52.1",
+        "phase": "RED",
+        "action": "Write test: when osdm_layout_json has internals/signs arrays, renderer uses data-driven path instead of hardcoded elements"
+      },
+      {
+        "id": "52.2",
+        "phase": "RED",
+        "action": "Write test: OSDM icon code 115 (WC) renders a WC element at the correct grid position"
+      },
+      {
+        "id": "52.3",
+        "phase": "RED",
+        "action": "Write test: OSDM icon code 20 (table) renders a table element at the correct grid position"
+      },
+      {
+        "id": "52.4",
+        "phase": "RED",
+        "action": "Write test: OSDM icon code 179 (door) renders a door element at the correct grid position"
+      },
+      {
+        "id": "52.5",
+        "phase": "RED",
+        "action": "Write test: OSDM icon code 135 (window) renders a window element at the correct grid position"
+      },
+      {
+        "id": "52.6",
+        "phase": "RED",
+        "action": "Write test: OSDM icon code 101 (zone 1st class) renders a '1' or 'I клас' label"
+      },
+      {
+        "id": "52.7",
+        "phase": "RED",
+        "action": "Write test: when osdm_layout_json has NO internals/signs, renderer falls back to legacy hardcoded logic (existing behavior preserved)"
+      },
+      {
+        "id": "52.8",
+        "phase": "GREEN",
+        "action": "Create OSDM_ICON_MAP constant mapping icon codes to render functions (115→WC, 20→table, 179→door, 135→window, 101→zone label, etc.)"
+      },
+      {
+        "id": "52.9",
+        "phase": "GREEN",
+        "action": "Add hasOsdmData check: if layout.osdmLayoutJson has internals or signs arrays with length > 0, use data-driven path"
+      },
+      {
+        "id": "52.10",
+        "phase": "GREEN",
+        "action": "Implement data-driven rendering: iterate internals/signs arrays, look up icon code in OSDM_ICON_MAP, render at coords"
+      },
+      {
+        "id": "52.11",
+        "phase": "GREEN",
+        "action": "Keep legacy rendering as else-branch — zero changes to existing hardcoded logic"
+      },
+      {
+        "id": "52.12",
+        "phase": "VISUAL",
+        "action": "Start dev server, navigate to composition editor with series 15-63 wagon, take screenshot"
+      },
+      {
+        "id": "52.13",
+        "phase": "VISUAL",
+        "action": "Verify: WCs at correct positions, tables between seat pairs, doors at ends, windows along edges, zone label visible"
+      },
+      {
+        "id": "52.14",
+        "phase": "REFACTOR",
+        "action": "Adjust positioning/sizing of OSDM elements if visual doesn't match expected layout"
+      },
+      {
+        "id": "52.15",
+        "phase": "DONE",
+        "action": "Run npm test, npm run type-check, npx eslint — all must pass"
+      },
+      {
+        "id": "52.16",
+        "phase": "DONE",
+        "action": "Verify: loading a wagon WITHOUT osdm_layout_json internals/signs still renders correctly (legacy fallback)"
+      },
+      {
+        "id": "52.17",
+        "phase": "DONE",
+        "action": "Commit: 'feat(seat-layout): Add OSDM data-driven rendering with legacy fallback for OpenSaloonLayout'"
+      }
+    ]
+  },
+  {
+    "id": 53,
+    "category": "wagon-migration",
+    "repo": "frontend",
+    "migrationRef": "02_series_15-63.md",
+    "description": "Remove hardcoded table/WC/door positions from OpenSaloonLayout for series 15-63",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "53.1",
+        "phase": "RED",
+        "action": "Write test: for wagon_type_id=2 with OSDM data, no hardcoded table positions are used — all tables come from osdm_layout_json internals"
+      },
+      {
+        "id": "53.2",
+        "phase": "RED",
+        "action": "Write test: for wagon_type_id=2 with OSDM data, no hardcoded WC positions are used"
+      },
+      {
+        "id": "53.3",
+        "phase": "RED",
+        "action": "Write test: for wagon_type_id=2 with OSDM data, no hardcoded door positions are used"
+      },
+      {
+        "id": "53.4",
+        "phase": "GREEN",
+        "action": "In data-driven branch: remove any remaining hardcoded structural element positions for this wagon type — everything comes from JSON"
+      },
+      {
+        "id": "53.5",
+        "phase": "VISUAL",
+        "action": "Screenshot series 15-63 wagon and compare — must be identical to task 52 result"
+      },
+      {
+        "id": "53.6",
+        "phase": "DONE",
+        "action": "Run npm test, npm run type-check, npx eslint — all must pass"
+      },
+      {
+        "id": "53.7",
+        "phase": "DONE",
+        "action": "Verify other wagon types (e.g. series 21-43) still render correctly via legacy fallback"
+      },
+      {
+        "id": "53.8",
+        "phase": "DONE",
+        "action": "Commit: 'refactor(seat-layout): Series 15-63 fully data-driven, no hardcoded structural elements'"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 54,
+    "category": "wagon-migration",
+    "repo": "frontend",
+    "migrationRef": "02_series_15-63.md",
+    "description": "Wire osdmLayoutJson from API to OpenSaloonLayout and disable legacy hardcoded elements when OSDM data is present",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "54.1",
+        "phase": "RED",
+        "action": "Write test: when coachLayout has osdmLayoutJson with internals/signs, OpenSaloonLayout receives it as prop"
+      },
+      {
+        "id": "54.2",
+        "phase": "RED",
+        "action": "Write test: when osdmLayoutJson is present, legacy hardcoded tables/WC/doors are NOT rendered (no duplicate elements)"
+      },
+      {
+        "id": "54.3",
+        "phase": "RED",
+        "action": "Write test: when osdmLayoutJson is absent/empty, legacy hardcoded rendering still works unchanged"
+      },
+      {
+        "id": "54.4",
+        "phase": "GREEN",
+        "action": "In SeatMapCanvas (or parent that calls OpenSaloonLayout), pass osdmLayoutJson from the coachLayout API response to the OpenSaloonLayout prop"
+      },
+      {
+        "id": "54.5",
+        "phase": "GREEN",
+        "action": "In OpenSaloonLayout, wrap legacy hardcoded element rendering (tables, WC, doors, windows) in if (!useDataDrivenRendering) guard so they are skipped when OSDM data exists"
+      },
+      {
+        "id": "54.6",
+        "phase": "GREEN",
+        "action": "Ensure seats are ALWAYS rendered regardless of useDataDrivenRendering — only non-seat decorations switch between legacy and OSDM"
+      },
+      {
+        "id": "54.7",
+        "phase": "VISUAL",
+        "action": "Start dev server, open composition editor with series 15-63 wagon, verify layout renders correctly with no duplicate elements"
+      },
+      {
+        "id": "54.8",
+        "phase": "REFACTOR",
+        "action": "Remove dead code: any legacy rendering branches that are now unreachable for series 15-63"
+      },
+      {
+        "id": "54.9",
+        "phase": "DONE",
+        "action": "Run npm test, npm run type-check, npx eslint — all must pass. Verify other wagon types (without OSDM data) still render correctly"
+      },
+      {
+        "id": "54.10",
+        "phase": "DONE",
+        "action": "Commit: 'fix(seat-layout): Wire osdmLayoutJson prop and disable legacy rendering when OSDM data present'"
+      }
+    ],
+    "passes": true
+  }
+]
