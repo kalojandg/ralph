@@ -494,3 +494,26 @@ TDD workflow гарантира:
 - `fix(compositions): Add guard to prevent duplicate WC rendering when OSDM data is present`
 
 ---
+
+## [2026-03-24 13:15] - Task #51: Add post-deployment SQL script with OSDM internals/signs data for series 15-63 wagon layout
+
+**Status:** ✅ Complete
+
+**What was done:**
+- Step 51.1: Read existing CoachLayouts seed data and found wagon_type_id=2 already has OSDM data
+- Step 51.2: Read _COMMON_REFERENCE.md and 02_series_15-63.md for OSDM icon codes and structure
+- Step 51.3: Created NEW post-deployment script 042_AddOsdmLayoutToSeries1563.sql
+- Step 51.4: Inserted OSDM internals array with WC icons (115), tables (20), and 1st class zone (101)
+- Step 51.5: Inserted OSDM signs array with doors (179) and windows (135)
+- Step 51.6: Script uses MERGE pattern for idempotency with safety check for wagon_type_id=2
+- Step 51.7: Registered new script in PostDeployment/Seed.sql
+- Step 51.8: Verified JSON validity using Node.js
+
+**Files modified:**
+- C:\Projects\BDZ Project\OSDM-Src\SQLProjects\RailRunServiceSQL\dbo\PostDeployment\Data\042_AddOsdmLayoutToSeries1563.sql (created)
+- C:\Projects\BDZ Project\OSDM-Src\SQLProjects\RailRunServiceSQL\dbo\PostDeployment\Seed.sql
+
+**Git commit:**
+- `feat(db): Add post-deployment SQL script with OSDM internals/signs data for series 15-63 wagon layout`
+
+---
