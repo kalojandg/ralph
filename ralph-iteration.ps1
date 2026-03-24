@@ -3,10 +3,11 @@ param(
     [string]$configFile = "ralph-config.json"
 )
 
-# Setup paths
+# Setup paths — ralph lives in C:\Projects\ralph\, project is C:\Projects\BDZ Project\
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $scriptDir
-$projectRoot = Split-Path -Parent (Split-Path -Parent $scriptDir)
+
+$bdzProject = "C:\Projects\BDZ Project"
 $tasksFile = Join-Path $scriptDir "tasks.json"
 
 # Load config
@@ -19,7 +20,7 @@ if (Test-Path $configFile) {
 }
 
 # Get model from config or use default
-$model = "claude-opus-4-5-20251101"
+$model = "claude-opus-4-20250514"
 if ($config -and $config.claude_args) {
     $modelIndex = [array]::IndexOf($config.claude_args, "--model")
     if ($modelIndex -ge 0 -and $modelIndex -lt $config.claude_args.Count - 1) {
@@ -30,6 +31,22 @@ if ($config -and $config.claude_args) {
 Write-Host "[i] Iteration $iterationNumber starting..." -ForegroundColor Cyan
 Write-Host "[i] Model: $model" -ForegroundColor Cyan
 
+# Show current task before starting
+if (Test-Path $tasksFile) {
+    $allTasks = Get-Content $tasksFile -Raw | ConvertFrom-Json
+    $currentTask = $allTasks | Where-Object { $_.passes -eq $false } | Select-Object -First 1
+    if ($currentTask) {
+        $repo = if ($currentTask.repo) { $currentTask.repo } else { "frontend" }
+        Write-Host "[>] Task #$($currentTask.id): $($currentTask.description)" -ForegroundColor Green
+        Write-Host "[>] Repo: $repo" -ForegroundColor Green
+        if ($currentTask.migrationRef) {
+            Write-Host "[>] Migration: $($currentTask.migrationRef)" -ForegroundColor Green
+        }
+    } else {
+        Write-Host "[+] No pending tasks!" -ForegroundColor Green
+    }
+}
+
 # Build prompt from PROMPT.md and user-steps.md
 $promptText = ""
 
@@ -39,18 +56,9 @@ if ($config -and $config.prompt_file) {
     $promptFile = $config.prompt_file
 }
 
-# Check in current dir first, then project root
-$promptPath = $promptFile
-if (!(Test-Path $promptPath)) {
-    $promptPath = Join-Path $projectRoot $promptFile
-}
-if (!(Test-Path $promptPath)) {
-    $promptPath = Join-Path $projectRoot "PROMPT.md"
-}
-
-if (Test-Path $promptPath) {
-    $promptText = Get-Content $promptPath -Raw
-    Write-Host "[+] Loaded: $promptPath" -ForegroundColor Green
+if (Test-Path $promptFile) {
+    $promptText = Get-Content $promptFile -Raw
+    Write-Host "[+] Loaded: $promptFile" -ForegroundColor Green
 } else {
     Write-Host "[X] PROMPT.md not found!" -ForegroundColor Red
     exit 1
@@ -99,17 +107,15 @@ Write-Host ""
 # Run Claude - capture output but also display progress indicator
 $outputFile = Join-Path $env:TEMP "ralph-output-$iterationNumber.txt"
 
-# Calculate project root (Admin-App folder)
-$projectRoot = Split-Path -Parent (Split-Path -Parent $scriptDir)
-Write-Host "[i] Project root: $projectRoot" -ForegroundColor Cyan
+# Working directory is the BDZ Project root — Claude navigates to specific repos via prerequisite
+Write-Host "[i] Working dir: $bdzProject" -ForegroundColor Cyan
 
 # Start claude in background and monitor
-# IMPORTANT: Job must change to project root directory so Claude can find files!
 $job = Start-Job -ScriptBlock {
     param($prompt, $output, $modelName, $workDir)
     Set-Location $workDir
     & claude -p "@$prompt" --model $modelName --dangerously-skip-permissions 2>&1 | Out-File -FilePath $output -Encoding UTF8
-} -ArgumentList $tempPrompt, $outputFile, $model, $projectRoot
+} -ArgumentList $tempPrompt, $outputFile, $model, $bdzProject
 
 # Show spinner while waiting
 $spinChars = @('|', '/', '-', '\')
@@ -120,7 +126,7 @@ Write-Host -NoNewline "Working "
 while ($job.State -eq 'Running') {
     Write-Host -NoNewline "`rWorking $($spinChars[$spinIndex]) "
     $spinIndex = ($spinIndex + 1) % 4
-    
+
     # Check if output file is growing
     if (Test-Path $outputFile) {
         $size = (Get-Item $outputFile).Length
@@ -129,7 +135,7 @@ while ($job.State -eq 'Running') {
             Write-Host -NoNewline "(${size} bytes) "
         }
     }
-    
+
     Start-Sleep -Milliseconds 500
 }
 
@@ -143,7 +149,7 @@ Write-Host ""
 # Read and display output
 if (Test-Path $outputFile) {
     $result = Get-Content $outputFile -Raw
-    
+
     Write-Host "============================================" -ForegroundColor Yellow
     Write-Host "   CLAUDE OUTPUT:" -ForegroundColor Yellow
     Write-Host "============================================" -ForegroundColor Yellow
@@ -151,7 +157,7 @@ if (Test-Path $outputFile) {
     Write-Host $result
     Write-Host ""
     Write-Host "============================================" -ForegroundColor Yellow
-    
+
     # Save to log
     $logDir = "logs"
     if (!(Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
@@ -159,7 +165,7 @@ if (Test-Path $outputFile) {
     $logFile = "$logDir/iteration-$iterationNumber-$timestamp.txt"
     $result | Out-File -FilePath $logFile -Encoding UTF8
     Write-Host "[+] Log saved: $logFile" -ForegroundColor Green
-    
+
     # Cleanup
     Remove-Item $outputFile -ErrorAction SilentlyContinue
 } else {
@@ -174,7 +180,7 @@ Write-Host ""
 if (Test-Path $tasksFile) {
     $tasksContent = Get-Content $tasksFile -Raw
     $tasks = $tasksContent | ConvertFrom-Json
-    
+
     # Count explicitly
     $total = 0
     $done = 0
@@ -184,14 +190,14 @@ if (Test-Path $tasksFile) {
             $done++
         }
     }
-    
+
     Write-Host "Progress: $done / $total tasks complete" -ForegroundColor Cyan
-    
+
     if ($done -eq $total -and $total -gt 0) {
         Write-Host "[+] ALL TASKS COMPLETE!" -ForegroundColor Green
         exit 0
     }
-    
+
     $next = $tasks | Where-Object { $_.passes -eq $false } | Select-Object -First 1
     if ($next) {
         Write-Host "Next task: #$($next.id) - $($next.description)" -ForegroundColor Yellow

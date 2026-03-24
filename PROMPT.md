@@ -4,21 +4,26 @@
 
 Прочети следните файлове за пълен context:
 
-1. **@docs/composition/activity.md** - История на свършената работа
-2. **@docs/composition/tasks.json** - Task list (твоя source of truth)
-3. **@docs/composition/PRD.json** - Requirements и TDD methodology
-4. **@docs/composition/designs/** - UI mockups за visual testing
+1. **C:/Projects/ralph/activity.md** - История на свършената работа
+2. **C:/Projects/ralph/tasks.json** - Task list (твоя source of truth)
+3. **C:/Projects/BDZ Project/Admin-App/docs/composition/PRD.json** - Requirements и TDD methodology
+4. **C:/Projects/BDZ Project/Admin-App/docs/composition/designs/** - UI mockups за visual testing
+
+**Working directories по repo:**
+- `frontend` → `C:\Projects\BDZ Project\Admin-App`
+- `backend` → `C:\Projects\BDZ Project\OSDM-Src\DotNetServices\RailRunService`
+- `database` → `C:\Projects\BDZ Project\OSDM-Src\SQLProjects\RailRunServiceSQL`
 
 ## Your Mission This Iteration
 
-Работи върху **ЕДИН ЕДИНСТВЕН ТАСК** от `tasks.json` където `"passes": false`.
+Работи върху **ЕДИН ЕДИНСТВЕН ТАСК** от `C:/Projects/ralph/tasks.json` където `"passes": false`.
 
 ## TDD Workflow (RED → GREEN → VISUAL → REFACTOR)
 
 ### Step 1: Find Next Task
 
 ```powershell
-# Прочети tasks.json и намери първия таск с "passes": false
+# Прочети C:/Projects/ralph/tasks.json и намери първия таск с "passes": false
 # Прочети ВСИЧКИ steps за този таск
 # Note: Ако има "designReference" и "tddWorkflow": true → следвай TDD phases
 ```
@@ -117,13 +122,13 @@
 
 **САМО АКО ВСИЧКИ КРИТЕРИИ СА ✅:**
 
-1. **Update tasks.json:**
+1. **Update C:/Projects/ralph/tasks.json:**
    ```json
    // Change for completed task:
    "passes": false → "passes": true
    ```
 
-2. **Log in activity.md:**
+2. **Log in C:/Projects/ralph/activity.md:**
    ```markdown
    ## [2026-02-03 HH:MM] - Task #{id}: {description}
    

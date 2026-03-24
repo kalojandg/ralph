@@ -5,7 +5,7 @@ echo.
 echo ====================================================
 echo    Ralph Wiggum TDD - Compositions Module
 echo    Test-Driven Development + Visual Feedback
-echo    Model: Claude Sonnet 4
+echo    Model: Claude Opus 4
 echo ====================================================
 echo.
 echo Starting with 20 iterations...
@@ -27,8 +27,8 @@ echo              Execution Complete
 echo ====================================================
 echo.
 echo Check results:
-echo   - Activity log: ..\docs\composition\activity.md
-echo   - Tasks status: ..\docs\composition\tasks.json
-echo   - Iteration logs: .\logs\
+echo   - Activity log: %~dp0activity.md
+echo   - Tasks status: %~dp0tasks.json
+echo   - Iteration logs: %~dp0logs\
 echo.
 pause

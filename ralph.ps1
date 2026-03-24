@@ -40,10 +40,10 @@ for ($i = 1; $i -le $iterations; $i++) {
     Write-Host ">>> Starting iteration $i of $iterations >>>" -ForegroundColor Magenta
     Write-Host ""
     
-    # Execute one iteration
-    $result = & powershell -ExecutionPolicy Bypass -NoProfile -File $iterationScript -iterationNumber $i -configFile $configFile
+    # Execute one iteration — run inline so output is visible
+    & .\$iterationScript -iterationNumber $i -configFile $configFile
     $exitCode = $LASTEXITCODE
-    
+
     Write-Host ""
     Write-Host "<<< End of iteration $i <<<" -ForegroundColor Magenta
     Write-Host ""

@@ -2292,209 +2292,155 @@
     "passes": true
   },
   {
-    "id": 52,
+    "id": 55,
     "category": "wagon-migration",
-    "repo": "frontend",
-    "migrationRef": "02_series_15-63.md",
-    "description": "Add OSDM icon registry and data-driven rendering support to OpenSaloonLayout",
-    "tddWorkflow": true,
-    "passes": true,
+    "repo": "database",
+    "migrationRef": "04_series_25-63.md",
+    "description": "Populate osdm_layout_json for series 25-63 with OSDM internals (WC, tables) and signs (doors) — post-deployment script",
+    "tddWorkflow": false,
     "steps": [
       {
-        "id": "52.1",
+        "id": "55.1",
         "phase": "RED",
-        "action": "Write test: when osdm_layout_json has internals/signs arrays, renderer uses data-driven path instead of hardcoded elements"
+        "action": "Read C:/Projects/wagon-migrations/04_series_25-63.md and C:/Projects/wagon-migrations/_COMMON_REFERENCE.md for OSDM codes and JSON structure"
       },
       {
-        "id": "52.2",
+        "id": "55.2",
         "phase": "RED",
-        "action": "Write test: OSDM icon code 115 (WC) renders a WC element at the correct grid position"
+        "action": "Read current seed 014_Seat_Definitions_25-63.sql to get exact table positions (T25,T21,T45,T41,T65,T61,T95,T91) and WC location"
       },
       {
-        "id": "52.3",
-        "phase": "RED",
-        "action": "Write test: OSDM icon code 20 (table) renders a table element at the correct grid position"
-      },
-      {
-        "id": "52.4",
-        "phase": "RED",
-        "action": "Write test: OSDM icon code 179 (door) renders a door element at the correct grid position"
-      },
-      {
-        "id": "52.5",
-        "phase": "RED",
-        "action": "Write test: OSDM icon code 135 (window) renders a window element at the correct grid position"
-      },
-      {
-        "id": "52.6",
-        "phase": "RED",
-        "action": "Write test: OSDM icon code 101 (zone 1st class) renders a '1' or 'I клас' label"
-      },
-      {
-        "id": "52.7",
-        "phase": "RED",
-        "action": "Write test: when osdm_layout_json has NO internals/signs, renderer falls back to legacy hardcoded logic (existing behavior preserved)"
-      },
-      {
-        "id": "52.8",
+        "id": "55.3",
         "phase": "GREEN",
-        "action": "Create OSDM_ICON_MAP constant mapping icon codes to render functions (115→WC, 20→table, 179→door, 135→window, 101→zone label, etc.)"
+        "action": "Create NEW post-deployment script 043_UpdateOsdmLayout_25-63.sql. JSON must include: gridSize, internals (icon 115=WC with coords, icon 20=table for each table position matching seed coords), signs (icon 179=door at both ends), aisle position. Use MERGE for idempotency"
       },
       {
-        "id": "52.9",
+        "id": "55.4",
         "phase": "GREEN",
-        "action": "Add hasOsdmData check: if layout.osdmLayoutJson has internals or signs arrays with length > 0, use data-driven path"
+        "action": "Also fix GridLength from 40 to 50 in same script (seat coords go to x=48)"
       },
       {
-        "id": "52.10",
+        "id": "55.5",
         "phase": "GREEN",
-        "action": "Implement data-driven rendering: iterate internals/signs arrays, look up icon code in OSDM_ICON_MAP, render at coords"
+        "action": "Register in Seed.sql with :r syntax"
       },
       {
-        "id": "52.11",
-        "phase": "GREEN",
-        "action": "Keep legacy rendering as else-branch — zero changes to existing hardcoded logic"
-      },
-      {
-        "id": "52.12",
-        "phase": "VISUAL",
-        "action": "Start dev server, navigate to composition editor with series 15-63 wagon, take screenshot"
-      },
-      {
-        "id": "52.13",
-        "phase": "VISUAL",
-        "action": "Verify: WCs at correct positions, tables between seat pairs, doors at ends, windows along edges, zone label visible"
-      },
-      {
-        "id": "52.14",
-        "phase": "REFACTOR",
-        "action": "Adjust positioning/sizing of OSDM elements if visual doesn't match expected layout"
-      },
-      {
-        "id": "52.15",
+        "id": "55.6",
         "phase": "DONE",
-        "action": "Run npm test, npm run type-check, npx eslint — all must pass"
+        "action": "Build: dotnet build RailRunServiceDb.sqlproj — 0 errors. Publish: publish-sqlproj.ps1 -Project RailRun"
       },
       {
-        "id": "52.16",
+        "id": "55.7",
         "phase": "DONE",
-        "action": "Verify: loading a wagon WITHOUT osdm_layout_json internals/signs still renders correctly (legacy fallback)"
-      },
-      {
-        "id": "52.17",
-        "phase": "DONE",
-        "action": "Commit: 'feat(seat-layout): Add OSDM data-driven rendering with legacy fallback for OpenSaloonLayout'"
-      }
-    ]
-  },
-  {
-    "id": 53,
-    "category": "wagon-migration",
-    "repo": "frontend",
-    "migrationRef": "02_series_15-63.md",
-    "description": "Remove hardcoded table/WC/door positions from OpenSaloonLayout for series 15-63",
-    "tddWorkflow": true,
-    "steps": [
-      {
-        "id": "53.1",
-        "phase": "RED",
-        "action": "Write test: for wagon_type_id=2 with OSDM data, no hardcoded table positions are used — all tables come from osdm_layout_json internals"
-      },
-      {
-        "id": "53.2",
-        "phase": "RED",
-        "action": "Write test: for wagon_type_id=2 with OSDM data, no hardcoded WC positions are used"
-      },
-      {
-        "id": "53.3",
-        "phase": "RED",
-        "action": "Write test: for wagon_type_id=2 with OSDM data, no hardcoded door positions are used"
-      },
-      {
-        "id": "53.4",
-        "phase": "GREEN",
-        "action": "In data-driven branch: remove any remaining hardcoded structural element positions for this wagon type — everything comes from JSON"
-      },
-      {
-        "id": "53.5",
-        "phase": "VISUAL",
-        "action": "Screenshot series 15-63 wagon and compare — must be identical to task 52 result"
-      },
-      {
-        "id": "53.6",
-        "phase": "DONE",
-        "action": "Run npm test, npm run type-check, npx eslint — all must pass"
-      },
-      {
-        "id": "53.7",
-        "phase": "DONE",
-        "action": "Verify other wagon types (e.g. series 21-43) still render correctly via legacy fallback"
-      },
-      {
-        "id": "53.8",
-        "phase": "DONE",
-        "action": "Commit: 'refactor(seat-layout): Series 15-63 fully data-driven, no hardcoded structural elements'"
+        "action": "Commit: 'feat(db): Add OSDM layout JSON for series 25-63'"
       }
     ],
     "passes": true
   },
   {
-    "id": 54,
+    "id": 56,
     "category": "wagon-migration",
     "repo": "frontend",
-    "migrationRef": "02_series_15-63.md",
-    "description": "Wire osdmLayoutJson from API to OpenSaloonLayout and disable legacy hardcoded elements when OSDM data is present",
+    "migrationRef": "04_series_25-63.md",
+    "description": "Add OSDM data-driven rendering to OpenSaloonLayout: read internals/signs from osdmLayoutJson to render tables, WC, doors instead of inferring from AccommodationType",
+    "passes": true,
     "tddWorkflow": true,
     "steps": [
       {
-        "id": "54.1",
+        "id": "56.1",
         "phase": "RED",
-        "action": "Write test: when coachLayout has osdmLayoutJson with internals/signs, OpenSaloonLayout receives it as prop"
+        "action": "Write test: when layout has osdmLayoutJson with internals containing icon=20 (table), render table elements at correct grid positions using OSDM icon styling"
       },
       {
-        "id": "54.2",
+        "id": "56.2",
         "phase": "RED",
-        "action": "Write test: when osdmLayoutJson is present, legacy hardcoded tables/WC/doors are NOT rendered (no duplicate elements)"
+        "action": "Write test: when layout has osdmLayoutJson with internals containing icon=115 (WC), render WC element at correct position"
       },
       {
-        "id": "54.3",
+        "id": "56.3",
         "phase": "RED",
-        "action": "Write test: when osdmLayoutJson is absent/empty, legacy hardcoded rendering still works unchanged"
+        "action": "Write test: when layout has osdmLayoutJson with signs containing icon=179 (door), render door element at correct position"
       },
       {
-        "id": "54.4",
+        "id": "56.4",
+        "phase": "RED",
+        "action": "Write test: when osdmLayoutJson is empty/absent, fall back to existing AccommodationType-based rendering (no regression for other wagons)"
+      },
+      {
+        "id": "56.5",
         "phase": "GREEN",
-        "action": "In SeatMapCanvas (or parent that calls OpenSaloonLayout), pass osdmLayoutJson from the coachLayout API response to the OpenSaloonLayout prop"
+        "action": "Restore osdmIcons.ts constant file with OSDM_ICON_MAP (code -> Material Icon mapping) and hasOsdmData() helper"
       },
       {
-        "id": "54.5",
+        "id": "56.6",
         "phase": "GREEN",
-        "action": "In OpenSaloonLayout, wrap legacy hardcoded element rendering (tables, WC, doors, windows) in if (!useDataDrivenRendering) guard so they are skipped when OSDM data exists"
+        "action": "In OpenSaloonLayout: when hasOsdmData(osdmLayoutJson) is true, render non-seat elements (tables, WC, doors) from internals/signs arrays using OSDM_ICON_MAP. Seats ALWAYS render from seats[] array"
       },
       {
-        "id": "54.6",
+        "id": "56.7",
         "phase": "GREEN",
-        "action": "Ensure seats are ALWAYS rendered regardless of useDataDrivenRendering — only non-seat decorations switch between legacy and OSDM"
+        "action": "When hasOsdmData is true, SKIP legacy AccommodationType-based rendering for TABLE/WC types to avoid duplicates. Only skip non-seat decoration rendering, not seat rendering"
       },
       {
-        "id": "54.7",
+        "id": "56.8",
+        "phase": "GREEN",
+        "action": "Wire osdmLayoutJson from coachLayout API response through SeatMapCanvas to OpenSaloonLayout prop"
+      },
+      {
+        "id": "56.9",
         "phase": "VISUAL",
-        "action": "Start dev server, open composition editor with series 15-63 wagon, verify layout renders correctly with no duplicate elements"
+        "action": "Start dev server, open series 25-63 wagon. Verify: tables rendered from OSDM data, WC visible, doors at ends, all 78 seats visible, no duplicate elements"
       },
       {
-        "id": "54.8",
-        "phase": "REFACTOR",
-        "action": "Remove dead code: any legacy rendering branches that are now unreachable for series 15-63"
+        "id": "56.10",
+        "phase": "VISUAL",
+        "action": "Open series 21-43 wagon (NO osdm data) — verify it still renders correctly via legacy fallback"
       },
       {
-        "id": "54.9",
+        "id": "56.11",
         "phase": "DONE",
-        "action": "Run npm test, npm run type-check, npx eslint — all must pass. Verify other wagon types (without OSDM data) still render correctly"
+        "action": "Run npm test, npm run type-check, npx eslint — all must pass"
       },
       {
-        "id": "54.10",
+        "id": "56.12",
         "phase": "DONE",
-        "action": "Commit: 'fix(seat-layout): Wire osdmLayoutJson prop and disable legacy rendering when OSDM data present'"
+        "action": "Commit: 'feat(seat-layout): OSDM data-driven rendering for non-seat elements with legacy fallback'"
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 58,
+    "category": "wagon-migration",
+    "repo": "frontend",
+    "migrationRef": "02_series_15-63.md",
+    "description": "Visual verification: series 15-63 renders correctly with OSDM data-driven path after task #56",
+    "tddWorkflow": false,
+    "steps": [
+      {
+        "id": "58.1",
+        "phase": "VISUAL",
+        "action": "Start dev server, open composition with series 15-63 wagon"
+      },
+      {
+        "id": "58.2",
+        "phase": "VISUAL",
+        "action": "Verify: 3 seat rows (2+1), tables between face-to-face pairs, WC zones at ends, doors at ends, corridor centered, all 71 seats visible"
+      },
+      {
+        "id": "58.3",
+        "phase": "VISUAL",
+        "action": "If layout is broken — fix osdm_layout_json in DB via new post-deployment script (DO NOT modify 042 script). Coords must match seed file 006_Seat_Definitions_15-63.sql"
+      },
+      {
+        "id": "58.4",
+        "phase": "DONE",
+        "action": "Run npm test — all must pass"
+      },
+      {
+        "id": "58.5",
+        "phase": "DONE",
+        "action": "Commit if changes were needed: 'fix(db): Correct OSDM layout JSON coords for series 15-63'"
       }
     ],
     "passes": true
