@@ -1,3 +1,9 @@
+## 📚 Етап 3: Wagon Management Feature (Tasks #59-#72)
+
+**Фокус:** Таблица за управление на вагони — BE номенклатура + API, FE рутиране, таблица, филтри, preview, деактивиране. Реален workflow FE↔BE↔DB (без localStorage mock).
+
+---
+
 ## 📚 Етап 2: Advanced Seat Management & TDD Mastery (Tasks #44-#80)
 
 **Фокус:** Пълна seat management система с TDD workflow и визуално тестване

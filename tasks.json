@@ -2406,8 +2406,7 @@
         "phase": "DONE",
         "action": "Commit: 'feat(seat-layout): OSDM data-driven rendering for non-seat elements with legacy fallback'"
       }
-    ],
-    "passes": true
+    ]
   },
   {
     "id": 58,
@@ -2444,5 +2443,373 @@
       }
     ],
     "passes": true
+  },
+  {
+    "id": 59,
+    "category": "backend",
+    "description": "[BE] Добавяне на WagonStatus номенклатура (по модела на CompositionStatus) — Draft, Active, Archived. Seed data + migration.",
+    "steps": [
+      {
+        "id": "59.1",
+        "action": "Напиши unit тестове за WagonStatus enum/entity в Domain слоя"
+      },
+      {
+        "id": "59.2",
+        "action": "Създай WagonStatus номенклатура в Domain (enum или entity, по модела на CompositionStatus)"
+      },
+      {
+        "id": "59.3",
+        "action": "Добави Status колона в WagonTypes таблицата (миграция)"
+      },
+      {
+        "id": "59.4",
+        "action": "Seed data: всички съществуващи вагони получават Status=Active"
+      },
+      {
+        "id": "59.5",
+        "action": "Регистрирай WagonStatus в NomenclatureService за да се достъпва от FE"
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 60,
+    "category": "backend",
+    "description": "[BE] API endpoint GET /api/wagon-types — списък вагони с филтър по статус (Active/Archived/Draft)",
+    "steps": [
+      {
+        "id": "60.1",
+        "action": "Напиши integration тестове за GET /api/wagon-types с query param ?status=Active"
+      },
+      {
+        "id": "60.2",
+        "action": "Създай Query + Handler (CQRS) за GetWagonTypes с филтър по статус"
+      },
+      {
+        "id": "60.3",
+        "action": "Добави endpoint в WagonTypesController"
+      },
+      {
+        "id": "60.4",
+        "action": "Тестовете минават"
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 61,
+    "category": "backend",
+    "description": "[BE] API endpoint PATCH /api/wagon-types/{id}/status — смяна на статус (activate/archive/deactivate)",
+    "steps": [
+      {
+        "id": "61.1",
+        "action": "Напиши integration тестове за PATCH status transitions (Draft->Active, Active->Archived, Archived->Draft)"
+      },
+      {
+        "id": "61.2",
+        "action": "Създай Command + Handler (CQRS) за SetWagonTypeStatus"
+      },
+      {
+        "id": "61.3",
+        "action": "Добави endpoint в WagonTypesController"
+      },
+      {
+        "id": "61.4",
+        "action": "Тестовете минават"
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 62,
+    "category": "frontend",
+    "description": "[FE] Рутиране: Compositions меню с 2 подменюта — Сглобяване на композиция (съществуваща страница) и Управление на вагони (нова)",
+    "steps": [
+      {
+        "id": "62.1",
+        "action": "Напиши тестове: sidebar показва Compositions с 2 подменюта; клик на всяко навигира до правилния route"
+      },
+      {
+        "id": "62.2",
+        "action": "Добави routes в router.tsx: /compositions (съществуващ) и /wagons (нов)"
+      },
+      {
+        "id": "62.3",
+        "action": "Промени MainLayout.tsx: Compositions меню с expandable подменюта"
+      },
+      {
+        "id": "62.4",
+        "action": "Добави i18n ключове за новите менюта в bg.json и en.json"
+      },
+      {
+        "id": "62.5",
+        "action": "Тестовете минават"
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 63,
+    "category": "frontend",
+    "description": "[FE] API слой: wagons.api.ts и wagons.types.ts — заявки към BE за списък вагони и смяна на статус",
+    "steps": [
+      {
+        "id": "63.1",
+        "action": "Напиши integration тестове за wagonsApi.getWagonTypes() и wagonsApi.setStatus()"
+      },
+      {
+        "id": "63.2",
+        "action": "Създай src/api/wagons/wagons.types.ts с WagonTypeDto, WagonStatus enum"
+      },
+      {
+        "id": "63.3",
+        "action": "Създай src/api/wagons/wagons.api.ts с getWagonTypes(status?) и setStatus(id, status)"
+      },
+      {
+        "id": "63.4",
+        "action": "Добави endpoints в api/config.ts"
+      },
+      {
+        "id": "63.5",
+        "action": "Тестовете минават"
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 64,
+    "category": "frontend",
+    "description": "[FE] React Query hooks: useWagonTypes и useSetWagonStatus",
+    "steps": [
+      {
+        "id": "64.1",
+        "action": "Напиши тестове за useWagonTypes hook (loading, success, error states)"
+      },
+      {
+        "id": "64.2",
+        "action": "Създай src/app/features/wagons/hooks/useWagonTypes.ts"
+      },
+      {
+        "id": "64.3",
+        "action": "Създай src/app/features/wagons/hooks/useSetWagonStatus.ts с invalidation на query"
+      },
+      {
+        "id": "64.4",
+        "action": "Тестовете минават"
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 65,
+    "category": "frontend",
+    "description": "[FE] Таблица WagonList — показва вагони с име, статус, action бутони (edit, preview, archive/delete)",
+    "steps": [
+      {
+        "id": "65.1",
+        "action": "Напиши тестове: таблицата рендерира вагони с name и status; бутони edit/preview/archive са видими"
+      },
+      {
+        "id": "65.2",
+        "action": "Създай src/app/features/wagons/components/WagonList.tsx с MUI Table"
+      },
+      {
+        "id": "65.3",
+        "action": "Бутон archive/delete се показва САМО за Draft и Archived статуси"
+      },
+      {
+        "id": "65.4",
+        "action": "Добави i18n ключове за таблицата в bg.json и en.json"
+      },
+      {
+        "id": "65.5",
+        "action": "Тестовете минават"
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 66,
+    "category": "frontend",
+    "description": "[FE] Филтър Active/Inactive слайдер — по подразбиране показва Active, toggle показва Archived/Draft",
+    "steps": [
+      {
+        "id": "66.1",
+        "action": "Напиши тестове: по подразбиране виждаме само Active вагони; toggle превключва към неактивни"
+      },
+      {
+        "id": "66.2",
+        "action": "Добави Switch/Toggle компонент над таблицата"
+      },
+      {
+        "id": "66.3",
+        "action": "Свържи с useWagonTypes hook — подавай status филтър"
+      },
+      {
+        "id": "66.4",
+        "action": "Тестовете минават"
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 67,
+    "category": "frontend",
+    "description": "[FE] Бутон Създаване на вагон — показва тостер Функционалността ще бъде реализирана в бъдеще",
+    "steps": [
+      {
+        "id": "67.1",
+        "action": "Напиши тест: клик на бутон Създаване показва snackbar с правилния текст"
+      },
+      {
+        "id": "67.2",
+        "action": "Добави бутон над таблицата, dispatch showSnackbar от ui.slice"
+      },
+      {
+        "id": "67.3",
+        "action": "Добави i18n ключове за бутона и съобщението"
+      },
+      {
+        "id": "67.4",
+        "action": "Тестовете минават"
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 68,
+    "category": "frontend",
+    "description": "[FE] Бутон Редактиране — показва тостер Функционалността ще бъде реализирана в бъдеще",
+    "steps": [
+      {
+        "id": "68.1",
+        "action": "Напиши тест: клик на edit бутон показва snackbar"
+      },
+      {
+        "id": "68.2",
+        "action": "Имплементирай onClick handler с dispatch showSnackbar"
+      },
+      {
+        "id": "68.3",
+        "action": "Тестовете минават"
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 69,
+    "category": "frontend",
+    "description": "[FE] Бутон Преглед — отваря диалог с renderer (SeatMapCanvas) в read-only режим",
+    "steps": [
+      {
+        "id": "69.1",
+        "action": "Напиши тестове: клик на preview отваря диалог; диалогът рендерира SeatMapCanvas; няма selection/action функционалности"
+      },
+      {
+        "id": "69.2",
+        "action": "Създай WagonPreviewDialog.tsx — MUI Dialog с SeatMapCanvas вътре, без toolbar/actions"
+      },
+      {
+        "id": "69.3",
+        "action": "Подай wagon data (coach layout + seat definitions) към renderer"
+      },
+      {
+        "id": "69.4",
+        "action": "Добави i18n ключове за диалога"
+      },
+      {
+        "id": "69.5",
+        "action": "Тестовете минават"
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 70,
+    "category": "frontend",
+    "description": "[FE] Бутон Деактивиране — смяна на статус с confirmation dialog",
+    "steps": [
+      {
+        "id": "70.1",
+        "action": "Напиши тестове: клик на deactivate показва потвърждение; confirm извиква setStatus mutation; таблицата се обновява"
+      },
+      {
+        "id": "70.2",
+        "action": "Създай confirmation dialog за деактивиране"
+      },
+      {
+        "id": "70.3",
+        "action": "Свържи с useSetWagonStatus mutation"
+      },
+      {
+        "id": "70.4",
+        "action": "Добави i18n ключове"
+      },
+      {
+        "id": "70.5",
+        "action": "Тестовете минават"
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 71,
+    "category": "frontend",
+    "description": "[FE] Страница WagonsPage — сглобява WagonList + филтри + бутон създаване",
+    "steps": [
+      {
+        "id": "71.1",
+        "action": "Напиши тестове за WagonsPage: рендерира заглавие, бутон създаване, филтър и таблица"
+      },
+      {
+        "id": "71.2",
+        "action": "Създай src/app/features/wagons/pages/WagonsPage.tsx"
+      },
+      {
+        "id": "71.3",
+        "action": "Свържи route /wagons към WagonsPage в router.tsx"
+      },
+      {
+        "id": "71.4",
+        "action": "Тестовете минават"
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 72,
+    "category": "e2e",
+    "description": "[E2E] End-to-end тест: пълен workflow — навигация до вагони, виждане на таблица, филтриране, преглед на вагон, деактивиране",
+    "steps": [
+      {
+        "id": "72.1",
+        "action": "Напиши E2E тест: отвори sidebar -> Compositions -> Управление на вагони"
+      },
+      {
+        "id": "72.2",
+        "action": "Провери таблицата показва Active вагони от BE"
+      },
+      {
+        "id": "72.3",
+        "action": "Toggle към неактивни — таблицата се обновява"
+      },
+      {
+        "id": "72.4",
+        "action": "Клик Preview на вагон — диалог с renderer се отваря и затваря"
+      },
+      {
+        "id": "72.5",
+        "action": "Клик Edit — тостер се показва"
+      },
+      {
+        "id": "72.6",
+        "action": "Клик Create — тостер се показва"
+      },
+      {
+        "id": "72.7",
+        "action": "Всички E2E тестове минават с реален BE + DB"
+      }
+    ],
+    "passes": false
   }
 ]

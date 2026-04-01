@@ -212,6 +212,59 @@ Output:
 <all-passed>true</all-passed>
 ```
 
+## Architecture Reference Files
+
+**Преди да започнеш таск, прочети съответния файл:**
+
+| Тип таск | Файл за четене | Какво съдържа |
+|----------|---------------|---------------|
+| **[BE] Backend** | `C:/Projects/railrun-backend-structure.md` | .NET 8 Clean Architecture, CQRS pattern, Controllers, Domain entities, Infrastructure, DTOs, Validation |
+| **[FE] Frontend** | `C:/Projects/admin-app-frontend-structure.md` | React 19 + TypeScript + Vite, folder structure, routing, API layer, React Query hooks, MUI components, i18n, testing patterns |
+| **[BE] Database** | `C:/Projects/railrun-database-guide.md` | SQL Server schema, WagonTypes/CoachLayouts/SeatDefinitions таблици, seed data, migrations, grid coordinate system |
+| **[E2E] End-to-end** | Прочети и трите файла | FE→BE→DB пълен workflow |
+
+**Ако таскът засяга API contract (endpoint URL, DTO shape) — прочети И frontend И backend файловете!**
+
+## Working Directories
+
+| Слой | Директория |
+|------|-----------|
+| **Frontend** | `C:\Projects\BDZ Project\Admin-App` |
+| **Backend** | `C:\Projects\BDZ Project\OSDM-Src\DotNetServices\RailRunService` |
+| **Database (SQL Project)** | `C:\Projects\BDZ Project\OSDM-Src\SQLProjects\RailRunServiceSQL` |
+
+## Build & Verify Commands
+
+```bash
+# === Frontend ===
+cd "C:\Projects\BDZ Project\Admin-App"
+npm run type-check          # TypeScript проверка
+npm run lint                # ESLint
+npm test                    # Vitest unit/component тестове
+npm run dev                 # Dev server на http://localhost:5173
+
+# === Backend ===
+cd "C:\Projects\BDZ Project\OSDM-Src\DotNetServices\RailRunService"
+dotnet build                # Build
+dotnet test                 # Unit тестове
+dotnet run --project RailRunService.API  # Стартира API
+
+# === Database (SQL Project) ===
+cd "C:\Projects\BDZ Project\OSDM-Src\SQLProjects\RailRunServiceSQL"
+dotnet build -c Release --no-incremental
+SqlPackage /Action:Publish /SourceFile:bin/Release/RailRunServiceDb.dacpac /TargetConnectionString:"Server=localhost,14430;Database=RailRunServiceDB;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;Encrypt=True;Connect Timeout=60;Command Timeout=0"
+```
+
+## Real Backend Workflow (Tasks #59-#72)
+
+**ВАЖНО:** Таскове #59-#72 (Wagon Management) работят с **реален backend и база данни**, НЕ с localStorage mock!
+
+- **Frontend** извиква реален API endpoint (axios → apiClient)
+- **Backend** обработва заявката чрез CQRS (Command/Query + Handler)
+- **Database** — данните се четат/пишат в SQL Server база
+- **FE unit тестове** мокват API слоя (`vi.mock('@/api/wagons/wagons.api')`)
+- **E2E тестове** минават през реален FE → BE → DB
+
 ## Important Rules
 
 ### 🚨 Critical

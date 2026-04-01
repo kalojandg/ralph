@@ -4,6 +4,117 @@
 
 ---
 
+## 🏗️ Backend Tasks (Tasks #59-#61)
+
+### Архитектурен Reference
+
+**Преди да започнеш BE таск, ЗАДЪЛЖИТЕЛНО прочети:**
+- `C:/Projects/railrun-backend-structure.md` — .NET 8 Clean Architecture, CQRS pattern, Controllers, Domain, Infrastructure
+- `C:/Projects/railrun-database-guide.md` — DB schema, WagonTypes таблица, migrations
+- `C:/Projects/admin-app-frontend-structure.md` — за API contract с FE
+
+### BE TDD Workflow
+
+1. **Напиши тест** (unit или integration) — тестът ТРЯБВА да ФЕЙЛВА
+2. **Имплементирай** минимален код за да минава тестът
+3. **Билдни:** `dotnet build`
+4. **Пусни тестовете:** `dotnet test`
+5. **Publish DB:** SqlPackage (виж команди в PROMPT.md)
+6. **Верифицирай** — endpoint отговаря правилно
+
+### CQRS Pattern (следвай го!)
+
+За нов endpoint:
+1. **Domain** — Entity/Enum (напр. WagonStatus)
+2. **Application/Queries или Application/Commands** — Query/Command + Handler
+3. **API/Controllers** — Endpoint в съответния Controller
+4. **Infrastructure** — DbContext update ако е нужен
+
+### Миграции
+
+- Seed files (005-035) са в Azure — НЕ ги пипай!
+- За промени по WagonTypes: създай НОВА миграция (071+)
+- За нови номенклатури: добави в NomenclatureService
+
+---
+
+## 🖥️ Frontend Tasks (Tasks #62-#71)
+
+### Архитектурен Reference
+
+**Преди да започнеш FE таск, ЗАДЪЛЖИТЕЛНО прочети:**
+- `C:/Projects/admin-app-frontend-structure.md` — React 19, folder structure, routing, API layer, hooks, MUI, i18n, testing
+
+### Реален API (НЕ localStorage!)
+
+Таскове #59-#72 използват **реален backend**:
+- `wagonsApi.getWagonTypes()` → GET /api/wagon-types
+- `wagonsApi.setStatus(id, status)` → PATCH /api/wagon-types/{id}/status
+- Номенклатури за WagonStatus → GET /api/nomenclatures/wagon-statuses
+
+### FE Architecture Pattern (следвай го!)
+
+За нов feature:
+1. **API layer** — `src/api/wagons/wagons.api.ts` + `wagons.types.ts` (endpoints, DTOs)
+2. **React Query hooks** — `src/app/features/wagons/hooks/useWagonTypes.ts` (query key factory, useQuery/useMutation)
+3. **Components** — `src/app/features/wagons/components/` (MUI компоненти)
+4. **Pages** — `src/app/features/wagons/pages/WagonsPage.tsx` (route-level)
+5. **Routing** — `src/app/routes/router.tsx` (добави route)
+6. **Sidebar** — `src/app/layout/MainLayout.tsx` (добави menu item)
+7. **i18n** — `src/locales/bg.json` + `en.json` (винаги и двата!)
+8. **API config** — `src/api/config.ts` (endpoint константи)
+
+### FE тестове мокват API слоя:
+```typescript
+vi.mock('@/api/wagons/wagons.api', () => ({
+  wagonsApi: {
+    getWagonTypes: vi.fn(),
+    setStatus: vi.fn(),
+  }
+}));
+```
+
+### FE TDD Workflow
+
+1. **Напиши тест** — тестът ТРЯБВА да ФЕЙЛВА
+2. **Имплементирай** минимален код за да минава тестът
+3. **Верифицирай:** `npm run type-check && npm run lint && npm test`
+4. **Всичко минава** → таскът е готов
+
+### Snackbar / Toaster pattern:
+```typescript
+import { useDispatch } from 'react-redux';
+import { showSnackbar } from '@/store/slices/ui.slice';
+
+const dispatch = useDispatch();
+dispatch(showSnackbar({ message: t('wagons.featureComingSoon'), severity: 'info' }));
+```
+
+### E2E тестове минават през реален BE+DB
+
+---
+
+## 🗄️ Database Tasks
+
+### Архитектурен Reference
+
+**Преди да работиш по DB таск, ЗАДЪЛЖИТЕЛНО прочети:**
+- `C:/Projects/railrun-database-guide.md` — SQL Server schema, WagonTypes таблица, seed data, migrations
+
+### DB Rules
+
+- **Seed files (005-035) са в Azure — НЕ ги пипай!**
+- За промени по WagonTypes: създай НОВА миграция (071+) в SQL Project
+- За нови номенклатури: добави в NomenclatureService И seed data
+- Билдни и публикувай:
+```bash
+cd "C:\Projects\BDZ Project\OSDM-Src\SQLProjects\RailRunServiceSQL"
+dotnet build -c Release --no-incremental
+SqlPackage /Action:Publish /SourceFile:bin/Release/RailRunServiceDb.dacpac /TargetConnectionString:"Server=localhost,14430;Database=RailRunServiceDB;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;Encrypt=True;Connect Timeout=60;Command Timeout=0"
+```
+
+---
+
 ## 🎯 Visual Feedback Loop (КРИТИЧНО!)
 
 ### cursor-ide-browser MCP Setup
