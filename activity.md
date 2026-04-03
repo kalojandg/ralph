@@ -4,6 +4,29 @@
 
 ---
 
+### Task #66: [FE] Филтър Active/Inactive слайдер (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 66.1: Wrote 6 tests — default ACTIVE fetch, display, toggle switch presence, toggle switches to inactive, label text
+- 66.2: Added MUI Switch with FormControlLabel above table in WagonsPage
+- 66.3: Connected useWagonTypes hook with status filter — ACTIVE by default, undefined (all) when toggled
+- 66.4: All 6 tests pass
+
+**Files modified:**
+- `src/app/features/wagons/pages/WagonsPage.tsx` — Full rewrite: useState for showInactive, useWagonTypes with status filter, WagonList integration, Switch toggle
+- `src/locales/bg.json` — Added wagons.filter.showActive, wagons.filter.showInactive
+- `src/locales/en.json` — Added wagons.filter.showActive, wagons.filter.showInactive
+
+**Files created:**
+- `src/app/features/wagons/pages/__tests__/WagonsPage.test.tsx` — 6 integration tests
+
+**Git commit:** `feat(compositions): [FE] Филтър Active/Inactive слайдер — по подразбиране показва Active, toggle показва Archived/Draft`
+
+---
+
 ### Task #65: [FE] Таблица WagonList — показва вагони с име, статус, action бутони (COMPLETE)
 
 **Status:** ✅ DONE
