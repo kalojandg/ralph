@@ -2499,7 +2499,7 @@
         "action": "Тестовете минават"
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 61,

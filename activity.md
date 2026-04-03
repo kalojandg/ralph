@@ -721,3 +721,30 @@ TDD workflow гарантира:
 - `feat(compositions): Add WagonStatus nomenclature (Draft, Active, Archived) with seed data and migration`
 
 ---
+
+## [2026-04-03 13:00] - Task #60: [BE] API endpoint GET /api/wagon-types — списък вагони с филтър по статус (Active/Archived/Draft)
+
+**Status:** ✅ Complete
+
+**What was done:**
+
+### Verification Phase
+- Step 60.1: Integration tests already exist in WagonTypesControllerTests.cs — `GetWagonTypes_FilterByStatus_SendsCorrectQuery` verifies ?status=ACTIVE query param
+- Step 60.2: Query + Handler (CQRS) already implemented in GetWagonTypes.cs — Status property on query, handler filters with `Where(w => w.Status == request.Status)`
+- Step 60.3: Endpoint already in WagonTypesController with `[FromQuery] string? status = null` parameter
+- Step 60.4: All 6 tests pass ✅ (including status filter test)
+
+**Key findings:**
+- All 4 steps were already implemented as part of Task #59 (WagonStatus nomenclature)
+- Build: 0 errors ✅
+- Tests: 6/6 passed ✅
+
+**Files (no changes needed — already implemented in Task #59):**
+- RailRunService.API/Controllers/WagonTypesController.cs (line 24: status query param)
+- RailRunService.Application/Features/Nomenclatures/Queries/GetWagonTypes.cs (lines 14, 36-37: Status filter)
+- RailRunService.API.Tests/Controllers/WagonTypesControllerTests.cs (lines 160-175: status filter test)
+
+**Git commit:**
+- `chore: Update tasks.json and activity.md for Task #60`
+
+---
