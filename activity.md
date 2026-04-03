@@ -793,3 +793,48 @@ TDD workflow гарантира:
 - `feat(compositions): [BE] API endpoint PATCH /api/wagon-types/{id}/status — смяна на статус (activate/archive/deactivate)`
 
 ---
+
+## [2026-04-03 14:10] - Task #62: [FE] Рутиране: Compositions меню с 2 подменюта — Сглобяване на композиция (съществуваща страница) и Управление на вагони (нова)
+
+**Status:** ✅ Complete
+
+**What was done:**
+
+### Step 62.2 — Routes
+- Added `WAGONS: '/wagons'` to ROUTES constants in `src/app/shared/constants/index.ts`
+- Added `/wagons` route in `router.tsx` pointing to new `WagonsPage` component
+- Imported `WagonsPage` from `@/app/features/wagons`
+
+### Step 62.3 — Sidebar (MainLayout.tsx)
+- Replaced simple "Compositions" link with expandable menu (Collapse pattern)
+- Added `compositionsOpen` state with auto-expand on compositions/wagons paths
+- Compositions expandable menu has 2 sub-items:
+  - "Сглобяване" (Assembly) → `/compositions` (existing page)
+  - "Управление на вагони" (Wagon Management) → `/wagons` (new page)
+- Added `ViewListIcon` and `DirectionsRailwayIcon` imports for sub-items
+- Active state detection works for both `/compositions/*` and `/wagons` paths
+
+### Step 62.4 — i18n
+- bg.json: Added `navigation.compositionsMenu.title/assembly/wagons` + `wagons.title`
+- en.json: Added `navigation.compositionsMenu.title/assembly/wagons` + `wagons.title`
+
+### Step 62.5 — Verification
+- TypeScript: 0 errors ✅
+- ESLint: 0 errors (5 pre-existing warnings only) ✅
+- Vitest: 84 test files, 1425 tests passed ✅
+
+**Files created:**
+- src/app/features/wagons/pages/WagonsPage.tsx (placeholder page)
+- src/app/features/wagons/index.ts (barrel export)
+
+**Files modified:**
+- src/app/shared/constants/index.ts (added WAGONS route)
+- src/app/routes/router.tsx (added /wagons route + WagonsPage import)
+- src/app/layout/MainLayout.tsx (expandable Compositions menu with 2 sub-items)
+- src/locales/bg.json (added compositionsMenu + wagons i18n keys)
+- src/locales/en.json (added compositionsMenu + wagons i18n keys)
+
+**Git commit:**
+- `feat(compositions): [FE] Рутиране: Compositions меню с 2 подменюта — Сглобяване на композиция (съществуваща страница) и Управление на вагони (нова)`
+
+---
