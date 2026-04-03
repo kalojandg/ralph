@@ -4,6 +4,45 @@
 
 ---
 
+### Task #68: [FE] Бутон Редактиране — показва тостер (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 68.1: Wrote test — click edit button dispatches showSnackbar with correct message and severity
+- 68.2: Updated handleEdit in WagonsPage to dispatch showSnackbar instead of no-op
+- 68.3: All tests pass (9 WagonsPage tests, 1469 total)
+
+**Files modified:**
+- `src/app/features/wagons/pages/WagonsPage.tsx` — handleEdit dispatches showSnackbar with comingSoon message
+- `src/app/features/wagons/pages/__tests__/WagonsPage.test.tsx` — Added Task #68 test (Edit button snackbar)
+
+**Git commit:** `feat(compositions): [FE] Бутон Редактиране — показва тостер Функционалността ще бъде реализирана в бъдеще`
+
+---
+
+### Task #67: [FE] Бутон Създаване на вагон — показва тостер (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 67.1: Wrote 2 tests — Create button renders, click dispatches showSnackbar with correct message/severity
+- 67.2: Added Create button above table with handleCreate dispatching showSnackbar from ui.slice
+- 67.3: Added i18n keys wagons.createButton and wagons.comingSoon to bg.json and en.json
+- 67.4: All tests pass (9 WagonsPage tests, 1469 total)
+
+**Files modified:**
+- `src/app/features/wagons/pages/WagonsPage.tsx` — Added Button import, useDispatch, showSnackbar import, handleCreate function, Create button in header
+- `src/app/features/wagons/pages/__tests__/WagonsPage.test.tsx` — Added Redux Provider, Task #67 tests (Create button render + snackbar dispatch)
+- `src/locales/bg.json` — Added wagons.createButton, wagons.comingSoon
+- `src/locales/en.json` — Added wagons.createButton, wagons.comingSoon
+
+**Git commit:** `feat(compositions): [FE] Бутон Създаване на вагон — показва тостер Функционалността ще бъде реализирана в бъдеще`
+
+---
+
 ### Task #66: [FE] Филтър Active/Inactive слайдер (COMPLETE)
 
 **Status:** ✅ DONE
