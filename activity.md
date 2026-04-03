@@ -4,6 +4,28 @@
 
 ---
 
+### Task #70: [FE] Бутон Деактивиране — смяна на статус с confirmation dialog (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 70.1: Wrote 4 tests — archive click shows confirmation dialog, cancel closes dialog, confirm calls setWagonTypeStatus mutation, success shows snackbar
+- 70.2: Added MUI confirmation dialog inline in WagonsPage (DialogTitle, DialogContent, DialogActions)
+- 70.3: Connected with useSetWagonTypeStatus mutation via mutateAsync, dispatches success/error snackbar
+- 70.4: Added i18n keys: wagons.archive.title, message, confirm, cancel, success, error
+- 70.5: All tests pass (89 files, 1481 tests)
+
+**Files modified:**
+- `src/app/features/wagons/pages/WagonsPage.tsx` — Added archiveWagon state, handleArchiveConfirm with useSetWagonTypeStatus, confirmation Dialog
+- `src/app/features/wagons/pages/__tests__/WagonsPage.test.tsx` — Added Task #70 tests (4 tests), mocks for coachLayoutsApi and SeatMapCanvas
+- `src/locales/bg.json` — Added wagons.archive.* keys
+- `src/locales/en.json` — Added wagons.archive.* keys
+
+**Git commit:** `feat(compositions): [FE] Бутон Деактивиране — смяна на статус с confirmation dialog`
+
+---
+
 ### Task #69: [FE] Бутон Преглед — отваря диалог с SeatMapCanvas (COMPLETE)
 
 **Status:** ✅ DONE
