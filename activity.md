@@ -4,6 +4,20 @@
 
 ---
 
+### Task #71: [FE] Страница WagonsPage — сглобява WagonList + филтри + бутон създаване (COMPLETE)
+
+**Status:** ✅ DONE (already satisfied by Tasks #66-70)
+
+**Steps completed:**
+- 71.1: Tests already exist in WagonsPage.test.tsx — title (Task #66), create button (Task #67), filter (Task #66), table data (Task #66)
+- 71.2: WagonsPage.tsx already created in Task #66, enhanced in Tasks #67-70
+- 71.3: Route /wagons already connected in router.tsx, import via @/app/features/wagons barrel export
+- 71.4: All tests pass (89 files, 1481 tests)
+
+**No new files or changes needed** — all criteria satisfied by prior tasks.
+
+---
+
 ### Task #70: [FE] Бутон Деактивиране — смяна на статус с confirmation dialog (COMPLETE)
 
 **Status:** ✅ DONE
