@@ -748,3 +748,48 @@ TDD workflow гарантира:
 - `chore: Update tasks.json and activity.md for Task #60`
 
 ---
+
+## [2026-04-03 13:30] - Task #61: [BE] API endpoint PATCH /api/wagon-types/{id}/status — смяна на статус (activate/archive/deactivate)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+
+### RED Phase
+- Step 61.1: Wrote 4 failing tests in WagonTypesControllerTests.cs:
+  - `SetWagonTypeStatus_ValidStatus_ReturnsOkWithUpdatedDto` — verifies 200 OK with updated DTO
+  - `SetWagonTypeStatus_NotFound_Returns404` — verifies 404 when wagon type not found
+  - `SetWagonTypeStatus_EmptyStatus_ReturnsBadRequest` — verifies 400 for empty status
+  - `SetWagonTypeStatus_SendsCorrectCommand` — verifies correct command dispatched via MediatR
+- Build FAILED ✅ (expected — SetWagonTypeStatusCommand not yet created)
+
+### GREEN Phase
+- Step 61.2: Created `SetWagonTypeStatus.cs` in Application/Features/Nomenclatures/Commands/
+  - `SetWagonTypeStatusCommand` with Id + Status properties
+  - `SetWagonTypeStatusCommandHandler` following CQRS pattern (read repo → update → return DTO)
+  - Normalizes status to uppercase with `ToUpperInvariant()`
+  - Returns 404 NotFound if wagon type doesn't exist
+- Step 61.3: Added PATCH endpoint in WagonTypesController
+  - `[HttpPatch("{id:long}/status")]` route
+  - Validates non-empty status in body → 400 BadRequest
+  - Dispatches `SetWagonTypeStatusCommand` via MediatR
+  - Added `SetWagonTypeStatusRequest` record DTO
+  - Added using for `RailRunService.Application.Features.Nomenclatures.Commands`
+
+### DONE Phase
+- Build: 0 errors ✅
+- Tests: 10/10 passed (6 existing + 4 new) ✅
+
+**Files created:**
+- RailRunService.Application/Features/Nomenclatures/Commands/SetWagonTypeStatus.cs
+
+**Files modified:**
+- RailRunService.API/Controllers/WagonTypesController.cs (added PATCH endpoint + request DTO)
+- RailRunService.API.Tests/Controllers/WagonTypesControllerTests.cs (added 4 new tests)
+
+**Git commit:**
+- `feat(compositions): [BE] API endpoint PATCH /api/wagon-types/{id}/status — смяна на статус (activate/archive/deactivate)`
+
+---
