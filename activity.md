@@ -4,6 +4,31 @@
 
 ---
 
+### Task #69: [FE] Бутон Преглед — отваря диалог с SeatMapCanvas (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 69.1: Wrote 8 tests — dialog not rendered when closed, title with series name, calls getBySeriesName, renders SeatMapCanvas, empty selectedIds (read-only), error state, close button, loading state
+- 69.2: Created WagonPreviewDialog.tsx — MUI Dialog with SeatMapCanvas, no toolbar/actions
+- 69.3: Loads layout via coachLayoutsApi.getBySeriesName(seriesName), generates default seats (all AVAILABLE)
+- 69.4: Added i18n keys: wagons.preview.title, wagons.preview.close, wagons.preview.noLayout, wagons.preview.loading
+- 69.5: All tests pass (89 files, 1477 tests)
+
+**Files created:**
+- `src/app/features/wagons/components/WagonPreviewDialog.tsx` — Dialog with SeatMapCanvas in read-only mode
+- `src/app/features/wagons/components/__tests__/WagonPreviewDialog.test.tsx` — 8 tests
+
+**Files modified:**
+- `src/app/features/wagons/pages/WagonsPage.tsx` — Added previewWagon state, handlePreview opens dialog, WagonPreviewDialog integration
+- `src/locales/bg.json` — Added wagons.preview.* keys
+- `src/locales/en.json` — Added wagons.preview.* keys
+
+**Git commit:** `feat(compositions): [FE] Бутон Преглед — отваря диалог с renderer (SeatMapCanvas) в read-only режим`
+
+---
+
 ### Task #68: [FE] Бутон Редактиране — показва тостер (COMPLETE)
 
 **Status:** ✅ DONE
