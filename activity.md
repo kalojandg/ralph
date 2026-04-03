@@ -4,6 +4,31 @@
 
 ---
 
+### Task #63: [FE] API слой: wagons.api.ts и wagons.types.ts (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 63.1: Wrote 14 integration tests for `wagonsApi.getWagonTypes()` and `wagonsApi.setWagonTypeStatus()` (RED — tests fail, module not found)
+- 63.2: Created `src/api/wagons/wagons.types.ts` with `WagonTypeDto`, `WagonTypeStatus`, response types
+- 63.3: Created `src/api/wagons/wagons.api.ts` with `getWagonTypes(status?)` and `setWagonTypeStatus(id, status)`
+- 63.4: Added `SET_STATUS` endpoint to `API_ENDPOINTS.WAGON_TYPES` in `api/config.ts`
+- 63.5: All 14 tests pass (GREEN); full suite: 85 files, 1439 tests, 0 failures
+
+**Files created:**
+- `src/api/wagons/wagons.types.ts` — WagonTypeDto, WagonTypeStatus, response types
+- `src/api/wagons/wagons.api.ts` — wagonsApi with getWagonTypes, setWagonTypeStatus
+- `src/api/wagons/index.ts` — barrel export
+- `src/api/wagons/__tests__/wagons.api.test.ts` — 14 integration tests
+
+**Files modified:**
+- `src/api/config.ts` — Added WAGON_TYPES.SET_STATUS endpoint
+
+**Git commit:** `feat(compositions): [FE] API слой: wagons.api.ts и wagons.types.ts — заявки към BE за списък вагони и смяна на статус`
+
+---
+
 ## 📚 Етап 2: Advanced Seat Management & TDD Mastery (Tasks #44-#80)
 
 **Фокус:** Пълна seat management система с TDD workflow и визуално тестване
