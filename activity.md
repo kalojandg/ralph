@@ -4,6 +4,30 @@
 
 ---
 
+### Task #65: [FE] Таблица WagonList — показва вагони с име, статус, action бутони (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 65.1: Wrote 12 tests — table renders names, statuses, classes, capacities, headers; edit/preview buttons visible for all; archive for DRAFT only; delete for ARCHIVED only; NOT for ACTIVE; loading, error, empty states
+- 65.2: Created `WagonList.tsx` with MUI Table (TableContainer, TableHead, TableBody, Chip statuses, IconButton actions)
+- 65.3: Archive button renders ONLY for DRAFT; Delete button renders ONLY for ARCHIVED; neither for ACTIVE
+- 65.4: Added i18n keys to bg.json and en.json (table headers, statuses, actions, empty/error messages)
+- 65.5: All 12 tests pass
+
+**Files created:**
+- `src/app/features/wagons/components/WagonList.tsx` — WagonList table component
+- `src/app/features/wagons/components/__tests__/WagonList.test.tsx` — 12 component tests
+
+**Files modified:**
+- `src/locales/bg.json` — Added wagons.table, wagons.status, wagons.actions translations
+- `src/locales/en.json` — Added wagons.table, wagons.status, wagons.actions translations
+
+**Git commit:** `feat(compositions): [FE] Таблица WagonList — показва вагони с име, статус, action бутони (edit, preview, archive/delete)`
+
+---
+
 ### Task #64: [FE] React Query hooks: useWagonTypes и useSetWagonStatus (COMPLETE)
 
 **Status:** ✅ DONE
