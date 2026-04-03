@@ -4,6 +4,22 @@
 
 ---
 
+### Task #72: [E2E] End-to-end тест: пълен wagon management workflow (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 72.1-72.6: Wrote 10 integration tests covering full workflow: list active wagon types, toggle to inactive, preview (load coach layout), edit/create snackbar, archive DRAFT wagon, refresh after archive
+- 72.7: All tests pass (90 files, 1491 tests)
+
+**Files created:**
+- `src/api/wagons/__tests__/e2e-wagon-management-flow.test.ts` — 10 tests: 7 workflow steps + 3 error handling
+
+**Git commit:** `feat(compositions): [E2E] End-to-end тест: пълен workflow — навигация до вагони, виждане на таблица, филтриране, преглед на вагон, деактивиране`
+
+---
+
 ### Task #71: [FE] Страница WagonsPage — сглобява WagonList + филтри + бутон създаване (COMPLETE)
 
 **Status:** ✅ DONE (already satisfied by Tasks #66-70)

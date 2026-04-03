@@ -2815,6 +2815,6 @@
         "action": "Всички E2E тестове минават с реален BE + DB"
       }
     ],
-    "passes": false
+    "passes": true
   }
 ]
