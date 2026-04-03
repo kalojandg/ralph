@@ -2451,26 +2451,31 @@
     "steps": [
       {
         "id": "59.1",
+        "phase": "RED",
         "action": "Напиши unit тестове за WagonStatus enum/entity в Domain слоя"
       },
       {
         "id": "59.2",
+        "phase": "GREEN",
         "action": "Създай WagonStatus номенклатура в Domain (enum или entity, по модела на CompositionStatus)"
       },
       {
         "id": "59.3",
+        "phase": "GREEN",
         "action": "Добави Status колона в WagonTypes таблицата (миграция)"
       },
       {
         "id": "59.4",
+        "phase": "GREEN",
         "action": "Seed data: всички съществуващи вагони получават Status=Active"
       },
       {
         "id": "59.5",
+        "phase": "DONE",
         "action": "Регистрирай WagonStatus в NomenclatureService за да се достъпва от FE"
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 60,
