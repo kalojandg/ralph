@@ -4,6 +4,26 @@
 
 ---
 
+### Task #64: [FE] React Query hooks: useWagonTypes и useSetWagonStatus (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 64.1: Wrote 9 tests for useWagonTypes (loading, success, error, filter) and useSetWagonTypeStatus (mutate, error, cache invalidation) — RED confirmed
+- 64.2: Created `src/app/features/wagons/hooks/useWagonTypes.ts` with query key factory + useQuery hook
+- 64.3: Created `src/app/features/wagons/hooks/useSetWagonStatus.ts` with useMutation + invalidateQueries on success
+- 64.4: All 9 hook tests pass (GREEN); combined: 23 tests (14 API + 9 hooks), 0 failures
+
+**Files created:**
+- `src/app/features/wagons/hooks/useWagonTypes.ts` — useWagonTypes hook + wagonTypeQueryKeys
+- `src/app/features/wagons/hooks/useSetWagonStatus.ts` — useSetWagonTypeStatus mutation hook
+- `src/app/features/wagons/hooks/__tests__/useWagonTypes.test.ts` — 9 integration tests
+
+**Git commit:** `feat(compositions): [FE] React Query hooks: useWagonTypes и useSetWagonStatus`
+
+---
+
 ### Task #63: [FE] API слой: wagons.api.ts и wagons.types.ts (COMPLETE)
 
 **Status:** ✅ DONE
