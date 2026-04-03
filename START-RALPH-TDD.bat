@@ -1,14 +1,14 @@
 @echo off
-REM TDD Ralph Wiggum - Full run with 20 iterations
+REM TDD Ralph Wiggum - Full run with 70 iterations
 
 echo.
 echo ====================================================
 echo    Ralph Wiggum TDD - Compositions Module
 echo    Test-Driven Development + Visual Feedback
-echo    Model: Claude Opus 4
+echo    Model: Claude Opus 4.6
 echo ====================================================
 echo.
-echo Starting with 20 iterations...
+echo Starting with 70 iterations...
 echo.
 echo TDD Workflow: RED - GREEN - VISUAL - REFACTOR - DONE
 echo Visual Testing: cursor-ide-browser MCP screenshots
@@ -19,7 +19,7 @@ echo.
 pause
 echo.
 
-powershell.exe -ExecutionPolicy Bypass -NoProfile -File "%~dp0ralph.ps1" 20
+powershell.exe -ExecutionPolicy Bypass -NoProfile -File "%~dp0ralph.ps1" 70
 
 echo.
 echo ====================================================
