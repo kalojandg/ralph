@@ -1462,3 +1462,29 @@ TDD workflow гарантира:
 **Git commit:** `feat(compositions): [FE] LocalStorage persistence — автоматично записване на промени при всяка промяна на grid state`
 
 ---
+
+### Task #90: [FE] Navigation guard — предупреждение при опит за напускане на страницата с незапазени промени (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 90.1 (RED): Wrote 9 failing tests in useUnsavedChangesGuard.test.tsx — UnsavedChangesDialog: not shown when closed, title/message render, 3 buttons (Save/Discard/Cancel) render, each button calls correct callback; beforeunload: registered when isDirty=true, not registered when isDirty=false
+- 90.2 (GREEN): Created `useUnsavedChangesGuard` hook — uses React Router's `useBlocker` for SPA navigation blocking, `window.onbeforeunload` for browser close/refresh; derives `showDialog` from `blocker.state === 'blocked'`; created `UnsavedChangesDialog` MUI component with Save/Discard/Cancel buttons
+- 90.3 (GREEN): Integrated in WagonCreationPage — `isDirty = gridElements.length > 0`; wired `handleSave` (placeholder for Task #91); renders UnsavedChangesDialog; updated existing tests to use `createMemoryRouter` + `RouterProvider` (required for `useBlocker`)
+- 90.4 (GREEN): Added i18n keys `wagons.creation.unsavedChanges.{title,message,save,discard,cancel}` in bg.json and en.json
+- 90.5 (DONE): Verified — type-check ✅ (0 errors), lint ✅ (0 errors, 517 pre-existing warnings), wagons tests 107/107 passed ✅
+
+**Files created:**
+- `src/app/features/wagons/hooks/useUnsavedChangesGuard.tsx`
+- `src/app/features/wagons/hooks/__tests__/useUnsavedChangesGuard.test.tsx`
+
+**Files modified:**
+- `src/app/features/wagons/pages/WagonCreationPage.tsx` (added useUnsavedChangesGuard + UnsavedChangesDialog integration, isDirty tracking)
+- `src/app/features/wagons/pages/__tests__/WagonCreationPage.test.tsx` (updated to use createMemoryRouter + RouterProvider for useBlocker compatibility)
+- `src/locales/bg.json` (added wagons.creation.unsavedChanges keys)
+- `src/locales/en.json` (added wagons.creation.unsavedChanges keys)
+
+**Git commit:** `feat(compositions): [FE] Navigation guard — предупреждение при опит за напускане на страницата с незапазени промени`
+
+---
