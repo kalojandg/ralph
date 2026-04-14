@@ -1421,3 +1421,22 @@ TDD workflow гарантира:
 **Git commit:** `feat(compositions): [FE] OsdmGrid — drop zone: приемане на елементи от палетата върху grid клетки`
 
 ---
+
+### Task #88: [FE] WagonCreationPage layout — сглобява ElementPalette + OsdmGrid + DndContext (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 88.1 (RED): Wrote 5 failing tests in WagonCreationPage.test.tsx — ElementPalette renders, OsdmGrid renders, default gridSize 24×10, flex layout (palette 0 0 200px, grid flex: 1), drop zone cells render
+- 88.2 (GREEN): Updated WagonCreationPage.tsx — flex layout with ElementPalette (flex: 0 0 200px) on the left and OsdmGrid (flex: 1) on the right; wrapped in DndContext from @dnd-kit/core; manages gridElements state and passes to OsdmGrid; default palette items: Seat, Table, WC, Door, Wall, Window
+- 88.3 (GREEN): Added onDragEnd handler in DndContext — reads drop target coordinates and drag source data, creates GridElement with unique ID, replaces any existing element at same coordinates
+- 88.4 (DONE): Verified — type-check ✅ (0 errors), lint ✅ (0 errors, 3 template-literal warnings), tests 1821 passed / 1 pre-existing fail (KP612GeneratePage) ✅
+
+**Files modified:**
+- `src/app/features/wagons/pages/WagonCreationPage.tsx` (added DndContext, ElementPalette, OsdmGrid, handleDragEnd, gridElements state)
+- `src/app/features/wagons/pages/__tests__/WagonCreationPage.test.tsx` (added 5 Task #88 tests)
+
+**Git commit:** `feat(compositions): [FE] WagonCreationPage layout — сглобява ElementPalette + OsdmGrid + DndContext`
+
+---

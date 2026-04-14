@@ -3321,7 +3321,7 @@
         "action": "npm test && npm run type-check — тестовете минават."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 89,
