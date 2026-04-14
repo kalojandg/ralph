@@ -97,6 +97,41 @@
 
 ---
 
+### Task #77: [FE] Рефакторинг OpenSaloonLayout — Стъпка 5: Извличане на cellRenderers.tsx и zonePanel.tsx (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 77.1 (RED): Baseline confirmed — 129 passed / 1 pre-existing fail, type-check clean
+- 77.2 (GREEN): Created `layoutRenderers/cellRenderers.tsx` — extracted `renderGridCells()` with full cell iteration loop (corridor, folding groups, vestibule, BIG_TABLE, WC, STAIRS, seats, grid labels)
+- 77.3 (GREEN): Created `layoutRenderers/zonePanel.tsx` — extracted `renderZoneBox()`, `renderFreightDoor()`, and `renderLegend()` functions
+- 77.4 (GREEN): Updated OpenSaloonLayout.tsx — replaced inline code with function calls; removed 7 unused imports (AccommodationType, SeatProperty, OSDM_ICON_MAP, hasOsdmData, OsdmMuiSvgIcon, TABLE_STYLE, WC_BOX_WIDTH_INSET, SeatCell)
+- 77.5 (DONE): Verified — type-check ✅, tests 129 passed / 1 pre-existing fail ✅
+
+**Files created:**
+- `src/app/features/compositions/components/layoutRenderers/cellRenderers.tsx` (464 lines)
+- `src/app/features/compositions/components/layoutRenderers/zonePanel.tsx` (183 lines)
+
+**Files modified:**
+- `src/app/features/compositions/components/layoutRenderers/OpenSaloonLayout.tsx` (reduced from ~815 to ~298 lines)
+
+**Етап 4A Summary — OpenSaloonLayout refactoring complete:**
+- Original: 2139 lines in single file
+- Final: ~298 lines in OpenSaloonLayout.tsx + 7 extracted modules
+  - `types.ts` — shared type definitions
+  - `constants.ts` — style constants
+  - `SeatCell.tsx` — individual seat cell component
+  - `gridBuilder.ts` — pure grid layout computation
+  - `wallRenderers.tsx` — wall column and bottom border rendering
+  - `osdmRenderers.tsx` — OSDM data-driven element rendering
+  - `cellRenderers.tsx` — grid cell iteration and rendering
+  - `zonePanel.tsx` — zone panels, freight door, legend
+
+**Git commit:** `a281cf1` — refactor: extract cellRenderers.tsx and zonePanel.tsx from OpenSaloonLayout
+
+---
+
 *(Tasks will be logged here as they are completed)*
 
 ---
