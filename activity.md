@@ -132,6 +132,28 @@
 
 ---
 
+### Task #78: [BE] CRUD API за CoachLayouts — POST /api/coach-layouts (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 78.1 (RED): Wrote 4 controller-layer unit tests: 201 Created, 404 WagonType not found, 400 invalid JSON, command verification
+- 78.2 (GREEN): Created `CreateCoachLayout.cs` — Command + Handler with validation (WagonTypeId exists, GridWidth/GridLength > 0, OsdmLayoutJson valid JSON)
+- 78.3 (GREEN): Added POST endpoint in `CoachLayoutsController.cs` with `CreateCoachLayoutRequest` record
+- 78.4 (DONE): Build ✅, 14/14 tests passed (10 existing WagonTypes + 4 new CoachLayouts) ✅
+
+**Files created:**
+- `RailRunService.Application/Features/Nomenclatures/Commands/CreateCoachLayout.cs`
+- `RailRunService.API.Tests/Controllers/CoachLayoutsControllerTests.cs`
+
+**Files modified:**
+- `RailRunService.API/Controllers/CoachLayoutsController.cs` (added POST endpoint + CreateCoachLayoutRequest record)
+
+**Git commit:** `a09b05ec` — feat(coach-layouts): add POST /api/coach-layouts endpoint
+
+---
+
 *(Tasks will be logged here as they are completed)*
 
 ---
