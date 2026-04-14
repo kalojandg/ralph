@@ -35,11 +35,12 @@ if (!(Test-Path $iterationScript)) {
 }
 
 # Main loop
-for ($i = 1; $i -le $iterations; $i++) {
+$i = 1
+while ($i -le $iterations) {
     Write-Host ""
     Write-Host ">>> Starting iteration $i of $iterations >>>" -ForegroundColor Magenta
     Write-Host ""
-    
+
     # Execute one iteration — run inline so output is visible
     & .\$iterationScript -iterationNumber $i -configFile $configFile
     $exitCode = $LASTEXITCODE
@@ -47,9 +48,10 @@ for ($i = 1; $i -le $iterations; $i++) {
     Write-Host ""
     Write-Host "<<< End of iteration $i <<<" -ForegroundColor Magenta
     Write-Host ""
-    
-    # Check if complete
+
+    # Check exit codes
     if ($exitCode -eq 0) {
+        # All tasks complete
         Write-Host ""
         Write-Host "====================================================" -ForegroundColor Green
         Write-Host "   [+] All tasks complete!" -ForegroundColor Green
@@ -58,9 +60,17 @@ for ($i = 1; $i -le $iterations; $i++) {
         Write-Host ""
         exit 0
     }
-    
-    # Optional: pause between iterations (except last one)
-    if ($i -lt $iterations) {
+    elseif ($exitCode -eq 2) {
+        # Quota exceeded — iteration already waited, retry WITHOUT consuming iteration count
+        Write-Host "[i] Retrying iteration $i after quota wait..." -ForegroundColor Cyan
+        continue
+    }
+
+    # Normal completion of one task — advance to next iteration
+    $i++
+
+    # Brief pause between iterations
+    if ($i -le $iterations) {
         Start-Sleep -Milliseconds 500
     }
 }

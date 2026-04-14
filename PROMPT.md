@@ -18,6 +18,17 @@
 
 Работи върху **ЕДИН ЕДИНСТВЕН ТАСК** от `C:/Projects/ralph/tasks.json` където `"passes": false`.
 
+### 🚨 CRITICAL: ONE TASK PER ITERATION — THEN STOP
+
+Тази итерация = ТОЧНО ЕДИН таск. След като го завършиш и къмитнеш:
+1. Изведи `<task-complete>` XML
+2. Изведи `<status>CONTINUE</status>` или `<promise>COMPLETE</promise>`
+3. **СПРИ ВЕДНАГА. НЕ продължавай със следващ таск.**
+4. Всеки следващ таск ще бъде изпълнен от **нов агент в нова итерация** с чист context.
+
+**Причина:** Избягваме context bloating. Всяка итерация = нов агент = чист context window.
+**Ако продължиш с втори таск в същата итерация — нарушаваш Ralph Wiggum алгоритъма.**
+
 ## TDD Workflow (RED → GREEN → VISUAL → REFACTOR)
 
 ### Step 1: Find Next Task
@@ -182,9 +193,9 @@
    - change remotes
    - make up your own commit message (use exact description!)
 
-### Step 5: Report Status
+### Step 5: Report Status AND STOP
 
-**Output exactly:**
+**Output exactly this, then STOP — do NOT continue with another task:**
 
 ```xml
 <task-complete>
@@ -195,22 +206,30 @@
 </task-complete>
 ```
 
-**IF there are more tasks with passes: false:**
+**Then check: are there more tasks with passes: false?**
 
-Output:
+If YES — output this and **STOP IMMEDIATELY** (next task = next iteration = new agent):
 ```xml
 <status>CONTINUE</status>
 <next-task>{next_task_id}</next-task>
 ```
 
-**IF ALL tasks have passes: true:**
-
-Output:
+If NO (all tasks done) — output:
 ```xml
 <promise>COMPLETE</promise>
 <total-tasks>{count}</total-tasks>
 <all-passed>true</all-passed>
 ```
+
+### 🛑 AFTER Step 5: YOUR ITERATION IS OVER
+
+**Do NOT:**
+- Start working on the next task
+- Read the next task's steps
+- "Prepare" anything for the next iteration
+- Continue writing code
+
+**The Ralph loop will spawn a NEW agent with clean context for the next task.**
 
 ## Architecture Reference Files
 
@@ -380,13 +399,12 @@ Mark `"passes": true` ONLY IF:
 
 ---
 
-**Ralph, work on ONE task, follow TDD phases, verify everything, commit, and report status!**
+**Ralph, work on ONE task, follow TDD phases, verify everything, commit, report status, and STOP.**
 
 **Remember:** 
+- **ONE TASK per iteration — then STOP. Next task = next agent = clean context.**
 - Steps ONE BY ONE
 - Tests FIRST (for TDD tasks)
 - Screenshot comparison MANDATORY (for designReference tasks)
 - Iterate until ALL verifications pass
-- Only then mark complete
-
-**Good luck! 🚀**
+- Only then mark complete, commit, output XML, and STOP

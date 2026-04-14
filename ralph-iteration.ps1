@@ -150,6 +150,68 @@ Write-Host ""
 if (Test-Path $outputFile) {
     $result = Get-Content $outputFile -Raw
 
+    # === QUOTA DETECTION ===
+    # Pattern: "You've hit your limit · resets 7pm (Europe/Sofia)"
+    if ($result -match "hit your limit") {
+        $waitMinutes = 60  # default fallback: wait 1 hour
+
+        if ($result -match "resets\s+(\d{1,2})(am|pm)\s*\(([^)]+)\)") {
+            $resetHour = [int]$Matches[1]
+            $ampm = $Matches[2]
+            $tz = $Matches[3]
+
+            # Convert to 24h
+            if ($ampm -eq "pm" -and $resetHour -ne 12) { $resetHour += 12 }
+            if ($ampm -eq "am" -and $resetHour -eq 12) { $resetHour = 0 }
+
+            $now = Get-Date
+            $resetTime = Get-Date -Hour $resetHour -Minute 0 -Second 0
+            # If reset time is in the past, it means tomorrow
+            if ($resetTime -le $now) { $resetTime = $resetTime.AddDays(1) }
+
+            $waitMinutes = [math]::Ceiling(($resetTime - $now).TotalMinutes)
+        }
+
+        # Add 2 min buffer, minimum 5 min
+        $waitMinutes = [math]::Max(5, $waitMinutes + 2)
+
+        Write-Host ""
+        Write-Host "============================================" -ForegroundColor Red
+        Write-Host "   QUOTA EXCEEDED" -ForegroundColor Red
+        Write-Host "   Resets at: ${resetHour}:00 ($tz)" -ForegroundColor Red
+        Write-Host "   Waiting $waitMinutes minutes..." -ForegroundColor Red
+        Write-Host "============================================" -ForegroundColor Red
+        Write-Host ""
+
+        # Save log
+        $logDir = "logs"
+        if (!(Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
+        $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
+        $logFile = "$logDir/iteration-$iterationNumber-$timestamp.txt"
+        "QUOTA EXCEEDED - waiting until $resetTime" | Out-File -FilePath $logFile -Encoding UTF8
+
+        # Wait loop — print status every 5 minutes
+        $waited = 0
+        while ($waited -lt $waitMinutes) {
+            $remaining = $waitMinutes - $waited
+            $resumeAt = (Get-Date).AddMinutes($remaining).ToString("HH:mm")
+            Write-Host "[$(Get-Date -Format 'HH:mm')] Waiting $remaining more minutes (resume at ~$resumeAt)..." -ForegroundColor Yellow
+            $sleepChunk = [math]::Min(5, $remaining)
+            Start-Sleep -Seconds ($sleepChunk * 60)
+            $waited += $sleepChunk
+        }
+
+        Write-Host ""
+        Write-Host "[+] Quota should be reset. Resuming..." -ForegroundColor Green
+        Write-Host ""
+
+        # Cleanup and retry this iteration (exit 2 = retry signal)
+        Remove-Item $outputFile -ErrorAction SilentlyContinue
+        Remove-Item $tempPrompt -ErrorAction SilentlyContinue
+        exit 2
+    }
+
+    # === NORMAL OUTPUT ===
     Write-Host "============================================" -ForegroundColor Yellow
     Write-Host "   CLAUDE OUTPUT:" -ForegroundColor Yellow
     Write-Host "============================================" -ForegroundColor Yellow
