@@ -308,6 +308,28 @@
 
 ---
 
+### Task #91: [FE] Бутон 'Запази' — изпращане на layout към backend (createWagonType + createCoachLayout) (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 91.1 (RED): Wrote 7 failing tests in WagonCreationPage.test.tsx — Save button renders, createWagonType called on click, createCoachLayout called with returned wagonTypeId, navigate to /wagons on success, success snackbar on success, error snackbar on failure, localStorage draft cleared on success
+- 91.2 (GREEN): Added Save button in toolbar (Box flex header with h4 title and Button). On click: 1) createWagonType.mutateAsync with placeholder data; 2) createCoachLayout.mutateAsync with wagonTypeId + OSDM JSON; 3) clearDraft(); 4) dispatch success snackbar + navigate('/wagons')
+- 91.3 (GREEN): Created `buildOsdmLayoutJson()` function — converts gridElements to OSDM JSON format with gridSize, internals (icon + x,y), empty signs array
+- 91.4 (GREEN): Added i18n keys wagons.creation.save, saveSuccess, saveError in bg.json and en.json
+- 91.5 (DONE): Verified — type-check ✅ (0 errors), lint ✅ (0 errors, 4 pre-existing warnings), tests 114 passed (11 files) ✅
+
+**Files modified:**
+- `src/app/features/wagons/pages/WagonCreationPage.tsx` (added Save button, handleSave with createWagonType + createCoachLayout chain, buildOsdmLayoutJson helper, useNavigate, useDispatch, showSnackbar)
+- `src/app/features/wagons/pages/__tests__/WagonCreationPage.test.tsx` (added 7 Task #91 tests, Redux Provider, mocked useCreateWagonType + useCreateCoachLayout + useNavigate)
+- `src/locales/bg.json` (added wagons.creation.save, saveSuccess, saveError)
+- `src/locales/en.json` (added wagons.creation.save, saveSuccess, saveError)
+
+**Git commit:** `feat(compositions): [FE] Бутон 'Запази' — изпращане на layout към backend (createWagonType + createCoachLayout)`
+
+---
+
 *(Tasks will be logged here as they are completed)*
 
 ---
