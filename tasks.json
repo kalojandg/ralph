@@ -3541,6 +3541,6 @@
         "action": "npm test && npx playwright test — ВСИЧКИ тестове минават (unit + E2E). npm run type-check && npm run lint — чисто."
       }
     ],
-    "passes": false
+    "passes": true
   }
 ]

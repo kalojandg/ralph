@@ -1,3 +1,51 @@
+## [2026-04-14 23:45] - Task #95: [E2E] End-to-end тест: пълен wagon creation workflow — навигация, drag-drop елементи, запис, проверка
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 95.1: Wrote 6 E2E Playwright tests in `tests/wagons/wagon-creation-workflow.spec.ts`
+  - Navigate from /wagons to /wagons/new via Create button
+  - Display creation page with title, palette, and grid
+  - Drag element from palette to grid position (5,3)
+  - Drag two elements onto grid (Seat at 5,3 and Table at 10,5)
+  - Fill metadata form fields (SeriesName, Capacity)
+  - Full workflow: navigate → drag → fill form → save → snackbar → redirect → verify in table
+- API mocks: wagon-types (GET/POST), wagon-status nomenclature, coach-layouts (POST)
+- Ran tests — all FAIL ✅ (dev server not running)
+
+### GREEN Phase
+- Started dev server on port 3001
+- Iteration 1: 4 pass, 2 fail — button "detached from DOM" during re-render. Fixed by waiting for table visibility and using `.first()` for stable element reference.
+- Iteration 2: Still 2 fail — "result is not iterable" JS crash. Root cause: API mock double-wrapping data (body had `{ data: { data: [...] } }` but axios adds `.data` wrapper). Also wrong nomenclature URL (`wagon-statuses` plural vs `wagon-status` singular). Fixed both.
+- Iteration 3: 5 pass, 1 fail — "Unsaved Changes" dialog blocking redirect after save. Race condition: `clearDraft()` sets state async but `navigate()` fires before React re-renders, so `isDirty` is still true when `useBlocker` evaluates.
+- Fix: Added `saveCompletedRef` (useRef) in WagonCreationPage. Changed `useUnsavedChangesGuard` to accept `saveCompletedRef` and use callback form `useBlocker(() => { if (saveCompletedRef?.current) return false; return isDirty; })` — evaluated at navigation time, not render time.
+- All 6 E2E tests PASS ✅
+
+### DONE Phase
+- Step 95.3: Verified all checks pass
+  - E2E tests: 6 passed (Chromium) ✅
+  - Unit tests: 1875 passed / 1 pre-existing fail (KP612GeneratePage) — 0 new failures
+  - Type-check: 0 errors
+  - Lint: 0 new errors
+
+**Files created:**
+- `tests/wagons/wagon-creation-workflow.spec.ts`
+
+**Files modified:**
+- `src/app/features/wagons/pages/WagonCreationPage.tsx` (added saveCompletedRef to fix navigation guard race condition)
+- `src/app/features/wagons/hooks/useUnsavedChangesGuard.tsx` (added saveCompletedRef param, useBlocker callback for real-time check)
+
+**Bug fixed:**
+- Navigation guard (useBlocker) blocking redirect after successful save — race condition between React async state update and router navigation. Fixed with useRef for synchronous communication.
+
+**Git commit:**
+- `feat(compositions): [E2E] End-to-end тест: пълен wagon creation workflow — навигация, drag-drop елементи, запис, проверка`
+
+---
+
 ## [2026-04-14 23:00] - Task #94: [FE] Wagon metadata form — полета за SeriesName, TravelClass, CompartmentType, Capacity
 
 **Status:** ✅ Complete
