@@ -1440,3 +1440,25 @@ TDD workflow гарантира:
 **Git commit:** `feat(compositions): [FE] WagonCreationPage layout — сглобява ElementPalette + OsdmGrid + DndContext`
 
 ---
+
+### Task #89: [FE] LocalStorage persistence — автоматично записване на промени при всяка промяна на grid state (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 89.1 (RED): Wrote 9 failing tests in useWagonDraft.test.ts — empty init, save on setGridElements, restore from localStorage on mount, restore gridSize, update on element removal, timestamp in stored data, gridSize in stored data, clearDraft removes data, corrupted data handled gracefully
+- 89.2 (GREEN): Created `useWagonDraft` hook — reads from localStorage('wagon_creation_draft') on mount, writes { gridSize, gridElements, timestamp } via useEffect on every state change, clearDraft removes key and resets state, handles corrupted JSON gracefully
+- 89.3 (GREEN): Integrated useWagonDraft in WagonCreationPage — replaced useState with useWagonDraft(), gridSize now from hook instead of constant, removed unused useState import
+- 89.4 (DONE): Verified — type-check ✅ (0 errors), lint ✅ (0 errors, 514 pre-existing warnings), wagons tests 98/98 passed ✅
+
+**Files created:**
+- `src/app/features/wagons/hooks/useWagonDraft.ts`
+- `src/app/features/wagons/hooks/__tests__/useWagonDraft.test.ts`
+
+**Files modified:**
+- `src/app/features/wagons/pages/WagonCreationPage.tsx` (replaced useState with useWagonDraft hook, removed DEFAULT_GRID_SIZE constant)
+
+**Git commit:** `feat(compositions): [FE] LocalStorage persistence — автоматично записване на промени при всяка промяна на grid state`
+
+---
