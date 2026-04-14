@@ -251,6 +251,33 @@
 
 ---
 
+### Task #83: [FE] React Query hooks за creation: useCreateWagonType, useCreateCoachLayout, useUpdateCoachLayout, useSaveSeats (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 83.1 (RED): Tests already written in `useCreationHooks.test.ts` (11 tests: useCreateWagonType 3, useCreateCoachLayout 3, useUpdateCoachLayout 2, useSaveSeats 3)
+- 83.2 (GREEN): All 4 hooks already implemented: `useCreateWagonType.ts` (with wagonType query cache invalidation), `useCreateCoachLayout.ts`, `useUpdateCoachLayout.ts`, `useSaveSeats.ts`
+- 83.3 (DONE): Verified — type-check ✅ (0 errors), lint ✅ (0 errors, 483 pre-existing warnings), tests 131/132 passed (1 pre-existing KP612 fail) ✅
+
+**Note:** All hooks and tests were already implemented in prior iterations as part of Tasks #78-#82 backend CRUD work. Task #83 confirmed everything is wired correctly.
+
+**Files (already existed, no changes needed):**
+- `src/app/features/wagons/hooks/useCreateWagonType.ts` — useMutation + cache invalidation
+- `src/app/features/wagons/hooks/useCreateCoachLayout.ts` — useMutation (simple)
+- `src/app/features/wagons/hooks/useUpdateCoachLayout.ts` — useMutation (simple)
+- `src/app/features/wagons/hooks/useSaveSeats.ts` — useMutation (simple)
+- `src/app/features/wagons/hooks/__tests__/useCreationHooks.test.ts` — 11 tests
+
+**Етап 4C Summary — FE API + Hooks complete:**
+- Task #82: API layer (createLayout, updateLayout, saveSeats, createWagonType)
+- Task #83: React Query mutation hooks (4 hooks, 11 tests)
+
+**Git commit:** `chore: Update tasks.json and activity.md for Task #83`
+
+---
+
 *(Tasks will be logged here as they are completed)*
 
 ---
