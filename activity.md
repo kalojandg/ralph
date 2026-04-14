@@ -198,6 +198,35 @@
 
 ---
 
+### Task #81: [BE] POST /api/wagon-types — създаване на нов WagonType (Draft) с празен CoachLayout (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 81.1 (RED): Wrote 3 controller-layer unit tests: 201 Created with DRAFT status, 409 Conflict duplicate SeriesName, command verification
+- 81.2 (GREEN): Created `CreateWagonType.cs` — Command + Handler: creates WagonType(Status=DRAFT) + empty CoachLayout(gridSize 24×10); validates SeriesName uniqueness
+- 81.3 (GREEN): Added POST endpoint in `WagonTypesController.cs` with `CreateWagonTypeRequest` record
+- 81.4 (DONE): Build ✅, 25/25 tests passed ✅
+
+**Етап 4B Summary — Backend CRUD complete:**
+- Task #78: POST /api/coach-layouts (create layout)
+- Task #79: PUT /api/coach-layouts/{id} (update layout)
+- Task #80: POST /api/coach-layouts/{layoutId}/seats (batch save seats)
+- Task #81: POST /api/wagon-types (create WagonType with Draft + empty CoachLayout)
+- Total: 25 tests, all passing
+
+**Files created:**
+- `RailRunService.Application/Features/Nomenclatures/Commands/CreateWagonType.cs`
+
+**Files modified:**
+- `RailRunService.API/Controllers/WagonTypesController.cs` (added POST endpoint + CreateWagonTypeRequest record)
+- `RailRunService.API.Tests/Controllers/WagonTypesControllerTests.cs` (added 3 create tests)
+
+**Git commit:** `a3afba11` — feat(wagon-types): add POST /api/wagon-types endpoint
+
+---
+
 *(Tasks will be logged here as they are completed)*
 
 ---
