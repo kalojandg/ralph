@@ -53,6 +53,25 @@
 
 **Git commit:** `feat(compositions): [FE] Рефакторинг OpenSaloonLayout — Стъпка 2: Извличане на SeatCell.tsx`
 
+### Task #75: [FE] Рефакторинг OpenSaloonLayout — Стъпка 3: Извличане на gridBuilder.ts (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 75.1 (RED): Baseline confirmed — 129 passed / 1 pre-existing fail, type-check clean
+- 75.2 (GREEN): Created `layoutRenderers/gridBuilder.ts` — extracted ~430 lines of pure grid-building logic into `buildGridLayout()` function with `GridLayoutInput` and `GridLayoutResult` types, plus `pixelToGrid()` helper
+- 75.3 (GREEN): Updated OpenSaloonLayout.tsx — replaced inline grid-building code (Steps 1-6) with `buildGridLayout()` call and destructuring; replaced `hasOsdmZones` with `osdmZonesPresent`; added local `wallSet` for rendering
+- 75.4 (DONE): Verified — type-check ✅, tests 129 passed / 1 pre-existing fail ✅
+
+**Files created:**
+- `src/app/features/compositions/components/layoutRenderers/gridBuilder.ts`
+
+**Files modified:**
+- `src/app/features/compositions/components/layoutRenderers/OpenSaloonLayout.tsx` (reduced by ~390 lines net)
+
+**Git commit:** `feat(compositions): [FE] Рефакторинг OpenSaloonLayout — Стъпка 3: Извличане на gridBuilder.ts`
+
 ---
 
 *(Tasks will be logged here as they are completed)*
