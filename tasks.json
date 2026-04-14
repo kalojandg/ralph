@@ -2816,5 +2816,731 @@
       }
     ],
     "passes": true
+  },
+
+  {
+    "id": 73,
+    "category": "refactor",
+    "repo": "frontend",
+    "description": "[FE] Рефакторинг OpenSaloonLayout — Стъпка 1: Извличане на types.ts и constants.ts",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "73.1",
+        "phase": "RED",
+        "action": "Пусни npm test и npm run type-check — запиши baseline (всички тестове минават). Това е твоят regression guard за целия рефакторинг."
+      },
+      {
+        "id": "73.2",
+        "phase": "GREEN",
+        "action": "Създай файл layoutRenderers/types.ts — извади от OpenSaloonLayout.tsx всички интерфейси и типове: WagonZone, CorridorDecoration, GridLabel, BottomBorder, WallModification, VisualRow, VisualRowType, и всички props интерфейси. Експортни ги."
+      },
+      {
+        "id": "73.3",
+        "phase": "GREEN",
+        "action": "Създай файл layoutRenderers/constants.ts — извади всички цветови константи, GRID_UNIT, SEAT_SPAN, LAYOUT_PADDING, style maps, color maps. Експортни ги."
+      },
+      {
+        "id": "73.4",
+        "phase": "GREEN",
+        "action": "В OpenSaloonLayout.tsx замени локалните дефиниции с import от types.ts и constants.ts. Не променяй логика — само move + import."
+      },
+      {
+        "id": "73.5",
+        "phase": "DONE",
+        "action": "Пусни npm test и npm run type-check — ВСИЧКИ тестове трябва да минават, ТОЧНО както преди рефакторинга. Ако нещо фейлва — поправи го преди да продължиш."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 74,
+    "category": "refactor",
+    "repo": "frontend",
+    "description": "[FE] Рефакторинг OpenSaloonLayout — Стъпка 2: Извличане на SeatCell.tsx",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "74.1",
+        "phase": "RED",
+        "action": "Пусни npm test — baseline check."
+      },
+      {
+        "id": "74.2",
+        "phase": "GREEN",
+        "action": "Създай файл layoutRenderers/SeatCell.tsx — извади SeatCell компонента (~lines 152-333 от OpenSaloonLayout.tsx) в отделен файл. Импортирай типовете от types.ts и константите от constants.ts."
+      },
+      {
+        "id": "74.3",
+        "phase": "GREEN",
+        "action": "В OpenSaloonLayout.tsx замени inline SeatCell с import от SeatCell.tsx."
+      },
+      {
+        "id": "74.4",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check — всички тестове минават без промени."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 75,
+    "category": "refactor",
+    "repo": "frontend",
+    "description": "[FE] Рефакторинг OpenSaloonLayout — Стъпка 3: Извличане на gridBuilder.ts (pure functions)",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "75.1",
+        "phase": "RED",
+        "action": "Пусни npm test — baseline."
+      },
+      {
+        "id": "75.2",
+        "phase": "GREEN",
+        "action": "Създай файл layoutRenderers/gridBuilder.ts — извади ЧИСТИТЕ функции (без React) от OpenSaloonLayout.tsx: buildPositionMap(), detectOverlaps(), buildVisualRows(), buildCssColumns(), getCssRow(), xToCssCol mapping logic. Тези функции приемат данни и връщат данни — без side effects."
+      },
+      {
+        "id": "75.3",
+        "phase": "GREEN",
+        "action": "В OpenSaloonLayout.tsx замени inline grid-building логиката с import от gridBuilder.ts."
+      },
+      {
+        "id": "75.4",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check — всички тестове минават."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 76,
+    "category": "refactor",
+    "repo": "frontend",
+    "description": "[FE] Рефакторинг OpenSaloonLayout — Стъпка 4: Извличане на osdmRenderers.tsx и wallRenderers.tsx",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "76.1",
+        "phase": "RED",
+        "action": "npm test — baseline."
+      },
+      {
+        "id": "76.2",
+        "phase": "GREEN",
+        "action": "Създай layoutRenderers/osdmRenderers.tsx — извади renderOsdmInternals(), renderOsdmSigns(), renderOsdmZones(), renderOsdmFoldingSeats(). Те приемат osdmLayoutJson, grid mappings и css mappings като props."
+      },
+      {
+        "id": "76.3",
+        "phase": "GREEN",
+        "action": "Създай layoutRenderers/wallRenderers.tsx — извади wall rendering (~lines 1190-1255) и bottom border rendering."
+      },
+      {
+        "id": "76.4",
+        "phase": "GREEN",
+        "action": "В OpenSaloonLayout.tsx замени inline rendering с imports от новите файлове."
+      },
+      {
+        "id": "76.5",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check — всички тестове минават."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 77,
+    "category": "refactor",
+    "repo": "frontend",
+    "description": "[FE] Рефакторинг OpenSaloonLayout — Стъпка 5: Извличане на cellRenderers.tsx и zonePanel.tsx",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "77.1",
+        "phase": "RED",
+        "action": "npm test — baseline."
+      },
+      {
+        "id": "77.2",
+        "phase": "GREEN",
+        "action": "Създай layoutRenderers/cellRenderers.tsx — извади renderCorridorCell(), renderFoldingGroup(), renderBigTable(), renderWcCell(), renderStairsCell(), renderSeatCell(). Приемат grid mappings като аргументи."
+      },
+      {
+        "id": "77.3",
+        "phase": "GREEN",
+        "action": "Създай layoutRenderers/zonePanel.tsx — извади side-panel zone boxes логиката."
+      },
+      {
+        "id": "77.4",
+        "phase": "GREEN",
+        "action": "OpenSaloonLayout.tsx трябва вече да е ~400 линии: main component с grid construction + cell iteration, всичко друго е в отделни файлове."
+      },
+      {
+        "id": "77.5",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check — всички тестове минават. Провери, че OpenSaloonLayout.tsx е значително намален."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 78,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[BE] CRUD API за CoachLayouts — POST /api/coach-layouts (create нов layout с OSDM JSON)",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "78.1",
+        "phase": "RED",
+        "action": "Напиши unit тест за CreateCoachLayoutCommand + Handler: приема WagonTypeId, GridWidth, GridLength, RendererType, OsdmLayoutJson; създава нов CoachLayout в DB; връща CoachLayoutDto."
+      },
+      {
+        "id": "78.2",
+        "phase": "GREEN",
+        "action": "Създай Application/Features/Nomenclatures/Commands/CreateCoachLayout.cs — Command + Handler. Валидирай: WagonTypeId съществува, OsdmLayoutJson е валиден JSON, GridWidth/GridLength > 0."
+      },
+      {
+        "id": "78.3",
+        "phase": "GREEN",
+        "action": "Добави endpoint POST /api/coach-layouts в CoachLayoutsController.cs. Приема CreateCoachLayoutRequest body."
+      },
+      {
+        "id": "78.4",
+        "phase": "DONE",
+        "action": "dotnet build && dotnet test — всички тестове минават."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 79,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[BE] CRUD API за CoachLayouts — PUT /api/coach-layouts/{id} (update OSDM JSON)",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "79.1",
+        "phase": "RED",
+        "action": "Напиши unit тест за UpdateCoachLayoutCommand: приема layoutId + OsdmLayoutJson + GridWidth + GridLength; обновява запис в DB; връща обновения CoachLayoutDto."
+      },
+      {
+        "id": "79.2",
+        "phase": "GREEN",
+        "action": "Създай Application/Features/Nomenclatures/Commands/UpdateCoachLayout.cs — Command + Handler. Валидирай: layoutId съществува."
+      },
+      {
+        "id": "79.3",
+        "phase": "GREEN",
+        "action": "Добави endpoint PUT /api/coach-layouts/{id} в CoachLayoutsController.cs."
+      },
+      {
+        "id": "79.4",
+        "phase": "DONE",
+        "action": "dotnet build && dotnet test — всички тестове минават."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 80,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[BE] CRUD API за SeatDefinitions — POST /api/coach-layouts/{layoutId}/seats (batch create/update seats)",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "80.1",
+        "phase": "RED",
+        "action": "Напиши unit тест за SaveSeatDefinitionsCommand: приема layoutId + масив от SeatDefinitionDto; изтрива старите SeatDefs за layoutId; вмъква новите; връща count."
+      },
+      {
+        "id": "80.2",
+        "phase": "GREEN",
+        "action": "Създай Application/Features/Nomenclatures/Commands/SaveSeatDefinitions.cs — Command + Handler. Транзакционно: DELETE old + INSERT new. Валидирай: layoutId съществува, няма дублирани SeatNumber-а."
+      },
+      {
+        "id": "80.3",
+        "phase": "GREEN",
+        "action": "Добави endpoint POST /api/coach-layouts/{layoutId}/seats в CoachLayoutsController.cs."
+      },
+      {
+        "id": "80.4",
+        "phase": "DONE",
+        "action": "dotnet build && dotnet test — всички тестове минават."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 81,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[BE] POST /api/wagon-types — създаване на нов WagonType (Draft) с празен CoachLayout",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "81.1",
+        "phase": "RED",
+        "action": "Напиши unit тест за CreateWagonTypeCommand: приема SeriesName, TravelClass, CompartmentType, DefaultCapacity; създава WagonType с Status=Draft + празен CoachLayout (gridSize: {x:24,y:10}, places:[], internals:[]); връща WagonTypeDto."
+      },
+      {
+        "id": "81.2",
+        "phase": "GREEN",
+        "action": "Създай Application/Features/Nomenclatures/Commands/CreateWagonType.cs — Command + Handler. Валидирай: SeriesName уникално."
+      },
+      {
+        "id": "81.3",
+        "phase": "GREEN",
+        "action": "Добави endpoint POST /api/wagon-types в WagonTypesController.cs."
+      },
+      {
+        "id": "81.4",
+        "phase": "DONE",
+        "action": "dotnet build && dotnet test — всички тестове минават."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 82,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] API слой за wagon creation — coachLayouts.api.ts с createLayout, updateLayout, saveSeats + createWagonType",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "82.1",
+        "phase": "RED",
+        "action": "Напиши тестове за новите API функции: coachLayoutsApi.createLayout(), coachLayoutsApi.updateLayout(), coachLayoutsApi.saveSeats(), wagonsApi.createWagonType(). Мокни apiClient."
+      },
+      {
+        "id": "82.2",
+        "phase": "GREEN",
+        "action": "Създай src/api/coach-layouts/coachLayouts.api.ts с функции за POST/PUT /api/coach-layouts и POST seats. Създай coachLayouts.types.ts с CreateCoachLayoutDto, UpdateCoachLayoutDto, SaveSeatsDto."
+      },
+      {
+        "id": "82.3",
+        "phase": "GREEN",
+        "action": "Добави createWagonType() в src/api/wagons/wagons.api.ts — POST /api/wagon-types."
+      },
+      {
+        "id": "82.4",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check — тестовете минават."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 83,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] React Query hooks за creation: useCreateWagonType, useCreateCoachLayout, useUpdateCoachLayout, useSaveSeats",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "83.1",
+        "phase": "RED",
+        "action": "Напиши тестове за всеки hook: loading/success/error states, invalidation на свързани queries."
+      },
+      {
+        "id": "83.2",
+        "phase": "GREEN",
+        "action": "Създай hooks в src/app/features/wagons/hooks/: useCreateWagonType.ts, useCreateCoachLayout.ts, useUpdateCoachLayout.ts, useSaveSeats.ts."
+      },
+      {
+        "id": "83.3",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check — тестовете минават."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 84,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Рутиране: /wagons/new → WagonCreationPage (нова страница)",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "84.1",
+        "phase": "RED",
+        "action": "Напиши тест: навигация до /wagons/new рендерира WagonCreationPage с заглавие 'Създаване на вагон'."
+      },
+      {
+        "id": "84.2",
+        "phase": "GREEN",
+        "action": "Създай src/app/features/wagons/pages/WagonCreationPage.tsx — празна страница със заглавие 'Създаване на вагон' (h4), Paper wrapper."
+      },
+      {
+        "id": "84.3",
+        "phase": "GREEN",
+        "action": "Добави route /wagons/new в router.tsx (ПРЕДИ /wagons за да не matchne като param). Import WagonCreationPage."
+      },
+      {
+        "id": "84.4",
+        "phase": "GREEN",
+        "action": "Промени бутона 'Създаване' в WagonsPage — вместо snackbar, navigate('/wagons/new')."
+      },
+      {
+        "id": "84.5",
+        "phase": "GREEN",
+        "action": "Добави i18n ключове: wagons.creation.title = 'Създаване на вагон' / 'Create Wagon'."
+      },
+      {
+        "id": "84.6",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check — тестовете минават. Старите тестове за snackbar трябва да се обновят (сега навигира вместо snackbar)."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 85,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] OSDM Grid компонент — празна решетка с пунктирани линии и gridSize от props",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "85.1",
+        "phase": "RED",
+        "action": "Напиши тестове: OsdmGrid рендерира CSS grid с правилен брой колони и редове базирани на gridSize prop; всяка клетка има dashed border; gridSize={x:24,y:10} създава 24 колони и 10 реда."
+      },
+      {
+        "id": "85.2",
+        "phase": "GREEN",
+        "action": "Създай src/app/features/wagons/components/OsdmGrid.tsx — CSS Grid компонент. Props: gridSize: {x: number, y: number}, cellSize: number (default 22px от GRID_UNIT). Рендерира gridSize.x * gridSize.y клетки с тънки пунктирани линии (border: 1px dashed #ccc). Всяка клетка е квадрат cellSize x cellSize px."
+      },
+      {
+        "id": "85.3",
+        "phase": "GREEN",
+        "action": "Добави координатни labels: числа по X оста (горе) и Y оста (ляво) за ориентация при дизайн."
+      },
+      {
+        "id": "85.4",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check — тестовете минават."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 86,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Element Palette — вертикален панел отляво с drag-and-drop елементи",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "86.1",
+        "phase": "RED",
+        "action": "Напиши тестове: ElementPalette рендерира вертикален списък от елементи; всеки елемент е draggable (има drag handle); тестови елементи 'Тест елемент 1' и 'Тест елемент 2' са видими."
+      },
+      {
+        "id": "86.2",
+        "phase": "GREEN",
+        "action": "Създай src/app/features/wagons/components/ElementPalette.tsx — вертикален MUI Paper панел (width: 200px) с Box елементи. Всеки елемент е квадрат (44x44px — SEAT_SPAN * GRID_UNIT) с label, border, и draggable={true}. Засега 2 тестови елемента: { id: 'test-1', label: 'Тест елемент 1', icon: 999 } и { id: 'test-2', label: 'Тест елемент 2', icon: 998 }."
+      },
+      {
+        "id": "86.3",
+        "phase": "GREEN",
+        "action": "Wrap ElementPalette елементите с @dnd-kit useDraggable hook. При drag start — задай данни за елемента (id, icon code, label) в drag event."
+      },
+      {
+        "id": "86.4",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check — тестовете минават."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 87,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] OsdmGrid — drop zone: приемане на елементи от палетата върху grid клетки",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "87.1",
+        "phase": "RED",
+        "action": "Напиши тестове: drop на елемент върху клетка (x=5, y=3) добавя елемент в grid state; елементът се визуализира на правилната позиция; drop на заета клетка не добавя елемент (или замества)."
+      },
+      {
+        "id": "87.2",
+        "phase": "GREEN",
+        "action": "Wrap всяка grid клетка с @dnd-kit useDroppable hook. При drop — извлечи grid координатите (x, y) от droppable id, извлечи елемент данните от draggable, добави в grid state."
+      },
+      {
+        "id": "87.3",
+        "phase": "GREEN",
+        "action": "Grid state: useState<GridElement[]> където GridElement = { id: string, icon: number, label: string, coords: {x: number, y: number} }. При drop — push нов елемент."
+      },
+      {
+        "id": "87.4",
+        "phase": "GREEN",
+        "action": "Рендерирай поставените елементи като цветни квадрати с label на съответната grid позиция."
+      },
+      {
+        "id": "87.5",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check — тестовете минават."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 88,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] WagonCreationPage layout — сглобява ElementPalette + OsdmGrid + DndContext",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "88.1",
+        "phase": "RED",
+        "action": "Напиши тестове: WagonCreationPage рендерира заглавие, ElementPalette отляво, OsdmGrid отдясно; цялата страница е обвита в DndContext; началният gridSize е {x:24, y:10}."
+      },
+      {
+        "id": "88.2",
+        "phase": "GREEN",
+        "action": "Обнови WagonCreationPage.tsx: flex layout с ElementPalette (flex: 0 0 200px) вляво и OsdmGrid (flex: 1) вдясно. Обвий с DndContext от @dnd-kit/core. Управлявай gridElements state тук и го подавай на OsdmGrid."
+      },
+      {
+        "id": "88.3",
+        "phase": "GREEN",
+        "action": "Добави onDragEnd handler в DndContext: когато елемент се пусне върху grid клетка, добави го в gridElements state."
+      },
+      {
+        "id": "88.4",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check — тестовете минават."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 89,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] LocalStorage persistence — автоматично записване на промени при всяка промяна на grid state",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "89.1",
+        "phase": "RED",
+        "action": "Напиши тестове: при добавяне на елемент в grid, данните се записват в localStorage('wagon_creation_draft'); при зареждане на страницата, ако има данни в localStorage — grid state се възстановява; при изтриване на елемент — localStorage се обновява."
+      },
+      {
+        "id": "89.2",
+        "phase": "GREEN",
+        "action": "Създай custom hook useWagonDraft(). Вътре: useEffect който при всяка промяна на gridElements записва JSON в localStorage('wagon_creation_draft'). При mount: чете от localStorage и сетва initial state. Ключът включва gridSize, gridElements, metadata (timestamp)."
+      },
+      {
+        "id": "89.3",
+        "phase": "GREEN",
+        "action": "Интегрирай useWagonDraft() в WagonCreationPage вместо обикновен useState."
+      },
+      {
+        "id": "89.4",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check — тестовете минават."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 90,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Navigation guard — предупреждение при опит за напускане на страницата с незапазени промени",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "90.1",
+        "phase": "RED",
+        "action": "Напиши тестове: ако има промени в grid state (isDirty=true) и потребителят натисне Back/навигира — показва се диалог 'Имате незапазени промени. Искате ли да ги запишете?'; бутон 'Да' извиква save и навигира; бутон 'Не' навигира без save; бутон 'Отказ' затваря диалога."
+      },
+      {
+        "id": "90.2",
+        "phase": "GREEN",
+        "action": "Създай custom hook useUnsavedChangesGuard(isDirty: boolean, onSave: () => Promise<void>). Вътре: 1) React Router's useBlocker за SPA навигация; 2) window.onbeforeunload за browser close/refresh. При блокирана навигация — показва MUI Dialog с 3 бутона."
+      },
+      {
+        "id": "90.3",
+        "phase": "GREEN",
+        "action": "Интегрирай useUnsavedChangesGuard в WagonCreationPage. isDirty = gridElements са различни от последния save. onSave = запиши към backend."
+      },
+      {
+        "id": "90.4",
+        "phase": "GREEN",
+        "action": "Добави i18n ключове: wagons.creation.unsavedChanges.title, message, save, discard, cancel."
+      },
+      {
+        "id": "90.5",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check — тестовете минават."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 91,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Бутон 'Запази' — изпращане на layout към backend (createWagonType + createCoachLayout)",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "91.1",
+        "phase": "RED",
+        "action": "Напиши тестове: клик на бутон 'Запази' извиква createWagonType mutation; при успех извиква createCoachLayout с върнатия wagonTypeId; при успех показва snackbar 'Вагонът е записан успешно' и навигира към /wagons; при грешка показва error snackbar."
+      },
+      {
+        "id": "91.2",
+        "phase": "GREEN",
+        "action": "Добави бутон 'Запази' в горния toolbar на WagonCreationPage (до заглавието). При клик: 1) createWagonType({seriesName, travelClass, compartmentType, defaultCapacity}); 2) createCoachLayout({wagonTypeId, gridWidth, gridLength, rendererType: 'ROWS', osdmLayoutJson}); 3) При успех: изчисти localStorage draft, navigate('/wagons')."
+      },
+      {
+        "id": "91.3",
+        "phase": "GREEN",
+        "action": "Конвертирай gridElements state в OSDM JSON формат: gridSize от grid props, internals от поставените елементи (icon code + coords). Засега тестовите елементи генерират internals entries."
+      },
+      {
+        "id": "91.4",
+        "phase": "GREEN",
+        "action": "Добави i18n ключове: wagons.creation.save, saveSuccess, saveError."
+      },
+      {
+        "id": "91.5",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check — тестовете минават."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 92,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Grid елементи: изтриване и преместване на вече поставени елементи",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "92.1",
+        "phase": "RED",
+        "action": "Напиши тестове: right-click на елемент в grid показва context menu с 'Изтрий'; клик на 'Изтрий' премахва елемента от grid state; drag на елемент вътре в grid го премества на нова позиция."
+      },
+      {
+        "id": "92.2",
+        "phase": "GREEN",
+        "action": "Направи поставените елементи в grid draggable (и droppable target). При drag end вътре в grid — обнови coords на елемента."
+      },
+      {
+        "id": "92.3",
+        "phase": "GREEN",
+        "action": "Добави MUI context menu (Menu) при right-click на елемент: 'Изтрий' — splice елемента от gridElements."
+      },
+      {
+        "id": "92.4",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check — тестовете минават."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 93,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Grid resize — промяна на gridSize чрез input полета",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "93.1",
+        "phase": "RED",
+        "action": "Напиши тестове: промяна на GridX input обновява gridSize.x; промяна на GridY обновява gridSize.y; grid се преоразмерява визуално; елементи извън новия размер получават предупреждение."
+      },
+      {
+        "id": "93.2",
+        "phase": "GREEN",
+        "action": "Добави toolbar над grid-a с два MUI TextField (type=number): 'Колони (X)' и 'Редове (Y)'. Default: x=24, y=10. onChange обновява gridSize state."
+      },
+      {
+        "id": "93.3",
+        "phase": "GREEN",
+        "action": "При намаляване на gridSize: ако има елементи извън новите граници — покажи warning dialog с опция да ги изтрие или да отмени resize."
+      },
+      {
+        "id": "93.4",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check — тестовете минават."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 94,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Wagon metadata form — полета за SeriesName, TravelClass, CompartmentType, Capacity",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "94.1",
+        "phase": "RED",
+        "action": "Напиши тестове: WagonMetadataForm рендерира 4 полета (SeriesName текст, TravelClass dropdown, CompartmentType dropdown, Capacity number); валидация: SeriesName е задължително; onChange подава обновените стойности нагоре."
+      },
+      {
+        "id": "94.2",
+        "phase": "GREEN",
+        "action": "Създай src/app/features/wagons/components/WagonMetadataForm.tsx — MUI форма с TextField (SeriesName), Select (TravelClass: FIRST/SECOND/MIXED), Select (CompartmentType: OPEN_SPACE/COMPARTMENT/SLEEPER/COUCHETTE), TextField number (Capacity)."
+      },
+      {
+        "id": "94.3",
+        "phase": "GREEN",
+        "action": "Интегрирай в WagonCreationPage — формата се показва над grid-а или в collapsible секция. Данните от формата се включват в save payload."
+      },
+      {
+        "id": "94.4",
+        "phase": "GREEN",
+        "action": "Добави i18n ключове за всички label-и и validation съобщения."
+      },
+      {
+        "id": "94.5",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check — тестовете минават."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 95,
+    "category": "e2e",
+    "repo": "frontend",
+    "description": "[E2E] End-to-end тест: пълен wagon creation workflow — навигация, drag-drop елементи, запис, проверка",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "95.1",
+        "phase": "RED",
+        "action": "Напиши E2E тестове: 1) Навигация: /wagons → клик 'Създаване' → /wagons/new; 2) Страницата показва заглавие, палета отляво, grid отдясно; 3) Drag 'Тест елемент 1' от палетата на grid позиция (5,3) — елементът се визуализира; 4) Drag 'Тест елемент 2' на позиция (10,5); 5) Попълни metadata форма; 6) Клик 'Запази' — snackbar за успех, redirect към /wagons; 7) Новият вагон е видим в таблицата."
+      },
+      {
+        "id": "95.2",
+        "phase": "GREEN",
+        "action": "Ако тестовете фейлват — поправи имплементацията. Итерирай докато всички E2E тестове минават."
+      },
+      {
+        "id": "95.3",
+        "phase": "DONE",
+        "action": "npm test && npx playwright test — ВСИЧКИ тестове минават (unit + E2E). npm run type-check && npm run lint — чисто."
+      }
+    ],
+    "passes": false
   }
 ]

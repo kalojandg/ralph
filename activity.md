@@ -1,3 +1,21 @@
+## 📚 Етап 4: Wagon Creation Feature (Tasks #73-#95)
+
+**Фокус:** Рефакторинг на OpenSaloonLayout.tsx (2139 линии → модулна структура) + нова страница "Създаване на вагон" с OSDM grid, drag-and-drop елементи от палета, localStorage persistence, navigation guard и запис към backend. Backend CRUD за CoachLayouts и WagonTypes.
+
+**Под-етапи:**
+- 4A: Рефакторинг OpenSaloonLayout (#73-#77)
+- 4B: Backend CRUD (#78-#81)
+- 4C: FE API + Hooks (#82-#83)
+- 4D: Creation UI (#84-#94)
+- 4E: E2E тест (#95)
+
+---
+
+*(Tasks will be logged here as they are completed)*
+
+---
+---
+
 ## 📚 Етап 3: Wagon Management Feature (Tasks #59-#72)
 
 **Фокус:** Таблица за управление на вагони — BE номенклатура + API, FE рутиране, таблица, филтри, preview, деактивиране. Реален workflow FE↔BE↔DB (без localStorage mock).

@@ -469,3 +469,96 @@ git commit -m "feat(compositions): {exact task.description from tasks.json}"
 ---
 
 **These user-defined steps ensure quality through TDD and visual verification!** ✅
+
+---
+
+## 🏗️ Етап 4: Wagon Creation Feature (Tasks #73-#95)
+
+**Фокус:** Рефакторинг на OpenSaloonLayout + нова страница "Създаване на вагон" с OSDM grid, drag-and-drop елементи, localStorage persistence, navigation guard и запис към backend.
+
+### Под-етапи:
+
+| Под-етап | Таскове | Какво прави |
+|----------|---------|-------------|
+| **4A: Рефакторинг** | #73-#77 | Разбиване на OpenSaloonLayout.tsx (~2139 линии) на модули. ZERO logic changes — само move + import |
+| **4B: Backend CRUD** | #78-#81 | POST/PUT coach-layouts, POST seats, POST wagon-types |
+| **4C: FE API + Hooks** | #82-#83 | API клиент + React Query hooks за новите endpoints |
+| **4D: Creation UI** | #84-#94 | Страница /wagons/new, OSDM grid, palette, drag-drop, localStorage, nav guard, save |
+| **4E: E2E** | #95 | Пълен workflow тест |
+
+---
+
+### 🔧 Рефакторинг правила (Tasks #73-#77) — КРИТИЧНО!
+
+**Принцип: "Само местиш, не променяш"**
+
+1. **ПРЕДИ** всяка стъпка: `npm test && npm run type-check` → запиши baseline
+2. **Извличай** код в нов файл, добавяй `export` там и `import` в оригиналния
+3. **СЛЕД** всяка стъпка: `npm test && npm run type-check` → СЪЩИЯТ резултат
+4. Ако тест фейлва → **ВЕДНАГА rollback** → анализирай → поправи
+5. **НИКОГА** не променяй rendering логика — само реорганизация на файлове
+
+**Целева структура след рефакторинг:**
+```
+layoutRenderers/
+├── OpenSaloonLayout.tsx   → ~400 линии (main component)
+├── SeatCell.tsx            → ~180 линии
+├── gridBuilder.ts          → ~450 линии (pure, unit-testable)
+├── cellRenderers.tsx        → ~400 линии
+├── osdmRenderers.tsx        → ~400 линии
+├── wallRenderers.tsx        → ~100 линии
+├── zonePanel.tsx            → ~100 линии
+├── types.ts                 → типове и интерфейси
+└── constants.ts             → цветове, GRID_UNIT, SEAT_SPAN
+```
+
+---
+
+### 🏗️ Backend CRUD правила (Tasks #78-#81)
+
+**Следвай CQRS pattern:**
+1. Command/Query → Handler → Controller endpoint
+2. Валидация в Handler-а
+3. `dotnet build && dotnet test` след всяка стъпка
+4. **НЕ създавай миграции в SQL проекта** — таблиците вече съществуват (CoachLayouts, SeatDefinitions, WagonTypes)
+
+**Нови endpoints:**
+```
+POST   /api/coach-layouts          → Create layout
+PUT    /api/coach-layouts/{id}     → Update layout (OSDM JSON)
+POST   /api/coach-layouts/{id}/seats → Batch save seats
+POST   /api/wagon-types            → Create wagon type (Draft)
+```
+
+---
+
+### 🖥️ Creation UI правила (Tasks #84-#94)
+
+**Drag-and-drop:** @dnd-kit (вече инсталиран от Task #1)
+- `DndContext` обвива цялата страница
+- `useDraggable` за palette елементи
+- `useDroppable` за grid клетки
+
+**OSDM Grid:**
+- CSS Grid с пунктирани линии (border: 1px dashed #ccc)
+- Размер от gridSize prop (default 24x10)
+- Клетка = GRID_UNIT (22px)
+- Координатни labels по X и Y оси
+
+**LocalStorage:**
+- Key: `wagon_creation_draft`
+- Записва се при ВСЯКА промяна (useEffect)
+- При mount — restore от localStorage
+- При успешен save към BE — изчисти localStorage
+
+**Navigation guard:**
+- React Router `useBlocker` за SPA навигация
+- `window.onbeforeunload` за browser close
+- Dialog с 3 бутона: Запази / Не запазвай / Отказ
+
+**Save flow:**
+1. createWagonType() → получи wagonTypeId
+2. createCoachLayout({ wagonTypeId, osdmLayoutJson }) → получи layoutId
+3. Изчисти localStorage draft
+4. Navigate to /wagons
+5. Snackbar за успех
