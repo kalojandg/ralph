@@ -1380,3 +1380,22 @@ TDD workflow гарантира:
 **Git commit:** `feat(compositions): [FE] OSDM Grid компонент — празна решетка с пунктирани линии и gridSize от props`
 
 ---
+
+### Task #86: [FE] Element Palette — вертикален панел отляво с drag-and-drop елементи (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 86.1 (RED): Wrote 8 failing tests for ElementPalette: palette container renders, all items visible (bg labels), palette-item testids, role=button for drag handles, palette width 200px, element size 44×44px (SEAT_SPAN × GRID_UNIT), empty items, custom items
+- 86.2 (GREEN): Created `src/app/features/wagons/components/ElementPalette.tsx` — MUI-free vertical panel (width: 200px) with DraggablePaletteItem subcomponent using @dnd-kit `useDraggable` hook. Each item is a 44×44px square with label, border, grab cursor. Drag data includes `{ id, icon, label }`.
+- 86.3 (GREEN): @dnd-kit `useDraggable` integrated into each palette item — drag ID is `palette-{item.id}`, drag data carries icon code and label for drop target consumption. `isDragging` state reduces opacity to 0.5.
+- 86.4 (DONE): Verified — type-check ✅ (0 errors), lint ✅ (0 errors, 2 template-literal warnings), tests 1809 passed / 1 pre-existing fail (KP612GeneratePage) ✅
+
+**Files created:**
+- `src/app/features/wagons/components/ElementPalette.tsx`
+- `src/app/features/wagons/components/__tests__/ElementPalette.test.tsx`
+
+**Git commit:** `feat(compositions): [FE] Element Palette — вертикален панел отляво с drag-and-drop елементи`
+
+---
