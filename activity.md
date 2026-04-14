@@ -1,3 +1,49 @@
+## [2026-04-14 23:00] - Task #94: [FE] Wagon metadata form — полета за SeriesName, TravelClass, CompartmentType, Capacity
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 94.1: Wrote 8 failing tests in WagonMetadataForm.test.tsx
+  - Render SeriesName text field
+  - Render TravelClass dropdown
+  - Render CompartmentType dropdown
+  - Render Capacity number field
+  - Show validation error when SeriesName is empty (showErrors prop)
+  - Call onChange when SeriesName changes
+  - Call onChange when Capacity changes
+  - Display existing values correctly
+- Ran tests — all FAIL ✅ (module not found)
+
+### GREEN Phase
+- Step 94.2: Created `WagonMetadataForm.tsx` — MUI form with TextField (SeriesName), TextField select (TravelClass: FIRST/SECOND/MIXED), TextField select (CompartmentType: OPEN_SALOON/COMPARTMENT/SLEEPER/COUCHETTE), TextField number (Capacity). Controlled component with value/onChange props. showErrors prop triggers validation display.
+- Step 94.3: Integrated in WagonCreationPage — form renders above grid inside Paper; extended useWagonDraft hook with metadata state (persisted to localStorage); handleSave uses metadata for createWagonType payload instead of hardcoded values; isDirty now includes metadata.seriesName
+- Step 94.4: Added i18n keys wagons.creation.metadata.* in bg.json and en.json (seriesName, travelClass, compartmentType, capacity, seriesNameRequired, travel class options, compartment type options)
+- Ran tests — all 8 PASS ✅
+
+### DONE Phase
+- Step 94.5: Verified all checks pass
+  - Tests: 1875 passed / 1 pre-existing fail (KP612GeneratePage) — 0 new failures
+  - Type-check: 0 errors
+  - Lint: 0 new errors (4 pre-existing in NotFoundPage.tsx, 518 pre-existing warnings)
+
+**Files created:**
+- `src/app/features/wagons/components/WagonMetadataForm.tsx`
+- `src/app/features/wagons/components/__tests__/WagonMetadataForm.test.tsx`
+
+**Files modified:**
+- `src/app/features/wagons/pages/WagonCreationPage.tsx` (added WagonMetadataForm integration, metadata in save payload)
+- `src/app/features/wagons/hooks/useWagonDraft.ts` (added metadata state with localStorage persistence)
+- `src/locales/bg.json` (added wagons.creation.metadata.* keys)
+- `src/locales/en.json` (added wagons.creation.metadata.* keys)
+
+**Git commit:**
+- `feat(compositions): [FE] Wagon metadata form — полета за SeriesName, TravelClass, CompartmentType, Capacity`
+
+---
+
 ## [2026-04-14 22:20] - Task #93: [FE] Grid resize — промяна на gridSize чрез input полета
 
 **Status:** ✅ Complete
