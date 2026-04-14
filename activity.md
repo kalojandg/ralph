@@ -154,6 +154,28 @@
 
 ---
 
+### Task #79: [BE] CRUD API за CoachLayouts — PUT /api/coach-layouts/{id} (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 79.1 (RED): Wrote 4 controller-layer unit tests: 200 OK, 404 not found, 400 invalid JSON, command verification
+- 79.2 (GREEN): Created `UpdateCoachLayout.cs` — Command + Handler with validation (LayoutId exists, GridWidth/GridLength > 0, OsdmLayoutJson valid JSON)
+- 79.3 (GREEN): Added PUT endpoint in `CoachLayoutsController.cs` with `UpdateCoachLayoutRequest` record
+- 79.4 (DONE): Build ✅, 18/18 tests passed (10 WagonTypes + 4 POST + 4 PUT CoachLayouts) ✅
+
+**Files created:**
+- `RailRunService.Application/Features/Nomenclatures/Commands/UpdateCoachLayout.cs`
+
+**Files modified:**
+- `RailRunService.API/Controllers/CoachLayoutsController.cs` (added PUT endpoint + UpdateCoachLayoutRequest record)
+- `RailRunService.API.Tests/Controllers/CoachLayoutsControllerTests.cs` (added 4 PUT tests)
+
+**Git commit:** `c9b6306b` — feat(coach-layouts): add PUT /api/coach-layouts/{id} endpoint
+
+---
+
 *(Tasks will be logged here as they are completed)*
 
 ---
