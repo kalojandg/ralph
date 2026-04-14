@@ -278,6 +278,36 @@
 
 ---
 
+### Task #84: [FE] Рутиране: /wagons/new → WagonCreationPage (нова страница) (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 84.1 (RED): Wrote 3 failing tests in WagonCreationPage.test.tsx — title renders, h4 variant, Paper wrapper
+- 84.2 (GREEN): Created `WagonCreationPage.tsx` — page with h4 title using `t('wagons.creation.title')` and MUI Paper wrapper
+- 84.3 (GREEN): Added `/wagons/new` route in `router.tsx` BEFORE `/wagons` to prevent param matching; added WagonCreationPage to barrel export in `index.ts`; added `WAGONS_NEW` constant
+- 84.4 (GREEN): Changed `handleCreate` in WagonsPage from `dispatch(showSnackbar(...))` to `navigate('/wagons/new')`; added `useNavigate` import from react-router-dom
+- 84.5 (GREEN): Added i18n keys `wagons.creation.title` = 'Създаване на вагон' / 'Create Wagon' in bg.json and en.json
+- 84.6 (DONE): Updated WagonsPage.test.tsx — added MemoryRouter wrapper, mocked useNavigate, changed Create button test to verify `navigate('/wagons/new')` instead of snackbar dispatch. All 17 tests pass (3 WagonCreationPage + 14 WagonsPage). type-check ✅, lint 0 errors ✅, full suite 1788/1789 (1 pre-existing KP612 fail) ✅
+
+**Files created:**
+- `src/app/features/wagons/pages/WagonCreationPage.tsx`
+- `src/app/features/wagons/pages/__tests__/WagonCreationPage.test.tsx`
+
+**Files modified:**
+- `src/app/features/wagons/index.ts` (added WagonCreationPage export)
+- `src/app/routes/router.tsx` (added /wagons/new route + WagonCreationPage import)
+- `src/app/shared/constants/index.ts` (added WAGONS_NEW route constant)
+- `src/app/features/wagons/pages/WagonsPage.tsx` (handleCreate → navigate instead of snackbar)
+- `src/app/features/wagons/pages/__tests__/WagonsPage.test.tsx` (added MemoryRouter, mocked useNavigate, updated Create button tests)
+- `src/locales/bg.json` (added wagons.creation.title)
+- `src/locales/en.json` (added wagons.creation.title)
+
+**Git commit:** `feat(compositions): [FE] Рутиране: /wagons/new → WagonCreationPage (нова страница)`
+
+---
+
 *(Tasks will be logged here as they are completed)*
 
 ---

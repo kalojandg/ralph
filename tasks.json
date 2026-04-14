@@ -3196,7 +3196,7 @@
         "action": "npm test && npm run type-check — тестовете минават. Старите тестове за snackbar трябва да се обновят (сега навигира вместо snackbar)."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 85,
