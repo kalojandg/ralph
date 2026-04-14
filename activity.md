@@ -227,6 +227,30 @@
 
 ---
 
+### Task #82: [FE] API слой за wagon creation — coachLayouts.api.ts с createLayout, updateLayout, saveSeats + createWagonType (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 82.1 (RED): Tests already written in `coachLayouts.api.test.ts` (9 tests: createLayout 3, updateLayout 3, saveSeats 3) and `wagons.api.test.ts` (3 createWagonType tests)
+- 82.2 (GREEN): `coachLayoutsApi.createLayout()`, `.updateLayout()`, `.saveSeats()` already implemented in coachLayouts.api.ts with DTOs (CreateCoachLayoutDto, UpdateCoachLayoutDto, SaveSeatItem, CoachLayoutCrudResponse, SaveSeatsResponse)
+- 82.3 (GREEN): `wagonsApi.createWagonType()` already implemented in wagons.api.ts with CreateWagonTypeDto
+- 82.4 (DONE): Verified — type-check ✅ (0 errors), lint ✅ (0 errors, 482 pre-existing warnings), tests 130/131 passed (1 pre-existing KP612 fail) ✅
+
+**Note:** All API functions and tests were already implemented in prior iterations as part of Tasks #78-#81 backend work. Task #82 confirmed everything is wired correctly on the frontend.
+
+**Files (already existed, no changes needed):**
+- `src/api/compositions/coachLayouts.api.ts` — createLayout, updateLayout, saveSeats + DTOs
+- `src/api/wagons/wagons.api.ts` — createWagonType
+- `src/api/wagons/wagons.types.ts` — CreateWagonTypeDto
+- `src/api/compositions/__tests__/coachLayouts.api.test.ts` — 9 tests
+- `src/api/wagons/__tests__/wagons.api.test.ts` — 3 createWagonType tests
+
+**Git commit:** `chore: Update tasks.json and activity.md for Task #82`
+
+---
+
 *(Tasks will be logged here as they are completed)*
 
 ---
