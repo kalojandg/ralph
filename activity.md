@@ -11,6 +11,29 @@
 
 ---
 
+### Task #73: [FE] Рефакторинг OpenSaloonLayout — Стъпка 1: Извличане на types.ts и constants.ts (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 73.1 (RED): Ran baseline — 129 passed / 1 pre-existing fail (KP612GeneratePage), type-check clean
+- 73.2 (GREEN): Created `layoutRenderers/types.ts` — extracted WagonZone, CorridorDecoration, GridLabel, BottomBorder, WallModification, VisualRow, VisualRowType
+- 73.3 (GREEN): Created `layoutRenderers/constants.ts` — extracted SEAT_COLORS, SELECTED_STYLE, FOLDING_SEAT_STYLE, WHEELCHAIR_STYLE, COMPANION_STYLE, FIRST_CLASS_STYLE, TABLE_STYLE, WC_BOX_WIDTH_INSET
+- 73.4 (GREEN): Updated OpenSaloonLayout.tsx — replaced inline definitions with imports from types.ts and constants.ts; added re-exports for backward compatibility (SeatMapCanvas.tsx imports types from OpenSaloonLayout)
+- 73.5 (DONE): Verified — type-check ✅, tests 129 passed / 1 pre-existing fail ✅, lint 0 errors ✅
+
+**Files created:**
+- `src/app/features/compositions/components/layoutRenderers/types.ts`
+- `src/app/features/compositions/components/layoutRenderers/constants.ts`
+
+**Files modified:**
+- `src/app/features/compositions/components/layoutRenderers/OpenSaloonLayout.tsx`
+
+**Git commit:** `feat(compositions): [FE] Рефакторинг OpenSaloonLayout — Стъпка 1: Извличане на types.ts и constants.ts`
+
+---
+
 *(Tasks will be logged here as they are completed)*
 
 ---
