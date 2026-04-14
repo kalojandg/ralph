@@ -1,3 +1,47 @@
+## [2026-04-14 22:20] - Task #93: [FE] Grid resize — промяна на gridSize чрез input полета
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 93.1: Wrote 8 failing tests in WagonCreationPage.gridResize.test.tsx
+  - Render GridX input with default value 24
+  - Render GridY input with default value 10
+  - Update grid columns when GridX changed
+  - Update grid rows when GridY changed
+  - Show warning dialog when elements outside new bounds
+  - Confirm resize removes out-of-bounds elements
+  - Cancel resize keeps original size and elements
+  - No warning when resize doesn't affect elements
+- Ran tests — all 8 FAIL ✅
+
+### GREEN Phase
+- Step 93.2: Added toolbar above grid with two MUI TextFields (Колони X, Редове Y). Default: x=24, y=10. onChange updates gridSize state via useWagonDraft.setGridSize
+- Step 93.3: Added resize warning dialog — when reducing gridSize makes elements out of bounds, shows MUI Dialog with confirm (remove + resize) or cancel (keep original)
+- Added i18n keys for bg.json and en.json (gridColumns, gridRows, resizeWarning.*)
+- Ran tests — all 8 PASS ✅
+
+### DONE Phase
+- Step 93.4: Verified all checks pass
+  - Tests: 135 passed (14 files) — 0 failures
+  - Type-check: 0 errors
+  - Lint: 0 errors (518 pre-existing warnings)
+
+**Files created:**
+- `src/app/features/wagons/pages/__tests__/WagonCreationPage.gridResize.test.tsx`
+
+**Files modified:**
+- `src/app/features/wagons/pages/WagonCreationPage.tsx`
+- `src/locales/bg.json`
+- `src/locales/en.json`
+
+**Git commit:**
+- `feat(compositions): [FE] Grid resize — промяна на gridSize чрез input полета`
+
+---
+
 ## 📚 Етап 4: Wagon Creation Feature (Tasks #73-#95)
 
 **Фокус:** Рефакторинг на OpenSaloonLayout.tsx (2139 линии → модулна структура) + нова страница "Създаване на вагон" с OSDM grid, drag-and-drop елементи от палета, localStorage persistence, navigation guard и запис към backend. Backend CRUD за CoachLayouts и WagonTypes.
@@ -327,6 +371,31 @@
 - `src/locales/en.json` (added wagons.creation.save, saveSuccess, saveError)
 
 **Git commit:** `feat(compositions): [FE] Бутон 'Запази' — изпращане на layout към backend (createWagonType + createCoachLayout)`
+
+---
+
+### Task #92: [FE] Grid елементи: изтриване и преместване на вече поставени елементи (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 92.1 (RED): Wrote 6 failing tests in OsdmGrid.contextMenu.test.tsx — right-click on placed element shows MUI context menu with 'Изтрий', clicking 'Изтрий' calls onDeleteElement with element id, menu closes after delete, no context menu on empty cell right-click, placed elements have draggable role="button" from @dnd-kit useDraggable, placed elements have cursor: grab
+- 92.1 (RED): Updated OsdmGrid.actions.test.tsx — aligned prop names (onRemoveElement → onDeleteElement) and test assertions with actual implementation (DraggableElement with useDraggable sets role="button" directly on grid-element testid)
+- 92.2 (GREEN): Created DraggableElement component inside OsdmGrid.tsx — wraps placed elements with useDraggable from @dnd-kit, sets data.fromGrid=true for in-grid moves, adds cursor: grab, handles onContextMenu with e.preventDefault/stopPropagation
+- 92.3 (GREEN): Added MUI Menu context menu to OsdmGrid — positioned via anchorReference="anchorPosition" at click coords, single MenuItem "Изтрий" calls onDeleteElement(id) and closes menu; added onDeleteElement optional prop to OsdmGridProps
+- 92.3 (GREEN): Updated WagonCreationPage handleDragEnd — detects fromGrid flag on active.data.current; if fromGrid=true → update existing element coords (move); else → create new element from palette. Added handleDeleteElement callback that splices element from gridElements by id. Passed onDeleteElement to OsdmGrid.
+- 92.4 (DONE): Verified — type-check ✅ (0 errors), lint ✅ (0 errors, pre-existing warnings only), tests 127/127 passed (13 files) ✅
+
+**Files modified:**
+- `src/app/features/wagons/components/OsdmGrid.tsx` (added DraggableElement with useDraggable, MUI Menu context menu, onDeleteElement prop, context menu state management)
+- `src/app/features/wagons/pages/WagonCreationPage.tsx` (added handleDeleteElement, updated handleDragEnd for in-grid move via fromGrid flag, passed onDeleteElement to OsdmGrid)
+- `src/app/features/wagons/components/__tests__/OsdmGrid.actions.test.tsx` (aligned prop names and assertions with implementation)
+
+**Files created:**
+- `src/app/features/wagons/components/__tests__/OsdmGrid.contextMenu.test.tsx` (6 tests for context menu delete + draggable)
+
+**Git commit:** `feat(compositions): [FE] Grid елементи: изтриване и преместване на вече поставени елементи`
 
 ---
 
