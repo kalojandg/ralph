@@ -34,6 +34,27 @@
 
 ---
 
+### Task #74: [FE] Рефакторинг OpenSaloonLayout — Стъпка 2: Извличане на SeatCell.tsx (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 74.1 (RED): Baseline confirmed — 129 passed / 1 pre-existing fail, type-check clean
+- 74.2 (GREEN): Created `layoutRenderers/SeatCell.tsx` — extracted SeatCell component (~190 lines) with SeatCellProps interface and seatNumberDisplay helper
+- 74.3 (GREEN): Updated OpenSaloonLayout.tsx — replaced inline SeatCell with import; removed unused imports (SeatStatus, SEAT_COLORS, SELECTED_STYLE, WHEELCHAIR_STYLE, COMPANION_STYLE, FIRST_CLASS_STYLE)
+- 74.4 (DONE): Verified — type-check ✅, tests 129 passed / 1 pre-existing fail ✅
+
+**Files created:**
+- `src/app/features/compositions/components/layoutRenderers/SeatCell.tsx`
+
+**Files modified:**
+- `src/app/features/compositions/components/layoutRenderers/OpenSaloonLayout.tsx`
+
+**Git commit:** `feat(compositions): [FE] Рефакторинг OpenSaloonLayout — Стъпка 2: Извличане на SeatCell.tsx`
+
+---
+
 *(Tasks will be logged here as they are completed)*
 
 ---
