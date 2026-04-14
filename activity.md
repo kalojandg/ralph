@@ -74,6 +74,29 @@
 
 ---
 
+### Task #76: [FE] Рефакторинг OpenSaloonLayout — Стъпка 4: Извличане на osdmRenderers.tsx и wallRenderers.tsx (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 76.1 (RED): Baseline confirmed — 129 passed / 1 pre-existing fail, type-check clean
+- 76.2 (GREEN): Created `layoutRenderers/wallRenderers.tsx` — extracted `renderWallColumns()` and `renderBottomBorders()` functions with typed input interfaces
+- 76.3 (GREEN): Created `layoutRenderers/osdmRenderers.tsx` — extracted `renderOsdmElements()` (~570 lines) covering all OSDM internals, signs, zones, and folding seats; includes `resolveWcGridXAfterSeat()` helper
+- 76.4 (GREEN): Updated OpenSaloonLayout.tsx — replaced ~685 lines of inline wall/OSDM rendering with function calls; removed unused imports (ariaLabelForZoneVisuals, dedupeOsdmZoneVisuals, resolveOsdmZoneFacilityVisuals, FOLDING_SEAT_STYLE, VisualRow)
+- 76.5 (DONE): Verified — type-check ✅, tests 129 passed / 1 pre-existing fail ✅
+
+**Files created:**
+- `src/app/features/compositions/components/layoutRenderers/wallRenderers.tsx` (120 lines)
+- `src/app/features/compositions/components/layoutRenderers/osdmRenderers.tsx` (702 lines)
+
+**Files modified:**
+- `src/app/features/compositions/components/layoutRenderers/OpenSaloonLayout.tsx` (reduced from ~1467 to ~815 lines)
+
+**Git commit:** `ee62db8` — refactor: extract wallRenderers.tsx and osdmRenderers.tsx from OpenSaloonLayout
+
+---
+
 *(Tasks will be logged here as they are completed)*
 
 ---
