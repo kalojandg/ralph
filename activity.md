@@ -1399,3 +1399,25 @@ TDD workflow гарантира:
 **Git commit:** `feat(compositions): [FE] Element Palette — вертикален панел отляво с drag-and-drop елементи`
 
 ---
+
+### Task #87: [FE] OsdmGrid — drop zone: приемане на елементи от палетата върху grid клетки (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 87.1 (RED): Wrote 7 tests in OsdmGrid.drop.test.tsx — droppable cells render, placed elements at correct position, multiple elements, element inside cell container, empty gridElements shows no placed elements, cell count preserved, colored background on placed elements
+- 87.2 (GREEN): Created `DroppableCell` component wrapping each cell with `@dnd-kit/core` `useDroppable` hook; droppable ID = `cell-${x}-${y}`, data carries `{x, y}` coordinates; visual feedback on hover (`isOver` → light blue background)
+- 87.3 (GREEN): Exported `GridElement` type from OsdmGrid: `{ id: string, icon: number, label: string, coords: {x: number, y: number} }`; `OsdmGridProps` extended with optional `gridElements?: GridElement[]` and `onDrop?` callback; `elementMap` built with `useMemo` for O(1) lookup
+- 87.4 (GREEN): Placed elements render as colored squares (#e3f2fd) with label text inside their respective grid cells; backward compatibility preserved — when `gridElements`/`onDrop` not provided, uses `PlainCell` (no hooks)
+- 87.5 (DONE): Verified — type-check ✅ (0 errors), lint ✅ (0 errors), tests 84/84 wagon suite passed ✅
+
+**Files created:**
+- `src/app/features/wagons/components/__tests__/OsdmGrid.drop.test.tsx`
+
+**Files modified:**
+- `src/app/features/wagons/components/OsdmGrid.tsx` (added DroppableCell, PlainCell, GridElement type, gridElements/onDrop props)
+
+**Git commit:** `feat(compositions): [FE] OsdmGrid — drop zone: приемане на елементи от палетата върху grid клетки`
+
+---
