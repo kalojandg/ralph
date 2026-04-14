@@ -176,6 +176,28 @@
 
 ---
 
+### Task #80: [BE] CRUD API за SeatDefinitions — POST /api/coach-layouts/{layoutId}/seats (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 80.1 (RED): Wrote 4 controller-layer unit tests: 200 with count, 404 layout not found, 400 duplicate seat numbers, command verification
+- 80.2 (GREEN): Created `SaveSeatDefinitions.cs` — Command + Handler: delete-old + insert-new pattern; validates layout exists, no duplicate SeatNumbers
+- 80.3 (GREEN): Added POST endpoint `{layoutId}/seats` in `CoachLayoutsController.cs`
+- 80.4 (DONE): Build ✅, 22/22 tests passed (10 WagonTypes + 4 POST + 4 PUT + 4 batch seats) ✅
+
+**Files created:**
+- `RailRunService.Application/Features/Nomenclatures/Commands/SaveSeatDefinitions.cs`
+
+**Files modified:**
+- `RailRunService.API/Controllers/CoachLayoutsController.cs` (added POST seats endpoint)
+- `RailRunService.API.Tests/Controllers/CoachLayoutsControllerTests.cs` (added 4 batch seats tests)
+
+**Git commit:** `c014a4dc` — feat(coach-layouts): add POST /api/coach-layouts/{layoutId}/seats endpoint
+
+---
+
 *(Tasks will be logged here as they are completed)*
 
 ---
