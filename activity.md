@@ -1361,3 +1361,22 @@ TDD workflow гарантира:
 - `feat(compositions): [FE] Рутиране: Compositions меню с 2 подменюта — Сглобяване на композиция (съществуваща страница) и Управление на вагони (нова)`
 
 ---
+
+### Task #85: [FE] OSDM Grid компонент — празна решетка с пунктирани линии и gridSize от props (COMPLETE)
+
+**Status:** ✅ DONE
+**TDD Phases:** RED → GREEN → DONE
+
+**Steps completed:**
+- 85.1 (RED): Wrote 13 failing tests for OsdmGrid: grid container renders, correct cell count (240 for 24×10, 24 for 6×4), CSS grid columns/rows, dashed border on cells, custom cellSize prop, default cellSize=22px (GRID_UNIT), cell testids encode x,y coordinates, X-axis labels, Y-axis labels, label counts
+- 85.2 (GREEN): Created `src/app/features/wagons/components/OsdmGrid.tsx` — CSS Grid component with gridSize and cellSize props, renders gridSize.x × gridSize.y cells with dashed borders
+- 85.3 (GREEN): Added coordinate labels — X-axis numbers along top, Y-axis numbers along left side for orientation during wagon design
+- 85.4 (DONE): Verified — type-check ✅, tests 1801 passed / 1 pre-existing fail (KP612GeneratePage) ✅
+
+**Files created:**
+- `src/app/features/wagons/components/OsdmGrid.tsx`
+- `src/app/features/wagons/components/__tests__/OsdmGrid.test.tsx`
+
+**Git commit:** `feat(compositions): [FE] OSDM Grid компонент — празна решетка с пунктирани линии и gridSize от props`
+
+---
