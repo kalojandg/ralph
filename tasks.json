@@ -3762,6 +3762,11 @@
         "id": "103.3",
         "phase": "DONE",
         "action": "npm test && npm run type-check && npm run lint — всичко минава. Check visually (npm run dev) — стените се рендерират като тънки линии в средата на клетки, corner-ите L/T се срещат в центъра."
+      },
+      {
+        "id": "103.4",
+        "phase": "DONE",
+        "action": "Regression check: npx playwright test tests/wagons/wagon-creation-workflow.spec.ts — всички сценарии от Task 95 E2E тестовете продължават да минават без модификация. Критично: drop/move/delete на non-wall елементи (seats, tables, zones) не е засегнат от wall render pipeline-а."
       }
     ],
     "passes": false
@@ -3881,6 +3886,11 @@
         "id": "107.4",
         "phase": "DONE",
         "action": "npm test && npm run type-check && npm run lint — всичко минава."
+      },
+      {
+        "id": "107.5",
+        "phase": "DONE",
+        "action": "Regression check: npx playwright test tests/wagons/wagon-creation-workflow.spec.ts — drop на seats/tables/zones в handleDragEnd продължава да работи. Wall code branch не счупва non-wall drop logic."
       }
     ],
     "passes": false
@@ -3952,13 +3962,18 @@
       },
       {
         "id": "110.2",
-        "phase": "GREEN",
-        "action": "Ако някъде flow-ът се чупи — идентифицирай и поправи. Тестът минава след като всички предходни таскове (96-109) са done."
+        "phase": "RED",
+        "action": "Добави втори integration тест в същия файл — localStorage draft persistence mid-edit: (1) Render WagonCreationPage (create mode, не edit); (2) Drop wall на grid-а; (3) Resize arm с resizeWallArm event simulation; (4) Unmount компонента (напр. render().unmount()); (5) Re-render WagonCreationPage; (6) Wall state е restored от localStorage 'wagon_creation_draft' ключа със същия dimension, coords и orientation; (7) buildOsdmLayoutJson от restored state дава същия JSON както преди unmount. Тестът ФЕЙЛВА (wall полета в GridElement трябва да са сериализуеми в localStorage — dimension, orientation, WallCode) — ако JSON.stringify/parse загуби структура, тестът улавя това."
       },
       {
         "id": "110.3",
+        "phase": "GREEN",
+        "action": "Ако някъде flow-ът се чупи — идентифицирай и поправи. Тестовете минават след като всички предходни таскове (96-109) са done. useWagonDraft трябва да сериализира/десериализира WallElement без загуба на полета."
+      },
+      {
+        "id": "110.4",
         "phase": "DONE",
-        "action": "npm test && npm run type-check && npm run lint — всичко минава. Integration тест PASSES."
+        "action": "npm test && npm run type-check && npm run lint — всичко минава. И двата integration теста PASSES."
       }
     ],
     "passes": false
@@ -3978,13 +3993,49 @@
       },
       {
         "id": "111.2",
-        "phase": "GREEN",
-        "action": "Ако E2E тестовете фейлват — поправи имплементацията. Итерирай докато всички минат."
+        "phase": "RED",
+        "action": "Добави втори E2E сценарий в същия файл — mixed-wagon edit: (1) Setup: създай wagon през API (mock или реален) със старата JSON schema (internals[] без dimension за стените, само seats в SeatDefinitions). Това симулира заварено wagon от преди Етап 5; (2) Navigate /wagons/:id/edit; (3) Wagon се зарежда — съществуващите елементи са видими (seats + ако има стари walls, те са с default dimension от wallShapes — fallback от Task 109); (4) Drop нова WALL_RIGHT_2 стена на свободна позиция; (5) Save; (6) Reload страницата; (7) Verify: internals[] в OSDM JSON съдържа И старите записи (с default или без dimension ако са били без) И новата стена (с експлицитно dimension). Това е full round-trip тест за backward compat + нова feature."
       },
       {
         "id": "111.3",
+        "phase": "GREEN",
+        "action": "Ако E2E тестовете фейлват — поправи имплементацията. Итерирай докато всички сценарии минат. Внимавай: mixed-wagon тестът може да улови бъгове в load path (dimension fallback) или в save path (mix от legacy и new entries)."
+      },
+      {
+        "id": "111.4",
         "phase": "DONE",
-        "action": "npm test && npx playwright test — ВСИЧКИ минават. npm run type-check && npm run lint — чисто."
+        "action": "npm test && npx playwright test — ВСИЧКИ минават (unit + E2E). npm run type-check && npm run lint — чисто. Critical regression: wagon-creation-workflow.spec.ts от Task 95 продължава да работи без промени."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 112,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Regression coverage — wagon metadata update + per-seat travelClass serialization",
+    "tddWorkflow": true,
+    "specRef": "frontend-requirements.md §5 (извън scope на walls, но защитава наскоро shipped features)",
+    "steps": [
+      {
+        "id": "112.1",
+        "phase": "RED",
+        "action": "Създай __tests__/WagonCreationPage.metadata.test.tsx. Тестове за edit mode save path: (1) Отвори edit mode за съществуващ wagon; (2) Промени travelClass от SECOND → FIRST през WagonMetadataForm dropdown; (3) Click Save; (4) Verify useUpdateWagonType mutation е извикана с dto: { seriesName, travelClass: 'FIRST', compartmentType, defaultCapacity }; (5) Verify updateCoachLayout е извикан СЛЕД updateWagonType (не преди); (6) Verify при грешка в updateWagonType, updateCoachLayout НЕ се вика (fail-fast); (7) Verify в create mode (не edit) — updateWagonType НЕ се вика, само createWagonType. Тестовете ФЕЙЛВАТ ако някой следващ wall рефакторинг случайно счупи save flow-а."
+      },
+      {
+        "id": "112.2",
+        "phase": "RED",
+        "action": "Създай __tests__/buildSeatDefinitions.test.ts (или добави в съществуващ). Тестове за seat travelClass сериализация: (1) Seat с el.travelClass === 'FIRST' → attributes съдържа 'FIRST_CLASS'; (2) Seat с el.travelClass === 'SECOND' → attributes съдържа 'SECOND_CLASS'; (3) Seat с el.travelClass === undefined → attributes съдържа 'SECOND_CLASS' (default); (4) Wheelchair, companion, folding seats — НЕ добавят class в attributes (class е само за SEAT); (5) Load path: при parse на seat с attributes включващи 'FIRST_CLASS' → el.travelClass === 'FIRST'; с 'SECOND_CLASS' → 'SECOND'; без нито едно → undefined. Тестовете ФЕЙЛВАТ ако някой пипне buildSeatDefinitions или load logic."
+      },
+      {
+        "id": "112.3",
+        "phase": "GREEN",
+        "action": "Ако тестовете фейлват — идентифицирай и поправи (вероятно нищо не трябва да се променя, т.к features са shipped; тестовете са regression guard). Тестовете трябва да минат както е сега."
+      },
+      {
+        "id": "112.4",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check && npm run lint — всичко минава. Тези тестове защитават: (a) updateWagonType endpoint (Task извън #96-#111); (b) per-seat travelClass (FIRST_CLASS/SECOND_CLASS) сериализация. И двете са shipped, но нямат coverage. Регресиите при wall рефакторинг ще бъдат хванати."
       }
     ],
     "passes": false
