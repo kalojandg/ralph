@@ -1,0 +1,7 @@
+﻿This iteration is complete. Task #93 has been finished, committed, and reported. Stopping now.
+
+```xml
+<status>CONTINUE</status>
+<next-task>94</next-task>
+```
+

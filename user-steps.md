@@ -562,3 +562,179 @@ POST   /api/wagon-types            → Create wagon type (Draft)
 3. Изчисти localStorage draft
 4. Navigate to /wagons
 5. Snackbar за успех
+
+---
+
+## 🧱 Етап 5: Walls Feature (Tasks #96-#111)
+
+**Фокус:** Resizeable OSDM стени (icon codes 23-32) в grid-а за създаване/edit
+на вагон. Пълна OSDM спецификация (GraphicElement + RectangleGeometry).
+
+### Подетапи
+
+| Под-етап | Таскове | Какво прави |
+|---------|---------|-------------|
+| **5A: Domain & helpers** | #96-#101 | Type model, wallShapes registry, cell classifiers, mutation & collision helpers (pure, unit-testable) |
+| **5B: Rendering** | #102-#104 | WallCellVisual компонент + OsdmGrid integration + cursors/drag handles |
+| **5C: Interaction** | #105-#106 | Resize session + Move session + Esc cancel |
+| **5D: Integration** | #107-#109 | Palette drop initial dimension + OSDM serialize/deserialize |
+| **5E: Verification** | #110-#111 | Integration test + E2E Playwright |
+
+### 📜 Задължителни reference файлове
+
+Преди да започнеш **всеки** wall таск:
+
+1. **`C:/Users/kaloyan.georgiev.AMEXIS/Downloads/walls.ini`** — визуалния модел,
+   класификация на клетки, rendering подход, bounding box на L/T. Това е
+   **single source of truth** за геометрията и UX поведението.
+2. **`C:/Projects/BDZ Project/Admin-App/docs/composition/frontend-requirements.md §5`** —
+   формалните функционални изисквания (FR-1..FR-7), acceptance criteria,
+   разбивка на таскове.
+3. **`C:/Projects/admin-app-frontend-structure.md`** — React/TS/MUI patterns.
+
+**Ако таскът засяга OSDM JSON формат** — прочети и
+https://raw.githubusercontent.com/UnionInternationalCheminsdeFer/OSDM/master/specification/schemas/place.yml
+(GraphicElement, RectangleGeometry, GridDimension).
+
+### 🎯 Архитектурни правила за Етап 5
+
+#### Grid инвариант (НЕПОКЛАТИМ)
+**ВСИЧКИ клетки в OsdmGrid са единен размер (GRID_UNIT = 22px).** Няма
+dedicated wall-tracks, няма по-тесни колони. Стените живеят **вътре** в
+нормални клетки. Незаетата част от клетката остава празна.
+
+(Open saloon има dedicated wall tracks — **НЕ** пренасяме този подход.
+Заимстваме само визуалния стил: цвят `#546E7A`, 3px thickness, borderRadius 1px.)
+
+#### Layering / zIndex
+- **Walls: zIndex 1** (под седалки/зони на 2).
+- Wrapper divs на wall клетки поемат mouse events (`position: absolute; inset: 0`).
+- Линиите вътре (4-те half-line segments) са `pointer-events: none`.
+
+#### Rendering подход
+- **WallCellVisual** компонент — до 4 half-line segments (up/down/left/right)
+  според посоките на продължение на стената от тази клетка.
+- Corner клетка (L): две половини се срещат точно в центъра (`|` + `—`).
+- Middle клетка: двете половини по оста на рамото → пълна линия top→bottom
+  или left→right.
+
+#### End vs Middle vs Internal
+- **End** — последна клетка на рамо, resize-анчър. Cursor `col-resize` /
+  `row-resize` според оста. Visual: малка drag handle точка (4-6 px) в
+  ъгъла.
+- **Middle** — между end-овете; move-анчър. Cursor `grab`.
+- **Internal** — corner (L) или junction (T). Без cursor, без interaction.
+
+#### Collision
+- Прилага се при **resize** и **move**.
+- `canPlaceWall` проверява: (1) всички wall клетки в grid границите;
+  (2) нито една от wall клетки не пресича друг елемент.
+- `clampWallToValid` връща последния валиден state (не преминава през пречка).
+- По време на drag — червена полупрозрачна подсветка на crossing cells
+  (преизползваме съществуващата логика).
+
+### 🚨 Critical rules за Етап 5
+
+1. **Pure helpers first** — таскове #96-#101 са pure utility functions (data
+   transformations). Пишат се с unit тестове преди да се интегрират в UI.
+   Няма DOM, няма state, само функции с pure input/output.
+
+2. **Render integration после** — таск #103 подмена на съществуващата wall
+   rendering логика (стари сиви правоъгълничета от DraggableElement) с
+   WallCellVisual. Внимавай: трябва да се изключат wall icons (23-32) от
+   съществуващия non-wall pipeline.
+
+3. **Mouse events ПОСЛЕ rendering** — таскове #105-#106. Не пипай
+   interaction-ите преди да имаш стабилен rendering.
+
+4. **OSDM JSON формат се ПРОМЕНЯ** — таск #108 добавя `dimension` в
+   internals[] за walls. Load logic (#109) чете с fallback. Важно:
+   non-wall internals НЕ се засягат.
+
+5. **Backward compatibility задължителна** — стари wagon-и без dimension
+   зареждат с default размер от wallShapes. Тест за това в #109.
+
+6. **Не мигрирай `code` при resize** — WALL_LEFT_3 свит до 2-place си остава
+   WALL_LEFT_3. OSDM позволява произволен dimension за всеки code.
+
+7. **Няма rotate за v1** — ориентацията се избира при drop чрез конкретния
+   палитра елемент (WALL_LEFT vs WALL_RIGHT; T-top vs T-bottom). Resize не
+   променя orientation.
+
+### 🧪 TDD за Етап 5
+
+За всеки таск (#96-#111):
+
+1. **RED** — напиши failing тест(ове). Пусни `npm test` → тестовете ФЕЙЛВАТ.
+   Verify ФЕЙЛВАТ по правилната причина (модул липсва, тестван behavior
+   не е имплементиран).
+2. **GREEN** — минимална имплементация. Пусни `npm test` → всички ПАСВАТ.
+3. **REFACTOR** (по желание) — подобрения без да чупят тестовете.
+4. **VISUAL** (за UI таскове) — npm run dev + manual проверка (cursor-ide-browser
+   MCP ако е наличен). Цвят, положение, cursor behavior.
+5. **DONE** — `npm test && npm run type-check && npm run lint` — чисто.
+
+### 📁 Файлова структура
+
+**Нови файлове (предвидени):**
+```
+src/app/features/wagons/components/
+├── wallTypes.ts              # Task #96 — WallElement type, WallCode, WallOrientation, isWallElement
+├── wallShapes.ts             # Task #97 — WALL_SHAPES registry, getDefaultDimension
+├── wallCells.ts              # Task #98-99 — getWallCells, classifyCell, getCellDirections
+├── wallMutations.ts          # Task #100 — resizeWallArm, moveWall
+├── wallCollision.ts          # Task #101 — canPlaceWall, clampWallToValid
+└── WallCellVisual.tsx        # Task #102 — React component with half-line segments
+```
+
+**Променени файлове (предвидени):**
+```
+src/app/features/wagons/components/OsdmGrid.tsx    # Task #96 (type extend), #103 (wall render), #104 (cursors), #105-106 (drag sessions)
+src/app/features/wagons/pages/WagonCreationPage.tsx # Task #107 (palette drop), #108 (save), #109 (load)
+src/app/features/wagons/components/ElementPalette.tsx  # (optional) per-orientation palette items за T-top vs T-bottom, ако се реши в #97
+```
+
+**Тестове:**
+```
+src/app/features/wagons/components/__tests__/wallTypes.test.ts             # #96
+src/app/features/wagons/components/__tests__/wallShapes.test.ts            # #97
+src/app/features/wagons/components/__tests__/wallCells.test.ts             # #98
+src/app/features/wagons/components/__tests__/wallCellClassification.test.ts # #99
+src/app/features/wagons/components/__tests__/wallMutations.test.ts         # #100
+src/app/features/wagons/components/__tests__/wallCollision.test.ts         # #101
+src/app/features/wagons/components/__tests__/WallCellVisual.test.tsx       # #102
+src/app/features/wagons/components/__tests__/OsdmGrid.walls.test.tsx       # #103, #104, #105, #106
+src/app/features/wagons/pages/__tests__/WagonCreationPage.wallDrop.test.tsx # #107
+src/app/features/wagons/__tests__/buildOsdmLayoutJson.test.ts              # #108
+src/app/features/wagons/__tests__/loadWagon.test.tsx                       # #109
+src/app/features/wagons/__tests__/walls.integration.test.tsx               # #110
+tests/wagons/walls-workflow.spec.ts                                        # #111 (Playwright E2E)
+```
+
+### ✅ Success criteria per task (final check)
+
+Преди да маркираш `"passes": true` за wall таск, провери:
+
+1. ✅ Тестовете от RED phase сега ПАСВАТ
+2. ✅ `npm run type-check` чист
+3. ✅ `npm run lint` — няма нови errors (pre-existing warnings се игнорират)
+4. ✅ Ако таскът има rendering/UI компонент — провери визуално с npm run dev
+5. ✅ Acceptance criteria от frontend-requirements.md §5.7 приложими за таска
+   са изпълнени
+6. ✅ Актуализиран activity.md запис
+7. ✅ Git commit с **точното** `description` от tasks.json
+
+### ⚠️ Отворени въпроси (решават се в хода на Етап 5)
+
+1. **Palette expansion за orientations** — дали T-top и T-bottom са отделни
+   палитра елементи (препоръчано за v1) или един с orientation picker. За
+   v1 се препоръчва два отделни елемента — по-просто UX.
+
+2. **Clamp посока при resize** — когато end клетката на рамо е блокирана от
+   пречка по ресайз, clamp-ва ли до последната valid клетка преди пречката
+   (препоръчано) или връща towards originalWall-а (unclear visually). Изборът:
+   clamp ДО пречката (consistent с "стената стига до пречката").
+
+3. **Selection highlight** — по желание за v1: visual border около избрана
+   стена след click. Не задължително, но подобрява UX. Решение: добавя се
+   в полиране фаза след #111 ако има време.

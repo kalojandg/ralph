@@ -3542,5 +3542,451 @@
       }
     ],
     "passes": true
+  },
+  {
+    "id": 96,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Wall data model — extend GridElement with dimension and WallElement type",
+    "tddWorkflow": true,
+    "specRef": "frontend-requirements.md §5.5 Данни & модел",
+    "steps": [
+      {
+        "id": "96.1",
+        "phase": "RED",
+        "action": "Създай тест файл src/app/features/wagons/components/__tests__/wallTypes.test.ts. Напиши failing тестове: (1) WallElement type има полета icon (WallCode), dimension { width, height }, optional orientation; (2) WallCode union съдържа точно 23-32; (3) GridElement type остава backward-compatible — нормалните (non-wall) елементи не изискват dimension. Пусни npm test — тестовете ФЕЙЛВАТ (модулът/типовете липсват)."
+      },
+      {
+        "id": "96.2",
+        "phase": "GREEN",
+        "action": "Създай src/app/features/wagons/components/wallTypes.ts: export type WallCode = 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32; export type WallOrientation = 'TOP' | 'BOTTOM' | 'LEFT' | 'RIGHT'; export interface WallElement extends Pick<GridElement, 'id' | 'coords' | 'label'> { icon: WallCode; dimension: { width: number; height: number }; orientation?: WallOrientation; }. Export type guard isWallElement(el: GridElement): el is WallElement който проверява дали el.icon е в 23-32."
+      },
+      {
+        "id": "96.3",
+        "phase": "GREEN",
+        "action": "В OsdmGrid.tsx разшири GridElement interface с optional `dimension?: { width: number; height: number }` и optional `orientation?: WallOrientation` (import от wallTypes). Съществуващите non-wall elements не се променят (полетата са optional)."
+      },
+      {
+        "id": "96.4",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check && npm run lint — всичко минава. Тестовете от 96.1 сега PASS."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 97,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] wallShapes.ts registry — per-code form descriptor (straight/L/T, arms, defaults)",
+    "tddWorkflow": true,
+    "specRef": "frontend-requirements.md §5.5, walls.ini §2",
+    "steps": [
+      {
+        "id": "97.1",
+        "phase": "RED",
+        "action": "Създай src/app/features/wagons/components/__tests__/wallShapes.test.ts. Тестове: (1) wallShapes[29] има type='straight', 1 arm, defaultArmLength=2; (2) wallShapes[30] type='straight', defaultArmLength=3; (3) wallShapes[32] defaultArmLength=1; (4) wallShapes[24] (WALL_LEFT_3) type='L', 2 arms, defaultArmLength=3; (5) wallShapes[25] (WALL_RIGHT_3) type='L' с обратни arm directions от 24; (6) wallShapes[23] (T_WALL_3) type='T', 3 arms (left/right/down спрямо junction), defaultArmLength=3; (7) wallShapes[26] (T_WALL_2) type='T', defaultArmLength=2; (8) wallShapes[31] MOVABLE_WALL type='straight'. Пусни npm test — тестовете ФЕЙЛВАТ."
+      },
+      {
+        "id": "97.2",
+        "phase": "GREEN",
+        "action": "Създай src/app/features/wagons/components/wallShapes.ts. Експортирай WallShape interface { code: WallCode; type: 'straight' | 'L' | 'T'; arms: Array<{ axis: 'horizontal'|'vertical'; direction: 'left'|'right'|'up'|'down' }>; defaultArmLength: number; defaultOrientation: WallOrientation; }. Експортирай const WALL_SHAPES: Record<WallCode, WallShape> с всички 10 кода. За L-формите: WALL_LEFT (24, 27) — arms [{vertical, up}, {horizontal, right}] относно corner в долу-ляво; WALL_RIGHT (25, 28) — arms [{vertical, up}, {horizontal, left}] относно corner долу-дясно. За T-формите (23, 26): 3 arms [{horizontal, left}, {horizontal, right}, {vertical, down}] относно junction в горе-среден."
+      },
+      {
+        "id": "97.3",
+        "phase": "GREEN",
+        "action": "Добави helper getDefaultDimension(code: WallCode): { width: number; height: number } който връща bbox размерите за initial drop. Straight horizontal → {armLen, 1}; vertical → {1, armLen}. L 3×3 → {3, 3}. T 3-place top → {3 (ширина на horizontal bar), 3 (височина на vertical stub + 1 junction)} — конкретните стойности се определят от geometry of shape в wallShapes.ts."
+      },
+      {
+        "id": "97.4",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check && npm run lint — всичко минава. Покриват се всички 10 кода с тестове."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 98,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] getWallCells helper — compute occupied cells (exclude empty bbox cells for L/T)",
+    "tddWorkflow": true,
+    "specRef": "walls.ini §3.5 Bounding box на стената",
+    "steps": [
+      {
+        "id": "98.1",
+        "phase": "RED",
+        "action": "Създай __tests__/wallCells.test.ts. Тестове: (1) Права стена 29 (horizontal, dimension {3,1}) заема 3 клетки в реда y, коорд (x..x+2); (2) Вертикална 30 (dimension {1,5}) заема 5 клетки в колоната x; (3) L WALL_LEFT_3 в позиция (5,3) с corner долу-ляво: заема L-форма с vertical arm (5,3)-(5,5) и horizontal arm (5,5)-(7,5) — общо 5 клетки, НЕ 9 (bbox 3×3 минус 4 empty cells); (4) T WALL_TOP_3 в (4,2): horizontal bar (4,2)-(6,2) + vertical stub (5,2)-(5,4) — 5 клетки; (5) Средните клетки се изчисляват коректно независимо от orientation. Тестовете ФЕЙЛВАТ."
+      },
+      {
+        "id": "98.2",
+        "phase": "GREEN",
+        "action": "В wallShapes.ts (или нов wallCells.ts) експортирай getWallCells(wall: WallElement): Array<{ x: number; y: number }>. Имплементация: според wall.icon и wall.orientation, трасирай всяко рамо и corner/junction. Използвай WALL_SHAPES[code] за посоките на рамената. Върни уникален списък клетки."
+      },
+      {
+        "id": "98.3",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check && npm run lint — всичко минава. Тестовете покриват и четирите orientations (TOP/BOTTOM/LEFT/RIGHT) за L и T."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 99,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] classifyCell + getCellDirections helpers — end/middle/internal + rendering directions",
+    "tddWorkflow": true,
+    "specRef": "frontend-requirements.md §5.6 Rendering модел, walls.ini §3",
+    "steps": [
+      {
+        "id": "99.1",
+        "phase": "RED",
+        "action": "Създай __tests__/wallCellClassification.test.ts. Тестове: (1) За права hor 3-place, клетките [end, middle, end]; (2) За права 1-place, single клетка е 'end'; (3) За L WALL_LEFT_3: corner клетка е 'internal'; върховете на двете рамена са 'end'; останалите 3 — 'middle'; (4) За T 3-place: junction е 'internal'; 3-те върха са 'end'; (5) classifyCell връща и axis ('horizontal'|'vertical') за end клетки — използва се за cursor selection; (6) getCellDirections за corner клетка в L (напр. corner е долу-ляво, vertical arm отива нагоре, horizontal arm отива надясно) връща { up: true, right: true, down: false, left: false }; (7) getCellDirections за middle клетка на вертикално рамо → { up: true, down: true, left: false, right: false }; (8) За end клетка на horizontal арм → { up: false, down: false, left: depends на посоката, right: depends }. Тестовете ФЕЙЛВАТ."
+      },
+      {
+        "id": "99.2",
+        "phase": "GREEN",
+        "action": "Експортирай classifyCell(wall, cellKey: {x,y}): { type: 'end'|'middle'|'internal'; armAxis?: 'horizontal'|'vertical' } и getCellDirections(wall, cellKey): { up: boolean; down: boolean; left: boolean; right: boolean }. Използвай getWallCells и WALL_SHAPES за трасиране."
+      },
+      {
+        "id": "99.3",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check && npm run lint — всичко минава. Покритие на всички 10 кода × 4 orientations."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 100,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] resizeWallArm + moveWall mutation helpers",
+    "tddWorkflow": true,
+    "specRef": "frontend-requirements.md §5.3 FR-3, FR-4",
+    "steps": [
+      {
+        "id": "100.1",
+        "phase": "RED",
+        "action": "Създай __tests__/wallMutations.test.ts. Тестове: (1) resizeWallArm на horizontal end клетка на права стена 29 с dx=+2 → width расте с 2; (2) Clamp до min 1 при dx < -(armLen-1); (3) Движение по грешна ос (dy на horizontal arm) се игнорира; (4) Resize на L — само съответното рамо расте, corner и друго рамо не се местят; (5) moveWall с dx=2, dy=1 → всички клетки се местят с (+2, +1), формата остава; (6) Не се позволява обръщане: при resize на end клетка в посока навътре, action спира когато рамото е 1 клетка. Тестовете ФЕЙЛВАТ."
+      },
+      {
+        "id": "100.2",
+        "phase": "GREEN",
+        "action": "Експортирай resizeWallArm(wall: WallElement, endCellKey: {x,y}, delta: {dx: number; dy: number}): WallElement — чете axis на endCell от classifyCell, прилага delta САМО по тази ос, clamp-ва до мин 1 клетка на рамо, връща нова wall с обновени dimension/coords. За L/T — рамото-специфична логика; corner/junction остават фиксирани в абсолютни координати. Експортирай moveWall(wall: WallElement, delta: {dx: number; dy: number}): WallElement — просто coords += delta."
+      },
+      {
+        "id": "100.3",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check && npm run lint — всичко минава."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 101,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Wall collision util — canPlaceWall / clampWallToValid",
+    "tddWorkflow": true,
+    "specRef": "frontend-requirements.md §5.3 FR-5",
+    "steps": [
+      {
+        "id": "101.1",
+        "phase": "RED",
+        "action": "Създай __tests__/wallCollision.test.ts. Тестове: (1) canPlaceWall връща true ако всички getWallCells(wall) са в gridSize границите и не пресичат други елементи; (2) Връща false при out-of-bounds; (3) Връща false при overlap с друг елемент (седалка на една от wall клетките); (4) clampWallToValid при resize — намалява dimension до последен валиден размер; (5) clampWallToValid при move — връща wall с coords спрени до ръба на пречката, не навлиза. Тестовете ФЕЙЛВАТ."
+      },
+      {
+        "id": "101.2",
+        "phase": "GREEN",
+        "action": "Експортирай canPlaceWall(wall: WallElement, otherElements: GridElement[], gridSize: {x: number; y: number}): boolean. Използва getWallCells + Set на окупирани клетки от otherElements (buildOccupiedMap от OsdmGrid.tsx или нов util). Експортирай clampWallToValid(originalWall, targetWall, otherElements, gridSize): WallElement — итерира от targetWall към originalWall по посоката на промяната, връщайки последния валиден state."
+      },
+      {
+        "id": "101.3",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check && npm run lint — всичко минава."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 102,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] WallCellVisual component — half-line segments rendering",
+    "tddWorkflow": true,
+    "specRef": "frontend-requirements.md §5.6 Rendering модел",
+    "steps": [
+      {
+        "id": "102.1",
+        "phase": "RED",
+        "action": "Създай src/app/features/wagons/components/__tests__/WallCellVisual.test.tsx. Тестове: (1) Render с directions { up: true, down: true } → 2 line segments, единия от top до middle, другия от middle до bottom; (2) directions { up: true, right: true } (corner) → 2 segments, single meeting point в center; (3) directions всички false (не би трябвало да се случва, но defensive) → null или empty; (4) Props: cellSize (за изчисление на width/height), color (default #546E7A), thickness (default 3). Тестовете ФЕЙЛВАТ (компонентът липсва)."
+      },
+      {
+        "id": "102.2",
+        "phase": "GREEN",
+        "action": "Създай src/app/features/wagons/components/WallCellVisual.tsx. Функционален React компонент. Props: directions: { up: boolean; down: boolean; left: boolean; right: boolean }; color?: string; thickness?: number. Render: 1-4 absolute-positioned div-ове (един за всяка true посока) с правилно позициониране (top:0/50%, left:0/50%, width/height 50% или thickness). Цвят #546E7A по default, borderRadius 1px. Pointer-events: none на линиите (за да не пречат на drag)."
+      },
+      {
+        "id": "102.3",
+        "phase": "VISUAL",
+        "action": "Използвай cursor-ide-browser MCP ако е активен. В противен случай — добави Storybook-like test renderer: створи test page с 8 сценария (middle vertical, middle horizontal, L corner top-right, L corner bottom-left, T junction top, T junction bottom, straight end, single cell) и провери визуално."
+      },
+      {
+        "id": "102.4",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check && npm run lint — всичко минава."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 103,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] OsdmGrid integration — render walls via WallCellVisual in each occupied cell",
+    "tddWorkflow": true,
+    "specRef": "frontend-requirements.md §5.6 Rendering модел",
+    "steps": [
+      {
+        "id": "103.1",
+        "phase": "RED",
+        "action": "В __tests__/OsdmGrid.test.tsx (или нов OsdmGrid.walls.test.tsx) добави тестове: (1) При gridElements с WallElement (icon 29, dimension {3,1}, coords {2,4}) — render-ват се 3 WallCellVisual компонента в клетки (2,4), (3,4), (4,4); (2) L-shape (icon 24) — render-ват се точно толкова WallCellVisual колкото getWallCells връща, във всяка клетка със съответните directions от getCellDirections; (3) Wall has zIndex 1 (по-нисък от seats/zones на 2); (4) Non-wall elements продължават да се рендерират нормално. Тестовете ФЕЙЛВАТ."
+      },
+      {
+        "id": "103.2",
+        "phase": "GREEN",
+        "action": "В OsdmGrid.tsx: (1) Определи dedicated render pipeline за wall elements (isWallElement check); (2) За всяка wall — итерирай getWallCells, за всяка клетка render-ни <WallCellVisual directions={getCellDirections(wall, cell)} /> в absolute-positioned wrapper при coords (cell.x * cellSize, cell.y * cellSize), width=height=cellSize, zIndex: 1; (3) Изключи walls от съществуващата non-wall render logic (DraggableElement). Стените спират да се рендерират като сиви правоъгълничета — заменят се с WallCellVisual."
+      },
+      {
+        "id": "103.3",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check && npm run lint — всичко минава. Check visually (npm run dev) — стените се рендерират като тънки линии в средата на клетки, corner-ите L/T се срещат в центъра."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 104,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Cursor styling + drag handles for wall cells",
+    "tddWorkflow": true,
+    "specRef": "frontend-requirements.md §5.6 Курсори, Visual affordance",
+    "steps": [
+      {
+        "id": "104.1",
+        "phase": "RED",
+        "action": "Тестове в __tests__/WallCellVisual.test.tsx (или отделен): (1) End клетка на horizontal arm → wrapper style.cursor === 'col-resize'; (2) End клетка на vertical arm → 'row-resize'; (3) Middle клетка → 'grab'; (4) Internal (corner/junction) → default (undefined или 'default'); (5) Visual: drag handle dot (4-6px) е рендериран в ъгъла на end клетки (data-testid='wall-resize-handle'). Тестовете ФЕЙЛВАТ."
+      },
+      {
+        "id": "104.2",
+        "phase": "GREEN",
+        "action": "Добави props `cellType: 'end' | 'middle' | 'internal'` и `armAxis?: 'horizontal' | 'vertical'` към WallCellVisual wrapper. Логика: cursor = endCell && armAxis==='horizontal' ? 'col-resize' : endCell && armAxis==='vertical' ? 'row-resize' : middleCell ? 'grab' : undefined. За end клетки render-ни малка <div data-testid='wall-resize-handle' style={{width:5, height:5, background:'#546E7A', borderRadius:'50%', position:'absolute', ...}} /> — позицията в ъгъла зависи от armAxis и посоката."
+      },
+      {
+        "id": "104.3",
+        "phase": "GREEN",
+        "action": "В OsdmGrid wall render цикъла (от таск 103) — подавай cellType и armAxis на всеки WallCellVisual, изчислено от classifyCell."
+      },
+      {
+        "id": "104.4",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check && npm run lint — всичко минава."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 105,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Wall resize session — mousedown on end cell, live drag, mouseup commit",
+    "tddWorkflow": true,
+    "specRef": "frontend-requirements.md §5.3 FR-3, §5.3 FR-5",
+    "steps": [
+      {
+        "id": "105.1",
+        "phase": "RED",
+        "action": "Създай __tests__/OsdmGrid.wallResize.test.tsx. Тестове: (1) mousedown на end клетка → стартира resize session (internal state или context); (2) mousemove по оста на рамото → calculates потенциален нов размер и подсвтва променени клетки (визуален preview); (3) mouseup → onUpdateElement callback се вика с нов dimension; (4) Ако resize пресича друг елемент — clamp до последния валиден размер; (5) Drag по грешна ос (напр. dy на horizontal arm) → игнорира се, размерът не се променя. Тестовете ФЕЙЛВАТ."
+      },
+      {
+        "id": "105.2",
+        "phase": "GREEN",
+        "action": "В OsdmGrid.tsx добави wallDragSession state: { type: 'resize'; wallId: string; endCellKey: {x,y}; originalWall: WallElement } | null. onMouseDown на wall end клетка → задава сесия. useEffect с window mousemove/mouseup listeners докато сесия е активна: при mousemove, вземи event.clientX/Y, преведи към grid cell delta, извикай resizeWallArm + clampWallToValid, setGridElements с новия wall state (за live preview). При mouseup: извикай onUpdateElement (committing), изчисти сесия."
+      },
+      {
+        "id": "105.3",
+        "phase": "GREEN",
+        "action": "Defensive: ако event.target не е wall клетка, mousemove не променя session. Предотврати default browser drag (event.preventDefault в mousedown). pointer-events: none на WallCellVisual линиите за да не прехващат mousedown."
+      },
+      {
+        "id": "105.4",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check && npm run lint — всичко минава. Ръчно тестване: npm run dev → drop стена → drag end клетка → виждаш live resize + collision clamp."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 106,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Wall move session + Esc cancel",
+    "tddWorkflow": true,
+    "specRef": "frontend-requirements.md §5.3 FR-4, FR-7",
+    "steps": [
+      {
+        "id": "106.1",
+        "phase": "RED",
+        "action": "Тестове в __tests__/OsdmGrid.wallMove.test.tsx: (1) mousedown на middle клетка → стартира move session; (2) mousemove → стената live се мести, форма остава; (3) mouseup → onUpdateElement с нови coords; (4) Escape клавиш по време на session → session отменена, стената се връща в originalWall state; (5) Wall без middle клетки (1×1 или 1+1 L) → mousedown на end клетка НЕ стартира move session, само resize. Тестовете ФЕЙЛВАТ."
+      },
+      {
+        "id": "106.2",
+        "phase": "GREEN",
+        "action": "Разшири wallDragSession да поддържа type: 'move' | 'resize'. onMouseDown на middle клетка → задава 'move' сесия. mousemove: moveWall + clampWallToValid. mouseup: commit. Escape keydown listener по време на сесия → setGridElements връща originalWall, изчиства сесия."
+      },
+      {
+        "id": "106.3",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check && npm run lint — всичко минава."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 107,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Palette drop — create WallElement with initial dimension from wallShapes",
+    "tddWorkflow": true,
+    "specRef": "frontend-requirements.md §5.3 FR-1",
+    "steps": [
+      {
+        "id": "107.1",
+        "phase": "RED",
+        "action": "Тестове в __tests__/WagonCreationPage.wallDrop.test.tsx: (1) Drop на WALL_LEFT_3 (icon 24) от палитрата → нов WallElement с dimension {3, 3}, orientation default, coords на drop позицията; (2) Drop на WALL_END_TO_END (30) → dimension {3, 1} (horizontal) или {1, 3} (vertical) — зависи от default orientation; (3) Drop на WALL_COMPARTMENT_1 (32) → dimension {1, 1}; (4) Ако initial dimension излиза извън grid границите в drop позицията → clamp (скъси) до ръба. Тестовете ФЕЙЛВАТ."
+      },
+      {
+        "id": "107.2",
+        "phase": "GREEN",
+        "action": "В WagonCreationPage.tsx handleDragEnd — ако dragData.icon е в диапазона 23-32, използвай getDefaultDimension(icon) + defaultOrientation от WALL_SHAPES, създай WallElement вместо обикновен GridElement. Приложи clampWallToValid преди commit."
+      },
+      {
+        "id": "107.3",
+        "phase": "GREEN",
+        "action": "Обнови getDragSpan в OsdmGrid.tsx — за wall icons връща getDefaultDimension(icon) вместо {w:1, h:1}. Така drop preview highlight-а правилната област."
+      },
+      {
+        "id": "107.4",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check && npm run lint — всичко минава."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 108,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] OSDM serialize — add dimension to internals[] for wall elements",
+    "tddWorkflow": true,
+    "specRef": "frontend-requirements.md §5.5 OSDM JSON формат",
+    "steps": [
+      {
+        "id": "108.1",
+        "phase": "RED",
+        "action": "Тестове в __tests__/buildOsdmLayoutJson.test.ts: (1) Build с WallElement (icon 24, dimension {3,3}, coords {2,2}, orientation 'TOP') → internals съдържа обект { icon: 24, coords: {x:2,y:2}, dimension: {width:3,height:3}, orientation: 'TOP' }; (2) Non-wall internals запазват стария формат (без dimension); (3) Wall без orientation → default 'TOP'. Тестовете ФЕЙЛВАТ."
+      },
+      {
+        "id": "108.2",
+        "phase": "GREEN",
+        "action": "В WagonCreationPage.buildOsdmLayoutJson — за elements с isWallElement, сериализирай dimension и orientation в internals entry. Non-wall entries остават същите."
+      },
+      {
+        "id": "108.3",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check && npm run lint — всичко минава."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 109,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] OSDM deserialize — read dimension with backward-compat fallback",
+    "tddWorkflow": true,
+    "specRef": "frontend-requirements.md §5.4 Backward compatibility",
+    "steps": [
+      {
+        "id": "109.1",
+        "phase": "RED",
+        "action": "Тестове в __tests__/loadWagon.test.tsx (edit mode): (1) JSON с `{ icon: 24, coords:{x:2,y:2}, dimension:{width:3,height:3} }` → loaded WallElement с правилни dimension и orientation; (2) JSON без dimension (старият формат) → loaded с default dimension от getDefaultDimension(24); (3) Non-wall internals (tables, doors) не се засягат; (4) След load → render се позиционира правилно. Тестовете ФЕЙЛВАТ."
+      },
+      {
+        "id": "109.2",
+        "phase": "GREEN",
+        "action": "В WagonCreationPage useEffect load logic (при edit mode) — за всеки internals[] item: ако icon е wall code, парсирай dimension (с fallback към default) и orientation, създай WallElement. Non-wall items остават в стария pipeline."
+      },
+      {
+        "id": "109.3",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check && npm run lint — всичко минава. Ръчен test: създай вагон със стара JSON структура в DB (без dimension), отвори за edit → стената се визуализира с default размер."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 110,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Integration test — full wall lifecycle round-trip (drop → resize → move → save → reload)",
+    "tddWorkflow": true,
+    "specRef": "frontend-requirements.md §5.7 Acceptance criteria",
+    "steps": [
+      {
+        "id": "110.1",
+        "phase": "RED",
+        "action": "Създай __tests__/walls.integration.test.tsx. Голям integration тест с MSW или mock API: (1) Рендерирай WagonCreationPage; (2) Drop L-shape (WALL_LEFT_3) на позиция; (3) Resize vertical arm до 5 клетки; (4) Move цялата стена с 2 клетки наляво; (5) Save — mock POST връща success; (6) Проверка: buildOsdmLayoutJson-ът съдържа правилния wall запис с dimension {3, 5}; (7) Отвори страницата в edit mode със същия JSON; (8) Wall е рендериран с коректни dimensions и позиция. Тестът ФЕЙЛВА (стъпките няма как да минат без предходните таскове)."
+      },
+      {
+        "id": "110.2",
+        "phase": "GREEN",
+        "action": "Ако някъде flow-ът се чупи — идентифицирай и поправи. Тестът минава след като всички предходни таскове (96-109) са done."
+      },
+      {
+        "id": "110.3",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check && npm run lint — всичко минава. Integration тест PASSES."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 111,
+    "category": "e2e",
+    "repo": "frontend",
+    "description": "[E2E] Walls full creation workflow — Playwright test",
+    "tddWorkflow": true,
+    "specRef": "frontend-requirements.md §5.7 Acceptance criteria",
+    "steps": [
+      {
+        "id": "111.1",
+        "phase": "RED",
+        "action": "Създай tests/wagons/walls-workflow.spec.ts. Playwright сценарии: (1) Navigate /wagons/new; (2) Drop 'Стена ← 3м' (L WALL_LEFT_3) на grid позиция (5,3); (3) Verify wall се появява — 5 DOM nodes (data-testid='wall-cell-visual') в съответните клетки; (4) Drag end клетка на vertical arm надолу с 2 клетки — vertical arm става 5 клетки; (5) Drag middle клетка на horizontal arm — цялата стена се мести; (6) Try to drag end през друг елемент (постави първо седалка в пречка) — wall спира до нея; (7) Press Esc по време на move — стената се връща; (8) Попълни metadata и save; (9) Navigate back — reload wagon — stена е в същия state; (10) Click right → context menu → Изтрий — стената изчезва."
+      },
+      {
+        "id": "111.2",
+        "phase": "GREEN",
+        "action": "Ако E2E тестовете фейлват — поправи имплементацията. Итерирай докато всички минат."
+      },
+      {
+        "id": "111.3",
+        "phase": "DONE",
+        "action": "npm test && npx playwright test — ВСИЧКИ минават. npm run type-check && npm run lint — чисто."
+      }
+    ],
+    "passes": false
   }
 ]
