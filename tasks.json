@@ -3681,7 +3681,7 @@
         "action": "npm test && npm run type-check && npm run lint — всичко минава."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 101,
@@ -3707,7 +3707,7 @@
         "action": "npm test && npm run type-check && npm run lint — всичко минава."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 102,
@@ -3738,7 +3738,7 @@
         "action": "npm test && npm run type-check && npm run lint — всичко минава."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 103,
@@ -3769,7 +3769,7 @@
         "action": "Regression check: npx playwright test tests/wagons/wagon-creation-workflow.spec.ts — всички сценарии от Task 95 E2E тестовете продължават да минават без модификация. Критично: drop/move/delete на non-wall елементи (seats, tables, zones) не е засегнат от wall render pipeline-а."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 104,
