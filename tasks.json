@@ -3919,7 +3919,7 @@
         "action": "npm test && npm run type-check && npm run lint — всичко минава."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 109,

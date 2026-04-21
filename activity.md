@@ -1,3 +1,36 @@
+## [2026-04-21 20:00] - Task #108: [FE] OSDM serialize — add dimension to internals[] for wall elements
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 108.1: Extracted `buildOsdmLayoutJson` from `WagonCreationPage.tsx` into its own module `buildOsdmLayoutJson.ts` for testability. Created `__tests__/buildOsdmLayoutJson.test.ts` with 3 tests:
+  - (1) Build with WallElement (icon 24, dimension {3,3}, coords {2,2}, orientation 'TOP') → internals contains { icon: 24, coords: {x:2,y:2}, dimension: {width:3,height:3}, orientation: 'TOP' }
+  - (2) Non-wall internals keep old format (no dimension property)
+  - (3) Wall without orientation → default 'TOP'
+  - Ran tests → 2 FAIL ✅ (expected: dimension not serialized yet)
+
+### GREEN Phase
+- Step 108.2: Updated `buildOsdmLayoutJson.ts` internals serialization:
+  - Import `isWallElement` from wallTypes
+  - For wall elements (icons 23-32): serialize `dimension: { width, height }` and use `el.orientation ?? 'TOP'`
+  - Non-wall entries remain unchanged (no dimension property)
+  - Ran tests → 3/3 PASS ✅
+
+### DONE Phase
+- Step 108.3: `npm test` — 2020/2024 pass (4 pre-existing failures unrelated to this change). `npm run type-check` — clean. ESLint — 0 errors (pre-existing warnings only).
+
+**Files modified:**
+- `src/app/features/wagons/pages/buildOsdmLayoutJson.ts` (NEW — extracted and enhanced function)
+- `src/app/features/wagons/pages/__tests__/buildOsdmLayoutJson.test.ts` (NEW — 3 unit tests)
+- `src/app/features/wagons/pages/WagonCreationPage.tsx` (removed inline function, added import)
+
+**Git commit:** `feat(compositions): [FE] OSDM serialize — add dimension to internals[] for wall elements`
+
+---
+
 ## [2026-04-21 19:30] - Task #107: [FE] Palette drop — create WallElement with initial dimension from wallShapes
 
 **Status:** ✅ Complete
