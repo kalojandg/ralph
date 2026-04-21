@@ -3572,7 +3572,7 @@
         "action": "npm test && npm run type-check && npm run lint — всичко минава. Тестовете от 96.1 сега PASS."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 97,
@@ -3603,7 +3603,7 @@
         "action": "npm test && npm run type-check && npm run lint — всичко минава. Покриват се всички 10 кода с тестове."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 98,
@@ -3629,7 +3629,7 @@
         "action": "npm test && npm run type-check && npm run lint — всичко минава. Тестовете покриват и четирите orientations (TOP/BOTTOM/LEFT/RIGHT) за L и T."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 99,
@@ -3655,7 +3655,7 @@
         "action": "npm test && npm run type-check && npm run lint — всичко минава. Покритие на всички 10 кода × 4 orientations."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 100,

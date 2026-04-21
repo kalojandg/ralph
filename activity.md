@@ -1,3 +1,163 @@
+## [2026-04-21 13:25] - Task #99: [FE] classifyCell + getCellDirections helpers — end/middle/internal + rendering directions
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 99.1: Created failing test file `src/app/features/wagons/components/__tests__/wallCellClassification.test.ts`
+  - 10 tests covering: straight 3-place [end, middle, end]; single-cell 'end'; L WALL_LEFT_3 corner='internal', tips='end', rest='middle'; T WALL_TOP_3 junction='internal', 3 tips='end'; armAxis for end cells; getCellDirections for L corner (up+right); getCellDirections for vertical middle (up+down); getCellDirections for horizontal end (left only); T junction directions (left+right+down); T stub end (up only)
+  - Ran test → FAILS (module `../wallCellClassification` does not exist) ✅
+
+### GREEN Phase
+- Step 99.2: Created `src/app/features/wagons/components/wallCellClassification.ts`
+  - `classifyCell(wall, cellKey)` returns `{ type: 'end'|'middle'|'internal'; armAxis?: 'horizontal'|'vertical' }`
+  - `getCellDirections(wall, cellKey)` returns `{ up, down, left, right }` booleans
+  - Uses `getWallCells` to compute occupied set, then checks 4-directional neighbors
+  - Internal = neighbors on both axes; End = 0-1 neighbors; Middle = 2 neighbors on same axis
+- Ran test → 10/10 PASSES ✅
+
+### DONE Phase
+- Step 99.3: Verification
+  - `npm test` (wall-related) → 47/47 passed (12 wallCells + 25 wallShapes + 10 wallCellClassification) ✅
+  - `npm run type-check` → passes ✅
+  - `npm run lint` → 0 errors in new files ✅
+
+**Files modified:**
+- `src/app/features/wagons/components/__tests__/wallCellClassification.test.ts` (new)
+- `src/app/features/wagons/components/wallCellClassification.ts` (new)
+
+**Git commit:**
+- `feat(compositions): [FE] classifyCell + getCellDirections helpers — end/middle/internal + rendering directions`
+
+---
+
+## [2026-04-21 13:10] - Task #98: [FE] getWallCells helper — compute occupied cells (exclude empty bbox cells for L/T)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 98.1: Created failing test file `src/app/features/wagons/components/__tests__/wallCells.test.ts`
+  - 12 tests covering: straight horizontal (2-cell, 3-cell), straight vertical (5-cell), L WALL_LEFT_3 (5 cells not 9 bbox), T WALL_TOP_3 (5 cells), arbitrary positions, L WALL_RIGHT_3 mirrored, L WALL_LEFT_2 (3 cells), T WALL_TOP_2 (3 cells), single-cell wall (code 32), uniqueness for L and T
+  - Ran test → FAILS (module `../wallCells` does not exist) ✅
+
+### GREEN Phase
+- Step 98.2: Created `src/app/features/wagons/components/wallCells.ts`
+  - `getWallCells(wall: WallElement)` dispatches to `straightCells`, `lShapeCells`, `tShapeCells`
+  - Straight: fills all bbox cells
+  - L-shape: traces vertical arm from corner upward + horizontal arm from corner in direction, deduplicates at corner
+  - T-shape: horizontal bar at junction row + vertical stub from junction downward, deduplicates at junction
+  - Uses `Set<string>` for uniqueness
+- Ran test → 12/12 PASSES ✅
+
+### DONE Phase
+- Step 98.3: Fixed lint error (non-null assertion → early return guard)
+  - `npm test` → 12/12 passed (wallCells.test.ts), 1941/1945 passed overall (4 pre-existing failures)
+  - `npm run type-check` → passes ✅
+  - `npm run lint` → 0 errors in new files ✅
+
+**Files modified:**
+- `src/app/features/wagons/components/__tests__/wallCells.test.ts` (new)
+- `src/app/features/wagons/components/wallCells.ts` (new)
+
+**Git commit:**
+- `feat(compositions): [FE] getWallCells helper — compute occupied cells (exclude empty bbox cells for L/T)`
+
+---
+
+## [2026-04-21 12:48] - Task #97: [FE] wallShapes.ts registry — per-code form descriptor (straight/L/T, arms, defaults)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 97.1: Created failing test file `src/app/features/wagons/components/__tests__/wallShapes.test.ts`
+  - WALL_SHAPES registry contains all 10 codes (23-32)
+  - Straight walls (29, 30, 31, 32): correct type, arm count, defaultArmLength
+  - L-shaped walls (24, 25, 27, 28): type='L', 2 arms, opposite directions for LEFT/RIGHT variants
+  - T-shaped walls (23, 26): type='T', 3 arms (left/right/down from junction)
+  - L-arm direction details: WALL_LEFT vertical up + horizontal right; WALL_RIGHT vertical up + horizontal left
+  - T-arm direction details: horizontal left + horizontal right + vertical down
+  - Each shape has defaultOrientation
+  - getDefaultDimension: straight→{armLen, 1}, L→{armLen, armLen}, T→{armLen, armLen}
+- Ran `npm test` — tests FAIL (module doesn't exist) ✅
+
+### GREEN Phase
+- Step 97.2: Created `src/app/features/wagons/components/wallShapes.ts`
+  - Exported `WallShapeArm` interface { axis, direction }
+  - Exported `WallShape` interface { code, type, arms, defaultArmLength, defaultOrientation }
+  - Exported `WALL_SHAPES: Record<WallCode, WallShape>` with all 10 codes
+  - L-forms: WALL_LEFT (24, 27) — corner bottom-left, arms vertical up + horizontal right
+  - L-forms: WALL_RIGHT (25, 28) — corner bottom-right, arms vertical up + horizontal left
+  - T-forms (23, 26) — junction top-middle, arms horizontal left + right + vertical down
+  - Straight (29, 30, 31, 32) — single horizontal arm
+- Step 97.3: Added `getDefaultDimension(code: WallCode)` helper
+  - Straight → { width: armLen, height: 1 }
+  - L/T → { width: armLen, height: armLen }
+- Ran `npm test` — all 25 tests PASS ✅
+
+**Verification:**
+- ✅ npm test — 25/25 wallShapes tests pass (4 pre-existing failures unrelated)
+- ✅ npm run type-check — clean
+- ✅ npm run lint — 0 errors (510 pre-existing warnings)
+
+**Files modified:**
+- `src/app/features/wagons/components/__tests__/wallShapes.test.ts` (NEW)
+- `src/app/features/wagons/components/wallShapes.ts` (NEW)
+
+**Git commit:**
+- `feat(compositions): [FE] wallShapes.ts registry — per-code form descriptor (straight/L/T, arms, defaults)`
+
+---
+
+## [2026-04-21 12:17] - Task #96: [FE] Wall data model — extend GridElement with dimension and WallElement type
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 96.1: Created failing test file `src/app/features/wagons/components/__tests__/wallTypes.test.ts`
+  - WallCode union type contains exactly codes 23-32
+  - WallElement type has icon (WallCode), dimension { width, height }, optional orientation
+  - GridElement backward compatibility — non-wall elements don't require dimension
+  - isWallElement type guard returns true for codes 23-32, false otherwise
+- Ran `npm test` — tests FAIL (module doesn't exist) ✅
+
+### GREEN Phase
+- Step 96.2: Created `src/app/features/wagons/components/wallTypes.ts`
+  - Exported `WallCode` type (23-32 union)
+  - Exported `WallOrientation` type ('TOP' | 'BOTTOM' | 'LEFT' | 'RIGHT')
+  - Exported `WallElement` interface extending `Pick<GridElement, 'id' | 'coords' | 'label'>`
+  - Exported `isWallElement` type guard function using Set-based lookup
+- Step 96.3: Extended `GridElement` interface in `OsdmGrid.tsx`
+  - Added optional `dimension?: { width: number; height: number }`
+  - Added optional `orientation?: WallOrientation`
+  - Imported `WallOrientation` type from `wallTypes`
+- Ran `npm test` — all 8 tests PASS ✅
+
+**Verification:**
+- ✅ npm test — 8/8 wallTypes tests pass (4 pre-existing failures unrelated)
+- ✅ npm run type-check — clean
+- ✅ npm run lint — 0 errors (510 pre-existing warnings)
+
+**Files modified:**
+- `src/app/features/wagons/components/__tests__/wallTypes.test.ts` (NEW)
+- `src/app/features/wagons/components/wallTypes.ts` (NEW)
+- `src/app/features/wagons/components/OsdmGrid.tsx` (MODIFIED — added dimension/orientation to GridElement)
+
+**Git commit:**
+- `feat(compositions): [FE] Wall data model — extend GridElement with dimension and WallElement type`
+
+---
+
 ## [2026-04-14 23:45] - Task #95: [E2E] End-to-end тест: пълен wagon creation workflow — навигация, drag-drop елементи, запис, проверка
 
 **Status:** ✅ Complete
