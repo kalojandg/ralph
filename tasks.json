@@ -3945,7 +3945,7 @@
         "action": "npm test && npm run type-check && npm run lint — всичко минава. Ръчен test: създай вагон със стара JSON структура в DB (без dimension), отвори за edit → стената се визуализира с default размер."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 110,
@@ -3976,7 +3976,7 @@
         "action": "npm test && npm run type-check && npm run lint — всичко минава. И двата integration теста PASSES."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 111,

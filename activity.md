@@ -1,3 +1,85 @@
+## [2026-04-21 21:00] - Task #110: [FE] Integration test — full wall lifecycle round-trip (drop → resize → move → save → reload)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 110.1: Created `__tests__/walls.integration.test.tsx` with full lifecycle integration test:
+  - (1) Render WagonCreationPage, capture onDragEnd from DndContext mock
+  - (2) Drop WALL_LEFT_3 (icon 24) at position {x:4,y:4} via simulated DragEndEvent
+  - (3) Verify initial dimension {width:3,height:3} from getDefaultDimension(24)
+  - (4) Resize vertical arm to 5 cells via resizeWallArm() mutation
+  - (5) Move entire wall 2 cells left via moveWall() mutation
+  - (6) Verify buildOsdmLayoutJson produces correct wall entry with dimension {width:3,height:5}
+  - (7) Reload: parse JSON, rebuild wall with dimension, verify getWallCells returns correct cell count
+  - Additional test: buildOsdmLayoutJson includes dimension only for wall elements, not doors
+  - All tests PASS immediately (tasks 96-109 already implement all required functionality)
+
+- Step 110.2: Added localStorage draft persistence tests in same file:
+  - (1) Wall state survives JSON.stringify/parse round-trip via localStorage — drop wall, verify localStorage contains wall data, unmount, re-render, verify wall restored with correct dimension/orientation
+  - (2) Direct field preservation test: WallElement fields (dimension, orientation, icon) survive JSON serialization
+  - (3) Full draft round-trip: pre-seed localStorage with wall draft data, mount WagonCreationPage, verify wall renders and data persists in localStorage
+  - All tests PASS ✅
+
+### GREEN Phase
+- Step 110.3: No fixes needed — all 5 tests passed immediately since wall features (tasks 96-109) are fully implemented
+
+### DONE Phase
+- Step 110.4: Full verification:
+  - `npm test` → 2033 tests total, 2029 passed, 4 failed (all pre-existing, unrelated to changes)
+  - `npm run type-check` → clean (exit 0)
+  - `npm run lint` → 0 errors, 520 warnings (all pre-existing)
+
+**Files created:**
+- `src/app/features/wagons/pages/__tests__/walls.integration.test.tsx` — new integration test file (5 tests covering full wall lifecycle and localStorage persistence)
+
+**Git commit:**
+- `feat(compositions): [FE] Integration test — full wall lifecycle round-trip (drop → resize → move → save → reload)`
+
+---
+
+## [2026-04-21 20:30] - Task #109: [FE] OSDM deserialize — read dimension with backward-compat fallback
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 109.1: Created `__tests__/loadWagon.test.tsx` with 4 tests for edit-mode wall deserialization:
+  - (1) JSON with explicit dimension `{ icon: 24, coords:{x:2,y:2}, dimension:{width:3,height:3}, orientation:'BOTTOM' }` → wall cells rendered at correct position
+  - (2) JSON without dimension (legacy format) → wall uses `getDefaultDimension(24)` fallback → wall cells rendered
+  - (3) Non-wall internals (doors, tables) → no wall-cell test IDs produced
+  - (4) Mixed: wall with dimension + wall without dimension + door → both walls render, door doesn't produce wall cells
+  - Ran tests → 1 FAIL ✅ (TypeError: Cannot destructure 'width' of wall.dimension as it is undefined)
+
+### GREEN Phase
+- Step 109.2: Updated `WagonCreationPage.tsx` load logic (internals loop):
+  - Added `isWallCode` helper to `wallTypes.ts` (checks icon number against WALL_CODES set)
+  - Import `isWallCode` and `WallOrientation` type in WagonCreationPage
+  - Extended OSDM type annotation to include `dimension` and `orientation` fields on internals
+  - For each internal item: if `isWallCode(item.icon)`, set `el.dimension = item.dimension ?? getDefaultDimension(item.icon)` and `el.orientation = item.orientation`
+  - Non-wall items remain unchanged (no dimension/orientation added)
+  - Ran tests → 4/4 PASS ✅
+
+### DONE Phase
+- Step 109.3: Full verification:
+  - `npm test` → 2024 passed, 4 failed (all pre-existing, unrelated to changes)
+  - `npm run type-check` → clean (exit 0)
+  - `npm run lint` → 0 errors, 520 warnings (all pre-existing)
+
+**Files modified:**
+- `src/app/features/wagons/components/wallTypes.ts` — added `isWallCode()` export
+- `src/app/features/wagons/pages/WagonCreationPage.tsx` — wall dimension/orientation parsing in edit-mode load logic
+- `src/app/features/wagons/pages/__tests__/loadWagon.test.tsx` — new test file (4 tests)
+
+**Git commit:**
+- `feat(compositions): [FE] OSDM deserialize — read dimension with backward-compat fallback`
+
+---
+
 ## [2026-04-21 20:00] - Task #108: [FE] OSDM serialize — add dimension to internals[] for wall elements
 
 **Status:** ✅ Complete
