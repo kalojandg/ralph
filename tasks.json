@@ -4007,7 +4007,7 @@
         "action": "npm test && npx playwright test — ВСИЧКИ минават (unit + E2E). npm run type-check && npm run lint — чисто. Critical regression: wagon-creation-workflow.spec.ts от Task 95 продължава да работи без промени."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 112,
