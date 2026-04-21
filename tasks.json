@@ -3893,7 +3893,7 @@
         "action": "Regression check: npx playwright test tests/wagons/wagon-creation-workflow.spec.ts — drop на seats/tables/zones в handleDragEnd продължава да работи. Wall code branch не счупва non-wall drop logic."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 108,

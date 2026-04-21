@@ -1,3 +1,32 @@
+## [2026-04-21 19:30] - Task #107: [FE] Palette drop — create WallElement with initial dimension from wallShapes
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 107.1: Tests already existed in `src/app/features/wagons/pages/__tests__/WagonCreationPage.wallDrop.test.tsx` with 4 tests:
+  - (1) Drop WALL_LEFT_3 (icon 24) → WallElement with dimension {3,3} and default orientation
+  - (2) Drop WALL_END_TO_END (icon 30) → straight wall with dimension {3,1}
+  - (3) Drop WALL_COMPARTMENT_1 (icon 32) → wall with dimension {1,1}
+  - (4) Wall dimension clamped when exceeding grid boundary at drop position
+
+### GREEN Phase
+- Step 107.2: handleDragEnd wall logic already existed in WagonCreationPage.tsx (lines 581-615) — detects wall icons (23-32), gets default dimension from getDefaultDimension(), creates WallElement, applies clampWallToValid
+- Step 107.3: Updated `getDragSpan` in `OsdmGrid.tsx` to return correct wall dimensions for drag preview highlighting. For wall icons, returns `getDefaultDimension(icon)` for new drops and actual `el.dimension` for existing grid elements being moved.
+
+### DONE Phase
+- Step 107.4: `npm test` — 4/4 wall drop tests pass, 59/59 wall-related tests pass. `npm run type-check` — clean. `npm run lint` — 0 errors (pre-existing warnings only).
+- Step 107.5: Playwright regression — all failures are infrastructure (dev server not running, browser executables missing). No new failures introduced by this change.
+
+**Files modified:**
+- `src/app/features/wagons/components/OsdmGrid.tsx` (added wall icon handling to getDragSpan function + imports for getDefaultDimension, WALL_SHAPES, WallCode)
+
+**Git commit:** `feat(compositions): [FE] Palette drop — create WallElement with initial dimension from wallShapes`
+
+---
+
 ## [2026-04-21 17:30] - Task #106: [FE] Wall move session + Esc cancel
 
 **Status:** ✅ Complete
