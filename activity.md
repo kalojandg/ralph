@@ -1,3 +1,51 @@
+## [2026-04-21 23:00] - Task #112: [FE] Regression coverage — wagon metadata update + per-seat travelClass serialization
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 112.1: Created `__tests__/WagonCreationPage.metadata.test.tsx` with 7 regression tests for edit-mode save path:
+  - (1) Verify updateWagonType called with correct DTO { seriesName, travelClass, compartmentType, defaultCapacity }
+  - (2) Verify updateCoachLayout called AFTER updateWagonType (call order assertion)
+  - (3) Verify fail-fast: if updateWagonType rejects, updateCoachLayout is NOT called
+  - (4) Verify in create mode: updateWagonType NOT called, only createWagonType
+  - (5) Verify changed travelClass (SECOND → FIRST via dropdown) passes through to updateWagonType DTO
+  - (6) Verify navigation to /wagons after successful edit-mode save
+  - (7) Verify error snackbar shown when updateWagonType rejects
+
+- Step 112.2: Created `__tests__/buildSeatDefinitions.test.ts` with 15 tests for seat travelClass serialization:
+  - Serialize path: SEAT with travelClass 'FIRST' → attributes contain 'FIRST_CLASS'
+  - Serialize path: SEAT with travelClass 'SECOND' → attributes contain 'SECOND_CLASS'
+  - Serialize path: SEAT with travelClass undefined → defaults to 'SECOND_CLASS'
+  - WHEELCHAIR_SPACE, COMPANION → attributes do NOT contain class
+  - FOLDING_SEAT → attributes are ["WINDOW", "FOLDING"], no class
+  - SEAT preserves facing direction in attributes
+  - Filters out non-seat elements (icon !== 0)
+  - Load path: FIRST_CLASS → 'FIRST', SECOND_CLASS → 'SECOND', neither → undefined, null → undefined
+  - Round-trip: FIRST → serialize → parse → FIRST, SECOND → serialize → parse → SECOND, undefined → serialize → parse → SECOND (default)
+
+- Extracted `buildSeatDefinitions()` from WagonCreationPage.tsx to `buildSeatDefinitions.ts` for testability (same pattern as buildOsdmLayoutJson.ts)
+
+### GREEN Phase
+- Step 112.3: All 22 new tests pass immediately (features are already shipped; these are regression guards)
+
+### DONE Phase
+- Step 112.4: npm test ✅ (22/22 new tests pass, all existing tests pass), npm run type-check ✅ (0 errors), npm run lint ✅ (0 errors, only pre-existing warnings)
+
+**Files created:**
+- `src/app/features/wagons/pages/__tests__/WagonCreationPage.metadata.test.tsx` (7 tests)
+- `src/app/features/wagons/pages/__tests__/buildSeatDefinitions.test.ts` (15 tests)
+- `src/app/features/wagons/pages/buildSeatDefinitions.ts` (extracted from WagonCreationPage.tsx)
+
+**Files modified:**
+- `src/app/features/wagons/pages/WagonCreationPage.tsx` (removed inline buildSeatDefinitions, added import from buildSeatDefinitions.ts)
+
+**Git commit:** `feat(compositions): [FE] Regression coverage — wagon metadata update + per-seat travelClass serialization`
+
+---
+
 ## [2026-04-21 22:30] - Task #111: [E2E] Walls full creation workflow — Playwright test
 
 **Status:** ✅ Complete

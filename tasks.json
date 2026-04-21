@@ -4038,6 +4038,6 @@
         "action": "npm test && npm run type-check && npm run lint — всичко минава. Тези тестове защитават: (a) updateWagonType endpoint (Task извън #96-#111); (b) per-seat travelClass (FIRST_CLASS/SECOND_CLASS) сериализация. И двете са shipped, но нямат coverage. Регресиите при wall рефакторинг ще бъдат хванати."
       }
     ],
-    "passes": false
+    "passes": true
   }
 ]
