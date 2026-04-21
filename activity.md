@@ -1,3 +1,46 @@
+## [2026-04-21 17:30] - Task #106: [FE] Wall move session + Esc cancel
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 106.1: Created `src/app/features/wagons/components/__tests__/OsdmGrid.wallMove.test.tsx` with 5 tests:
+  - (1) mousedown on middle cell + mousemove + mouseup → onUpdateElement called with new coords
+  - (2) mousemove during move session → live preview with wall at new position, shape preserved
+  - (3) mouseup commits coords change, dimension unchanged
+  - (4) Escape key during active session → session canceled, wall returns to original position
+  - (5) Wall without middle cells (small wall) → mousedown on end cell does not start move session
+  - Ran tests → 3 FAIL ✅ (expected: no move logic exists yet)
+
+### GREEN Phase
+- Step 106.2: Modified `src/app/features/wagons/components/OsdmGrid.tsx`:
+  - Added `moveWall` import from wallMutations
+  - Extended `wallDragSession` type to support `type: 'move'` variant (in addition to 'resize')
+  - Updated `handleWallCellMouseDown` to handle middle cells → starts move session
+  - Updated `useEffect` mousemove handler: calls `moveWall` for move sessions, `resizeWallArm` for resize sessions
+  - Added `keydown` listener for Escape key → cancels session, clears preview
+  - Updated wall cell rendering: enabled `pointerEvents` and `onMouseDown` for both end and middle cells
+  - Updated `OsdmGrid.wallResize.test.tsx`: adjusted "middle cell" test to verify move behavior instead of no-op
+  - Ran tests → 5 PASS ✅
+
+### DONE Phase
+- Step 106.3: Verification:
+  - `npm test` → all wall tests pass (11/11), full suite 2013 pass (4 pre-existing failures unrelated to task)
+  - `npm run type-check` → clean ✅
+  - `npm run lint` → 0 errors, 514 pre-existing warnings ✅
+
+**Files modified:**
+- `src/app/features/wagons/components/OsdmGrid.tsx` (wall drag session type, mousedown handler, event listeners, cell rendering)
+- `src/app/features/wagons/components/__tests__/OsdmGrid.wallMove.test.tsx` (new test file)
+- `src/app/features/wagons/components/__tests__/OsdmGrid.wallResize.test.tsx` (updated middle cell test)
+
+**Git commit:**
+- `feat(compositions): [FE] Wall move session + Esc cancel`
+
+---
+
 ## [2026-04-21 16:35] - Task #105: [FE] Wall resize session — mousedown on end cell, live drag, mouseup commit
 
 **Status:** ✅ Complete
