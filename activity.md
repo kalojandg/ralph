@@ -1,3 +1,92 @@
+## [2026-04-21 16:35] - Task #105: [FE] Wall resize session — mousedown on end cell, live drag, mouseup commit
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 105.1: Created `src/app/features/wagons/components/__tests__/OsdmGrid.wallResize.test.tsx` with 6 tests:
+  - (1) mousedown on end cell + mousemove + mouseup → onUpdateElement called with new dimension
+  - (2) mousemove during resize session → live preview with updated wall cells
+  - (3) mouseup commits resize via onUpdateElement callback
+  - (4) resize crossing another element → clamped to last valid size
+  - (5) drag perpendicular to arm axis → ignored, no dimension change
+  - (6) mousedown on middle cell → does not start resize session
+  - Ran tests → 2 FAIL ✅ (expected: no resize logic exists yet)
+
+### GREEN Phase
+- Step 105.2: Modified `src/app/features/wagons/components/OsdmGrid.tsx`
+  - Added imports: `resizeWallArm` from wallMutations, `clampWallToValid` from wallCollision, `useEffect`/`useRef` from React
+  - Added `wallDragSession` state: `{ type: 'resize'; wallId; endCellKey; originalWall; startClient }` or null
+  - Added `wallPreviewOverride` state for live preview during drag
+  - Added refs (synced via useEffect) for wallDragSession, wallPreview, gridElements
+  - Added `handleWallCellMouseDown`: classifies cell, only starts session for 'end' cells, calls preventDefault
+  - Added useEffect with window mousemove/mouseup listeners:
+    - mousemove: converts pixel delta to grid cell delta, calls resizeWallArm + clampWallToValid, sets preview
+    - mouseup: commits via onUpdateElement if dimension/coords changed, clears session
+  - Updated wall rendering: uses wallPreviewOverride for active wall, adds mousedown handler on end cells
+  - Set `pointerEvents: 'auto'` on end cells, `'none'` on non-end cells
+- Step 105.3: Defensive checks already in place:
+  - event.preventDefault in mousedown prevents browser drag
+  - WallCellVisual has pointer-events: none on line segments
+  - End cells have pointer-events: auto on wrapper div
+  - Fixed React 19 ref-during-render lint errors (moved to useEffect)
+- Ran tests → ALL 6 PASS ✅
+
+### DONE Phase
+- Step 105.4: Verification
+  - npm test: 6/6 wall resize tests pass, all pre-existing tests pass
+  - npm run type-check: Clean compile
+  - npm run lint: 0 errors (pre-existing warnings only)
+
+**Files modified:**
+- `src/app/features/wagons/components/OsdmGrid.tsx` (wall resize session logic)
+- `src/app/features/wagons/components/__tests__/OsdmGrid.wallResize.test.tsx` (new test file)
+
+**Git commit:**
+- `feat(compositions): [FE] Wall resize session — mousedown on end cell, live drag, mouseup commit`
+
+---
+
+## [2026-04-21 15:50] - Task #104: [FE] Cursor styling + drag handles for wall cells
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 104.1: Added 8 failing tests to `src/app/features/wagons/components/__tests__/WallCellVisual.test.tsx`
+  - (1) End cell on horizontal arm → cursor col-resize; (2) End cell on vertical arm → cursor row-resize; (3) Middle cell → cursor grab; (4) Internal cell → no cursor override; (5) End cell renders drag handle dot (5px, #546E7A, circle, absolute positioned, data-testid='wall-resize-handle'); (6) Middle cell does not render drag handle; (7) Internal cell does not render drag handle; (8) Without cellType prop → no cursor, no handle (backward compat)
+  - Ran tests → 4 FAIL ✅ (cursor and handle assertions fail because props don't exist yet)
+
+### GREEN Phase
+- Step 104.2: Modified `src/app/features/wagons/components/WallCellVisual.tsx`
+  - Added `cellType` and `armAxis` optional props to interface
+  - Added cursor computation: end+horizontal→col-resize, end+vertical→row-resize, middle→grab, internal→undefined
+  - Added resize handle dot (5px circle) rendered only for `cellType === 'end'`
+  - Ran tests → ALL 21 PASS ✅
+- Step 104.3: Modified `src/app/features/wagons/components/OsdmGrid.tsx`
+  - Added `classifyCell` import from wallCellClassification
+  - In wall render loop: compute classification via `classifyCell(wall, cell)` and pass `cellType` and `armAxis` props to WallCellVisual
+
+### DONE Phase
+- Step 104.4: Verification:
+  - npm test → 21/21 WallCellVisual tests pass ✅ (4 pre-existing failures in unrelated files)
+  - npm run type-check → 0 errors ✅
+  - npm run lint → 0 errors ✅ (514 pre-existing warnings)
+
+**Files modified:**
+- `src/app/features/wagons/components/WallCellVisual.tsx` (modified — cellType/armAxis props, cursor logic, resize handle dot)
+- `src/app/features/wagons/components/__tests__/WallCellVisual.test.tsx` (modified — 8 new tests for cursor + handle)
+- `src/app/features/wagons/components/OsdmGrid.tsx` (modified — classifyCell import, pass cellType/armAxis to WallCellVisual)
+
+**Git commit:**
+- `feat(compositions): [FE] Cursor styling + drag handles for wall cells`
+
+---
+
 ## [2026-04-21 15:15] - Task #103: [FE] OsdmGrid integration — render walls via WallCellVisual in each occupied cell
 
 **Status:** ✅ Complete
