@@ -233,16 +233,42 @@ If NO (all tasks done) — output:
 
 ## Architecture Reference Files
 
-**Преди да започнеш таск, прочети съответния файл:**
+**ЗАДЪЛЖИТЕЛНО преди да започнеш таск прочети съответния файл. Патърните в тези файлове са ПРАВИЛА, не препоръки — не следваш ли ги, PR-ът ще получи коментари и ще се връща за преработка.**
 
 | Тип таск | Файл за четене | Какво съдържа |
 |----------|---------------|---------------|
-| **[BE] Backend** | `C:/Projects/railrun-backend-structure.md` | .NET 8 Clean Architecture, CQRS pattern, Controllers, Domain entities, Infrastructure, DTOs, Validation |
+| **[BE] Backend** | `C:/Projects/railrun-backend-structure.md` | .NET 8 Clean Architecture, CQRS, **Aggregate Repositories + IUnitOfWork** (избягва multiple SaveChanges), nav-property за create-graph, DTOs location (**API request/response DTOs → `*.API/DTOs/`, НЕ в контролера**), Validation |
 | **[FE] Frontend** | `C:/Projects/admin-app-frontend-structure.md` | React 19 + TypeScript + Vite, folder structure, routing, API layer, React Query hooks, MUI components, i18n, testing patterns |
 | **[BE] Database** | `C:/Projects/railrun-database-guide.md` | SQL Server schema, WagonTypes/CoachLayouts/SeatDefinitions таблици, seed data, migrations, grid coordinate system |
 | **[E2E] End-to-end** | Прочети и трите файла | FE→BE→DB пълен workflow |
 
 **Ако таскът засяга API contract (endpoint URL, DTO shape) — прочети И frontend И backend файловете!**
+
+### 🚨 [BE] Pre-flight checklist (чети преди ВСЕКИ backend таск)
+
+Преди да напишеш код в `RailRunService.API` / `.Application` / `.Infrastructure`, отвори `C:/Projects/railrun-backend-structure.md` секция **"Code Patterns"** и потвърди, че разбираш тези правила. Всички са извлечени от реални PR ревюта:
+
+1. **DTO location** — API request/response records/classes се дефинират в `*.API/DTOs/{Feature}*.cs`, НИКОГА вътре в `*Controller.cs`. Application-layer DTOs (commands/queries) са в `*.Application/DTOs/`.
+2. **Един логически write → един `SaveChangesAsync`.** Ако handler-ът пише в 2+ таблици (delete aggregate, replace child collection, create parent+child), използвай **custom `IXxxRepository` + `IUnitOfWork`**, НЕ верига от `AddAsync`/`DeleteAsync` върху generic `IRepository<T,long>` (всеки генеричен call е отделна транзакция → partial failure).
+3. **Create graph чрез nav property** — `child.Parent = parent;` + `await _childRepo.AddAsync(child);` вместо `await _parentRepo.AddAsync(parent); child.ParentId = parent.Id; await _childRepo.AddAsync(child);`. EF traverse-ва графа и insert-ва всичко в едно SaveChanges.
+4. **Delete aggregate чрез nav property + Include** — `_context.Parents.Include(p => p.Children).ThenInclude(c => c.GrandChildren).FirstOrDefaultAsync(...)`, после `RemoveRange` на децата + `Remove` на parent, после един `SaveChanges`.
+5. **Extract constants; don't hardcode** — magic strings като `"DRAFT"`, `"ROWS"`, хардкоднати grid sizes, pre-baked JSON strings — в `private const`. Ако имаш seed JSON, сериализирай от анонимен обект (`JsonSerializer.Serialize(new { ... }, LayoutJsonOptions)`), не хардкодвай stringified JSON.
+6. **Без излишни коментари** — `// Validate X unique`, `// Create WagonType with DRAFT status` не добавят информация, която имената на методите/константите вече казват. Махай ги.
+
+### 📛 Existing aggregate repos (НЕ преоткривай, следвай образеца)
+
+| Репо | Кога се ползва | Handler пример |
+|------|---------------|---------------|
+| `ICompositionRepository` | Delete composition (cascade carriages/audit/availability/blocks) | `DeleteComposition.cs` |
+| `IWagonTypeRepository` | Delete wagon type (cascade coach layouts + seat defs) | `DeleteWagonType.cs` |
+| `ICoachLayoutRepository` | Replace seat definitions атомарно | `SaveSeatDefinitions.cs` |
+| `IBlockedSeatRepository` | Bulk remove/update blocked seats | seat unblock flows |
+
+Нужен ти е нов aggregate repo? Добави:
+1. `IXxxRepository.cs` в `RailRunService.Application/Interfaces/` (докстринг: "without auto-SaveChanges. Use with IUnitOfWork.")
+2. `XxxRepository.cs` в `RailRunService.Infrastructure/Repositories/` (inject `SqlDbContext`)
+3. DI регистрация в `ServiceCollectionExtensions.cs`
+4. Handler inject-ва `IXxxRepository` + `IUnitOfWork`, вика един `_unitOfWork.SaveChangesAsync(ct)` накрая.
 
 ## Working Directories
 
