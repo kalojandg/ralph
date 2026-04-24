@@ -1,0 +1,2 @@
+﻿Acknowledged тАФ that background test run was the full suite I already analyzed. The 4 failures are all pre-existing and unrelated to Task #96. The iteration is complete and stopped as per Ralph protocol.
+

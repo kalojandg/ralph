@@ -738,3 +738,254 @@ tests/wagons/walls-workflow.spec.ts                                        # #11
 3. **Selection highlight** — по желание за v1: visual border около избрана
    стена след click. Не задължително, но подобрява UX. Решение: добавя се
    в полиране фаза след #111 ако има време.
+
+---
+
+## 🎨 Етап 6: Renderer Unification (Tasks #113-#124)
+
+**Фокус:** Унификация на двата wagon renderer-а (OpenSaloonLayout за
+композиция + OsdmGrid за редактор) над обща OSDM-съвместима shared library.
+Elimination на dual source of truth. Визуален паритет — каквото editor-ът
+може да създаде, composition-ът го рендира.
+
+### Подетапи
+
+| Под-етап | Таскове | Какво прави |
+|---------|---------|-------------|
+| **6A: Audit** | #113 | OSDM spec compliance одит (read-only, produce osdm-audit.md) |
+| **6B: Foundation** | #114-#116 | Shared types + constants + parse + classify |
+| **6C: Element renderers** | #117-#120 | Per-element React компоненти (Seat/Berth/Wall/Window/Door/Zone/Table/Stairs/Amenity) |
+| **6D: Grid infrastructure** | #121 | GridContainer + GridCell + GridLayer + DragHighlightOverlay |
+| **6E: Orchestrator migration** | #122-#123 | OsdmGrid (≤500 реда) + OpenSaloonLayout (≤250 реда) |
+| **6F: Verification** | #124 | E2E round-trip (create → view → edit → view) |
+
+### 📜 Задължителни reference файлове
+
+Преди да започнеш **всеки** таск от Етап 6:
+
+1. **`C:/Projects/wagon-renderer-unification-plan.md`** — архитектурният plan.
+   **Single source of truth** за structure, scope, размерни цели, секции 0-10.
+2. **`C:/Projects/BDZ Project/Admin-App/docs/composition/osdm-audit.md`** —
+   **създаден от Task 113**. След Task 113, всеки следващ таск го консултира
+   за полета, които са "направени на око".
+3. **`C:/Projects/admin-app-frontend-structure.md`** — React/TS/MUI patterns.
+
+### 🎯 Архитектурни правила за Етап 6 (КРИТИЧНИ!)
+
+#### Scope boundary
+
+**IN scope:**
+- Shared library `src/app/shared/wagonGrid/` (6 подпапки: types, constants, parse, classify, osdmRenderers, gridFrame)
+- OsdmGrid.tsx рефактор (само rendering → shared; orchestration + DnD + mutations остават)
+- OpenSaloonLayout.tsx рефактор + OSDM parity
+- Tests — unit + component + E2E
+
+**OUT of scope (в Етап 7 на друг колега):**
+- Seed / DB cleanup на legacy structural pseudo-seats (WALL/WC/ZONE/PLACEHOLDER/STAIRS с isPhysicallyPresent=false)
+- Миграция на спални/кушет/купе wagons към OSDM grid формат
+- Изтриване на legacy renderers: CabinLayout, SleeperLayout, CouchetteLayout, CompartmentLayout
+- Изтриване на legacy rendering файлове: cellRenderers, osdmRenderers, wallRenderers, SeatCell, zonePanel
+- Изтриване на legacy AccommodationType enum стойности
+- Премахване на pixel coordinate infrastructure (gridToPixel, pixelToGrid, LAYOUT_PADDING, Seat.coordinates pixel)
+- DB check constraints / invariants
+
+#### Backward compatibility (НЕПОКЛАТИМ принцип)
+
+**Legacy wagons продължават да работят.** Адаптерът в `shared/wagonGrid/parse/buildCanonicalInput.ts`
+конвертира legacy Seat[] с isPhysicallyPresent=false + pixel coords към
+synthetic OSDM elements на read-time. Това гарантира:
+- Composition view на legacy wagon → стените, WC, zones продължават да се виждат.
+- Create / edit flow-ът в wagon editor-а не е засегнат (OsdmGrid вече чете OSDM JSON).
+- След като колегата изпълни Етап 7 (DB cleanup), adapter-ът ще бъде no-op за
+  повечето wagons и ще може да бъде изтрит в следващ рефактор.
+
+**Marker convention:** Целият legacy adapter код има коментар
+```
+// TEMP: remove after Etap 7 seed cleanup
+```
+за да е лесно за finding и изтриване.
+
+#### Размерни цели (HARD targets)
+
+- `OsdmGrid.tsx`: ~1500 реда → **≤ 500 реда** след Task 122.
+- `OpenSaloonLayout.tsx`: ~300 реда + ~80KB поддържащи → **≤ 250 реда в 1 файл** след Task 123.
+
+Ако превишиш цел → идентифицирай какво още може да се extract-не в shared.
+Преминаване над таргета без обосновка = таскът не е готов.
+
+#### Renderer API контракт (за shared/wagonGrid/osdmRenderers/)
+
+Всеки shared renderer приема:
+```typescript
+{
+  element: OsdmElement,            // unified type, discriminated by kind
+  cellSize: number,                 // px per grid cell (default 22)
+  state?: {                         // optional visual state
+    selected?: boolean,
+    highlighted?: boolean,
+    dropTarget?: boolean,
+    invalid?: boolean,
+  },
+  interaction?: {                   // optional callbacks — determines edit vs read-only mode
+    onClick?: (element) => void,
+    onContextMenu?: (element, position) => void,
+    onDragStart?: (element) => void,
+    onResize?: (element, delta) => void,   // resize handles appear ONLY if provided
+    onHover?: (element, hovering) => void,
+  },
+}
+```
+
+**Read-only mode** (composition view) = без `interaction` callbacks → renderer не показва resize dots, drag handles, hover cursors.
+**Edit mode** (wagon editor) = с `interaction` → renderer активира affordance-и.
+
+#### Един elements type не може да има два renderer-а
+
+Lint / code review правило: ако имаш нужда да рендираш OSDM елемент вътре
+във feature (compositions/ или wagons/), **трябва** да ползваш shared renderer.
+Никаква локална реимплементация. Дивергенцията е премахната by construction.
+
+### 🧪 TDD за Етап 6
+
+За всеки таск:
+
+1. **RED** — напиши failing тест(ове). `npm test` → ФЕЙЛВАТ по правилната причина
+   (модулът не съществува, компонентът не рендира expected element).
+2. **GREEN** — минимална имплементация. `npm test` → ПАСВАТ.
+3. **VISUAL** (само Task 123) — screenshot compare с editor preview чрез
+   cursor-ide-browser MCP. Визуален паритет задължителен.
+4. **DONE** — `npm test && npm run type-check && npm run lint` + (за #122, #124) +
+   `npx playwright test` — чисто.
+
+### 📁 Файлова структура (целева след Етап 6)
+
+**Нови файлове:**
+```
+src/app/shared/wagonGrid/
+├── index.ts                                    # public barrel
+├── types/
+│   ├── index.ts                                 # OsdmElement union, ElementState, ElementInteraction, CanonicalInput
+│   └── __tests__/types.test.ts                  # type-level assertions
+├── constants/
+│   ├── index.ts                                 # WAGON_COLORS, CELL_TOKENS, Z_INDEX
+│   └── __tests__/constants.test.ts
+├── parse/
+│   ├── parseOsdmLayout.ts                       # JSON string → normalized elements
+│   ├── buildCanonicalInput.ts                   # compose seats + osdmLayout (+ legacy adapter)
+│   └── __tests__/
+│       ├── parseOsdmLayout.test.ts
+│       ├── buildCanonicalInput.test.ts
+│       └── buildCanonicalInput.legacyWagons.test.ts
+├── classify/                                    # преместено от wagons/components/
+│   ├── wallCells.ts
+│   ├── wallCellClassification.ts
+│   ├── wallShapes.ts
+│   ├── wallTypes.ts
+│   └── __tests__/ (преместени от wagons/components/__tests__/)
+├── osdmRenderers/
+│   ├── SeatRenderer.tsx
+│   ├── BerthRenderer.tsx
+│   ├── FoldingSeatRenderer.tsx
+│   ├── WallRenderer.tsx                         # мигрирано от wagons/components/WallCellVisual.tsx
+│   ├── WindowRenderer.tsx
+│   ├── DoorRenderer.tsx
+│   ├── ZoneRenderer.tsx
+│   ├── TableRenderer.tsx
+│   ├── BigTableRenderer.tsx
+│   ├── StairsRenderer.tsx
+│   ├── AmenityRenderer.tsx
+│   ├── PlaceholderRenderer.tsx
+│   └── __tests__/ (по един тест на компонент)
+└── gridFrame/
+    ├── GridContainer.tsx
+    ├── GridCell.tsx
+    ├── GridLayer.tsx
+    ├── DragHighlightOverlay.tsx
+    └── __tests__/
+```
+
+**Променени файлове:**
+```
+src/app/features/wagons/components/OsdmGrid.tsx                   # Task 122 (свива до ≤500 реда)
+src/app/features/compositions/components/layoutRenderers/OpenSaloonLayout.tsx  # Task 123 (свива до ≤250 реда)
+src/api/compositions/coachLayouts.api.ts                          # Task 123 (може да отпадне pixel conversion при review)
+```
+
+**НЕ-изтрити файлове (Етап 7 ги трие):**
+```
+src/app/features/compositions/components/layoutRenderers/
+├── cellRenderers.tsx         # остава, просто не се import-ва повече
+├── osdmRenderers.tsx         # остава
+├── wallRenderers.tsx         # остава
+├── SeatCell.tsx              # остава
+├── zonePanel.tsx             # остава (или минимално опростен)
+├── gridBuilder.ts            # остава (или минимално опростен)
+├── CabinLayout.tsx           # остава, dispatch-ът в SeatMapCanvas не е пипан
+├── SleeperLayout.tsx         # остава
+├── CouchetteLayout.tsx       # остава
+└── CompartmentLayout.tsx     # остава
+
+src/app/features/wagons/components/
+└── WallCellVisual.tsx        # ще остане, но като re-export от shared/wagonGrid/osdmRenderers/WallRenderer
+                              # (за да не се счупят external import-и; Етап 7 ще го премахне)
+```
+
+### 🚨 Critical rules за Етап 6
+
+1. **Никакъв breaking change на API контракта.** `CoachLayoutDto` с `seats[]` +
+   `osdmLayoutJson` остава. `rendererType` поле остава (игнорира се, но не се
+   трие). Backend-ът не се пипа.
+
+2. **SeatMapCanvas dispatcher остава непроменен.** Маршрутизирането между
+   OpenSaloonLayout и CabinLayout (sleeper/couchette) не се пипа в Етап 6.
+   Композицията за спални вагони продължава да минава през CabinLayout.
+   Это е за Етап 7 — обединяването на всички типове под OpenSaloonLayout.
+
+3. **Adapter задължителен, не опционален.** Task 115 е критичен — без него
+   легаси wagons се чупят в композицията. Не се skip-ва.
+
+4. **Shared renderers = SSOT за визуалното.** Ако намериш inline rendering
+   в OsdmGrid или OpenSaloonLayout, което не е preselect-но за премахване —
+   това е знак че не си доизкарал extraction-а.
+
+5. **Visual regression за Task 123 е задължителен.** Screenshot compare
+   OpenSaloonLayout vs editor preview (drawer в WagonCreationPage) за реални
+   wagon серии: 21-43, 21-50. Ако не са идентични — не е passed.
+
+6. **Нула регресия за съществуващи тестове.** Baseline брой passing тестове
+   се записва в RED phase на всеки migration таск (#116, #122, #123) и след
+   DONE трябва да е СЪЩИЯТ брой. Ако падне — rollback, debug, retry.
+
+### ✅ Success criteria per task (final check)
+
+Преди да маркираш `"passes": true` за Етап 6 таск, провери:
+
+1. ✅ Тестовете от RED phase сега ПАСВАТ
+2. ✅ Съществуващите тестове — същият брой passing (нула регресия)
+3. ✅ `npm run type-check` чист
+4. ✅ `npm run lint` — няма нови errors
+5. ✅ За Task 122/124: `npx playwright test` минава
+6. ✅ За Task 123: визуален screenshot compare е okay
+7. ✅ За Task 122/123: размерните таргети са постигнати (≤500 / ≤250 реда)
+8. ✅ Актуализиран activity.md запис
+9. ✅ Git commit с **точното** `description` от tasks.json
+
+### ⚠️ Отворени въпроси (решават се в хода на Етап 6)
+
+1. **Kакво става със zonePanel.tsx side-panel zones?** Те идват от orchestration
+   props (`zones`, `leftZones`), не от osdmLayoutJson. Решение в Task 115:
+   legacy adapter ги мапва в OSDM zones synthetic → renderer-ите ги виждат
+   както normal zones. В Task 123 — zonePanel.tsx не се ползва повече.
+
+2. **OpenSaloonLayout public props contract — breaking или backward-compat?**
+   Текущият компонент приема много legacy props. В Task 123 — запазваме ги
+   (приема същия interface) но вътрешно ги route-ваме през adapter. Public
+   API не се чупи, callers в SeatMapCanvas не се пипат.
+
+3. **Wall rendering в OpenSaloonLayout** (ново в Етап 6, не е имало досега) —
+   след Task 118 + 123, legacy wagons със structural WALL pseudo-seats ще
+   показват стени чрез shared WallRenderer, защото adapter-ът (Task 115) ги
+   синтезира. Това може да изглежда РАЗЛИЧНО от текущия render (legacy
+   wallAfterColumns 3px divider vs. full OSDM WallRenderer cell-by-cell).
+   Това **не е регресия** — то е визуализиране на данни, които досега не са
+   се показвали коректно. Visual check в Task 123.7 го валидира.

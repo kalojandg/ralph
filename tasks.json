@@ -4039,5 +4039,466 @@
       }
     ],
     "passes": true
+  },
+  {
+    "id": 113,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[AUDIT] OSDM spec compliance — field-by-field review (no code)",
+    "tddWorkflow": false,
+    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §0 (ограничения), §5 Етап 0 (OSDM audit)",
+    "steps": [
+      {
+        "id": "113.1",
+        "action": "Прочети C:/Projects/wagon-renderer-unification-plan.md изцяло. Задачата е audit (read-only), без писане на код. Целта — да идентифицираме кои полета в текущия код не се мапват чисто към OSDM IRS 90918-10 и кои extensions са направени 'на око'."
+      },
+      {
+        "id": "113.2",
+        "action": "Одитирай следните полета срещу OSDM IRS 90918-10 spec. Първичен източник: src/app/features/compositions/constants/osdmIcons.ts (вече съдържа OSDM_ICON_MAP mapping). Вторичен (ако network позволява): https://raw.githubusercontent.com/UnionInternationalCheminsdeFer/OSDM/master/specification/schemas/place.yml. Ако мрежа не е налична — **пропускни външния fetch**, работи само с локалния код. За всяко поле: цитирай текущо използване (file:line в PR кода), OSDM еквивалент ако има в OSDM_ICON_MAP или подобно, или 'не съществува в локалния OSDM mapping — кандидат за 'направено на око''. Полета: junctionOffset (wagons/osdmElements/wallTypes.ts), travelClass (FIRST/SECOND в buildSeatDefinitions.ts), berthLevel (UPPER/MIDDLE/LOWER в OsdmGrid.tsx), zoneLabel + zone width/height (в buildOsdmLayoutJson.ts), dimension на walls (internals[]) и signs (signs[]), orientation enum values (TOP/BOTTOM/LEFT/RIGHT, HORIZONTAL/VERTICAL, FACING_LEFT/RIGHT/UP/DOWN)."
+      },
+      {
+        "id": "113.3",
+        "action": "Одитирай 'dual source of truth' проблема: в coachLayouts.api.ts:191-199 има STRUCTURAL_TYPES branch който третира WALL/WC/PLACEHOLDER/GAP/ZONE/GRID_LABEL/WALL_H/CORRIDOR/STAIRS като 'псевдо-места' с isPhysicallyPresent=false. Документирай: (1) кои wagon серии в seed-а имат тези псевдо-места; (2) какви accommodation types се ползват; (3) как OpenSaloonLayout сега ги рендира чрез cellRenderers.tsx."
+      },
+      {
+        "id": "113.4",
+        "action": "Одитирай OsdmGrid capabilities за спални/кушет/купе вагони: (1) Дали може да се drop-ва BERTH с 3 levels? (2) Има ли palette item за couchette (6-level)? (3) Може ли да се изграждат купета (отделни секции със стени)? Провери ElementPalette.tsx и accommodationType стойностите. За всяко: YES/NO/PARTIAL + цитат от кода. **Скоп-clarifier**: ако има gaps, само документирай ги — не имплементирай fix в Етап 6; те са за Етап 7 (колегата)."
+      },
+      {
+        "id": "113.5",
+        "action": "Създай C:/Projects/BDZ Project/Admin-App/docs/composition/osdm-audit.md с резултатите от одита. Формат: 4 секции (field-by-field audit, dual source of truth, legacy renderer inventory, OsdmGrid capability gaps). За всяко намерено несъответствие с OSDM spec — препоръка: 'reshape to OSDM field X' или 'flag as non-OSDM, needs design decision'."
+      },
+      {
+        "id": "113.6",
+        "action": "Commit-ни само osdm-audit.md (без промени в изходен код). Commit message: точно description-а от tasks.json."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 114,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Shared wagonGrid — types + constants foundation",
+    "tddWorkflow": true,
+    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §4.5 (extraction scope) — подпапки types/ и constants/",
+    "steps": [
+      {
+        "id": "114.1",
+        "phase": "RED",
+        "action": "Създай src/app/shared/wagonGrid/types/__tests__/types.test-d.ts (TypeScript type-level тест, ако е възможно с vitest expectTypeOf) или алтернативно __tests__/types.test.ts с runtime шаблони. Тест: (1) OsdmElement union съдържа всички варианти (seat, berth, folding, wall, window, door, zone, table, big_table, stairs, amenity, placeholder); (2) ElementState е { selected?, highlighted?, dropTarget?, invalid? } — всички optional; (3) ElementInteraction е { onClick?, onContextMenu?, onDragStart?, onResize?, onHover? } — всички optional; (4) CanonicalInput е { gridSize, places, structural } — places от Seat[] (isPhysicallyPresent=true), structural от osdmLayoutJson полетата. Тестовете ФЕЙЛВАТ защото модулите не съществуват."
+      },
+      {
+        "id": "114.2",
+        "phase": "RED",
+        "action": "Създай src/app/shared/wagonGrid/constants/__tests__/constants.test.ts. Тест: export-ва WAGON_COLORS (seat available/booked/blocked/locked/selected + first-class gold + wheelchair blue + companion orange + table brown), CELL_TOKENS (cellSize=22, seatSpan=2, berthSpan={w:3,h:2}, wallThickness=3, stripThickness={window:5, door:9}), Z_INDEX ({base:0, walls:1, elements:2, windows:3, doors:4, dragOverlay:5}). Стойностите MUST матчват C:/Projects/wagon-renderer-unification-plan.md §0 spec."
+      },
+      {
+        "id": "114.3",
+        "phase": "GREEN",
+        "action": "Създай src/app/shared/wagonGrid/types/index.ts с unified типовете. Дискриминатор по element.kind: 'seat' | 'berth' | 'folding' | 'wall' | 'window' | 'door' | 'zone' | 'table' | 'bigTable' | 'stairs' | 'amenity' | 'placeholder'. Всеки variant носи нужните полета (coords, icon, label, accommodationType, dimension, orientation, width/height, facing, travelClass, berthLevel, seatNumber, zoneLabel). **Полетата, които Task 113 audit пометна като 'направени на око', използвай с явен коментар 'TODO: reshape to OSDM X after audit'**. НЕ изтривай полетата в този таск — fix-а на audit findings е отделна задача."
+      },
+      {
+        "id": "114.4",
+        "phase": "GREEN",
+        "action": "Създай src/app/shared/wagonGrid/constants/index.ts с колор + cell + z-index tokens. Вземи текущите стойности от src/app/features/compositions/components/layoutRenderers/constants.ts и src/app/features/wagons/osdmElements/wallCells.ts (WALL_COLOR_MAP) и ги обедини в един source."
+      },
+      {
+        "id": "114.5",
+        "phase": "GREEN",
+        "action": "Създай src/app/shared/wagonGrid/index.ts като public barrel: export-ва само от types и constants (докато не се добавят останалите подпапки). Никой friend module от features/compositions или features/wagons НЕ ги ползва още — само типовете съществуват в shared."
+      },
+      {
+        "id": "114.6",
+        "phase": "DONE",
+        "action": "npm test && npm run type-check && npm run lint — чисто. shared/wagonGrid/ папка съществува с types/ + constants/ + index.ts barrel. НИТО един existing файл не е променен — само добавка."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 115,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Shared wagonGrid — parse layer + legacy backward-compat adapter",
+    "tddWorkflow": true,
+    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §4.5 (parse/), §5 Етап 3 (OpenSaloonLayout input contract)",
+    "steps": [
+      {
+        "id": "115.1",
+        "phase": "RED",
+        "action": "Създай src/app/shared/wagonGrid/parse/__tests__/parseOsdmLayout.test.ts. Тестове: (1) parse-ва валиден JSON string с internals[] + signs[] + zones[] + gridSize; (2) връща structural елементи в unified OsdmElement формат; (3) walls (icon 23-32) → element.kind='wall' с dimension/orientation/junctionOffset; (4) windows (135/174/175) → kind='window' от signs[]; (5) doors (176-179) → kind='door' от signs[]; (6) празен/невалиден JSON → връща empty structural + warning log; (7) backward-compat: wall без dimension → default от wallShapes (както loadWagon прави сега)."
+      },
+      {
+        "id": "115.2",
+        "phase": "RED",
+        "action": "Създай src/app/shared/wagonGrid/parse/__tests__/buildCanonicalInput.test.ts. Тестове: (1) вход { seats: Seat[], osdmLayout: OsdmLayoutJson } → output { gridSize, places, structural }; (2) places съдържа САМО Seat с isPhysicallyPresent=true; (3) structural от osdmLayout се merge-ва с legacy structural от seats[] (адаптер за isPhysicallyPresent=false); (4) legacy WALL seat → synthesized wall OsdmElement; (5) legacy WC seat → synthesized zone; (6) legacy STAIRS/ZONE/PLACEHOLDER → правилни synthesized elements; (7) pixel coords в Seat.coordinates → grid coords (gridX = (x-LAYOUT_PADDING)/GRID_UNIT); (8) wagon с САМО OSDM (без legacy structural) → passthrough на osdmLayout."
+      },
+      {
+        "id": "115.3",
+        "phase": "RED",
+        "action": "Създай __tests__/buildCanonicalInput.legacyWagons.test.ts. **Източници на fixtures** (в този ред): (1) Hand-written realistic data inspired by BackendCoachLayoutDto shape в src/api/compositions/coachLayouts.api.ts lines 44-54. (2) Примерни Seat[] структури от съществуващи тестове: src/app/features/compositions/components/layoutRenderers/__tests__/*.test.tsx. (3) OsdmLayoutJson структурата от src/app/features/wagons/pages/buildOsdmLayoutJson.ts output. Покрити серии (по 2-3 теста всяка): 21-43 (open saloon, само seats), 21-50 (compartment, със стени), WLAB 70-71 (sleeper, berths), 25-63 (open saloon с legacy structural pseudo-places). **Важно**: не е нужно да репликираш реалния DB seed — целта е да тестваш adapter-a с representative shapes. **Ако в seed-а няма osdmLayoutJson** за legacy сериите — adapter-ът трябва да произведе валиден канонически вход само от seats[] (включително structural pseudo-places)."
+      },
+      {
+        "id": "115.4",
+        "phase": "GREEN",
+        "action": "Имплементирай src/app/shared/wagonGrid/parse/parseOsdmLayout.ts. Pure функция. Без fetch, без React. Парсва JSON string, валидира shape, връща normalized OsdmElement[] + gridSize. За wall-specific: викай helper от wallShapes. Текущо местоположение е wagons/osdmElements/wallShapes.ts (ще се премести в shared/wagonGrid/classify/ от Task 116). Ако Task 116 още не е изпълнен, import от текущото място; Task 118 ще refactor-не."
+      },
+      {
+        "id": "115.5",
+        "phase": "GREEN",
+        "action": "Имплементирай src/app/shared/wagonGrid/parse/buildCanonicalInput.ts. Pure. Композира двете API полета. Legacy adapter за Seat[] с isPhysicallyPresent=false е **маркиран с явен коментар 'TEMP: remove after Etap 7 seed cleanup'**. Mapping: accommodationType='WALL' → kind:'wall' с default dimension; 'WC' → kind:'zone' с OSDM icon 115; 'STAIRS' → kind:'stairs' icon 136; 'PLACEHOLDER' → kind:'placeholder'; 'ZONE' → kind:'zone' с label от attributes; 'GAP' → placeholder; 'CORRIDOR' → се ползва като aisle hint за gridSize. Pixel coords → grid: px = LAYOUT_PADDING + gridX*GRID_UNIT → gridX = (px-LAYOUT_PADDING)/GRID_UNIT."
+      },
+      {
+        "id": "115.6",
+        "phase": "GREEN",
+        "action": "Expose parse public API в src/app/shared/wagonGrid/index.ts — export buildCanonicalInput, parseOsdmLayout, + types CanonicalInput."
+      },
+      {
+        "id": "115.7",
+        "phase": "DONE",
+        "action": "npm test — всички нови тестове ПАСВАТ. Съществуващи тестове (2000+) продължават да минават — никой не е импортнал още новите функции, така че няма регресия. npm run type-check && npm run lint — чисто."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 116,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Shared wagonGrid — move wall classify/cells/shapes from wagons/ to shared",
+    "tddWorkflow": true,
+    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §4.5 (classify/)",
+    "steps": [
+      {
+        "id": "116.1",
+        "phase": "RED",
+        "action": "Baseline: npm test — запиши брой passing тестове (общо + специфично за wallCellClassification, wallCells, wallShapes, wallTypes, WallCellVisual). Това е 'нула регресия' цел."
+      },
+      {
+        "id": "116.2",
+        "phase": "GREEN",
+        "action": "**Текущо местоположение** на файловете: `src/app/features/wagons/osdmElements/` (след предишен рефактор в Етап 5). Премести САМО wall classify helper-ите: wallCells.ts → src/app/shared/wagonGrid/classify/wallCells.ts; wallCellClassification.ts → classify/wallCellClassification.ts; wallShapes.ts → classify/wallShapes.ts; wallTypes.ts → classify/wallTypes.ts. Тестовете им (__tests__/wallCells.test.ts etc.) се местят в shared/wagonGrid/classify/__tests__/. **ОСТАВЯТ В osdmElements/**: wallMutations.ts, wallCollision.ts, doorCollision.ts, doorMutations.ts, doorTypes.ts, windowCollision.ts, windowMutations.ts, windowTypes.ts — те са edit-domain logic, не classify. **Важно: БЕЗ промяна на съдържание — само git mv + обновяване на import paths**."
+      },
+      {
+        "id": "116.3",
+        "phase": "GREEN",
+        "action": "Обнови import paths в consumer-ите. Външни (в components/ + pages/): `components/OsdmGrid.tsx` (17 imports от ../osdmElements/wall*); `components/WallCellVisual.tsx` (1 import); `components/ElementPalette.tsx` (4 imports за wall*); `pages/WagonCreationPage.tsx` (5 imports за wall*); `pages/buildOsdmLayoutJson.ts` (1 import `../osdmElements/wallTypes`); `pages/__tests__/walls.integration.test.tsx` (4 imports). Вътре в osdmElements/ (остават като consumer-и на преместените wall* файлове): wallMutations.ts, wallCollision.ts, doorCollision.ts, windowCollision.ts — техните `./wallCells`, `./wallTypes`, `./wallCellClassification` imports стават `../../../shared/wagonGrid/classify/wallCells` etc (или да се ползва barrel). Предпочитана форма: import от shared/wagonGrid barrel."
+      },
+      {
+        "id": "116.4",
+        "phase": "GREEN",
+        "action": "Export-ни публично от src/app/shared/wagonGrid/index.ts: classifyCell, getWallCells, getCellDirections, WALL_SHAPES, getDefaultDimension, isWallCode, isWallElement + всички wall types (WallCode, WallOrientation, WallElement, CellDirections, CellClassification)."
+      },
+      {
+        "id": "116.5",
+        "phase": "DONE",
+        "action": "npm test — **СЪЩИЯТ** брой passing тестове като в step 116.1. Нула регресия. npm run type-check && npm run lint — чисто. Wall classify тестовете сега са във shared/wagonGrid/classify/__tests__/. Editor-domain logic (mutations, collisions) остава в wagons/osdmElements/."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 117,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Shared wagonGrid — SeatRenderer + BerthRenderer + FoldingSeatRenderer",
+    "tddWorkflow": true,
+    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §4.5 (osdmRenderers/)",
+    "steps": [
+      {
+        "id": "117.1",
+        "phase": "RED",
+        "action": "Създай src/app/shared/wagonGrid/osdmRenderers/__tests__/SeatRenderer.test.tsx. Тестове: (1) render SEAT variant — зелен availaible bg, number label, backrest strip по facing; (2) render WHEELCHAIR_SPACE — blue, ♿ icon; (3) render COMPANION — orange; (4) travelClass='FIRST' → златен бордър/bg; (5) state.selected=true → blue ring glow; (6) state.highlighted=true → yellow bg; (7) interaction.onClick callback извиква се при click; (8) interaction.onContextMenu при right-click; (9) читаем seatNumber в textContent; (10) accessibility: role='button', tabIndex=0, aria-label. Тестовете ФЕЙЛВАТ (модулът липсва)."
+      },
+      {
+        "id": "117.2",
+        "phase": "RED",
+        "action": "Създай __tests__/BerthRenderer.test.tsx. Тестове: (1) kind='berth' с berthLevel='UPPER' — горна позиция на label; (2) 'LOWER' — долна; (3) 'MIDDLE' — централна; (4) span 3x2 grid cells; (5) seatNumber видим; (6) interaction callbacks (click, contextMenu). ФЕЙЛВАТ."
+      },
+      {
+        "id": "117.3",
+        "phase": "RED",
+        "action": "Създай __tests__/FoldingSeatRenderer.test.tsx. Тестове: (1) 1-cell span; (2) dashed blue border; (3) state.selected работи; (4) click callback. ФЕЙЛВАТ."
+      },
+      {
+        "id": "117.4",
+        "phase": "GREEN",
+        "action": "Имплементирай SeatRenderer.tsx. Pure presentational. Props: { element: OsdmElement (kind='seat'), state?: ElementState, interaction?: ElementInteraction, cellSize: number }. Използвай constants от shared/wagonGrid/constants. Заимствай визуалния стил от src/app/features/compositions/components/layoutRenderers/SeatCell.tsx (без Legacy wiring). First-class gold, wheelchair blue, companion orange — по element.accommodationType + element.travelClass."
+      },
+      {
+        "id": "117.5",
+        "phase": "GREEN",
+        "action": "Имплементирай BerthRenderer.tsx и FoldingSeatRenderer.tsx по същия pattern. BerthRenderer визуалът се заимства от OsdmGrid.tsx текущата inline berth логика."
+      },
+      {
+        "id": "117.6",
+        "phase": "GREEN",
+        "action": "Export от shared/wagonGrid/index.ts: SeatRenderer, BerthRenderer, FoldingSeatRenderer."
+      },
+      {
+        "id": "117.7",
+        "phase": "DONE",
+        "action": "npm test — нови тестове ПАСВАТ. Съществуващите тестове минават — никой consumer още не ги ползва (те остават в Task 122 + 123). type-check + lint чисто."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 118,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Shared wagonGrid — WallRenderer (all 10 icon variants)",
+    "tddWorkflow": true,
+    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §4.5 (osdmRenderers/), §2.3 (walls 10-icon parity)",
+    "steps": [
+      {
+        "id": "118.1",
+        "phase": "RED",
+        "action": "Създай src/app/shared/wagonGrid/osdmRenderers/__tests__/WallRenderer.test.tsx. Тестове за всяка от 10-те wall icon stoynosti (23, 24, 25, 26, 27, 28, 29, 30, 31, 32): (1) render-ва правилен брой cells според dimension; (2) color според icon (darker за 23-25, lighter за 26-28, etc. — консултирай WALL_COLOR_MAP); (3) end cells имат resize dot КОГАТО interaction.onResize е подаден; (4) internal cells (corner/junction за L/T) нямат interaction; (5) без interaction.onResize → няма drag handles (read-only mode)."
+      },
+      {
+        "id": "118.2",
+        "phase": "RED",
+        "action": "Добави тест за orientations: L walls (24/25/27/28) имат 2 arms — horizontal + vertical; T walls (23/26) имат 3 arms; straight walls (29-32) 1 arm. Всеки case тества expected cell count и tree structure."
+      },
+      {
+        "id": "118.3",
+        "phase": "GREEN",
+        "action": "Мигрирай src/app/features/wagons/components/WallCellVisual.tsx → shared/wagonGrid/osdmRenderers/WallRenderer.tsx. Интерфейсът се променя: вместо cell-specific WallCellVisual, WallRenderer приема цялата wall element и вътрешно извиква getWallCells + classifyCell + WallCellVisual sub-компонент за всяка клетка. Resize dots се показват само ако interaction.onResize е подаден."
+      },
+      {
+        "id": "118.4",
+        "phase": "GREEN",
+        "action": "Използвай shared/wagonGrid/classify (след Task 116). Export WallRenderer от barrel."
+      },
+      {
+        "id": "118.5",
+        "phase": "DONE",
+        "action": "npm test — нови WallRenderer тестове ПАСВАТ. Съществуващите WallCellVisual тестове (след Task 116 в shared/classify/__tests__/) или остават да тестват sub-компонента, или се re-point към WallRenderer ако се обединят. type-check + lint чисто."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 119,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Shared wagonGrid — WindowRenderer + DoorRenderer",
+    "tddWorkflow": true,
+    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §4.5, §2.3 (windows 3-icon, doors 4-icon parity)",
+    "steps": [
+      {
+        "id": "119.1",
+        "phase": "RED",
+        "action": "Създай __tests__/WindowRenderer.test.tsx. Тестове: (1) icon=135 (1-place) → 1-cell strip; (2) icon=174 (2-place) → 2-cell; (3) icon=175 (3-place) → 3-cell; (4) orientation='HORIZONTAL' → horizontal strip, 'VERTICAL' → vertical; (5) light cyan color (#81D4FA); (6) resize handles (8px circles at ends) когато interaction.onResize e подаден; (7) без onResize → handle-ите липсват (read-only). ФЕЙЛВА."
+      },
+      {
+        "id": "119.2",
+        "phase": "RED",
+        "action": "Създай __tests__/DoorRenderer.test.tsx. Тестове: (1) всяка от 4-те icon stoynosti (176, 177, 178, 179) render-ва разпознаваемо различна иконка (rotated glyph); (2) pale blue bg (#E3F2FD); (3) dimension се респектира; (4) resize handles условно; (5) icon НЕ се промеnя при resize (за разлика от window). ФЕЙЛВА."
+      },
+      {
+        "id": "119.3",
+        "phase": "GREEN",
+        "action": "Имплементирай WindowRenderer.tsx. Визуалът — strip centered на wall cell edge, от current OsdmGrid inline window logic. Resize handles conditional."
+      },
+      {
+        "id": "119.4",
+        "phase": "GREEN",
+        "action": "Имплементирай DoorRenderer.tsx. Визуалът — strip с icon glyph. 4-те icons имат леко различен визуал (OSDM_ICON_IMAGES map)."
+      },
+      {
+        "id": "119.5",
+        "phase": "DONE",
+        "action": "Export от barrel. npm test, type-check, lint — чисто."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 120,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Shared wagonGrid — Zone/Table/Stairs/Amenity/Placeholder renderers",
+    "tddWorkflow": true,
+    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §4.5",
+    "steps": [
+      {
+        "id": "120.1",
+        "phase": "RED",
+        "action": "Създай __tests__/ZoneRenderer.test.tsx, __tests__/TableRenderer.test.tsx, __tests__/BigTableRenderer.test.tsx, __tests__/StairsRenderer.test.tsx, __tests__/AmenityRenderer.test.tsx, __tests__/PlaceholderRenderer.test.tsx. За всеки: (1) render с minimal props; (2) respect-ва dimension/width/height; (3) interaction.onClick/onContextMenu callbacks работят; (4) ZoneRenderer: zoneLabel се рендира ако е подаден; icon се показва (OSDM icon 100-172 range); (5) BigTableRenderer: height поле респектирано, resize conditional."
+      },
+      {
+        "id": "120.2",
+        "phase": "GREEN",
+        "action": "Имплементирай 6-те renderer-а. Визуалите се вземат от: ZoneRenderer ← compositions/.../osdmRenderers.tsx (resolveOsdmZoneFacilityVisuals); TableRenderer / BigTableRenderer ← cellRenderers.tsx; StairsRenderer ← cellRenderers.tsx; AmenityRenderer ← OsdmGrid.tsx inline amenity rendering; PlaceholderRenderer ← просто invisible 1-cell spacer."
+      },
+      {
+        "id": "120.3",
+        "phase": "GREEN",
+        "action": "Export-ни всички от barrel."
+      },
+      {
+        "id": "120.4",
+        "phase": "DONE",
+        "action": "npm test, type-check, lint — чисто."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 121,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Shared wagonGrid — gridFrame (GridContainer + GridCell + GridLayer + DragHighlightOverlay)",
+    "tddWorkflow": true,
+    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §4.5 (gridFrame/)",
+    "steps": [
+      {
+        "id": "121.1",
+        "phase": "RED",
+        "action": "Създай __tests__/GridContainer.test.tsx. Тестове: (1) render CSS Grid с gridTemplateColumns/Rows генерирани от gridSize; (2) cellSize prop респектиран; (3) children се рендират като grid items. ФЕЙЛВА."
+      },
+      {
+        "id": "121.2",
+        "phase": "RED",
+        "action": "Създай __tests__/GridCell.test.tsx. Тестове: (1) render cell с coords (x,y); (2) interaction.onDropTarget подаден → wrap-ва в useDroppable и има data-testid='grid-cell-x-y'; (3) без onDropTarget → просто div; (4) className според hover/dropTarget state."
+      },
+      {
+        "id": "121.3",
+        "phase": "RED",
+        "action": "Създай __tests__/GridLayer.test.tsx. Тестове: (1) z-index се задава от Z_INDEX tokens; (2) absolute positioning върху grid. __tests__/DragHighlightOverlay.test.tsx: (1) green overlay при valid drop; (2) red при collision; (3) се скрива когато drag не е активен."
+      },
+      {
+        "id": "121.4",
+        "phase": "GREEN",
+        "action": "Имплементирай 4-те компонента. GridContainer wrapper върху <Box display='grid'>; GridCell с optional useDroppable (от @dnd-kit/core); GridLayer wrapper div с z-index; DragHighlightOverlay с Map<cellKey, 'valid'|'invalid'> prop."
+      },
+      {
+        "id": "121.5",
+        "phase": "DONE",
+        "action": "Export от barrel. npm test, type-check, lint — чисто."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 122,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] OsdmGrid migrates to shared renderers — target ≤500 lines",
+    "tddWorkflow": true,
+    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §5 Етап 2, §8 (размерни цели)",
+    "steps": [
+      {
+        "id": "122.1",
+        "phase": "RED",
+        "action": "Baseline snapshot: (1) `(Get-Content src/app/features/wagons/components/OsdmGrid.tsx).Count` — запиши броя редове (expect ~1500); (2) `npm run test:run` — запиши ТОТАЛНИЯ брой passing тестове (expect ~2200+); (3) Списъкът на файлове за специфично проследяване на регресия: OsdmGrid.*.test.tsx, WagonCreationPage.*.test.tsx, walls.integration.test.tsx — запиши техния брой passing; (4) Playwright: `npx playwright test tests/wagons/walls-workflow.spec.ts` — запиши брой passing. **Важно**: тази baseline се сравнява в DONE phase — ако total брой padne, това е регресия и таск-а фейлва."
+      },
+      {
+        "id": "122.2",
+        "phase": "GREEN",
+        "action": "Refactor OsdmGrid.tsx: замени inline seat rendering с <SeatRenderer>; inline berth → <BerthRenderer>; inline wall rendering (WallCellVisual usage) → <WallRenderer>; window strip → <WindowRenderer> с interaction.onResize; door strip → <DoorRenderer> с interaction.onResize; zone overlays → <ZoneRenderer>; table/big_table/stairs/amenity → съответните renderers. CSS Grid setup → <GridContainer>+<GridCell>; drag highlight → <DragHighlightOverlay>."
+      },
+      {
+        "id": "122.3",
+        "phase": "GREEN",
+        "action": "Запази в OsdmGrid.tsx: DnD wiring (DndContext, useDndMonitor), palette callback, mutations callbacks (onUpdateElement, onDeleteElement), dialog state, save/load coordination. Премахни inline rendering код."
+      },
+      {
+        "id": "122.4",
+        "phase": "GREEN",
+        "action": "Валидация: всички OsdmGrid тестове + wagon creation тестове минават — **същия брой** passing както в 122.1. Playwright walls-workflow.spec.ts — **същия брой** passing. Ако нещо фейлва — поправи renderer-а или orchestration логиката."
+      },
+      {
+        "id": "122.5",
+        "phase": "DONE",
+        "action": "Проверка на размера: OsdmGrid.tsx **≤ 500 реда**. Ако е повече — идентифицирай какво още може да се извлече в shared и го направи (може да се наложи мини-extraction на drag session hooks в shared/wagonGrid/hooks/). npm test + type-check + lint + playwright — чисто."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 123,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] OpenSaloonLayout migrates to shared renderers + full OSDM parity with OsdmGrid",
+    "tddWorkflow": true,
+    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §5 Етап 3, §0 constraint 4 (паритет задължителен), §0 constraint 8 (без production impact)",
+    "steps": [
+      {
+        "id": "123.1",
+        "phase": "RED",
+        "action": "Създай __tests__/OpenSaloonLayout.parity.test.tsx. За всеки OSDM element тип, който OsdmGrid може да създаде в osdmLayoutJson — тест че OpenSaloonLayout го рендира видимо. Cases: (1) wagon с 3 wall variants (L, T, straight) — 3 WallRenderer instances в DOM; (2) wagon с всичките 4 door icons — видими; (3) wagon с 1/2/3-place windows — различни dimension-и; (4) berth с UPPER/LOWER/MIDDLE — level labels видими; (5) first-class seat — златен стил; (6) amenity icon standalone — видим; (7) resizable zone с custom label — label в DOM. ВСИЧКИ тестове ФЕЙЛВАТ (OpenSaloonLayout текущо не рендира всички тези)."
+      },
+      {
+        "id": "123.2",
+        "phase": "RED",
+        "action": "Създай __tests__/OpenSaloonLayout.legacyWagon.test.tsx. Legacy wagon snapshot: вход = realistic Seat[] със structural pseudo-places (WALL/WC/ZONE с isPhysicallyPresent=false) + legacy пиксел coords + БЕЗ osdmLayoutJson. Тестове: (1) стените се рендират (защото adapter ги конвертира в OSDM синтетично); (2) WC zone се рендира; (3) ZONE items се рендират; (4) nothing in the DOM contains text like 'null' or 'undefined' (regression guard); (5) seat coords се преобразуват от pixel → grid правилно."
+      },
+      {
+        "id": "123.3",
+        "phase": "RED",
+        "action": "Baseline: `npm run test:run` — запиши ТОТАЛНИЯ брой passing тестове. Отделно: npm test за compositions feature (OpenSaloonLayout.*, CompositionDetails, SeatMapCanvas.*) — запиши брой passing. Това е 'нула регресия' gate — в DONE phase двете числа трябва да са >= baseline + новите parity тестове."
+      },
+      {
+        "id": "123.4",
+        "phase": "GREEN",
+        "action": "Refactor OpenSaloonLayout.tsx: вместо да чете Seat[] pixel coords и sidecars (wallAfterColumns, bottomBorders, gridLabels, zones/leftZones), извиква buildCanonicalInput({ seats, osdmLayout }) от shared/wagonGrid/parse. След това рендира CanonicalInput.places + CanonicalInput.structural през shared renderers + <GridContainer>. Legacy sidecar props продължават да се приемат (не breaking change) и се предават към adapter-а (който вече има legacy mapping logic от Task 115)."
+      },
+      {
+        "id": "123.5",
+        "phase": "GREEN",
+        "action": "Запази в OpenSaloonLayout.tsx: selection state (ctrl/shift/double-click/context menu), keyboard handlers (Enter/Space). Премахни/опрости: gridBuilder pixel→grid logic (вече в adapter); cellRenderers/osdmRenderers/wallRenderers/SeatCell — **запази файловете но ги НЕ-import-вай** (колегата ще ги изтрие в Etap 7); zonePanel side-panel — запази orchestration (или го опрости ако legacy props вече идват като OSDM zones от adapter)."
+      },
+      {
+        "id": "123.6",
+        "phase": "GREEN",
+        "action": "Валидация: Task 123.1 parity тестове ПАСВАТ. Task 123.2 legacy тестове ПАСВАТ. Съществуващи composition тестове — **същия брой** passing като в 123.3. Итерирай докато всичко е зелено."
+      },
+      {
+        "id": "123.7",
+        "phase": "VISUAL",
+        "action": "npm run dev. **Ако cursor-ide-browser MCP е наличен**: отвори composition view за реален wagon: (a) 21-43 (open saloon) — как изглежда? (b) 21-50 (compartment) — стените на купетата видими ли са? (c) WLAB 70-71 (sleeper) — НЕ е в scope за rendering от OpenSaloonLayout (той още използва CabinLayout за sleeper — проверка че dispatch-а в SeatMapCanvas НЕ е променен и спалните продължават да минават през CabinLayout). Сравнявай визуално с wagon editor preview (drawer в WagonCreationPage) за същия wagon — трябва да е паритетно. **Ако MCP не е наличен** (напр. grep за cursor-ide-browser fail): пропуснни ръчно визуално сравнение, вместо това увеличи покритието на Task 123.1 parity тестовете с допълнителни assertion-и — напр. computed styles на rendered elements, DOM structure дълбочина, правилни testid-та за всеки variant. Отбележи в activity.md че VISUAL phase е skip-нат заради липса на MCP."
+      },
+      {
+        "id": "123.8",
+        "phase": "DONE",
+        "action": "Проверка на размера: OpenSaloonLayout.tsx **≤ 250 реда** (малко по-толерантно от 200 заради legacy fallback glue code). npm test + type-check + lint + playwright — всичко чисто. Визуален check в 123.7 потвърден."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 124,
+    "category": "e2e",
+    "repo": "frontend",
+    "description": "[E2E] Renderer unification — round-trip regression coverage (create → view → edit → view)",
+    "tddWorkflow": true,
+    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §0 constraint 4 (не чупи create/edit/composition/view)",
+    "steps": [
+      {
+        "id": "124.1",
+        "phase": "RED",
+        "action": "Създай tests/wagons/renderer-parity.spec.ts (Playwright). Сценарий 1: (a) /wagons/new → drop 3 seats + 1 L-wall + 1 window + 1 door + 1 zone; (b) попълни metadata → Save; (c) navigate до /compositions или друго място, където OpenSaloonLayout рендира този wagon; (d) VERIFY: DOM съдържа 3 seat nodes, wall cells за L shape, 1 window strip, 1 door strip, 1 zone box. Сценарий 2: edit на същия wagon → промени seat number → Save → view-ни отново → новият number е видим. Сценарий 3: legacy wagon (зареди съществуващ wagon който има pseudo-places в seats[]) → view-ни → стените и WC се виждат (backward compat adapter работи)."
+      },
+      {
+        "id": "124.2",
+        "phase": "RED",
+        "action": "Създай __tests__/OpenSaloonLayout.compositionIntegration.test.tsx. Unit-level roundtrip: (a) GridElement[] от editor → buildOsdmLayoutJson + buildSeatDefinitions → CoachLayoutDto; (b) CoachLayoutDto → mapCoachLayoutFromBackend (API mapper) → Seat[] + osdmLayoutJson; (c) рендирай OpenSaloonLayout с тези — visual output трябва да съдържа СЪЩИТЕ element types като в editor-а."
+      },
+      {
+        "id": "124.3",
+        "phase": "GREEN",
+        "action": "Ако тестовете фейлват — root cause обикновено е (a) adapter mapping incorrect за някой edge case, (b) shared renderer не рендира някой element, (c) API mapper губи поле. Поправи. Итерирай."
+      },
+      {
+        "id": "124.4",
+        "phase": "DONE",
+        "action": "npm test + npx playwright test — всичко минава. type-check + lint чисто. Task 111 (walls-workflow) + Task 124 (parity) + всички OpenSaloonLayout, OsdmGrid тестове минават паралелно. Това е финалният gate: ако минава — двата renderer-а работят паралелно през OSDM структурата, без да чупят визуализацията."
+      }
+    ],
+    "passes": false
   }
 ]

@@ -4,9 +4,8 @@
 
 ## Last Iteration Summary
 
-**Iteration:** Етап 4 завършен
-**Task Worked On:** #95 (last task of Етап 4)
-**Status:** ✅ ALL COMPLETE (Tasks #1-#95)
+**Iteration:** Етап 5 завършен (Tasks #96-#112)
+**Status:** ✅ Walls feature в OsdmGrid работи end-to-end
 
 ---
 
@@ -14,104 +13,118 @@
 
 <!-- Ralph will read this before next iteration -->
 
-**Continue with:** Task #96 — [FE] Wall data model — extend GridElement with dimension and WallElement type
+**Continue with:** Task #113 — [AUDIT] OSDM spec compliance — field-by-field review (no code)
 
-**🧱 НАЧАЛО НА ЕТАП 5: Walls Feature (Tasks #96-#111)**
+**🎨 НАЧАЛО НА ЕТАП 6: Renderer Unification (Tasks #113-#124)**
 
-### 📜 Задължително преди да започнеш първия wall таск
+### 📜 Задължително преди да започнеш първия таск от Етап 6
 
 Прочети **в този ред**:
 
-1. **`C:/Users/kaloyan.georgiev.AMEXIS/Downloads/walls.ini`** — single source of
-   truth за визуалния модел, геометрията, UX поведението. Целият документ.
-2. **`C:/Projects/BDZ Project/Admin-App/docs/composition/frontend-requirements.md`**,
-   секция **§5 Етап 5: Walls** — формалните FR изисквания, acceptance criteria,
-   разбивка на таскове, data model, OSDM JSON формат.
-3. **`C:/Projects/ralph/user-steps.md`**, секция **🧱 Етап 5** — архитектурни
-   правила, TDD рутина, файлова структура, critical rules.
-4. **`C:/Projects/admin-app-frontend-structure.md`** — React/TS/MUI patterns
-   за проекта.
+1. **`C:/Projects/wagon-renderer-unification-plan.md`** — архитектурният plan. Цялостен контекст за:
+   - Какво е текущото състояние (dual source of truth, дивергенция на визуализацията).
+   - Каква е целевата архитектура (shared wagonGrid library + 2 orchestrator-а).
+   - Кои задачи са в scope на Етап 6 vs в scope на Етап 7 (колегата).
+2. **`C:/Projects/ralph/user-steps.md`**, секция **🎨 Етап 6** — архитектурни правила,
+   TDD рутина, файлова структура, critical rules.
+3. **`C:/Projects/BDZ Project/Admin-App/docs/composition/osdm-audit.md`** —
+   **ще бъде създаден в Task 113**. След Task 113, всеки следващ таск го
+   чете за да знае кои полета трябва да reshape-не към OSDM.
+4. **`C:/Projects/admin-app-frontend-structure.md`** — React/TS/MUI patterns.
 
-### 🎯 Архитектурни правила за Етап 5 (кратко)
+### 🎯 Архитектурни правила за Етап 6 (кратко)
 
-**Grid инвариант:** Всички клетки в OsdmGrid са 22×22 px — еднакви. Няма
-dedicated wall-tracks. Стените се рендерират **вътре** в нормални клетки
-(не в dedicated tracks като в open saloon).
+**Цел:** 2 renderer-а (OpenSaloonLayout + OsdmGrid), използващи shared OSDM структурата,
+готови за работа, БЕЗ да чупят визуализацията на create / edit / composition / view.
 
-**Rendering:** WallCellVisual компонент с до 4 half-line segments
-(up/down/left/right). Corner клетки имат 2 половини, срещащи се в центъра.
+**Scope IN:**
+- Shared `src/app/shared/wagonGrid/` library (types, constants, parse, classify, osdmRenderers, gridFrame)
+- OsdmGrid рефактор (≤500 реда, само orchestration + DnD + mutations)
+- OpenSaloonLayout рефактор + full OSDM parity (≤250 реда)
+- Tests — unit + component + E2E regression
 
-**Layering:** Walls zIndex 1 (под седалки/зони на 2). Wrapper divs поемат
-events; линиите са `pointer-events: none`.
+**Scope OUT (в друга задача на друг колега — Етап 7):**
+- Seed/DB cleanup на legacy structural pseudo-seats
+- Миграция на спални/кушет/купе wagons към OSDM grid
+- Изтриване на CabinLayout / SleeperLayout / CouchetteLayout / CompartmentLayout
+- Изтриване на legacy AccommodationType enum стойности
+- Премахване на pixel coordinate infrastructure
+- DB check constraints
 
-**Classification:** end (resize), middle (move), internal (corner/junction,
-без interaction). Зависи от `code` + `orientation` + `dimension`.
-
-**Collision:** стена спира до пречката, не навлиза. Прилага се при resize
-И при move. Backward compat — стари wagon-и без `dimension` зареждат с
-default от wallShapes.
+**Backward compatibility задължителна:** adapter в shared/wagonGrid/parse/
+конвертира legacy Seat[] с isPhysicallyPresent=false + pixel coords към
+synthetic OSDM elements. Markiran с `TEMP: remove after Etap 7 seed cleanup`.
+Тази прослойка позволява Етап 6 да се merge-не преди Етап 7 да приключи.
 
 ### 🧪 TDD ритуал за всеки таск
 
-1. **RED** → пиши тестове, пусни npm test, **verify FAIL**
+1. **RED** → пиши тестове, пусни `npm test`, **verify FAIL**
 2. **GREEN** → минимална имплементация, verify PASS
-3. **DONE** → npm test && npm run type-check && npm run lint — чисто
-
-**За Етап 5, RED phase е КРИТИЧЕН** — тестовете трябва да фейлват по
-правилната причина (модулът/функцията липсва, не заради syntax грешка).
+3. **VISUAL** (само за Task 123) → screenshot compare чрез cursor-ide-browser
+4. **DONE** → `npm test && npm run type-check && npm run lint` + (за Task 122, 124) + `npx playwright test`
 
 ### 📋 Последователност на таскове (не пропускай стъпки!)
 
-**5A — Domain & helpers (#96-#101):** pure functions, unit-testable
-- #96 WallElement type
-- #97 wallShapes registry
-- #98 getWallCells
-- #99 classifyCell + getCellDirections
-- #100 resizeWallArm + moveWall
-- #101 canPlaceWall + clampWallToValid
+**6A — Audit (#113):** read-only, произвежда osdm-audit.md
+- #113 OSDM spec compliance audit
 
-**5B — Rendering (#102-#104):** UI components
-- #102 WallCellVisual component
-- #103 OsdmGrid integration (замени старите сиви правоъгълничета)
-- #104 Cursor + drag handles
+**6B — Foundation (#114-#116):** types, parse, classify
+- #114 Shared types + constants
+- #115 Shared parse + legacy adapter (backward-compat)
+- #116 Преместване на wall classify/cells/shapes в shared
 
-**5C — Interaction (#105-#106):**
-- #105 Resize session (mousedown end → drag → commit)
-- #106 Move session + Esc cancel
+**6C — Element renderers (#117-#120):** per-element components
+- #117 SeatRenderer + BerthRenderer + FoldingSeatRenderer
+- #118 WallRenderer (всички 10 icon варианта)
+- #119 WindowRenderer + DoorRenderer
+- #120 Zone/Table/Stairs/Amenity/Placeholder renderers
 
-**5D — Integration (#107-#109):**
-- #107 Palette drop с default dimension
-- #108 OSDM serialize (dimension в internals[])
-- #109 OSDM deserialize с fallback
+**6D — Grid infrastructure (#121):**
+- #121 GridContainer + GridCell + GridLayer + DragHighlightOverlay
 
-**5E — Verification (#110-#111):**
-- #110 Integration round-trip тест
-- #111 E2E Playwright workflow
+**6E — Orchestrator migration (#122-#123):**
+- #122 OsdmGrid → shared renderers (≤500 реда)
+- #123 OpenSaloonLayout → shared + OSDM parity (≤250 реда)
+
+**6F — Verification (#124):**
+- #124 E2E renderer parity: create → view → edit → view round-trip
 
 ---
 
 ## Issues from Last Iteration
 
-[None — Етап 4 завършен успешно]
+[None — Етап 5 завършен успешно; Tasks #96-#112 all passed]
 
 ---
 
-## ⚠️ Важно за Етап 5
+## ⚠️ Важно за Етап 6
 
-- **НЕ мигрирай `code` при resize.** WALL_LEFT_3 свит до 2-place си остава
-  WALL_LEFT_3. OSDM позволява произволен dimension за всеки code.
-- **НЕ пипай Open Saloon Layout's wall rendering.** Там има dedicated
-  grid tracks — тази логика остава за съществуващия view. Етап 5 засяга
-  ТОЛКОВА OsdmGrid и WagonCreationPage.
-- **НЕ добавяй rotate button за v1.** Ориентацията се избира чрез различни
-  палитра елементи при drop.
-- **backward compat задължителна** — стари JSON без dimension зареждат с
-  default от wallShapes (тест в #109).
+- **Legacy rendering НЕ се изтрива в този етап.** cellRenderers.tsx,
+  osdmRenderers.tsx, wallRenderers.tsx, SeatCell.tsx, zonePanel.tsx,
+  CabinLayout.tsx, SleeperLayout.tsx, CouchetteLayout.tsx, CompartmentLayout.tsx —
+  всички остават като файлове. OpenSaloonLayout след рефактора просто
+  не ги import-ва. Колегата ги трие в Етап 7.
+
+- **SeatMapCanvas dispatcher НЕ се пипа.** Който определя кой renderer да се
+  ползва за коя серия (sleeper → CabinLayout etc.) — стои. Етап 6 променя само
+  самите renderer-и, не тяхното маршрутизиране.
+
+- **Visual regression проверка е задължителна за Task 123** — OpenSaloonLayout
+  промените могат да счупят визуално възприятие. Използвай cursor-ide-browser
+  MCP за screenshots. Сравнявай с wagon editor preview (drawer в WagonCreationPage)
+  за паритет.
+
+- **`osdm-audit.md` от Task 113 е входен артефакт за Task 114+** — полетата,
+  маркирани като 'направено на око', в Task 114 получават TODO коментар в
+  типовете и се адресират в **Етап 7** (не в Етап 6, за да не разширяваме scope).
+
+- **Backward-compat adapter НЕ е опционален.** Адаптерът в Task 115 е
+  задължителен за да не чупим композицията на legacy wagons.
 
 ---
 
-**Next Action:** Find task #96 (first with `"passes": false`) and begin Stage 5.
+**Next Action:** Find task #113 (first with `"passes": false`) and begin Етап 6.
 
-Прочети walls.ini, frontend-requirements.md §5, и user-steps.md §Етап 5
-ПРЕДИ да започнеш. Следвай TDD: RED → GREEN → DONE. Коmmит с точния
-`description` от tasks.json. След това изведи XML status и **СПРИ**.
+Прочети `C:/Projects/wagon-renderer-unification-plan.md`, `user-steps.md §Етап 6`,
+и (за #114+) `osdm-audit.md` ПРЕДИ да започнеш. Следвай TDD: RED → GREEN → DONE.
+Commit с точния `description` от tasks.json. След това изведи XML status и **СПРИ**.
