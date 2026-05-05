@@ -1,3 +1,40 @@
+## [2026-05-05 15:07] - Task #119: [FE] Shared wagonGrid — WindowRenderer + DoorRenderer
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Test file already existed: src/app/shared/wagonGrid/osdmRenderers/__tests__/WindowRenderer.test.tsx (12 tests)
+- Tests cover: icon=135 (1-cell), icon=174 (2-cell), icon=175 (3-cell), horizontal/vertical orientation, light cyan color (#81D4FA), resize handles conditional on interaction.onResize, no handles in read-only mode
+- Test file already existed: src/app/shared/wagonGrid/osdmRenderers/__tests__/DoorRenderer.test.tsx (14 tests)
+- Tests cover: all 4 icon variants (176, 177, 178, 179) with distinguishable data-icon attributes, pale blue bg (#E3F2FD), dimension respected for horizontal/vertical, resize handles conditional, icon does not change on resize
+
+### GREEN Phase
+- Implementation already existed: src/app/shared/wagonGrid/osdmRenderers/WindowRenderer.tsx (143 lines)
+- WindowRenderer: strip component with auto icon decision by dimension, light cyan color, resize handles conditional
+- Implementation already existed: src/app/shared/wagonGrid/osdmRenderers/DoorRenderer.tsx (143 lines)
+- DoorRenderer: strip component with 4 icon variants (rotated glyphs), pale blue bg, resize handles conditional
+
+### DONE Phase
+- npm test WindowRenderer — 12/12 ✅
+- npm test DoorRenderer — 14/14 ✅
+- npm run type-check — clean (0 errors) ✅
+- npm run lint — clean (0 errors, 2 warnings only) ✅
+- Export confirmed in shared/wagonGrid/index.ts ✅
+
+**Files modified:**
+- src/app/shared/wagonGrid/osdmRenderers/WindowRenderer.tsx (already complete)
+- src/app/shared/wagonGrid/osdmRenderers/DoorRenderer.tsx (already complete)
+- src/app/shared/wagonGrid/osdmRenderers/__tests__/WindowRenderer.test.tsx (already complete)
+- src/app/shared/wagonGrid/osdmRenderers/__tests__/DoorRenderer.test.tsx (already complete)
+
+**Git commit:**
+- `feat(compositions): [FE] Shared wagonGrid — WindowRenderer + DoorRenderer`
+
+---
+
 ## [2026-05-05 15:03] - Task #118: [FE] Shared wagonGrid — WallRenderer (all 10 icon variants)
 
 **Status:** ✅ Complete
