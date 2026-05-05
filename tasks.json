@@ -4417,7 +4417,7 @@
         "action": "Проверка на размера: OsdmGrid.tsx **≤ 500 реда**. Ако е повече — идентифицирай какво още може да се извлече в shared и го направи (може да се наложи мини-extraction на drag session hooks в shared/wagonGrid/hooks/). npm test + type-check + lint + playwright — чисто."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 123,
@@ -4468,7 +4468,7 @@
         "action": "Проверка на размера: OpenSaloonLayout.tsx **≤ 250 реда** (малко по-толерантно от 200 заради legacy fallback glue code). npm test + type-check + lint + playwright — всичко чисто. Визуален check в 123.7 потвърден."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 124,
@@ -4499,7 +4499,7 @@
         "action": "npm test + npx playwright test — всичко минава. type-check + lint чисто. Task 111 (walls-workflow) + Task 124 (parity) + всички OpenSaloonLayout, OsdmGrid тестове минават паралелно. Това е финалният gate: ако минава — двата renderer-а работят паралелно през OSDM структурата, без да чупят визуализацията."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 125,
