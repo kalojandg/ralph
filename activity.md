@@ -1,3 +1,36 @@
+## [2026-05-05 15:03] - Task #118: [FE] Shared wagonGrid — WallRenderer (all 10 icon variants)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Test file already existed: src/app/shared/wagonGrid/osdmRenderers/__tests__/WallRenderer.test.tsx (221 lines, 31 tests)
+- Tests cover: all 10 wall icon codes (23-32), correct cell count per dimension, wall color, resize handles on end cells with interaction.onResize, no handles without interaction (read-only mode), internal cells have no interaction, L-wall 2 arms, T-wall 3 arms, straight-wall 1 arm, cell structure verification
+
+### GREEN Phase
+- Implementation already existed: src/app/shared/wagonGrid/osdmRenderers/WallRenderer.tsx (175 lines)
+- WallRenderer accepts full wall element + optional state + optional interaction
+- Internally calls getWallCells + classifyCell + getCellDirections from shared/classify
+- Renders WallCellInner sub-component per cell with direction segments and optional resize dots
+- Resize dots shown only when interaction.onResize is provided
+
+### DONE Phase
+- npm test WallRenderer — 31/31 ✅
+- npm run type-check — clean (0 errors) ✅
+- npm run lint — clean (0 errors) ✅
+- Export confirmed in shared/wagonGrid/index.ts ✅
+
+**Files modified:**
+- src/app/shared/wagonGrid/osdmRenderers/WallRenderer.tsx (already complete)
+- src/app/shared/wagonGrid/osdmRenderers/__tests__/WallRenderer.test.tsx (already complete)
+
+**Git commit:**
+- `feat(compositions): [FE] Shared wagonGrid — WallRenderer (all 10 icon variants)`
+
+---
+
 ## [2026-05-05 14:25] - Task #117: [FE] Shared wagonGrid — SeatRenderer + BerthRenderer + FoldingSeatRenderer
 
 **Status:** ✅ Complete

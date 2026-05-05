@@ -4278,7 +4278,7 @@
         "action": "npm test — нови WallRenderer тестове ПАСВАТ. Съществуващите WallCellVisual тестове (след Task 116 в shared/classify/__tests__/) или остават да тестват sub-компонента, или се re-point към WallRenderer ако се обединят. type-check + lint чисто."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 119,
