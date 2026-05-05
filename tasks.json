@@ -4541,7 +4541,7 @@
         "action": "Working dir: backend. `dotnet build` + `dotnet test --filter CloneEndpoint` зелени. Документирай в `C:\\Projects\\ralph\\activity.md` за Task 125: (a) кой branch (A/B/C) се случи; (b) финалния API contract (използвай се от FE Task 130); (c) дали /clone-for-period съществува или FE ще loop-ва. **Гаранция:** няма промени в SQL проекта; няма EF migration файлове; всички writes минават през existing entities."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 130,
@@ -4567,7 +4567,7 @@
         "action": "npm test compositions.api.clone — зелено. npm run type-check чисто."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 131,

@@ -1,3 +1,129 @@
+## [2026-05-05 16:38] - Task #130: [FE] API layer — compositionsApi.clone(), cloneForPeriod(), getClonePreview() + types
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 130.1: Wrote 5 failing tests in `src/api/compositions/__tests__/compositions.api.clone.test.ts`
+  - `clone()` calls POST /api/compositions/{sourceId}/clone with correct body shape
+  - `clone()` returns CloneResponse with all fields
+  - `cloneForPeriod()` calls POST /clone-for-period with correct body
+  - `getClonePreview()` calls GET with trainNumber+dateRange, filters by daysOfWeek client-side
+  - 409 error propagates through axios interceptor as typed error
+
+### GREEN Phase
+- Step 130.2: Added types to `compositions.types.ts`: CloneCompositionDto, CloneCompositionPeriodDto, CloneResponse, ClonePeriodResponse, ClonePreviewItem, SkippedCloneItem, DayOfWeek
+- Step 130.2: Added `clone()`, `cloneForPeriod()`, `getClonePreview()` to `compositions.api.ts`
+- `getClonePreview` implements client-side conflict detection per spec §2.3 (no dedicated endpoint)
+
+### DONE Phase
+- Step 130.3: All 5 tests pass ✅
+- npm run type-check — clean ✅
+- npm run lint — clean ✅
+
+**Files modified:**
+- `src/api/compositions/compositions.types.ts` (added clone types)
+- `src/api/compositions/compositions.api.ts` (added 3 clone methods)
+- `src/api/compositions/__tests__/compositions.api.clone.test.ts` (new test file)
+
+**Git commit:**
+- `feat(compositions): [FE] API layer — compositionsApi.clone(), cloneForPeriod(), getClonePreview() + types`
+
+---
+
+## [2026-05-05 16:30] - Task #125: [BE] Verify existing /clone endpoint(s); gap-fill само ако нещо липсва — НЕ пипай DB
+
+**Status:** ✅ Complete
+
+**TDD Phase:** AUDIT → RED → GREEN → DONE
+
+**Branch:** C (endpoint липсваше изцяло — full gap-fill)
+
+**What was done:**
+### AUDIT Phase (125.1)
+- Grep за "clone" в Controllers/ и Application/Features/Compositions/ — **0 резултата**
+- POST /api/compositions/{id}/clone — НЕ съществува
+- POST /api/compositions/{id}/clone-for-period — НЕ съществува
+- Документирано: Branch C — пълна имплементация нужна
+
+### RED Phase (125.2)
+- Написани 9 unit теста в CloneCompositionCommandHandlerTests.cs:
+  - Handle_ClonesBlockedSeats_DropsBookings — основен бизнес тест (2 blocked carry, 0 SeatAvailabilities)
+  - Handle_SetsCorrectTargetFields — DRAFT status, target date/train
+  - Handle_ReturnsCorrectResponse — carriagesCloned, blockedSeatsCloned
+  - Handle_SourceNotFound_ReturnsNotFound
+  - Handle_ConflictWithoutOverwrite_Returns409
+  - Handle_ConflictWithOverwrite_DeletesExistingAndClones
+  - Handle_Success_PublishesAuditEvent
+  - Handle_NotFound_DoesNotPublishAuditEvent
+  - Handle_NewBlockedSeatsHaveNewPKs_NotSourcePKs
+
+### GREEN Phase (125.3-125.5)
+- CloneCompositionCommand + Handler в Application/Features/Compositions/Commands/CloneComposition.cs
+- ICompositionRepository: добавени GetWithCarriagesAndBlockedSeatsAsync, FindByTrainNumberAndDateAsync, Add
+- CompositionRepository: имплементация с Include(Carriages→BlockedSeats).AsNoTracking()
+- CloneCompositionResponseDto в Application/DTOs/Compositions/
+- CloneCompositionRequest в API/DTOs/
+- Endpoint [HttpPost("{id:long}/clone")] в CompositionsController
+- AuditMessages.RailRun.CompositionCloned добавен в SharedSrc
+- RailRunErrorCodes.TargetOccupied = "TARGET_OCCUPIED" добавен
+
+### Period Clone Decision (125.5)
+- /clone-for-period НЕ е build-нат
+- FE Task 131 ще loop-ва над /clone за всеки date в периода
+- Build-ва се САМО ако loop-ът е >5s за 60 дни
+
+### DONE Phase (125.6)
+- dotnet build — ✅ (Application, Infrastructure, API — 0 errors)
+- dotnet test Application.Tests — 57/57 ✅ (9 нови clone тестове)
+- dotnet test API.Tests — 25/25 ✅
+- dotnet test Infrastructure.Tests — 4/4 ✅
+- Няма промени в SQL проекта
+- Няма EF migration файлове
+- Всички writes минават през existing entities + IUnitOfWork
+
+**API Contract (за FE Task 130):**
+```
+POST /api/compositions/{id}/clone
+Content-Type: application/json
+
+Request:
+{
+  "targetTrainNumber": "8632",
+  "targetDate": "2026-06-01T00:00:00",
+  "overwrite": false
+}
+
+200 OK:
+{
+  "newCompositionId": 123,
+  "carriagesCloned": 8,
+  "blockedSeatsCloned": 5,
+  "warnings": []
+}
+
+409 CONFLICT (overwrite=false и target зает):
+Result с ErrorKind.Conflict, errorCode "TARGET_OCCUPIED", errorArgs: [existingCompositionId]
+```
+
+**Files modified:**
+- SharedSrc/MessageBus/Events/Audit/AuditMessages.cs (CompositionCloned)
+- RailRunService.Application/Constants/RailRunErrorCodes.cs (TargetOccupied)
+- RailRunService.Application/Interfaces/ICompositionRepository.cs (+3 methods)
+- RailRunService.Infrastructure/Repositories/CompositionRepository.cs (+3 methods)
+- RailRunService.Application/Features/Compositions/Commands/CloneComposition.cs (NEW)
+- RailRunService.Application/DTOs/Compositions/CloneCompositionResponseDto.cs (NEW)
+- RailRunService.API/DTOs/CloneCompositionRequest.cs (NEW)
+- RailRunService.API/Controllers/CompositionsController.cs (+clone endpoint)
+- RailRunService.Application.Tests/CloneCompositionCommandHandlerTests.cs (NEW, 9 tests)
+
+**Git commit:**
+- `feat(compositions): [BE] Verify existing /clone endpoint(s); gap-fill само ако нещо липсва — НЕ пипай DB`
+
+---
+
 ## [2026-05-05 15:25] - Task #121: [FE] Shared wagonGrid — gridFrame (GridContainer + GridCell + GridLayer + DragHighlightOverlay)
 
 **Status:** ✅ Complete
