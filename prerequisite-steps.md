@@ -10,9 +10,9 @@
 
 | repo | Какво е | Working Directory |
 |------|---------|-------------------|
-| `frontend` | React Admin-App | `C:\Projects\BDZ Project\Admin-App` |
-| `backend` | .NET RailRunService | `C:\Projects\BDZ Project\OSDM-Src\DotNetServices\RailRunService` |
-| `database` | SQL seed data & schema | `C:\Projects\BDZ Project\OSDM-Src\SQLProjects\RailRunServiceSQL` |
+| `frontend` | React Admin-App | `C:\Users\kaloyan.georgiev\Projects\Admin-App` |
+| `backend` | .NET RailRunService | `C:\Users\kaloyan.georgiev\Projects\OSDM-Src\DotNetServices\RailRunService` |
+| `database` | SQL seed data & schema | `C:\Users\kaloyan.georgiev\Projects\OSDM-Src\SQLProjects\RailRunServiceSQL` |
 
 Ако `"repo"` липсва — определи от описанието на таска:
 - UI компонент, страница, React тест → `frontend`
@@ -27,17 +27,17 @@
 
 - Ако `repo` = **frontend** →
   ```bash
-  cat C:/Projects/admin-app-frontend-structure.md
+  cat C:/Users/kaloyan.georgiev/Projects/admin-app-frontend-structure.md
   ```
 
 - Ако `repo` = **backend** →
   ```bash
-  cat C:/Projects/railrun-backend-structure.md
+  cat C:/Users/kaloyan.georgiev/Projects/railrun-backend-structure.md
   ```
 
 - Ако `repo` = **database** →
   ```bash
-  cat C:/Projects/railrun-database-guide.md
+  cat C:/Users/kaloyan.georgiev/Projects/railrun-database-guide.md
   ```
 
 ---
@@ -46,12 +46,12 @@
 
 Ако таскът има `"migrationRef"` поле — прочети го **в допълнение** към structure файла от Стъпка 2.
 
-`"migrationRef"` съдържа относителен път от `C:\Projects\wagon-migrations\`. Например:
-- `"migrationRef": "02_series_15-63.md"` → прочети `C:\Projects\wagon-migrations\02_series_15-63.md`
+`"migrationRef"` съдържа относителен път от `C:\Users\kaloyan.georgiev\Projects\wagon-migrations\`. Например:
+- `"migrationRef": "02_series_15-63.md"` → прочети `C:\Users\kaloyan.georgiev\Projects\wagon-migrations\02_series_15-63.md`
 
 **Винаги прочети и общата референция:**
 ```bash
-cat C:/Projects/wagon-migrations/_COMMON_REFERENCE.md
+cat C:/Users/kaloyan.georgiev/Projects/wagon-migrations/_COMMON_REFERENCE.md
 ```
 
 Тя съдържа OSDM кодове, icon mapping, JSON структура и fallback стратегия.
@@ -87,12 +87,12 @@ END
 
 При **frontend** таскове — ЗАДЪЛЖИТЕЛНО прочети и спазвай:
 ```bash
-cat C:/Projects/admin-app-frontend-structure.md
+cat C:/Users/kaloyan.georgiev/Projects/admin-app-frontend-structure.md
 ```
 
 При **backend** таскове — ЗАДЪЛЖИТЕЛНО прочети и спазвай:
 ```bash
-cat C:/Projects/railrun-backend-structure.md
+cat C:/Users/kaloyan.georgiev/Projects/railrun-backend-structure.md
 ```
 
 Тези файлове съдържат актуалната архитектура, конвенции за именуване, folder structure и patterns.

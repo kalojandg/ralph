@@ -1788,7 +1788,7 @@ TDD workflow гарантира:
 - Validated JSON structure using Node.js JSON.parse()
 
 **Files modified:**
-- C:\Projects\BDZ Project\OSDM-Src\SQLProjects\RailRunServiceSQL\dbo\PostDeployment\Data\004_Coach_Layouts.sql
+- C:\Users\kaloyan.georgiev\Projects\OSDM-Src\SQLProjects\RailRunServiceSQL\dbo\PostDeployment\Data\004_Coach_Layouts.sql
 
 **Git commit:**
 - feat(db): Update osdm_layout_json for series 15-63 with OSDM internals/signs
@@ -1934,8 +1934,8 @@ TDD workflow гарантира:
 - Step 51.8: Verified JSON validity using Node.js
 
 **Files modified:**
-- C:\Projects\BDZ Project\OSDM-Src\SQLProjects\RailRunServiceSQL\dbo\PostDeployment\Data\042_AddOsdmLayoutToSeries1563.sql (created)
-- C:\Projects\BDZ Project\OSDM-Src\SQLProjects\RailRunServiceSQL\dbo\PostDeployment\Seed.sql
+- C:\Users\kaloyan.georgiev\Projects\OSDM-Src\SQLProjects\RailRunServiceSQL\dbo\PostDeployment\Data\042_AddOsdmLayoutToSeries1563.sql (created)
+- C:\Users\kaloyan.georgiev\Projects\OSDM-Src\SQLProjects\RailRunServiceSQL\dbo\PostDeployment\Seed.sql
 
 **Git commit:**
 - `feat(db): Add post-deployment SQL script with OSDM internals/signs data for series 15-63 wagon layout`
@@ -1976,8 +1976,8 @@ TDD workflow гарантира:
 - Committed in submodule: feat(db): Add OSDM layout JSON for series 25-63
 
 **Files modified:**
-- C:\Projects\BDZ Project\OSDM-Src\SQLProjects\RailRunServiceSQL\dbo\PostDeployment\Data\043_UpdateOsdmLayout_25-63.sql (created)
-- C:\Projects\BDZ Project\OSDM-Src\SQLProjects\RailRunServiceSQL\dbo\PostDeployment\Seed.sql
+- C:\Users\kaloyan.georgiev\Projects\OSDM-Src\SQLProjects\RailRunServiceSQL\dbo\PostDeployment\Data\043_UpdateOsdmLayout_25-63.sql (created)
+- C:\Users\kaloyan.georgiev\Projects\OSDM-Src\SQLProjects\RailRunServiceSQL\dbo\PostDeployment\Seed.sql
 
 **Git commit:**
 - `feat(db): Add OSDM layout JSON for series 25-63`
@@ -2064,9 +2064,9 @@ TDD workflow гарантира:
   - All elements rendered from OSDM data, not hardcoded
 
 **Files modified:**
-- C:\Projects\BDZ Project\OSDM-Src\SQLProjects\RailRunServiceSQL\dbo\PostDeployment\Data\044_FixOsdmLayoutSeries1563.sql (created)
-- C:\Projects\BDZ Project\OSDM-Src\SQLProjects\RailRunServiceSQL\dbo\PostDeployment\Seed.sql
-- C:\Projects\BDZ Project\Admin-App\manual-steps-task58.md (created)
+- C:\Users\kaloyan.georgiev\Projects\OSDM-Src\SQLProjects\RailRunServiceSQL\dbo\PostDeployment\Data\044_FixOsdmLayoutSeries1563.sql (created)
+- C:\Users\kaloyan.georgiev\Projects\OSDM-Src\SQLProjects\RailRunServiceSQL\dbo\PostDeployment\Seed.sql
+- C:\Users\kaloyan.georgiev\Projects\Admin-App\manual-steps-task58.md (created)
 
 **Git commit:**
 - `fix(db): Correct OSDM layout JSON coords for series 15-63`

@@ -6,13 +6,13 @@
 
 1. **C:/Users/kaloyan.georgiev/Projects/ralph/activity.md** - История на свършената работа
 2. **C:/Users/kaloyan.georgiev/Projects/ralph/tasks.json** - Task list (твоя source of truth)
-3. **C:/Projects/BDZ Project/Admin-App/docs/composition/PRD.json** - Requirements и TDD methodology
-4. **C:/Projects/BDZ Project/Admin-App/docs/composition/designs/** - UI mockups за visual testing
+3. **C:/Users/kaloyan.georgiev/Projects/Admin-App/docs/composition/PRD.json** - Requirements и TDD methodology
+4. **C:/Users/kaloyan.georgiev/Projects/Admin-App/docs/composition/designs/** - UI mockups за visual testing
 
 **Working directories по repo:**
-- `frontend` → `C:\Projects\BDZ Project\Admin-App`
-- `backend` → `C:\Projects\BDZ Project\OSDM-Src\DotNetServices\RailRunService`
-- `database` → `C:\Projects\BDZ Project\OSDM-Src\SQLProjects\RailRunServiceSQL`
+- `frontend` → `C:\Users\kaloyan.georgiev\Projects\Admin-App`
+- `backend` → `C:\Users\kaloyan.georgiev\Projects\OSDM-Src\DotNetServices\RailRunService`
+- `database` → `C:\Users\kaloyan.georgiev\Projects\OSDM-Src\SQLProjects\RailRunServiceSQL`
 
 ## Your Mission This Iteration
 
@@ -237,16 +237,16 @@ If NO (all tasks done) — output:
 
 | Тип таск | Файл за четене | Какво съдържа |
 |----------|---------------|---------------|
-| **[BE] Backend** | `C:/Projects/railrun-backend-structure.md` | .NET 8 Clean Architecture, CQRS, **Aggregate Repositories + IUnitOfWork** (избягва multiple SaveChanges), nav-property за create-graph, DTOs location (**API request/response DTOs → `*.API/DTOs/`, НЕ в контролера**), Validation |
-| **[FE] Frontend** | `C:/Projects/admin-app-frontend-structure.md` | React 19 + TypeScript + Vite, folder structure, routing, API layer, React Query hooks, MUI components, i18n, testing patterns |
-| **[BE] Database** | `C:/Projects/railrun-database-guide.md` | SQL Server schema, WagonTypes/CoachLayouts/SeatDefinitions таблици, seed data, migrations, grid coordinate system |
+| **[BE] Backend** | `C:/Users/kaloyan.georgiev/Projects/railrun-backend-structure.md` | .NET 8 Clean Architecture, CQRS, **Aggregate Repositories + IUnitOfWork** (избягва multiple SaveChanges), nav-property за create-graph, DTOs location (**API request/response DTOs → `*.API/DTOs/`, НЕ в контролера**), Validation |
+| **[FE] Frontend** | `C:/Users/kaloyan.georgiev/Projects/admin-app-frontend-structure.md` | React 19 + TypeScript + Vite, folder structure, routing, API layer, React Query hooks, MUI components, i18n, testing patterns |
+| **[BE] Database** | `C:/Users/kaloyan.georgiev/Projects/railrun-database-guide.md` | SQL Server schema, WagonTypes/CoachLayouts/SeatDefinitions таблици, seed data, migrations, grid coordinate system |
 | **[E2E] End-to-end** | Прочети и трите файла | FE→BE→DB пълен workflow |
 
 **Ако таскът засяга API contract (endpoint URL, DTO shape) — прочети И frontend И backend файловете!**
 
 ### 🚨 [BE] Pre-flight checklist (чети преди ВСЕКИ backend таск)
 
-Преди да напишеш код в `RailRunService.API` / `.Application` / `.Infrastructure`, отвори `C:/Projects/railrun-backend-structure.md` секция **"Code Patterns"** и потвърди, че разбираш тези правила. Всички са извлечени от реални PR ревюта:
+Преди да напишеш код в `RailRunService.API` / `.Application` / `.Infrastructure`, отвори `C:/Users/kaloyan.georgiev/Projects/railrun-backend-structure.md` секция **"Code Patterns"** и потвърди, че разбираш тези правила. Всички са извлечени от реални PR ревюта:
 
 1. **DTO location** — API request/response records/classes се дефинират в `*.API/DTOs/{Feature}*.cs`, НИКОГА вътре в `*Controller.cs`. Application-layer DTOs (commands/queries) са в `*.Application/DTOs/`.
 2. **Един логически write → един `SaveChangesAsync`.** Ако handler-ът пише в 2+ таблици (delete aggregate, replace child collection, create parent+child), използвай **custom `IXxxRepository` + `IUnitOfWork`**, НЕ верига от `AddAsync`/`DeleteAsync` върху generic `IRepository<T,long>` (всеки генеричен call е отделна транзакция → partial failure).
@@ -274,28 +274,28 @@ If NO (all tasks done) — output:
 
 | Слой | Директория |
 |------|-----------|
-| **Frontend** | `C:\Projects\BDZ Project\Admin-App` |
-| **Backend** | `C:\Projects\BDZ Project\OSDM-Src\DotNetServices\RailRunService` |
-| **Database (SQL Project)** | `C:\Projects\BDZ Project\OSDM-Src\SQLProjects\RailRunServiceSQL` |
+| **Frontend** | `C:\Users\kaloyan.georgiev\Projects\Admin-App` |
+| **Backend** | `C:\Users\kaloyan.georgiev\Projects\OSDM-Src\DotNetServices\RailRunService` |
+| **Database (SQL Project)** | `C:\Users\kaloyan.georgiev\Projects\OSDM-Src\SQLProjects\RailRunServiceSQL` |
 
 ## Build & Verify Commands
 
 ```bash
 # === Frontend ===
-cd "C:\Projects\BDZ Project\Admin-App"
+cd "C:\Users\kaloyan.georgiev\Projects\Admin-App"
 npm run type-check          # TypeScript проверка
 npm run lint                # ESLint
 npm test                    # Vitest unit/component тестове
 npm run dev                 # Dev server на http://localhost:5173
 
 # === Backend ===
-cd "C:\Projects\BDZ Project\OSDM-Src\DotNetServices\RailRunService"
+cd "C:\Users\kaloyan.georgiev\Projects\OSDM-Src\DotNetServices\RailRunService"
 dotnet build                # Build
 dotnet test                 # Unit тестове
 dotnet run --project RailRunService.API  # Стартира API
 
 # === Database (SQL Project) ===
-cd "C:\Projects\BDZ Project\OSDM-Src\SQLProjects\RailRunServiceSQL"
+cd "C:\Users\kaloyan.georgiev\Projects\OSDM-Src\SQLProjects\RailRunServiceSQL"
 dotnet build -c Release --no-incremental
 SqlPackage /Action:Publish /SourceFile:bin/Release/RailRunServiceDb.dacpac /TargetConnectionString:"Server=localhost,14430;Database=RailRunServiceDB;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;Encrypt=True;Connect Timeout=60;Command Timeout=0"
 ```

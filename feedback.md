@@ -21,16 +21,16 @@
 
 Прочети **в този ред**:
 
-1. **`C:/Projects/wagon-renderer-unification-plan.md`** — архитектурният plan. Цялостен контекст за:
+1. **`C:/Users/kaloyan.georgiev/Projects/wagon-renderer-unification-plan.md`** — архитектурният plan. Цялостен контекст за:
    - Какво е текущото състояние (dual source of truth, дивергенция на визуализацията).
    - Каква е целевата архитектура (shared wagonGrid library + 2 orchestrator-а).
    - Кои задачи са в scope на Етап 6 vs в scope на Етап 7 (колегата).
 2. **`C:/Users/kaloyan.georgiev/Projects/ralph/user-steps.md`**, секция **🎨 Етап 6** — архитектурни правила,
    TDD рутина, файлова структура, critical rules.
-3. **`C:/Projects/BDZ Project/Admin-App/docs/composition/osdm-audit.md`** —
+3. **`C:/Users/kaloyan.georgiev/Projects/Admin-App/docs/composition/osdm-audit.md`** —
    **ще бъде създаден в Task 113**. След Task 113, всеки следващ таск го
    чете за да знае кои полета трябва да reshape-не към OSDM.
-4. **`C:/Projects/admin-app-frontend-structure.md`** — React/TS/MUI patterns.
+4. **`C:/Users/kaloyan.georgiev/Projects/admin-app-frontend-structure.md`** — React/TS/MUI patterns.
 
 ### 🎯 Архитектурни правила за Етап 6 (кратко)
 
@@ -125,7 +125,7 @@ synthetic OSDM elements. Markiran с `TEMP: remove after Etap 7 seed cleanup`.
 
 **Next Action:** Find task #113 (first with `"passes": false`) and begin Етап 6.
 
-Прочети `C:/Projects/wagon-renderer-unification-plan.md`, `user-steps.md §Етап 6`,
+Прочети `C:/Users/kaloyan.georgiev/Projects/wagon-renderer-unification-plan.md`, `user-steps.md §Етап 6`,
 и (за #114+) `osdm-audit.md` ПРЕДИ да започнеш. Следвай TDD: RED → GREEN → DONE.
 Commit с точния `description` от tasks.json. След това изведи XML status и **СПРИ**.
 
@@ -152,7 +152,7 @@ Commit с точния `description` от tasks.json. След това изве
    - §4 — FE архитектура (dialog, hooks, mock backend filter)
 2. **`C:/Users/kaloyan.georgiev/Projects/ralph/user-steps.md`** §"🔁 Етап 7" — critical rules,
    подетапи, файлова структура, отворени въпроси.
-3. **`C:/Projects/admin-app-frontend-structure.md`** — за FE задачите.
+3. **`C:/Users/kaloyan.georgiev/Projects/admin-app-frontend-structure.md`** — за FE задачите.
 4. **`C:/Users/kaloyan.georgiev/Projects/ralph/PROMPT.md`** §"Existing aggregate repos" — само ако
    #125 fall-ва в Branch C (build handler).
 

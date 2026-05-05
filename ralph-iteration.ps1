@@ -3,11 +3,11 @@ param(
     [string]$configFile = "ralph-config.json"
 )
 
-# Setup paths — ralph lives in C:\Users\kaloyan.georgiev\Projects\ralph\, project is C:\Projects\BDZ Project\
+# Setup paths — ralph lives in C:\Users\kaloyan.georgiev\Projects\ralph\, project is C:\Users\kaloyan.georgiev\Projects\
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $scriptDir
 
-$bdzProject = "C:\Projects\BDZ Project"
+$bdzProject = "C:\Users\kaloyan.georgiev\Projects"
 $tasksFile = Join-Path $scriptDir "tasks.json"
 
 # Load config

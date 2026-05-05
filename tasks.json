@@ -2302,7 +2302,7 @@
       {
         "id": "55.1",
         "phase": "RED",
-        "action": "Read C:/Projects/wagon-migrations/04_series_25-63.md and C:/Projects/wagon-migrations/_COMMON_REFERENCE.md for OSDM codes and JSON structure"
+        "action": "Read C:/Users/kaloyan.georgiev/Projects/wagon-migrations/04_series_25-63.md and C:/Users/kaloyan.georgiev/Projects/wagon-migrations/_COMMON_REFERENCE.md for OSDM codes and JSON structure"
       },
       {
         "id": "55.2",
@@ -4046,11 +4046,11 @@
     "repo": "frontend",
     "description": "[AUDIT] OSDM spec compliance — field-by-field review (no code)",
     "tddWorkflow": false,
-    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §0 (ограничения), §5 Етап 0 (OSDM audit)",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/wagon-renderer-unification-plan.md §0 (ограничения), §5 Етап 0 (OSDM audit)",
     "steps": [
       {
         "id": "113.1",
-        "action": "Прочети C:/Projects/wagon-renderer-unification-plan.md изцяло. Задачата е audit (read-only), без писане на код. Целта — да идентифицираме кои полета в текущия код не се мапват чисто към OSDM IRS 90918-10 и кои extensions са направени 'на око'."
+        "action": "Прочети C:/Users/kaloyan.georgiev/Projects/wagon-renderer-unification-plan.md изцяло. Задачата е audit (read-only), без писане на код. Целта — да идентифицираме кои полета в текущия код не се мапват чисто към OSDM IRS 90918-10 и кои extensions са направени 'на око'."
       },
       {
         "id": "113.2",
@@ -4066,7 +4066,7 @@
       },
       {
         "id": "113.5",
-        "action": "Създай C:/Projects/BDZ Project/Admin-App/docs/composition/osdm-audit.md с резултатите от одита. Формат: 4 секции (field-by-field audit, dual source of truth, legacy renderer inventory, OsdmGrid capability gaps). За всяко намерено несъответствие с OSDM spec — препоръка: 'reshape to OSDM field X' или 'flag as non-OSDM, needs design decision'."
+        "action": "Създай C:/Users/kaloyan.georgiev/Projects/Admin-App/docs/composition/osdm-audit.md с резултатите от одита. Формат: 4 секции (field-by-field audit, dual source of truth, legacy renderer inventory, OsdmGrid capability gaps). За всяко намерено несъответствие с OSDM spec — препоръка: 'reshape to OSDM field X' или 'flag as non-OSDM, needs design decision'."
       },
       {
         "id": "113.6",
@@ -4081,7 +4081,7 @@
     "repo": "frontend",
     "description": "[FE] Shared wagonGrid — types + constants foundation",
     "tddWorkflow": true,
-    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §4.5 (extraction scope) — подпапки types/ и constants/",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/wagon-renderer-unification-plan.md §4.5 (extraction scope) — подпапки types/ и constants/",
     "steps": [
       {
         "id": "114.1",
@@ -4091,7 +4091,7 @@
       {
         "id": "114.2",
         "phase": "RED",
-        "action": "Създай src/app/shared/wagonGrid/constants/__tests__/constants.test.ts. Тест: export-ва WAGON_COLORS (seat available/booked/blocked/locked/selected + first-class gold + wheelchair blue + companion orange + table brown), CELL_TOKENS (cellSize=22, seatSpan=2, berthSpan={w:3,h:2}, wallThickness=3, stripThickness={window:5, door:9}), Z_INDEX ({base:0, walls:1, elements:2, windows:3, doors:4, dragOverlay:5}). Стойностите MUST матчват C:/Projects/wagon-renderer-unification-plan.md §0 spec."
+        "action": "Създай src/app/shared/wagonGrid/constants/__tests__/constants.test.ts. Тест: export-ва WAGON_COLORS (seat available/booked/blocked/locked/selected + first-class gold + wheelchair blue + companion orange + table brown), CELL_TOKENS (cellSize=22, seatSpan=2, berthSpan={w:3,h:2}, wallThickness=3, stripThickness={window:5, door:9}), Z_INDEX ({base:0, walls:1, elements:2, windows:3, doors:4, dragOverlay:5}). Стойностите MUST матчват C:/Users/kaloyan.georgiev/Projects/wagon-renderer-unification-plan.md §0 spec."
       },
       {
         "id": "114.3",
@@ -4122,7 +4122,7 @@
     "repo": "frontend",
     "description": "[FE] Shared wagonGrid — parse layer + legacy backward-compat adapter",
     "tddWorkflow": true,
-    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §4.5 (parse/), §5 Етап 3 (OpenSaloonLayout input contract)",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/wagon-renderer-unification-plan.md §4.5 (parse/), §5 Етап 3 (OpenSaloonLayout input contract)",
     "steps": [
       {
         "id": "115.1",
@@ -4168,7 +4168,7 @@
     "repo": "frontend",
     "description": "[FE] Shared wagonGrid — move wall classify/cells/shapes from wagons/ to shared",
     "tddWorkflow": true,
-    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §4.5 (classify/)",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/wagon-renderer-unification-plan.md §4.5 (classify/)",
     "steps": [
       {
         "id": "116.1",
@@ -4204,7 +4204,7 @@
     "repo": "frontend",
     "description": "[FE] Shared wagonGrid — SeatRenderer + BerthRenderer + FoldingSeatRenderer",
     "tddWorkflow": true,
-    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §4.5 (osdmRenderers/)",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/wagon-renderer-unification-plan.md §4.5 (osdmRenderers/)",
     "steps": [
       {
         "id": "117.1",
@@ -4250,7 +4250,7 @@
     "repo": "frontend",
     "description": "[FE] Shared wagonGrid — WallRenderer (all 10 icon variants)",
     "tddWorkflow": true,
-    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §4.5 (osdmRenderers/), §2.3 (walls 10-icon parity)",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/wagon-renderer-unification-plan.md §4.5 (osdmRenderers/), §2.3 (walls 10-icon parity)",
     "steps": [
       {
         "id": "118.1",
@@ -4286,7 +4286,7 @@
     "repo": "frontend",
     "description": "[FE] Shared wagonGrid — WindowRenderer + DoorRenderer",
     "tddWorkflow": true,
-    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §4.5, §2.3 (windows 3-icon, doors 4-icon parity)",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/wagon-renderer-unification-plan.md §4.5, §2.3 (windows 3-icon, doors 4-icon parity)",
     "steps": [
       {
         "id": "119.1",
@@ -4322,7 +4322,7 @@
     "repo": "frontend",
     "description": "[FE] Shared wagonGrid — Zone/Table/Stairs/Amenity/Placeholder renderers",
     "tddWorkflow": true,
-    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §4.5",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/wagon-renderer-unification-plan.md §4.5",
     "steps": [
       {
         "id": "120.1",
@@ -4353,7 +4353,7 @@
     "repo": "frontend",
     "description": "[FE] Shared wagonGrid — gridFrame (GridContainer + GridCell + GridLayer + DragHighlightOverlay)",
     "tddWorkflow": true,
-    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §4.5 (gridFrame/)",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/wagon-renderer-unification-plan.md §4.5 (gridFrame/)",
     "steps": [
       {
         "id": "121.1",
@@ -4389,7 +4389,7 @@
     "repo": "frontend",
     "description": "[FE] OsdmGrid migrates to shared renderers — target ≤500 lines",
     "tddWorkflow": true,
-    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §5 Етап 2, §8 (размерни цели)",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/wagon-renderer-unification-plan.md §5 Етап 2, §8 (размерни цели)",
     "steps": [
       {
         "id": "122.1",
@@ -4425,7 +4425,7 @@
     "repo": "frontend",
     "description": "[FE] OpenSaloonLayout migrates to shared renderers + full OSDM parity with OsdmGrid",
     "tddWorkflow": true,
-    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §5 Етап 3, §0 constraint 4 (паритет задължителен), §0 constraint 8 (без production impact)",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/wagon-renderer-unification-plan.md §5 Етап 3, §0 constraint 4 (паритет задължителен), §0 constraint 8 (без production impact)",
     "steps": [
       {
         "id": "123.1",
@@ -4476,7 +4476,7 @@
     "repo": "frontend",
     "description": "[E2E] Renderer unification — round-trip regression coverage (create → view → edit → view)",
     "tddWorkflow": true,
-    "specRef": "C:/Projects/wagon-renderer-unification-plan.md §0 constraint 4 (не чупи create/edit/composition/view)",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/wagon-renderer-unification-plan.md §0 constraint 4 (не чупи create/edit/composition/view)",
     "steps": [
       {
         "id": "124.1",
