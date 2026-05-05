@@ -1,3 +1,46 @@
+## [2026-05-05 PLANNING] - Tasks #125, #130–#139: Clone composition feature (NOT YET IMPLEMENTED)
+
+**Status:** 📋 Planned — 11 tasks total, all `passes: false`. Will be picked up one-per-iteration.
+
+**Source request:** User asked for the cloning workflow that connects [BDZR-89](https://ballisticcell-team.atlassian.net/browse/BDZR-89) (clone) and [BDZR-961](https://ballisticcell-team.atlassian.net/browse/BDZR-961) (availability). Key business rule:
+
+> **Blocked seats DO carry over** when cloning a composition (a broken seat is broken regardless of route). **Sold/reserved seats DO NOT** carry over (a ticket sold for Sofia→Burgas is meaningless when the wagon goes into a Burgas→Ruse composition).
+
+**Task breakdown:**
+
+| # | Layer | Description |
+|---|-------|-------------|
+| **125** | **BE** | **Verify existing /clone endpoint(s); gap-fill ONLY if missing — no DB changes** |
+| 130 | FE | API layer — `compositionsApi.clone/cloneForPeriod/getClonePreview` + types |
+| 131 | FE | LocalStorage mock — implement clone with blocked-vs-sold filter (critical regression test) |
+| 132 | FE | React Query hooks — `useCloneComposition`, `useCloneCompositionForPeriod`, `useClonePreview` |
+| 133 | FE | `CloneCompositionDialog` (4-step Stepper UI) |
+| 134 | FE | Wire 'Клониране' icon/button into List + Details pages |
+| 135 | FE | i18n keys (bg + en) |
+| 136 | FE | Conflict preview UI (Step 3 sub-component) |
+| 137 | FE | Integration test — full mock-backed flow + business-rule assertion |
+| 138 | E2E | Playwright single clone |
+| 139 | E2E | Playwright period clone + conflict + overwrite |
+
+> Task IDs 126-129 са изтрити (бяха излишни — schema audit + 4 BE handler tasks). Цялата BE работа сега е консолидирана в #125.
+
+**Files added in this planning round:**
+- `C:/Projects/ralph/composition-clone-spec.md` (NEW) — spec focused on consumer model: API contracts, FE dialog, mock backend filter rules, test strategy
+- `C:/Projects/ralph/tasks.json` — appended 11 task entries
+
+**BE scope (Task #125):** Single concentrated task with branching:
+- **Branch A** (endpoint exists + works correctly): nothing to do beyond documenting the contract for FE
+- **Branch B** (endpoint exists but filter is wrong): patch the `Include` clauses in handler — remove Include of `Bookings`/`SeatAvailability`/`SeatReservations`
+- **Branch C** (endpoint missing): build minimal `CloneCompositionCommand` + handler + endpoint over EXISTING entities. No new entities, no schema changes, no migrations.
+
+**Period clone strategy:** FE loop over `/clone` for each expanded date is the default. Server-side `/clone-for-period` is only built if it already exists (document only) or if FE loop is too slow (>5s for 60 days).
+
+**Hard guarantee:** No SQL project edits. No EF migrations. No new Domain entities. The clone feature is a pure consumer of existing schema.
+
+**Acceptance contract per spec §6:** blocked seats copied 1:1, sold/reserved seats fully dropped, source not mutated, exactly one `SaveChangesAsync` per target date, conflict + overwrite flow correct, no DB schema changes.
+
+---
+
 ## [2026-04-21 23:00] - Task #112: [FE] Regression coverage — wagon metadata update + per-seat travelClass serialization
 
 **Status:** ✅ Complete

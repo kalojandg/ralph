@@ -4500,5 +4500,351 @@
       }
     ],
     "passes": false
+  },
+  {
+    "id": 125,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[BE] Verify existing /clone endpoint(s); gap-fill само ако нещо липсва — НЕ пипай DB",
+    "tddWorkflow": true,
+    "specRef": "C:/Projects/ralph/composition-clone-spec.md §2 (API контракти), §3 (BE поведение)",
+    "notes": "ЕДИНСТВЕНА backend задача за clone feature-а. По спецификация (BDZR-89 / нотбук) endpoint-ите `POST /api/compositions/{id}/clone` и `POST /api/compositions/{id}/clone-for-period` СА част от архитектурата. Тази задача: (1) проверява дали реално съществуват в кода; (2) ако ДА — документира контракта и assert-ва бизнес правилото 'blocked carry, sold не'; (3) ако НЕ — gap-fill минимална имплементация. **БЕЗ schema промени, БЕЗ migrations, БЕЗ да се пипа SQL проекта.** Всички writes минават през EF + съществуващите Domain entities. РАБОТНА ДИРЕКТОРИЯ: само backend (`C:\\Projects\\BDZ Project\\OSDM-Src\\DotNetServices\\RailRunService`).",
+    "steps": [
+      {
+        "id": "125.1",
+        "phase": "AUDIT",
+        "action": "Working dir: backend. Grep за съществуващи endpoint-и: `Grep \"clone\" в Controllers/` и `Grep \"Clone\" в Application/Features/Compositions/`. Документирай в activity.md за Task 125: (a) дали `POST /api/compositions/{id}/clone` съществува; (b) дали `clone-for-period` съществува; (c) ако да — пълния DTO contract (request body shape + response shape) от съществуващите Request/Response records. Това е input за FE Task 130 (FE-то трябва да targets-ва точно този contract)."
+      },
+      {
+        "id": "125.2",
+        "phase": "RED",
+        "action": "Working dir: backend. Напиши integration test `CloneEndpoint_CarriesBlockedSeats_DropsBookings`: (a) през TestServer fixture seed-ни composition с 1 carriage, 2 BlockedSeats и 3 Bookings (използвай existing seed/factory методи); (b) POST /api/compositions/{id}/clone към нов train+date; (c) GET /api/compositions/{newId}; (d) assert новата carriage има 2 BlockedSeats със същия SeatNumber+Reason но нови PK, и **0 Bookings**. Това е **acceptance test** за бизнес правилото — независимо дали endpoint-ът вече съществува или ще се build-не в тази задача."
+      },
+      {
+        "id": "125.3",
+        "phase": "GREEN",
+        "action": "Branch A — endpoint вече съществува и тестът от 125.2 ПАСВА: skip към 125.5 (passes:true, без code changes). Branch B — endpoint съществува НО тестът фейлва (грешен филтър): отвори handler-а в `Application/Features/Compositions/Commands/CloneComposition*.cs` и поправи `Include` clauses — увери се че EF query НЕ Include-ва `Bookings`/`SeatAvailability`/`SeatReservations` навигациите. Поправи docs ако трябва. Branch C — endpoint липсва изцяло: build-ни минимална имплементация (виж 125.4)."
+      },
+      {
+        "id": "125.4",
+        "phase": "GREEN",
+        "action": "Само за Branch C (endpoint липсва). Имплементирай минимум: (a) `CloneCompositionCommand(long SourceId, string TargetTrainNumber, DateOnly TargetDate, bool Overwrite)` + Handler в `Application/Features/Compositions/Commands/CloneComposition.cs`. (b) `CompositionRepository.CloneAsync`: `_context.Compositions.Include(c => c.Carriages).ThenInclude(ca => ca.BlockedSeats).Include(c => c.Carriages).ThenInclude(ca => ca.RouteSegments).AsNoTracking().First(...)` → manual deep-clone (нови PK, set nav properties parent←child) → `AddAsync` → handler вика `IUnitOfWork.SaveChangesAsync` ВЕДНЪЖ. **НЕ** Include-вай Bookings/SeatAvailability — те остават trip-scoped. (c) Endpoint `[HttpPost(\"{id:long}/clone\")]` в CompositionsController. (d) DTOs в `RailRunService.API/DTOs/Compositions/`. (e) Conflict detection: ако target slot е зает → 409 с existingCompositionId; FE-то показва confirm dialog; повторното извикване с overwrite=true изтрива старата (reuse `DeleteAsync` от existing repo)."
+      },
+      {
+        "id": "125.5",
+        "phase": "GREEN",
+        "action": "Period clone (`POST /api/compositions/{id}/clone-for-period`) — ако НЕ съществува, **по подразбиране НЕ build-вай**. FE Task 131 ще loop-ва над `/clone` за всеки date в периода (по-просто, по-малко BE code, същият UX). Build-вай /clone-for-period САМО ако: (a) audit от 125.1 показа че вече съществува (тогава нищо не пишеш — само документирай contract-а), ИЛИ (b) FE задачата #131 reveal-не че loop-ът е твърде бавен (>5s за 60 дни). Документирай в activity.md решението."
+      },
+      {
+        "id": "125.6",
+        "phase": "DONE",
+        "action": "Working dir: backend. `dotnet build` + `dotnet test --filter CloneEndpoint` зелени. Документирай в `C:\\Projects\\ralph\\activity.md` за Task 125: (a) кой branch (A/B/C) се случи; (b) финалния API contract (използвай се от FE Task 130); (c) дали /clone-for-period съществува или FE ще loop-ва. **Гаранция:** няма промени в SQL проекта; няма EF migration файлове; всички writes минават през existing entities."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 130,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] API layer — compositionsApi.clone(), cloneForPeriod(), getClonePreview() + types",
+    "tddWorkflow": true,
+    "specRef": "C:/Projects/ralph/composition-clone-spec.md §4.1",
+    "steps": [
+      {
+        "id": "130.1",
+        "phase": "RED",
+        "action": "Напиши `compositions.api.clone.test.ts`. Mock apiClient.post/get. Test 1: `clone(sourceId, dto)` извиква POST /api/compositions/{sourceId}/clone с правилен body shape; връща CloneResponse. Test 2: `cloneForPeriod()` POST към /clone-for-period. Test 3: `getClonePreview()` GET с query string; daysOfWeek се сериализира като CSV. Test 4: 409 response се прехвърля през axios interceptor като typed error. ФЕЙЛВАТ."
+      },
+      {
+        "id": "130.2",
+        "phase": "GREEN",
+        "action": "Добави в `src/api/compositions/compositions.api.ts`: `clone`, `cloneForPeriod`, `getClonePreview`. Добави в `compositions.types.ts`: `CloneCompositionDto`, `CloneCompositionPeriodDto`, `CloneResponse`, `ClonePeriodResponse`, `ClonePreviewItem`, `SkippedCloneItem`, `DayOfWeek` union type ('MON'|'TUE'|'WED'|'THU'|'FRI'|'SAT'|'SUN')."
+      },
+      {
+        "id": "130.3",
+        "phase": "DONE",
+        "action": "npm test compositions.api.clone — зелено. npm run type-check чисто."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 131,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] LocalStorage mock — implement cloneComposition (carry blockedSeats, drop sold/reserved/availability)",
+    "tddWorkflow": true,
+    "specRef": "C:/Projects/ralph/composition-clone-spec.md §4.2",
+    "notes": "КРИТИЧЕН TASK. Тук се defen-ва бизнес правилото на ниво mock backend — а dev/UI разчитат на mock-а. Без този task, FE testing-ът на UI по-долу няма realistic data.",
+    "steps": [
+      {
+        "id": "131.1",
+        "phase": "RED",
+        "action": "В `src/services/mockBackend/seedData.ts` добави seed entry: composition #1 (Sofia-Burgas, 2026-06-01) с 2 carriages — carriage A има 2 blockedSeats (BrokenSeat#5, ServiceSeat#10), 3 bookings (sold seats #1,#2,#3), 1 reservation (locked seat #15); carriage B празно. Това е сценарият от user request: ако клонирам в Burgas-Ruse, sold seats не трябва да дойдат."
+      },
+      {
+        "id": "131.2",
+        "phase": "RED",
+        "action": "Напиши `mockStorage.clone.test.ts`. Test 1: `cloneComposition_CopiesBlockedSeats` — clone composition #1 към (8632, 2026-07-01); assert новата composition: carriage A има 2 blockedSeats със същите Reason+SeatNumber, **0 bookings, 0 reservations**. Test 2: `cloneComposition_AssignsNewIdsAndSlot` — assert id !== source.id, trainNumber + date правилни, status='Draft'. Test 3: `cloneComposition_PersistsToLocalStorage` — след clone, getAll() връща +1 composition. Test 4: `cloneComposition_DoesNotMutateSource` — clone, assert source carriage A все още има 3 bookings. ФЕЙЛВАТ."
+      },
+      {
+        "id": "131.3",
+        "phase": "RED",
+        "action": "Test 5: `cloneCompositionForPeriod_ExpandsDates` — start 2026-07-01 (Wed), end 2026-07-08 (Wed), days=[MON,WED] → 3 нови composition записи (07-01, 07-06, 07-08). Test 6: `cloneCompositionForPeriod_ConflictDetectionWithoutOverwrite` — ако вече съществува target slot → пропуска го, връща в skipped. Test 7: `cloneCompositionForPeriod_OverwriteTrue` — изтрива старата + създава нова. ФЕЙЛВАТ."
+      },
+      {
+        "id": "131.4",
+        "phase": "GREEN",
+        "action": "В `src/services/mockBackend/mockStorage.ts` имплементирай `cloneComposition(sourceId, dto): CloneResponse`. Стъпки: (a) намери source; ако липсва → throw NotFoundError; (b) `JSON.parse(JSON.stringify(source))` за дълбоко копие; (c) **filter**: изтрий полетата `bookings`, `reservations`, `seatAvailability`, `auditLog` от composition И от всяка carriage; (d) запази `blockedSeats`, `serviceSeats`, `routeSegments`; (e) подмени id (nanoid), trainNumber, date, status='Draft'; (f) ако overwrite + conflict → изтрий conflicting от store; ако !overwrite + conflict → throw ConflictError; (g) push в localStorage; (h) върни CloneResponse."
+      },
+      {
+        "id": "131.5",
+        "phase": "GREEN",
+        "action": "Имплементирай `cloneCompositionForPeriod(sourceId, dto): ClonePeriodResponse`. Reuse helper `expandDateRange(start, end, daysOfWeek)` (нов файл `src/utils/dateRange.ts` — ще се reuse-ва и в UI). Loop-ва, catch-ва ConflictError → push в skipped, continue. Връща aggregate result."
+      },
+      {
+        "id": "131.6",
+        "phase": "GREEN",
+        "action": "Имплементирай `getClonePreview(sourceId, params)` — read-only, не мутира state."
+      },
+      {
+        "id": "131.7",
+        "phase": "DONE",
+        "action": "npm test mockStorage.clone — всички 7 зелени. npm run type-check чисто. Manual sanity: clear localStorage; reload app; в console: `await mockStorageService.cloneComposition(1, { targetTrainNumber: '8632', targetDate: '2026-07-01', overwrite: false })` → response има 0 bookings."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 132,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] React Query hooks — useCloneComposition, useCloneCompositionForPeriod, useClonePreview",
+    "tddWorkflow": true,
+    "specRef": "C:/Projects/ralph/composition-clone-spec.md §4.3",
+    "steps": [
+      {
+        "id": "132.1",
+        "phase": "RED",
+        "action": "Напиши `useCloneComposition.test.tsx`. Test 1: success path — mock API resolves; assert mutation.isSuccess; assert queryClient.invalidateQueries called с ['compositions']. Test 2: 409 conflict error — mutation.error има typed `code: 'TARGET_OCCUPIED'` и `existingCompositionId`. Test 3: useCloneCompositionForPeriod — invalidates ['compositions'] след success. Test 4: useClonePreview — query се disable-ва ако params не са валидни (enabled: false). ФЕЙЛВАТ."
+      },
+      {
+        "id": "132.2",
+        "phase": "GREEN",
+        "action": "Създай в `src/app/features/compositions/hooks/`: `useCloneComposition.ts`, `useCloneCompositionForPeriod.ts`, `useClonePreview.ts`. Reuse query key factory от `compositions.queryKeys.ts`."
+      },
+      {
+        "id": "132.3",
+        "phase": "DONE",
+        "action": "npm test useCloneComposition — всички зелени. type-check чисто."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 133,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] CloneCompositionDialog — Stepper UI (4 steps: type, params, conflict preview, confirm)",
+    "tddWorkflow": true,
+    "designReference": "docs/composition/designs/clone-dialog.png",
+    "specRef": "C:/Projects/ralph/composition-clone-spec.md §4.4",
+    "notes": "Дизайн file `clone-dialog.png` още не съществува — designer-ът трябва да го направи. До тогава: VISUAL phase прави screenshot и reviewer го сравнява със спецификацията §4.4 (Step 1-4 текстов wireframe).",
+    "steps": [
+      {
+        "id": "133.1",
+        "phase": "RED",
+        "action": "Напиши `CloneCompositionDialog.test.tsx`. Test 1: render dialog с sourceId=1; assert MUI Stepper присъства с 4 стъпки. Test 2: Step 1 — radio 'За един ден' / 'За период'; selected='период' → Step 2 показва date range picker; selected='един ден' → Step 2 показва single date picker. Test 3: Step 2 (period) — ToggleButtonGroup за 7-те дни от седмицата; default всички избрани; може да се разкарват. Test 4: Step 2 валидация — Next disabled ако TargetTrainNumber празен или дати невалидни. Test 5: Step 3 — извиква useClonePreview; ако има conflicts — рендира список + checkbox 'Презапиши'. Test 6: Step 4 — показва summary + warning text за blocked vs sold; бутон 'Клонирай' извиква useCloneComposition. Test 7: success → snackbar + close. Test 8: 409 conflict → grid step 3 reopens. ФЕЙЛВАТ."
+      },
+      {
+        "id": "133.2",
+        "phase": "GREEN",
+        "action": "Създай `src/app/features/compositions/components/CloneCompositionDialog.tsx`. MUI: Dialog, Stepper, RadioGroup, DatePicker (от @mui/x-date-pickers), ToggleButtonGroup, Checkbox, Alert (за warning). State: useState за active step + form state. На step 4 — Alert severity='warning' с текст: t('compositions.clone.blockedSeatsCarriedOver') + t('compositions.clone.soldSeatsNotCarriedOver')."
+      },
+      {
+        "id": "133.3",
+        "phase": "GREEN",
+        "action": "Wire useCloneComposition / useCloneCompositionForPeriod според Step 1 selection."
+      },
+      {
+        "id": "133.4",
+        "phase": "VISUAL",
+        "action": "npm run dev. Open /compositions; trigger CloneCompositionDialog (от row action — добави в Task 134). Step through всички 4 стъпки. Screenshot всяка стъпка с cursor-ide-browser MCP. Проверка: layout MUI стандартен, warning alert е видим и четим, ToggleButtonGroup за дните е разпознаваем (active state ясно различим от inactive)."
+      },
+      {
+        "id": "133.5",
+        "phase": "DONE",
+        "action": "npm test CloneCompositionDialog — всички 8 зелени. type-check + lint чисто. Visual screenshot записан в `docs/composition/designs/clone-dialog-current.png` за бъдеща сравнение."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 134,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Wire 'Клониране' action в CompositionsListPage и CompositionDetailsPage",
+    "tddWorkflow": true,
+    "specRef": "C:/Projects/ralph/composition-clone-spec.md §4.5",
+    "steps": [
+      {
+        "id": "134.1",
+        "phase": "RED",
+        "action": "Тест за CompositionsListPage: всеки row има IconButton с aria-label 'Клониране' (icon ContentCopy от @mui/icons-material). Click → отваря CloneCompositionDialog със sourceId=row.id. Тест за CompositionDetailsPage: header има button 'Клониране' с същата функционалност. ФЕЙЛВА."
+      },
+      {
+        "id": "134.2",
+        "phase": "GREEN",
+        "action": "Добави IconButton в CompositionList.tsx (row actions колона). Добави Button в CompositionDetailsPage header. И двете отварят shared CloneCompositionDialog (state в parent)."
+      },
+      {
+        "id": "134.3",
+        "phase": "VISUAL",
+        "action": "Screenshot на /compositions list — провери, че clone icon е видим и не нарушава row layout. Screenshot на /compositions/:id — clone button в header е консистентен с другите header actions."
+      },
+      {
+        "id": "134.4",
+        "phase": "DONE",
+        "action": "npm test — зелени. lint + type-check чисто."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 135,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] i18n keys за clone — bg.json + en.json",
+    "tddWorkflow": false,
+    "specRef": "C:/Projects/ralph/composition-clone-spec.md §4.6",
+    "steps": [
+      {
+        "id": "135.1",
+        "action": "В `src/locales/bg.json` добави под `compositions.clone`: title='Клониране на композиция', singleDay='За един ден', period='За период', targetTrain='Целеви влак', targetDate='Целева дата', startDate='Начална дата', endDate='Крайна дата', daysOfWeek='Дни от седмицата', overwriteWarning='Съществуват активни композиции в този период. Презаписването ще ги изтрие.', blockedSeatsCarriedOver='Блокираните места ще бъдат пренесени (счупени седалки, технически проблеми, служебни места).', soldSeatsNotCarriedOver='Продадените билети и резервациите НЯМА да бъдат пренесени (свързани са с конкретен маршрут и дата).', confirmExecute='Клонирай', success='Композицията е клонирана успешно.', successPeriod='Създадени {{count}} композиции, пропуснати {{skipped}}.', conflictTitle='Конфликт с активни композиции', conflictWarning='За избрания период има {{count}} активни композиции. Маркирайте „Презапиши“ за да продължите.', errorSourceEmpty='Изходната композиция няма вагони.', errorRangeTooLarge='Периодът не може да бъде повече от 365 дни.'"
+      },
+      {
+        "id": "135.2",
+        "action": "В `src/locales/en.json` добави огледално (English equivalent). Spec §4.6 има пълния списък ключове."
+      },
+      {
+        "id": "135.3",
+        "action": "npm test i18n.coverage (ако съществува) — 0 missing keys. Иначе manual: grep `t\\('compositions.clone\\.` в кода → всеки key съществува в двата файла."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 136,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Conflict preview UI — list of existing compositions + overwrite checkbox в Step 3",
+    "tddWorkflow": true,
+    "specRef": "C:/Projects/ralph/composition-clone-spec.md §4.4 Step 3",
+    "notes": "Това е под-таск на 133. Изваден отделно защото логиката за preview е достатъчно сложна и заслужава отделна regression coverage.",
+    "steps": [
+      {
+        "id": "136.1",
+        "phase": "RED",
+        "action": "Напиши `CloneCompositionDialog.conflictPreview.test.tsx`. Test 1: ако useClonePreview връща [] → Step 3 показва само 'Няма конфликти' и Next е enabled без overwrite checkbox. Test 2: useClonePreview връща 3 items → рендира MUI List с 3 items (date + train + composition id); overwrite checkbox visible. Test 3: overwrite unchecked → Next disabled. Test 4: overwrite checked → Next enabled и form state има overwrite=true. Test 5: useClonePreview е loading → показва Skeleton/CircularProgress. Test 6: useClonePreview error → Alert error 'Не може да се провери конфликт'. ФЕЙЛВАТ."
+      },
+      {
+        "id": "136.2",
+        "phase": "GREEN",
+        "action": "В CloneCompositionDialog Step 3 контейнера: extract в sub-component `<ConflictPreviewStep />`. Render conditionals според preview.data."
+      },
+      {
+        "id": "136.3",
+        "phase": "DONE",
+        "action": "npm test CloneCompositionDialog.conflictPreview — всички 6 зелени."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 137,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Integration test — full clone flow (FE → mockStorage → state assertion)",
+    "tddWorkflow": true,
+    "specRef": "C:/Projects/ralph/composition-clone-spec.md §5.2",
+    "notes": "Този тест е сърцето на FE верификацията. Симулира пълния user flow и assert-ва бизнес правилото.",
+    "steps": [
+      {
+        "id": "137.1",
+        "phase": "RED",
+        "action": "Създай `__tests__/cloneComposition.integration.test.tsx`. Setup: render <CompositionsListPage> с QueryClientProvider; seed mockStorage с composition #1 (mixed state — 2 blocked, 3 sold, 1 reserved). Steps: (a) click 'Клониране' icon на row #1; (b) Step 1: select 'За един ден'; Next; (c) Step 2: enter trainNumber='8632', date='2026-07-01'; Next; (d) Step 3: assert 'Няма конфликти'; Next; (e) Step 4: assert warning 'Блокираните пренасят, продадените не'; click 'Клонирай'; (f) wait for success snackbar. Assertions: mockStorage.compositions.length === 2; new composition (sourceId+1): 1 carriage, 2 blocked seats, 0 bookings, 0 reservations; trainNumber='8632', date='2026-07-01', status='Draft'."
+      },
+      {
+        "id": "137.2",
+        "phase": "RED",
+        "action": "Втори integration test за period clone: select 'За период'; start 2026-07-01, end 2026-07-15; days=[MON,WED,FRI] → assert 7 нови composition записа са създадени, всеки с 2 blocked + 0 sold."
+      },
+      {
+        "id": "137.3",
+        "phase": "GREEN",
+        "action": "Ако нещо фейлва — root cause обикновено е: (a) mock filter правило не отстранява всичките bookings полета; (b) Stepper state mgmt губи form data между стъпки; (c) invalidateQueries не работи и UI показва stale data. Поправи."
+      },
+      {
+        "id": "137.4",
+        "phase": "DONE",
+        "action": "npm test cloneComposition.integration — зелени. type-check + lint чисто."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 138,
+    "category": "e2e",
+    "repo": "frontend",
+    "description": "[E2E] Single clone — Playwright full FE→BE→DB workflow",
+    "tddWorkflow": true,
+    "specRef": "C:/Projects/ralph/composition-clone-spec.md §5.3",
+    "notes": "ИЗИСКВА реален BE (Tasks 125-129) да са завършени. Ако още не са — task е BLOCKED. **РАБОТНА ДИРЕКТОРИЯ: САМО frontend** (`C:\\Projects\\BDZ Project\\Admin-App`). Тестовете правят HTTP заявки към работещ BE и SQL setup чрез `node scripts/seed.js` или подобно — НЕ редактират .cs файлове в backend репото и НЕ пипат SQL проекта. Ако тестът фейлва заради BE bug → отвори issue, не редактирай BE код в този task.",
+    "steps": [
+      {
+        "id": "138.1",
+        "phase": "RED",
+        "action": "Създай `tests/compositions/clone-single.spec.ts`. Setup: API call към BE — създай test composition със 2 carriages, 2 blockedSeats, 3 bookings (use POST /api/compositions + dependent endpoints, или direct SQL seed). Steps: navigate /compositions → find row → click Клониране → fill 'За един ден' + train '8632' + date '2026-07-01' → Confirm. Assertions: navigate /compositions/{newId} → 2 carriages visible, 2 blocked seats highlighted (gray), 0 sold seats (no red). Verify: GET /api/compositions/{newId} → carriages.length=2, blockedSeats=2, bookings=0."
+      },
+      {
+        "id": "138.2",
+        "phase": "GREEN",
+        "action": "Ако E2E фейлва: проверете BE response shape vs FE expectations; провери conflict detection; провери overwrite=false default behavior."
+      },
+      {
+        "id": "138.3",
+        "phase": "DONE",
+        "action": "npx playwright test tests/compositions/clone-single.spec.ts — passes. Cleanup: API DELETE на test compositions."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 139,
+    "category": "e2e",
+    "repo": "frontend",
+    "description": "[E2E] Period clone — days-of-week filter + conflict + overwrite flow",
+    "tddWorkflow": true,
+    "specRef": "C:/Projects/ralph/composition-clone-spec.md §5.3",
+    "notes": "ИЗИСКВА реален BE (Tasks 125-129) да са завършени. **РАБОТНА ДИРЕКТОРИЯ: САМО frontend** (`C:\\Projects\\BDZ Project\\Admin-App`). Същото правило като Task 138: само Playwright spec файлове в `tests/`; НЕ редактирай backend / SQL проектите.",
+    "steps": [
+      {
+        "id": "139.1",
+        "phase": "RED",
+        "action": "Създай `tests/compositions/clone-period.spec.ts`. Scenario A (happy path): seed source composition; clone-for-period '2026-07-01' → '2026-07-31', days=[MON,TUE,WED,THU,FRI]; verify 23 (или коректен брой) created, всичките имат blocked seats, нито една — sold. Scenario B (conflict + overwrite): pre-seed target slot; clone-for-period в същия период с overwrite=false → check skipped[].length > 0; повтори с overwrite=true → assert старият slot е изтрит и заменен."
+      },
+      {
+        "id": "139.2",
+        "phase": "GREEN",
+        "action": "Ако фейлва: BE date expansion logic (Task 128) е най-вероятният culprit — провери timezone handling, edge cases (29 февруари, end-of-month). Поправи."
+      },
+      {
+        "id": "139.3",
+        "phase": "DONE",
+        "action": "npx playwright test tests/compositions/clone-period.spec.ts — passes. type-check + lint чисто. Cleanup: bulk DELETE на test compositions."
+      }
+    ],
+    "passes": false
   }
 ]

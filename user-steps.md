@@ -989,3 +989,121 @@ src/app/features/wagons/components/
    wallAfterColumns 3px divider vs. full OSDM WallRenderer cell-by-cell).
    Това **не е регресия** — то е визуализиране на данни, които досега не са
    се показвали коректно. Visual check в Task 123.7 го валидира.
+
+---
+
+## 🔁 Етап 7: Composition Cloning (Tasks #125, #130–#139)
+
+**Фокус:** Frontend "Клониране" workflow върху съществуваща композиция.
+Click "Клониране" → dialog с параметри (target train + date / период + дни от
+седмицата) → POST към existing `/api/compositions/{id}/clone` → нова композиция.
+**Бизнес правило:** блокирани места се пренасят; продадени/резервирани —
+**не** (те са обвързани с конкретен маршрут+дата).
+
+### Подетапи
+
+| Под-етап | Таскове | Какво прави |
+|---------|---------|-------------|
+| **7A: BE audit + gap-fill** | #125 | Verify existing /clone endpoint; ако филтърът е грешен → fix; ако endpoint липсва → build minimal handler. **БЕЗ DB промени.** |
+| **7B: FE foundation** | #130–#132 | API layer + mock backend (с критичния blocked-vs-sold филтър) + React Query hooks |
+| **7C: FE UI** | #133–#136 | CloneCompositionDialog (4-step Stepper) + wiring + i18n + conflict preview |
+| **7D: FE integration** | #137 | Full mock-flow тест с mixed state seed (асерт: blocked carry, sold не) |
+| **7E: E2E verification** | #138–#139 | Playwright single + period clone (FE→BE) |
+
+### 📜 Задължителни reference файлове
+
+Преди да започнеш **всеки** таск от Етап 7:
+
+1. **`C:/Projects/ralph/composition-clone-spec.md`** — single source of truth.
+   Секции: §0 бизнес правило, §1 скоуп (какво НЕ пишем), §2 API контракти,
+   §3 BE поведение (за #125), §4 FE архитектура, §5 тестове, §6 acceptance.
+2. **`C:/Projects/ralph/PROMPT.md`** §"Existing aggregate repos" — за #125 ако
+   се build-ва handler (използвай `ICompositionRepository` pattern, **не**
+   generic `IRepository<T>`).
+3. **`C:/Projects/admin-app-frontend-structure.md`** — за #130-#139.
+
+### 🚨 Critical rules за Етап 7 (червени линии)
+
+#### ❌ Никакви DB промени
+
+Schema-та вече съществува. Тази feature е **чист consumer**.
+- ❌ Никакви `.sql` файлове в `RailRunServiceSQL` проект
+- ❌ Никакви EF migrations
+- ❌ Никакви нови или променени Domain entities
+- ❌ Никаква промяна на съществуващи таблици
+- ✅ Само нови handlers/endpoints/DTOs (ако трябват) върху existing entities
+
+Ако в Task #125 audit-а покаже, че бизнес правилото "blocked carry, sold не"
+не може да бъде имплементирано **без** schema промяна → **STOP** и ескалирай.
+**НЕ** пиши migration "за да заобиколиш" проблема.
+
+#### 🔁 Endpoint-consumer model
+
+- Task #125 е BE audit + минимален gap-fill (1 endpoint maximum, ако липсва).
+- Period clone (`/clone-for-period`) НЕ се build-ва server-side по подразбиране
+  — FE loop-ва над `/clone` за всеки expanded date.
+- Conflict preview НЕ се прави като нов endpoint — FE filter-ва existing
+  `GET /api/compositions?trainNumber=...&dateFrom=...` локално.
+
+#### 🎯 Бизнес правило guard rails
+
+Всеки таск пише поне един assertion за филтъра (blocked carry / sold не):
+- Task #125 — integration test през TestServer
+- Task #131 — mock storage unit тест със смесен seed (2 blocked + 3 sold + 1 reserved)
+- Task #137 — full FE integration тест
+- Task #138 — Playwright E2E: GET /api/compositions/{newId} → 0 bookings
+
+Ако някой от тези тестове PASS-ва **без** реално да тества филтъра (напр.
+seed-ът няма sold seats) → тестът е невалиден, не е acceptance.
+
+### 🧪 TDD за Етап 7
+
+Стандартен RED → GREEN → DONE. Без VISUAL phase за повечето задачи (UI-то
+е стандартно MUI Stepper, не custom рисуване). VISUAL само за #133.4 — screenshot
+на dialog през cursor-ide-browser MCP за документиране в `clone-dialog-current.png`.
+
+### 📁 Файлова структура (целева след Етап 7)
+
+```
+Admin-App/
+├── src/
+│   ├── api/compositions/
+│   │   ├── compositions.api.ts          (+ clone, cloneForPeriod, getClonePreview)
+│   │   └── compositions.types.ts        (+ CloneCompositionDto, CloneResponse, DayOfWeek)
+│   ├── app/features/compositions/
+│   │   ├── components/
+│   │   │   ├── CloneCompositionDialog.tsx                 (NEW — Task 133)
+│   │   │   └── ConflictPreviewStep.tsx                    (NEW — Task 136)
+│   │   └── hooks/
+│   │       ├── useCloneComposition.ts                     (NEW — Task 132)
+│   │       ├── useCloneCompositionForPeriod.ts            (NEW — Task 132)
+│   │       └── useClonePreview.ts                         (NEW — Task 132)
+│   ├── services/mockBackend/
+│   │   └── mockStorage.ts                                 (+ cloneComposition method)
+│   ├── utils/
+│   │   └── dateRange.ts                                   (NEW — expandDateRange helper)
+│   └── locales/
+│       ├── bg.json                                        (+ compositions.clone.* keys)
+│       └── en.json                                        (+ compositions.clone.* keys)
+└── tests/compositions/
+    ├── clone-single.spec.ts                               (NEW — Task 138)
+    └── clone-period.spec.ts                               (NEW — Task 139)
+
+RailRunService/  (ОПЦИОНАЛНО — само ако Task 125 Branch C се случи)
+├── Application/Features/Compositions/Commands/
+│   └── CloneComposition.cs                                (Command + Handler)
+├── API/Controllers/CompositionsController.cs              (+ POST {id}/clone endpoint)
+└── API/DTOs/Compositions/
+    ├── CloneCompositionRequest.cs
+    └── CloneCompositionResponse.cs
+```
+
+### ⚠️ Отворени въпроси (решават се в #125)
+
+1. **Дали /clone endpoint вече съществува?** Ще се изясни в Step 125.1 (audit).
+   Ако ДА → Branch A (документирай contract). Ако НЕ → Branch C (build minimum).
+2. **Period clone server-side или FE loop?** Default: FE loop. Build server-side
+   само ако audit покаже че endpoint вече съществува, или ако FE loop е >5s.
+3. **`status` на новата composition при clone — `Draft` или `Active`?** Spec казва
+   `Draft` (admin преглежда преди да активира). Ако в audit (125.1) се види че
+   existing endpoint го прави `Active`, документирай и потвърди с product owner-а.

@@ -128,3 +128,64 @@ synthetic OSDM elements. Markiran с `TEMP: remove after Etap 7 seed cleanup`.
 Прочети `C:/Projects/wagon-renderer-unification-plan.md`, `user-steps.md §Етап 6`,
 и (за #114+) `osdm-audit.md` ПРЕДИ да започнеш. Следвай TDD: RED → GREEN → DONE.
 Commit с точния `description` от tasks.json. След това изведи XML status и **СПРИ**.
+
+---
+
+## 🔮 След Етап 6 — Етап 7: Composition Cloning (Tasks #125, #130–#139)
+
+> **TIMING:** Тази секция влиза в сила КОГАТО всички задачи #113–#124 са с `"passes": true`.
+> Преди това — игнорирай и работи по Етап 6.
+
+Когато първият `passes:false` task в `tasks.json` е #125 (вместо #113-#124):
+
+**Continue with:** Task #125 — [BE] Verify existing /clone endpoint(s); gap-fill само ако нещо липсва — НЕ пипай DB
+
+### 📜 Задължително преди първия таск от Етап 7
+
+Прочети **в този ред**:
+
+1. **`C:/Projects/ralph/composition-clone-spec.md`** — single source of truth за clone feature-а.
+   - §0 — бизнес правило (blocked carry, sold не)
+   - §1 — скоуп: какво НЕ пишем (никакви DB промени, никакви migrations)
+   - §2 — API контракти (POST /clone request/response shape, 409 conflict)
+   - §3 — BE поведение (за #125 само: audit + conditional gap-fill)
+   - §4 — FE архитектура (dialog, hooks, mock backend filter)
+2. **`C:/Projects/ralph/user-steps.md`** §"🔁 Етап 7" — critical rules,
+   подетапи, файлова структура, отворени въпроси.
+3. **`C:/Projects/admin-app-frontend-structure.md`** — за FE задачите.
+4. **`C:/Projects/ralph/PROMPT.md`** §"Existing aggregate repos" — само ако
+   #125 fall-ва в Branch C (build handler).
+
+### 🚨 Червени линии за Етап 7
+
+- ❌ **Никакви SQL миграции, никакви EF migrations, никакви промени в SQL проекта**
+- ❌ **Никакви нови или променени Domain entities**
+- ✅ Чист consumer на existing schema; clone feature пише само нови handlers/DTOs (ако трябва)
+- ✅ Default за period clone: FE loop над `/clone` endpoint, не нов server-side endpoint
+
+Ако Task #125 audit покаже че бизнес правилото "blocked carry, sold не" не може
+да бъде имплементирано **без** schema промяна → **STOP** и ескалирай. НЕ пиши
+migration "за да заобиколиш".
+
+### 🎯 Бизнес правило guard rails (за всеки таск)
+
+Всеки таск с тестове ТРЯБВА да assert-не филтъра:
+- #125 — integration test: POST /clone върху mixed-state composition → 0 bookings
+- #131 — mock storage unit тест: seed (2 blocked + 3 sold + 1 reserved) → clone → assert (2 blocked, 0 sold, 0 reserved)
+- #137 — full FE integration тест с mock backend
+- #138 — Playwright E2E: GET /api/compositions/{newId} → bookings.length === 0
+
+Ако seed-ът не съдържа sold seats → тестът е невалиден (не тества правилото).
+
+### 📋 Подетапи на Етап 7
+
+- **7A: BE audit + gap-fill** (#125) — verify, fix филтър ако грешен, build minimal handler ако липсва
+- **7B: FE foundation** (#130-#132) — API layer + mock + hooks
+- **7C: FE UI** (#133-#136) — dialog + wiring + i18n + conflict preview
+- **7D: FE integration** (#137) — mock-backed test
+- **7E: E2E** (#138-#139) — Playwright single + period
+
+### 🛑 Не правиш Етап 7 ако
+
+- Task #113-#124 не са завършени → продължи с Етап 6
+- Task #125 audit показва schema проблем → STOP, ескалирай (не пиши migration)
