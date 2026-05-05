@@ -4073,7 +4073,7 @@
         "action": "Commit-ни само osdm-audit.md (без промени в изходен код). Commit message: точно description-а от tasks.json."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 114,
@@ -4114,7 +4114,7 @@
         "action": "npm test && npm run type-check && npm run lint — чисто. shared/wagonGrid/ папка съществува с types/ + constants/ + index.ts barrel. НИТО един existing файл не е променен — само добавка."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 115,
@@ -4160,7 +4160,7 @@
         "action": "npm test — всички нови тестове ПАСВАТ. Съществуващи тестове (2000+) продължават да минават — никой не е импортнал още новите функции, така че няма регресия. npm run type-check && npm run lint — чисто."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 116,

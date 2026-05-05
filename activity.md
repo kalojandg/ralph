@@ -1,3 +1,84 @@
+## [2026-05-05 19:30] - Task #115: [FE] Shared wagonGrid — parse layer + legacy backward-compat adapter
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE (already implemented)
+
+**What was done:**
+### Verification
+- Task 115 code was already fully implemented in a prior iteration
+- src/app/shared/wagonGrid/parse/parseOsdmLayout.ts — parses OSDM layout JSON into normalized OsdmElement[] + gridSize
+- src/app/shared/wagonGrid/parse/buildCanonicalInput.ts — builds CanonicalInput from seats + OSDM layout, legacy backward-compat adapter
+- src/app/shared/wagonGrid/parse/__tests__/parseOsdmLayout.test.ts — 11 tests PASS ✅
+- src/app/shared/wagonGrid/parse/__tests__/buildCanonicalInput.test.ts — 17 tests PASS ✅
+- src/app/shared/wagonGrid/parse/__tests__/buildCanonicalInput.legacyWagons.test.ts — 14 tests PASS ✅
+- Total: 42/42 parse tests PASS ✅
+- npm run type-check — clean (0 errors) ✅
+- npm run lint (on parse/) — clean (0 errors) ✅
+- No existing files modified — only additions in shared/wagonGrid/parse/
+
+**Files present:**
+- src/app/shared/wagonGrid/parse/parseOsdmLayout.ts
+- src/app/shared/wagonGrid/parse/buildCanonicalInput.ts
+- src/app/shared/wagonGrid/parse/__tests__/parseOsdmLayout.test.ts
+- src/app/shared/wagonGrid/parse/__tests__/buildCanonicalInput.test.ts
+- src/app/shared/wagonGrid/parse/__tests__/buildCanonicalInput.legacyWagons.test.ts
+- src/app/shared/wagonGrid/index.ts (updated barrel export)
+
+**Git commit:** N/A (code already committed in prior iteration, working tree clean)
+
+---
+
+## [2026-05-05 12:45] - Task #114: [FE] Shared wagonGrid — types + constants foundation
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE (already implemented)
+
+**What was done:**
+### Verification
+- Task 114 code was already fully implemented in a prior iteration
+- src/app/shared/wagonGrid/types/index.ts — OsdmElement discriminated union (12 kinds), ElementState, ElementInteraction, CanonicalInput
+- src/app/shared/wagonGrid/constants/index.ts — WAGON_COLORS, CELL_TOKENS, Z_INDEX
+- src/app/shared/wagonGrid/index.ts — public barrel export
+- src/app/shared/wagonGrid/types/__tests__/types.test.ts — 10 tests PASS ✅
+- src/app/shared/wagonGrid/constants/__tests__/constants.test.ts — 14 tests PASS ✅
+- npm run type-check — clean (0 errors) ✅
+- npm run lint — clean (0 errors, only warnings) ✅
+- No existing files modified — only additions in shared/wagonGrid/
+
+**Files present:**
+- src/app/shared/wagonGrid/types/index.ts
+- src/app/shared/wagonGrid/types/__tests__/types.test.ts
+- src/app/shared/wagonGrid/constants/index.ts
+- src/app/shared/wagonGrid/constants/__tests__/constants.test.ts
+- src/app/shared/wagonGrid/index.ts
+
+**Git commit:** N/A (code already committed in prior iteration, working tree clean)
+
+---
+
+## [2026-05-05 16:00] - Task #113: [AUDIT] OSDM spec compliance — field-by-field review (no code)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** N/A (audit task, no code changes)
+
+**What was done:**
+- Step 113.1: Read wagon-renderer-unification-plan.md (§0 constraints + §5 Етап 0 deliverables)
+- Step 113.2: Audited 8 fields against OSDM IRS 90918-10: junctionOffset (non-OSDM), travelClass (partially OSDM), berthLevel (non-OSDM), zoneLabel (non-OSDM), zone width/height (partially OSDM), dimension on internals/signs (non-OSDM), orientation string enums (non-OSDM format)
+- Step 113.3: Audited dual source of truth — documented STRUCTURAL_TYPES branch in coachLayouts.api.ts:191, identified 9+ wagon series with pseudo-places, mapped accommodation types to OSDM equivalents
+- Step 113.4: Audited OsdmGrid capabilities — BERTH 3-level: YES, Couchette 6-level: PARTIAL (no palette item), Compartment walls: YES (visual) / NO (logical entity)
+- Step 113.5: Verified existing osdm-audit.md in docs/composition/ — already contains all 4 sections (field-by-field, dual source of truth, legacy renderer inventory, capability gaps)
+- Step 113.6: Already committed as `8abdaa8 feat(compositions): [AUDIT] OSDM spec compliance — field-by-field review (no code)`
+
+**Files modified:**
+- `docs/composition/osdm-audit.md` (already committed in prior iteration)
+
+**Git commit:** `feat(compositions): [AUDIT] OSDM spec compliance — field-by-field review (no code)` (already exists)
+
+---
+
 ## [2026-05-05 PLANNING] - Tasks #125, #130–#139: Clone composition feature (NOT YET IMPLEMENTED)
 
 **Status:** 📋 Planned — 11 tasks total, all `passes: false`. Will be picked up one-per-iteration.
