@@ -25,8 +25,8 @@
 > Task IDs 126-129 са изтрити (бяха излишни — schema audit + 4 BE handler tasks). Цялата BE работа сега е консолидирана в #125.
 
 **Files added in this planning round:**
-- `C:/Projects/ralph/composition-clone-spec.md` (NEW) — spec focused on consumer model: API contracts, FE dialog, mock backend filter rules, test strategy
-- `C:/Projects/ralph/tasks.json` — appended 11 task entries
+- `C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md` (NEW) — spec focused on consumer model: API contracts, FE dialog, mock backend filter rules, test strategy
+- `C:/Users/kaloyan.georgiev/Projects/ralph/tasks.json` — appended 11 task entries
 
 **BE scope (Task #125):** Single concentrated task with branching:
 - **Branch A** (endpoint exists + works correctly): nothing to do beyond documenting the contract for FE

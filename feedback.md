@@ -25,7 +25,7 @@
    - Какво е текущото състояние (dual source of truth, дивергенция на визуализацията).
    - Каква е целевата архитектура (shared wagonGrid library + 2 orchestrator-а).
    - Кои задачи са в scope на Етап 6 vs в scope на Етап 7 (колегата).
-2. **`C:/Projects/ralph/user-steps.md`**, секция **🎨 Етап 6** — архитектурни правила,
+2. **`C:/Users/kaloyan.georgiev/Projects/ralph/user-steps.md`**, секция **🎨 Етап 6** — архитектурни правила,
    TDD рутина, файлова структура, critical rules.
 3. **`C:/Projects/BDZ Project/Admin-App/docs/composition/osdm-audit.md`** —
    **ще бъде създаден в Task 113**. След Task 113, всеки следващ таск го
@@ -144,16 +144,16 @@ Commit с точния `description` от tasks.json. След това изве
 
 Прочети **в този ред**:
 
-1. **`C:/Projects/ralph/composition-clone-spec.md`** — single source of truth за clone feature-а.
+1. **`C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md`** — single source of truth за clone feature-а.
    - §0 — бизнес правило (blocked carry, sold не)
    - §1 — скоуп: какво НЕ пишем (никакви DB промени, никакви migrations)
    - §2 — API контракти (POST /clone request/response shape, 409 conflict)
    - §3 — BE поведение (за #125 само: audit + conditional gap-fill)
    - §4 — FE архитектура (dialog, hooks, mock backend filter)
-2. **`C:/Projects/ralph/user-steps.md`** §"🔁 Етап 7" — critical rules,
+2. **`C:/Users/kaloyan.georgiev/Projects/ralph/user-steps.md`** §"🔁 Етап 7" — critical rules,
    подетапи, файлова структура, отворени въпроси.
 3. **`C:/Projects/admin-app-frontend-structure.md`** — за FE задачите.
-4. **`C:/Projects/ralph/PROMPT.md`** §"Existing aggregate repos" — само ако
+4. **`C:/Users/kaloyan.georgiev/Projects/ralph/PROMPT.md`** §"Existing aggregate repos" — само ако
    #125 fall-ва в Branch C (build handler).
 
 ### 🚨 Червени линии за Етап 7

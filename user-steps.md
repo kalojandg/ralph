@@ -1014,10 +1014,10 @@ Click "Клониране" → dialog с параметри (target train + date
 
 Преди да започнеш **всеки** таск от Етап 7:
 
-1. **`C:/Projects/ralph/composition-clone-spec.md`** — single source of truth.
+1. **`C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md`** — single source of truth.
    Секции: §0 бизнес правило, §1 скоуп (какво НЕ пишем), §2 API контракти,
    §3 BE поведение (за #125), §4 FE архитектура, §5 тестове, §6 acceptance.
-2. **`C:/Projects/ralph/PROMPT.md`** §"Existing aggregate repos" — за #125 ако
+2. **`C:/Users/kaloyan.georgiev/Projects/ralph/PROMPT.md`** §"Existing aggregate repos" — за #125 ако
    се build-ва handler (използвай `ICompositionRepository` pattern, **не**
    generic `IRepository<T>`).
 3. **`C:/Projects/admin-app-frontend-structure.md`** — за #130-#139.

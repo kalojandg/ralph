@@ -4,8 +4,8 @@
 
 Прочети следните файлове за пълен context:
 
-1. **C:/Projects/ralph/activity.md** - История на свършената работа
-2. **C:/Projects/ralph/tasks.json** - Task list (твоя source of truth)
+1. **C:/Users/kaloyan.georgiev/Projects/ralph/activity.md** - История на свършената работа
+2. **C:/Users/kaloyan.georgiev/Projects/ralph/tasks.json** - Task list (твоя source of truth)
 3. **C:/Projects/BDZ Project/Admin-App/docs/composition/PRD.json** - Requirements и TDD methodology
 4. **C:/Projects/BDZ Project/Admin-App/docs/composition/designs/** - UI mockups за visual testing
 
@@ -16,7 +16,7 @@
 
 ## Your Mission This Iteration
 
-Работи върху **ЕДИН ЕДИНСТВЕН ТАСК** от `C:/Projects/ralph/tasks.json` където `"passes": false`.
+Работи върху **ЕДИН ЕДИНСТВЕН ТАСК** от `C:/Users/kaloyan.georgiev/Projects/ralph/tasks.json` където `"passes": false`.
 
 ### 🚨 CRITICAL: ONE TASK PER ITERATION — THEN STOP
 
@@ -34,7 +34,7 @@
 ### Step 1: Find Next Task
 
 ```powershell
-# Прочети C:/Projects/ralph/tasks.json и намери първия таск с "passes": false
+# Прочети C:/Users/kaloyan.georgiev/Projects/ralph/tasks.json и намери първия таск с "passes": false
 # Прочети ВСИЧКИ steps за този таск
 # Note: Ако има "designReference" и "tddWorkflow": true → следвай TDD phases
 ```
@@ -133,13 +133,13 @@
 
 **САМО АКО ВСИЧКИ КРИТЕРИИ СА ✅:**
 
-1. **Update C:/Projects/ralph/tasks.json:**
+1. **Update C:/Users/kaloyan.georgiev/Projects/ralph/tasks.json:**
    ```json
    // Change for completed task:
    "passes": false → "passes": true
    ```
 
-2. **Log in C:/Projects/ralph/activity.md:**
+2. **Log in C:/Users/kaloyan.georgiev/Projects/ralph/activity.md:**
    ```markdown
    ## [2026-02-03 HH:MM] - Task #{id}: {description}
    

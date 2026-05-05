@@ -4507,7 +4507,7 @@
     "repo": "backend",
     "description": "[BE] Verify existing /clone endpoint(s); gap-fill само ако нещо липсва — НЕ пипай DB",
     "tddWorkflow": true,
-    "specRef": "C:/Projects/ralph/composition-clone-spec.md §2 (API контракти), §3 (BE поведение)",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md §2 (API контракти), §3 (BE поведение)",
     "notes": "ЕДИНСТВЕНА backend задача за clone feature-а. По спецификация (BDZR-89 / нотбук) endpoint-ите `POST /api/compositions/{id}/clone` и `POST /api/compositions/{id}/clone-for-period` СА част от архитектурата. Тази задача: (1) проверява дали реално съществуват в кода; (2) ако ДА — документира контракта и assert-ва бизнес правилото 'blocked carry, sold не'; (3) ако НЕ — gap-fill минимална имплементация. **БЕЗ schema промени, БЕЗ migrations, БЕЗ да се пипа SQL проекта.** Всички writes минават през EF + съществуващите Domain entities. РАБОТНА ДИРЕКТОРИЯ: само backend (`C:\\Projects\\BDZ Project\\OSDM-Src\\DotNetServices\\RailRunService`).",
     "steps": [
       {
@@ -4549,7 +4549,7 @@
     "repo": "frontend",
     "description": "[FE] API layer — compositionsApi.clone(), cloneForPeriod(), getClonePreview() + types",
     "tddWorkflow": true,
-    "specRef": "C:/Projects/ralph/composition-clone-spec.md §4.1",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md §4.1",
     "steps": [
       {
         "id": "130.1",
@@ -4575,7 +4575,7 @@
     "repo": "frontend",
     "description": "[FE] LocalStorage mock — implement cloneComposition (carry blockedSeats, drop sold/reserved/availability)",
     "tddWorkflow": true,
-    "specRef": "C:/Projects/ralph/composition-clone-spec.md §4.2",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md §4.2",
     "notes": "КРИТИЧЕН TASK. Тук се defen-ва бизнес правилото на ниво mock backend — а dev/UI разчитат на mock-а. Без този task, FE testing-ът на UI по-долу няма realistic data.",
     "steps": [
       {
@@ -4622,7 +4622,7 @@
     "repo": "frontend",
     "description": "[FE] React Query hooks — useCloneComposition, useCloneCompositionForPeriod, useClonePreview",
     "tddWorkflow": true,
-    "specRef": "C:/Projects/ralph/composition-clone-spec.md §4.3",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md §4.3",
     "steps": [
       {
         "id": "132.1",
@@ -4649,7 +4649,7 @@
     "description": "[FE] CloneCompositionDialog — Stepper UI (4 steps: type, params, conflict preview, confirm)",
     "tddWorkflow": true,
     "designReference": "docs/composition/designs/clone-dialog.png",
-    "specRef": "C:/Projects/ralph/composition-clone-spec.md §4.4",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md §4.4",
     "notes": "Дизайн file `clone-dialog.png` още не съществува — designer-ът трябва да го направи. До тогава: VISUAL phase прави screenshot и reviewer го сравнява със спецификацията §4.4 (Step 1-4 текстов wireframe).",
     "steps": [
       {
@@ -4686,7 +4686,7 @@
     "repo": "frontend",
     "description": "[FE] Wire 'Клониране' action в CompositionsListPage и CompositionDetailsPage",
     "tddWorkflow": true,
-    "specRef": "C:/Projects/ralph/composition-clone-spec.md §4.5",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md §4.5",
     "steps": [
       {
         "id": "134.1",
@@ -4717,7 +4717,7 @@
     "repo": "frontend",
     "description": "[FE] i18n keys за clone — bg.json + en.json",
     "tddWorkflow": false,
-    "specRef": "C:/Projects/ralph/composition-clone-spec.md §4.6",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md §4.6",
     "steps": [
       {
         "id": "135.1",
@@ -4740,7 +4740,7 @@
     "repo": "frontend",
     "description": "[FE] Conflict preview UI — list of existing compositions + overwrite checkbox в Step 3",
     "tddWorkflow": true,
-    "specRef": "C:/Projects/ralph/composition-clone-spec.md §4.4 Step 3",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md §4.4 Step 3",
     "notes": "Това е под-таск на 133. Изваден отделно защото логиката за preview е достатъчно сложна и заслужава отделна regression coverage.",
     "steps": [
       {
@@ -4767,7 +4767,7 @@
     "repo": "frontend",
     "description": "[FE] Integration test — full clone flow (FE → mockStorage → state assertion)",
     "tddWorkflow": true,
-    "specRef": "C:/Projects/ralph/composition-clone-spec.md §5.2",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md §5.2",
     "notes": "Този тест е сърцето на FE верификацията. Симулира пълния user flow и assert-ва бизнес правилото.",
     "steps": [
       {
@@ -4799,7 +4799,7 @@
     "repo": "frontend",
     "description": "[E2E] Single clone — Playwright full FE→BE→DB workflow",
     "tddWorkflow": true,
-    "specRef": "C:/Projects/ralph/composition-clone-spec.md §5.3",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md §5.3",
     "notes": "ИЗИСКВА реален BE (Tasks 125-129) да са завършени. Ако още не са — task е BLOCKED. **РАБОТНА ДИРЕКТОРИЯ: САМО frontend** (`C:\\Projects\\BDZ Project\\Admin-App`). Тестовете правят HTTP заявки към работещ BE и SQL setup чрез `node scripts/seed.js` или подобно — НЕ редактират .cs файлове в backend репото и НЕ пипат SQL проекта. Ако тестът фейлва заради BE bug → отвори issue, не редактирай BE код в този task.",
     "steps": [
       {
@@ -4826,7 +4826,7 @@
     "repo": "frontend",
     "description": "[E2E] Period clone — days-of-week filter + conflict + overwrite flow",
     "tddWorkflow": true,
-    "specRef": "C:/Projects/ralph/composition-clone-spec.md §5.3",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md §5.3",
     "notes": "ИЗИСКВА реален BE (Tasks 125-129) да са завършени. **РАБОТНА ДИРЕКТОРИЯ: САМО frontend** (`C:\\Projects\\BDZ Project\\Admin-App`). Същото правило като Task 138: само Playwright spec файлове в `tests/`; НЕ редактирай backend / SQL проектите.",
     "steps": [
       {

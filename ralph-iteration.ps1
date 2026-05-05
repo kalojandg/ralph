@@ -3,7 +3,7 @@ param(
     [string]$configFile = "ralph-config.json"
 )
 
-# Setup paths — ralph lives in C:\Projects\ralph\, project is C:\Projects\BDZ Project\
+# Setup paths — ralph lives in C:\Users\kaloyan.georgiev\Projects\ralph\, project is C:\Projects\BDZ Project\
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $scriptDir
 
