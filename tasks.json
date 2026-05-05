@@ -4196,7 +4196,7 @@
         "action": "npm test — **СЪЩИЯТ** брой passing тестове като в step 116.1. Нула регресия. npm run type-check && npm run lint — чисто. Wall classify тестовете сега са във shared/wagonGrid/classify/__tests__/. Editor-domain logic (mutations, collisions) остава в wagons/osdmElements/."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 117,
@@ -4242,7 +4242,7 @@
         "action": "npm test — нови тестове ПАСВАТ. Съществуващите тестове минават — никой consumer още не ги ползва (те остават в Task 122 + 123). type-check + lint чисто."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 118,

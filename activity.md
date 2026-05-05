@@ -1,3 +1,68 @@
+## [2026-05-05 14:25] - Task #117: [FE] Shared wagonGrid — SeatRenderer + BerthRenderer + FoldingSeatRenderer
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### GREEN Phase
+- Fixed SeatRenderer.tsx: Removed outer wrapper div, consolidated into single root element with role="button", aria attributes, data attributes. Used padding for inset effect instead of nested div sizing.
+- Fixed BerthRenderer.tsx: Removed outer wrapper div, made the berth-renderer div the root element. Moved data-selected/data-berth-level attributes to root.
+- Fixed FoldingSeatRenderer.tsx: Removed outer wrapper div, made the interactive element the root with cellSize dimensions and dashed border style.
+- Cleaned up unused variables (seatSize, heightPx, widthPx) and unused CELL_TOKENS import.
+
+### DONE Phase
+- All 30 tests pass across 3 test files:
+  - SeatRenderer.test.tsx — 15/15 ✅
+  - BerthRenderer.test.tsx — 9/9 ✅
+  - FoldingSeatRenderer.test.tsx — 6/6 ✅
+- npm run type-check — clean (0 errors) ✅
+- npm run lint — clean (0 errors) ✅
+- Exports confirmed in shared/wagonGrid/index.ts: SeatRenderer, BerthRenderer, FoldingSeatRenderer ✅
+- No consumers yet (task 122 + 123 will wire them) ✅
+
+**Files modified:**
+- src/app/shared/wagonGrid/osdmRenderers/SeatRenderer.tsx
+- src/app/shared/wagonGrid/osdmRenderers/BerthRenderer.tsx
+- src/app/shared/wagonGrid/osdmRenderers/FoldingSeatRenderer.tsx
+
+**Git commit:**
+- `feat(compositions): [FE] Shared wagonGrid — SeatRenderer + BerthRenderer + FoldingSeatRenderer`
+
+---
+
+## [2026-05-05 21:15] - Task #116: [FE] Shared wagonGrid — move wall classify/cells/shapes from wagons/ to shared
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE (already implemented, verified + lint fix)
+
+**What was done:**
+### Verification
+- Task 116 code was already fully implemented in a prior iteration
+- Wall classify files confirmed in shared/wagonGrid/classify/:
+  - wallCells.ts, wallCellClassification.ts, wallShapes.ts, wallTypes.ts
+  - __tests__/wallCells.test.ts (12 tests), __tests__/wallCellClassification.test.ts (10 tests), __tests__/wallShapes.test.ts (25 tests), __tests__/wallTypes.test.ts (8 tests)
+- Total: 55/55 classify tests PASS ✅
+- 17 consumer files confirmed importing from @/app/shared/wagonGrid/classify (not old path)
+- Zero imports remain from old osdmElements/wall* path ✅
+- Editor-domain logic (wallMutations, wallCollision, doorCollision, windowCollision, doorMutations, windowMutations, doorTypes, windowTypes) correctly remains in wagons/osdmElements/ ✅
+- Barrel exports in shared/wagonGrid/index.ts correctly expose: classifyCell, getCellDirections, getWallCells, WALL_SHAPES, getDefaultDimension, isWallCode, isWallElement + types ✅
+- npm run type-check — clean (0 errors) ✅
+- npm run lint — clean after removing unused WallShape type import in wallShapes.test.ts ✅
+- 794 relevant tests pass (63 test files) with zero regressions ✅
+
+### Lint fix applied
+- Removed unused `import type { WallShape }` from classify/__tests__/wallShapes.test.ts
+
+**Files modified:**
+- src/app/shared/wagonGrid/classify/__tests__/wallShapes.test.ts (removed unused import)
+
+**Git commit:**
+- `feat(compositions): [FE] Shared wagonGrid — move wall classify/cells/shapes from wagons/ to shared`
+
+---
+
 ## [2026-05-05 19:30] - Task #115: [FE] Shared wagonGrid — parse layer + legacy backward-compat adapter
 
 **Status:** ✅ Complete
