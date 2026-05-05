@@ -4345,7 +4345,7 @@
         "action": "npm test, type-check, lint — чисто."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 121,

@@ -1,3 +1,44 @@
+## [2026-05-05 15:15] - Task #120: [FE] Shared wagonGrid — Zone/Table/Stairs/Amenity/Placeholder renderers
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Tests already existed for all 6 renderers:
+  - ZoneRenderer.test.tsx (10 tests): minimal render, dimension respect, interaction callbacks, zoneLabel rendering, icon display
+  - TableRenderer.test.tsx (6 tests): minimal render, dimension, interaction callbacks
+  - BigTableRenderer.test.tsx (10 tests): minimal render, height respected, resize conditional
+  - StairsRenderer.test.tsx (9 tests): minimal render, dimension, callbacks
+  - AmenityRenderer.test.tsx (7 tests): minimal render, 1-cell dimension, onClick/onContextMenu, icon code, label
+  - PlaceholderRenderer.test.tsx (5 tests): minimal render, invisible spacer behavior
+
+### GREEN Phase
+- Implementations already existed for all 6 renderers in src/app/shared/wagonGrid/osdmRenderers/
+- ZoneRenderer: zone styling with resizable dimensions, custom zoneLabel, icon from OSDM_ICON_IMAGES
+- TableRenderer: small table (icon 20), 1-cell, simple rendering
+- BigTableRenderer: large table (icon 21), height-resizable, conditional resize handles
+- StairsRenderer: icons 136/137, SEAT_SPAN dimensions
+- AmenityRenderer: standalone 1-cell icon with fallback text label
+- PlaceholderRenderer: invisible 1-cell spacer
+- All exported from barrel index.ts
+
+### DONE Phase
+- Fixed AmenityRenderer test: label assertion updated from getByText to getByTitle (label renders as title/alt when icon image present)
+- npm test — 47/47 ✅
+- npm run type-check — clean (0 errors) ✅
+- npm run lint — clean (0 errors, 7 warnings only) ✅
+- All 6 renderers exported from shared/wagonGrid/index.ts barrel ✅
+
+**Files modified:**
+- src/app/shared/wagonGrid/osdmRenderers/__tests__/AmenityRenderer.test.tsx (fixed test assertion)
+
+**Git commit:**
+- `feat(compositions): [FE] Shared wagonGrid — Zone/Table/Stairs/Amenity/Placeholder renderers`
+
+---
+
 ## [2026-05-05 15:07] - Task #119: [FE] Shared wagonGrid — WindowRenderer + DoorRenderer
 
 **Status:** ✅ Complete
