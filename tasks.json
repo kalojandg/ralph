@@ -4381,7 +4381,7 @@
         "action": "Export от barrel. npm test, type-check, lint — чисто."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 122,

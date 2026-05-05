@@ -1,3 +1,40 @@
+## [2026-05-05 15:25] - Task #121: [FE] Shared wagonGrid — gridFrame (GridContainer + GridCell + GridLayer + DragHighlightOverlay)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Tests already existed in src/app/shared/wagonGrid/gridFrame/__tests__/:
+  - GridContainer.test.tsx (5 tests): CSS Grid with gridTemplateColumns/Rows from gridSize, cellSize respected, children as grid items, default cellSize 22, position relative
+  - GridCell.test.tsx (5 tests): coords data-testid, useDroppable when onDropTarget provided, plain div without onDropTarget, children inside cell, dashed border style
+  - GridLayer.test.tsx (5 tests): z-index from Z_INDEX tokens (walls/elements layers), absolute positioning, children rendering, pointer-events none
+  - DragHighlightOverlay.test.tsx (4 tests): green overlay for valid drop, red for collision, nothing when empty, positions using grid coords and cellSize
+
+### GREEN Phase
+- All 4 components already implemented:
+  - GridContainer: CSS Grid wrapper with dynamic gridTemplateColumns/Rows, position relative
+  - GridCell: optional @dnd-kit/core useDroppable integration, data-testid='grid-cell-x-y'
+  - GridLayer: absolute-positioned div with Z_INDEX tokens, pointer-events:none
+  - DragHighlightOverlay: Map<cellKey, 'valid'|'invalid'> rendering green/red overlays
+- Barrel export in gridFrame/index.ts
+- Main barrel wagonGrid/index.ts exports all 4 components
+
+### DONE Phase
+- npm test (gridFrame) — 19/19 ✅
+- npm run type-check — clean (0 errors) ✅
+- npm run lint — clean ✅
+
+**Files modified:**
+- (no code changes needed — already implemented by prior iteration)
+- C:/Users/kaloyan.georgiev/Projects/ralph/tasks.json (marked passes: true)
+
+**Git commit:**
+- `feat(compositions): [FE] Shared wagonGrid — gridFrame (GridContainer + GridCell + GridLayer + DragHighlightOverlay)`
+
+---
+
 ## [2026-05-05 15:15] - Task #120: [FE] Shared wagonGrid — Zone/Table/Stairs/Amenity/Placeholder renderers
 
 **Status:** ✅ Complete
