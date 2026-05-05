@@ -1,3 +1,43 @@
+## [2026-05-05 17:00] - Task #131: [FE] LocalStorage mock — implement cloneComposition (carry blockedSeats, drop sold/reserved/availability)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 131.1: Created seed data in `src/services/mockBackend/seedData.ts` with composition #1 (Sofia-Burgas, 2026-06-01) — carriage A has 2 blockedSeats (BrokenSeat#5, ServiceSeat#10), 4 bookings (3 sold, 1 reserved); carriage B empty
+- Step 131.2-131.3: Wrote 7 failing tests in `src/services/mockBackend/__tests__/mockStorage.clone.test.ts`:
+  - `copies blockedSeats from source carriages` (2 blocked carried)
+  - `drops bookings, reservations, and auditLog from clone` (0 bookings)
+  - `generates new IDs for composition, carriages, and blockedSeats` (no PK reuse)
+  - `returns 409 conflict when target slot is occupied and overwrite=false`
+  - `expands date range by daysOfWeek and creates compositions` (MON,WED → 3 comps)
+  - `skips conflicting slots without overwrite` (1 skipped)
+  - `overwrites conflicting slots when overwrite=true` (old deleted, new created)
+
+### GREEN Phase
+- Step 131.4: Implemented `mockStorageService.cloneComposition()` in `src/services/mockBackend/mockStorage.ts` — deep clone with new IDs, carries blockedSeats + routeSegments, drops bookings/auditLog, sets status='draft'
+- Step 131.5: Implemented `cloneCompositionForPeriod()` — reuses `expandDateRange()` from `src/utils/dateRange.ts`, catches ConflictError per date, aggregates results
+- Step 131.6: Implemented `getClonePreview()` — read-only conflict detection
+
+### DONE Phase
+- Step 131.7: All 7 tests pass ✅
+- npm run type-check — clean ✅
+- npm run lint — clean ✅
+- Full test suite: 222/228 files pass (6 pre-existing failures unrelated to this task)
+
+**Files modified:**
+- `src/services/mockBackend/seedData.ts` (new — mock types + seed data)
+- `src/services/mockBackend/mockStorage.ts` (new — MockStorageService with clone operations)
+- `src/services/mockBackend/__tests__/mockStorage.clone.test.ts` (new — 7 tests)
+- `src/utils/dateRange.ts` (new — expandDateRange utility)
+
+**Git commit:**
+- `feat(compositions): [FE] LocalStorage mock — implement cloneComposition (carry blockedSeats, drop sold/reserved/availability)`
+
+---
+
 ## [2026-05-05 16:38] - Task #130: [FE] API layer — compositionsApi.clone(), cloneForPeriod(), getClonePreview() + types
 
 **Status:** ✅ Complete

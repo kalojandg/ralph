@@ -4614,7 +4614,7 @@
         "action": "npm test mockStorage.clone — всички 7 зелени. npm run type-check чисто. Manual sanity: clear localStorage; reload app; в console: `await mockStorageService.cloneComposition(1, { targetTrainNumber: '8632', targetDate: '2026-07-01', overwrite: false })` → response има 0 bookings."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 132,
@@ -4765,30 +4765,35 @@
     "id": 137,
     "category": "frontend",
     "repo": "frontend",
-    "description": "[FE] Integration test — full clone flow (FE → mockStorage → state assertion)",
+    "description": "[FE] Integration test — full clone flow (FE → mocked compositionsApi → DOM + spy assertions)",
     "tddWorkflow": true,
     "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md §5.2",
-    "notes": "Този тест е сърцето на FE верификацията. Симулира пълния user flow и assert-ва бизнес правилото.",
+    "notes": "Този тест е сърцето на FE верификацията. Симулира пълния user flow и assert-ва бизнес правилото. ВАЖНО: mock-ва се `@/api/compositions/compositions.api` на module level (по CLAUDE.md конвенцията `vi.mock('@/api/[service]/[service].api', ...)`); НЕ се ползва mockStorage/seedData. Real BE контрактът се respect-ва чрез shape на mocked response, а проверките се правят върху (a) call args към `compositionsApi.clone` spy и (b) DOM (snackbar, нов row, затворен dialog).",
     "steps": [
       {
         "id": "137.1",
         "phase": "RED",
-        "action": "Създай `__tests__/cloneComposition.integration.test.tsx`. Setup: render <CompositionsListPage> с QueryClientProvider; seed mockStorage с composition #1 (mixed state — 2 blocked, 3 sold, 1 reserved). Steps: (a) click 'Клониране' icon на row #1; (b) Step 1: select 'За един ден'; Next; (c) Step 2: enter trainNumber='8632', date='2026-07-01'; Next; (d) Step 3: assert 'Няма конфликти'; Next; (e) Step 4: assert warning 'Блокираните пренасят, продадените не'; click 'Клонирай'; (f) wait for success snackbar. Assertions: mockStorage.compositions.length === 2; new composition (sourceId+1): 1 carriage, 2 blocked seats, 0 bookings, 0 reservations; trainNumber='8632', date='2026-07-01', status='Draft'."
+        "action": "Създай `__tests__/cloneComposition.integration.test.tsx`. Setup: `vi.mock('@/api/compositions/compositions.api')` — `getCompositions` returns seeded list с composition #1 (id=1, trainNumber='8631', date='2026-06-01', 2 carriages); първото извикване връща [comp1], второто (след invalidate) връща [comp1, cloned] където cloned има id=99, trainNumber='8632', date='2026-07-01', status='Draft'. `clone` spy returns `{ id: 99, trainNumber: '8632', date: '2026-07-01', status: 'Draft' }` (CloneResponse shape от Task 130). `getClonePreview` returns `{ conflicts: [] }`. Render `<CompositionsListPage>` обвито в QueryClientProvider + Redux Provider + MemoryRouter (по pattern на UsersListPage.test.tsx)."
       },
       {
         "id": "137.2",
         "phase": "RED",
-        "action": "Втори integration test за period clone: select 'За период'; start 2026-07-01, end 2026-07-15; days=[MON,WED,FRI] → assert 7 нови composition записа са създадени, всеки с 2 blocked + 0 sold."
+        "action": "Steps в първия тест (`single clone — full flow`): (a) `await screen.findByText('8631')` — assert composition #1 row visible; (b) click IconButton с aria-label 'Клониране' на row #1; (c) Step 1: select radio 'За един ден'; click Next; (d) Step 2: type trainNumber='8632', date='2026-07-01'; click Next; (e) Step 3: assert text 'Няма конфликти'; click Next; (f) Step 4: assert warning text matching `/блокирани.*пренесени/i` И `/продадени.*няма/i`; click 'Клонирай'. Assertions: (1) `compositionsApi.clone` spy е извикан ВЕДНЪЖ с args `(1, { targetTrainNumber: '8632', targetDate: '2026-07-01', overwrite: false })`; (2) success snackbar с текст съдържащ 'успешно' се появява; (3) Dialog е closed (`queryByRole('dialog')` returns null); (4) след invalidate — `await screen.findByText('8632')` — новият row е видим в листа. ФЕЙЛВА."
       },
       {
         "id": "137.3",
-        "phase": "GREEN",
-        "action": "Ако нещо фейлва — root cause обикновено е: (a) mock filter правило не отстранява всичките bookings полета; (b) Stepper state mgmt губи form data между стъпки; (c) invalidateQueries не работи и UI показва stale data. Поправи."
+        "phase": "RED",
+        "action": "Втори тест `period clone — expands dates and skips conflicts`. Mock setup: `cloneForPeriod` spy returns `ClonePeriodResponse` с `created: [{date: '2026-07-01'}, {date: '2026-07-03'}, {date: '2026-07-08'}, {date: '2026-07-10'}, {date: '2026-07-15'}]` и `skipped: [{date: '2026-07-06', reason: 'TARGET_OCCUPIED'}]`. `getClonePreview` returns `{ conflicts: [{date: '2026-07-06', existingCompositionId: 42}] }`. Steps: open dialog → Step 1: select 'За период' → Step 2: start='2026-07-01', end='2026-07-15', days=[MON,WED,FRI] → Step 3: assert conflict list rendered с 1 item за 07-06; tick 'Презапиши' checkbox → Step 4: click 'Клонирай'. Assertions: `cloneForPeriod` spy called once с body `{ targetTrainNumber, startDate: '2026-07-01', endDate: '2026-07-15', daysOfWeek: ['MON','WED','FRI'], overwrite: true }`; success snackbar shows 'Създадени 5, пропуснати 1' (или подобен i18n string match). ФЕЙЛВА."
       },
       {
         "id": "137.4",
+        "phase": "GREEN",
+        "action": "Ако нещо фейлва — типичен root cause: (a) Dialog не propagate-ва form state между Stepper стъпките; (b) `invalidateQueries(['compositions'])` не се вика след success → UI остава stale; (c) overwrite checkbox state не достига payload-а; (d) i18n key за period success message има грешен placeholder syntax. Поправи в съответния източник (Dialog state mgmt, useCloneComposition onSuccess, или i18n keys)."
+      },
+      {
+        "id": "137.5",
         "phase": "DONE",
-        "action": "npm test cloneComposition.integration — зелени. type-check + lint чисто."
+        "action": "npm test cloneComposition.integration — двата теста зелени. type-check + lint чисто. Verify: тестовете НЕ import-ват `mockStorageService` или нещо от `src/services/mockBackend/` — единствената mock повърхност е `@/api/compositions/compositions.api`."
       }
     ],
     "passes": false
