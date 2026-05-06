@@ -121,22 +121,66 @@ $job = Start-Job -ScriptBlock {
 $spinChars = @('|', '/', '-', '\')
 $spinIndex = 0
 $lastSize = 0
+$startTime = Get-Date
+$lastGrowth = Get-Date
+$maxIterationMinutes = 180
+$maxStaleMinutes = 60
+$timedOut = $false
+$timeoutReason = ""
 
 Write-Host -NoNewline "Working "
 while ($job.State -eq 'Running') {
     Write-Host -NoNewline "`rWorking $($spinChars[$spinIndex]) "
     $spinIndex = ($spinIndex + 1) % 4
 
+    # Hard timeout — runaway iteration
+    if (((Get-Date) - $startTime).TotalMinutes -gt $maxIterationMinutes) {
+        $timedOut = $true
+        $timeoutReason = "Max iteration time ($maxIterationMinutes min) exceeded"
+        break
+    }
+
     # Check if output file is growing
     if (Test-Path $outputFile) {
         $size = (Get-Item $outputFile).Length
         if ($size -gt $lastSize) {
             $lastSize = $size
+            $lastGrowth = Get-Date
             Write-Host -NoNewline "(${size} bytes) "
+        } elseif (((Get-Date) - $lastGrowth).TotalMinutes -gt $maxStaleMinutes) {
+            $timedOut = $true
+            $timeoutReason = "No output growth for $maxStaleMinutes min (claude likely hung)"
+            break
         }
     }
 
     Start-Sleep -Milliseconds 500
+}
+
+if ($timedOut) {
+    Write-Host ""
+    Write-Host ""
+    Write-Host "============================================" -ForegroundColor Red
+    Write-Host "   [X] ITERATION TIMED OUT" -ForegroundColor Red
+    Write-Host "   Reason: $timeoutReason" -ForegroundColor Red
+    Write-Host "============================================" -ForegroundColor Red
+
+    Stop-Job $job -ErrorAction SilentlyContinue
+    Remove-Job $job -Force -ErrorAction SilentlyContinue
+
+    # Save partial output as log so wrapper does not count this as silent failure
+    if (Test-Path $outputFile) {
+        $logDir = "logs"
+        if (!(Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
+        $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
+        $logFile = "$logDir/iteration-$iterationNumber-$timestamp-TIMEOUT.txt"
+        $partial = Get-Content $outputFile -Raw -ErrorAction SilentlyContinue
+        "TIMEOUT: $timeoutReason`n`n=== Partial output ===`n$partial" | Out-File -FilePath $logFile -Encoding UTF8
+        Write-Host "[+] Partial log saved: $logFile" -ForegroundColor Yellow
+        Remove-Item $outputFile -ErrorAction SilentlyContinue
+    }
+    Remove-Item $tempPrompt -ErrorAction SilentlyContinue
+    exit 3
 }
 
 # Wait for job to complete

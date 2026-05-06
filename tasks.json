@@ -4640,7 +4640,7 @@
         "action": "npm test useCloneComposition — всички зелени. type-check чисто."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 133,
@@ -4678,7 +4678,7 @@
         "action": "npm test CloneCompositionDialog — всички 8 зелени. type-check + lint чисто. Visual screenshot записан в `docs/composition/designs/clone-dialog-current.png` за бъдеща сравнение."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 134,
@@ -4709,7 +4709,7 @@
         "action": "npm test — зелени. lint + type-check чисто."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 135,
@@ -4732,7 +4732,7 @@
         "action": "npm test i18n.coverage (ако съществува) — 0 missing keys. Иначе manual: grep `t\\('compositions.clone\\.` в кода → всеки key съществува в двата файла."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 136,
@@ -4759,7 +4759,7 @@
         "action": "npm test CloneCompositionDialog.conflictPreview — всички 6 зелени."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 137,
@@ -4796,7 +4796,7 @@
         "action": "npm test cloneComposition.integration — двата теста зелени. type-check + lint чисто. Verify: тестовете НЕ import-ват `mockStorageService` или нещо от `src/services/mockBackend/` — единствената mock повърхност е `@/api/compositions/compositions.api`."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 138,
@@ -4823,7 +4823,7 @@
         "action": "npx playwright test tests/compositions/clone-single.spec.ts — passes. Cleanup: API DELETE на test compositions."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 139,

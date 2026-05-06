@@ -98,6 +98,14 @@ while ($i -le $iterations) {
         $consecutiveFailures = 0
         continue
     }
+    elseif ($exitCode -eq 3) {
+        # Iteration timed out — claude was killed. Advance to next iteration so we attempt the next pending task.
+        Write-Host "[!] Iteration $i was killed due to timeout. Advancing to next iteration..." -ForegroundColor Yellow
+        $consecutiveFailures = 0
+        $i++
+        Start-Sleep -Seconds 5
+        continue
+    }
 
     # Detect silent failure (Claude never produced output)
     if (-not $producedLog) {
