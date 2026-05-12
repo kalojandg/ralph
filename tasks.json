@@ -4850,6 +4850,6 @@
         "action": "npx playwright test tests/compositions/clone-period.spec.ts — passes. type-check + lint чисто. Cleanup: bulk DELETE на test compositions."
       }
     ],
-    "passes": false
+    "passes": true
   }
 ]

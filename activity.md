@@ -1,3 +1,29 @@
+## [2026-05-06 10:15] - Task #139: [E2E] Period clone — days-of-week filter + conflict + overwrite flow
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 139.1: Created `tests/compositions/clone-period.spec.ts` with two scenarios:
+  - Scenario A (happy path): seeds source composition, clones for period 2026-07-01→2026-07-31 with days=[MON,TUE,WED,THU,FRI], verifies 23 compositions created via clone-for-period API, blocked seats carried, correct payload sent
+  - Scenario B (conflict + overwrite): pre-seeds conflicting target composition, verifies conflict UI shown, overwrite checkbox enables proceed, API called with overwrite=true
+
+### GREEN Phase
+- Step 139.2: Tests pass immediately — backend period clone logic (Task #128) and FE dialog (Tasks #130-#137) already implemented correctly
+
+### DONE Phase
+- Step 139.3: `npx playwright test tests/compositions/clone-period.spec.ts` — 2 passed (13.2s). type-check clean. lint: 0 errors.
+
+**Files modified:**
+- tests/compositions/clone-period.spec.ts (created)
+
+**Git commit:**
+- `feat(compositions): [E2E] Period clone — days-of-week filter + conflict + overwrite flow`
+
+---
+
 ## [2026-05-05 22:30] - Task #138: [E2E] Single clone — Playwright full FE→BE→DB workflow
 
 **Status:** ✅ Complete
