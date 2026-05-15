@@ -78,7 +78,7 @@ vi.mock('@/api/wagons/wagons.api', () => ({
 
 1. **Напиши тест** — тестът ТРЯБВА да ФЕЙЛВА
 2. **Имплементирай** минимален код за да минава тестът
-3. **Верифицирай:** `npm run type-check && npm run lint && npm test`
+3. **Верифицирай:** `npm run type-check && npx eslint <files-changed-on-this-branch> && npm test`
 4. **Всичко минава** → таскът е готов
 
 ### Snackbar / Toaster pattern:
@@ -232,7 +232,7 @@ npm test
 npx playwright test
 
 # 3. Linter
-npm run lint
+npx eslint <files-changed-on-this-branch>
 
 # 4. TypeScript check
 npm run type-check
@@ -265,7 +265,7 @@ npm run type-check
 - Fix code style issues
 - Remove unused imports
 - Fix formatting
-- Re-run: `npm run lint`
+- Re-run: `npx eslint <files-changed-on-this-branch>`
 
 #### TypeScript Fails
 - Fix type errors
@@ -357,7 +357,7 @@ Step 11.17 (DONE): Final verification
 3. Did I take a screenshot (for designReference tasks)?
 4. Does the screenshot MATCH the mockup?
 5. Did I check layout, colors, typography, spacing?
-6. Did npm run lint pass?
+6. Did npx eslint <files-changed-on-this-branch> pass?
 7. Did npm run type-check pass?
 8. Did I update tasks.json ("passes": true)?
 9. Did I log in activity.md?
@@ -429,7 +429,7 @@ git commit -m "feat(compositions): {exact task.description from tasks.json}"
 2. ✅ Tests pass (npm test && npx playwright test)
 3. ✅ Screenshot taken (for designReference tasks)
 4. ✅ Design matches mockup (visual comparison ✅)
-5. ✅ Linter passes (npm run lint)
+5. ✅ Linter passes (npx eslint <files-changed-on-this-branch>)
 6. ✅ TypeScript compiles (npm run type-check)
 7. ✅ tasks.json updated ("passes": true)
 8. ✅ activity.md logged
@@ -493,10 +493,11 @@ git commit -m "feat(compositions): {exact task.description from tasks.json}"
 **Принцип: "Само местиш, не променяш"**
 
 1. **ПРЕДИ** всяка стъпка: `npm test && npm run type-check` → запиши baseline
-2. **Извличай** код в нов файл, добавяй `export` там и `import` в оригиналния
-3. **СЛЕД** всяка стъпка: `npm test && npm run type-check` → СЪЩИЯТ резултат
-4. Ако тест фейлва → **ВЕДНАГА rollback** → анализирай → поправи
-5. **НИКОГА** не променяй rendering логика — само реорганизация на файлове
+2. **ПРЕДИ** да извадиш функция/символ в нов файл: `gitnexus context <symbol>` → виж всички callers (incoming) и callees (outgoing). Ако броят е по-голям, отколкото очакваш — спри и преоцени scope-а. `gitnexus impact <symbol> --direction upstream --minConfidence 0.7` дава blast radius за смело преценяване колко refactor-а имаш.
+3. **Извличай** код в нов файл, добавяй `export` там и `import` в оригиналния
+4. **СЛЕД** всяка стъпка: `npm test && npm run type-check` → СЪЩИЯТ резултат. Плюс `gitnexus detect-changes` → засегнатите processes трябва да са СЪЩИТЕ като преди extract-а; ако са се появили нови flow-и — extract-ът е променил поведение, не просто организация.
+5. Ако тест фейлва → **ВЕДНАГА rollback** → `gitnexus context <failing-test-target>` за да видиш точните callers/callees преди да гадаеш → поправи
+6. **НИКОГА** не променяй rendering логика — само реорганизация на файлове
 
 **Целева структура след рефакторинг:**
 ```
@@ -519,8 +520,10 @@ layoutRenderers/
 **Следвай CQRS pattern:**
 1. Command/Query → Handler → Controller endpoint
 2. Валидация в Handler-а
-3. `dotnet build && dotnet test` след всяка стъпка
-4. **НЕ създавай миграции в SQL проекта** — таблиците вече съществуват (CoachLayouts, SeatDefinitions, WagonTypes)
+3. **Преди да добавиш нов Command/Query**, провери дали вече има подобен handler: `gitnexus query "<concept>" --repo Transport-OSDM-Src` (напр. `gitnexus query "duplicate placard validation"`). Ако намериш съществуващ handler за подобна функционалност — следвай патърна, не преоткривай.
+4. **Преди да промениш съществуващ DTO или Repository interface**: `gitnexus impact <DtoName> --direction upstream --minConfidence 0.8` за да видиш кои handlers/controllers/tests ще тряба да обновиш.
+5. `dotnet build && dotnet test` след всяка стъпка
+6. **НЕ създавай миграции в SQL проекта** — таблиците вече съществуват (CoachLayouts, SeatDefinitions, WagonTypes)
 
 **Нови endpoints:**
 ```
@@ -643,6 +646,9 @@ dedicated wall-tracks, няма по-тесни колони. Стените ж�
    rendering логика (стари сиви правоъгълничета от DraggableElement) с
    WallCellVisual. Внимавай: трябва да се изключат wall icons (23-32) от
    съществуващия non-wall pipeline.
+   *Преди подмяната:* `gitnexus context DraggableElement` за да видиш всички
+   места, които зависят от стария rendering път — wall icons може да са
+   рутирани там само по icon range, но е възможно да има и други callers.
 
 3. **Mouse events ПОСЛЕ rendering** — таскове #105-#106. Не пипай
    interaction-ите преди да имаш стабилен rendering.
@@ -672,7 +678,7 @@ dedicated wall-tracks, няма по-тесни колони. Стените ж�
 3. **REFACTOR** (по желание) — подобрения без да чупят тестовете.
 4. **VISUAL** (за UI таскове) — npm run dev + manual проверка (cursor-ide-browser
    MCP ако е наличен). Цвят, положение, cursor behavior.
-5. **DONE** — `npm test && npm run type-check && npm run lint` — чисто.
+5. **DONE** — `npm test && npm run type-check && npx eslint <files-changed-on-this-branch>` — чисто.
 
 ### 📁 Файлова структура
 
@@ -717,7 +723,7 @@ tests/wagons/walls-workflow.spec.ts                                        # #11
 
 1. ✅ Тестовете от RED phase сега ПАСВАТ
 2. ✅ `npm run type-check` чист
-3. ✅ `npm run lint` — няма нови errors (pre-existing warnings се игнорират)
+3. ✅ `npx eslint <files-changed-on-this-branch>` — няма нови errors (pre-existing warnings се игнорират)
 4. ✅ Ако таскът има rendering/UI компонент — провери визуално с npm run dev
 5. ✅ Acceptance criteria от frontend-requirements.md §5.7 приложими за таска
    са изпълнени
@@ -789,6 +795,9 @@ Elimination на dual source of truth. Визуален паритет — ка�
 - Премахване на pixel coordinate infrastructure (gridToPixel, pixelToGrid, LAYOUT_PADDING, Seat.coordinates pixel)
 - DB check constraints / invariants
 
+**Boundary verification:** преди да commit-неш new shared lib промени, пусни
+`gitnexus query "CabinLayout|SleeperLayout|CouchetteLayout|CompartmentLayout"` и `gitnexus context cellRenderers` — увери се, че **новият** `shared/wagonGrid/` код няма incoming edges от legacy renderers (или обратно). Ако има — нарушаваш isolation principle-а и Етап 7 cleanup-ът ще се счупи.
+
 #### Backward compatibility (НЕПОКЛАТИМ принцип)
 
 **Legacy wagons продължават да работят.** Адаптерът в `shared/wagonGrid/parse/buildCanonicalInput.ts`
@@ -854,7 +863,7 @@ Lint / code review правило: ако имаш нужда да рендир�
 2. **GREEN** — минимална имплементация. `npm test` → ПАСВАТ.
 3. **VISUAL** (само Task 123) — screenshot compare с editor preview чрез
    cursor-ide-browser MCP. Визуален паритет задължителен.
-4. **DONE** — `npm test && npm run type-check && npm run lint` + (за #122, #124) +
+4. **DONE** — `npm test && npm run type-check && npx eslint <files-changed-on-this-branch>` + (за #122, #124) +
    `npx playwright test` — чисто.
 
 ### 📁 Файлова структура (целева след Етап 6)
@@ -963,7 +972,7 @@ src/app/features/wagons/components/
 1. ✅ Тестовете от RED phase сега ПАСВАТ
 2. ✅ Съществуващите тестове — същият брой passing (нула регресия)
 3. ✅ `npm run type-check` чист
-4. ✅ `npm run lint` — няма нови errors
+4. ✅ `npx eslint <files-changed-on-this-branch>` — няма нови errors
 5. ✅ За Task 122/124: `npx playwright test` минава
 6. ✅ За Task 123: визуален screenshot compare е okay
 7. ✅ За Task 122/123: размерните таргети са постигнати (≤500 / ≤250 реда)

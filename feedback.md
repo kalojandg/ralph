@@ -61,7 +61,7 @@ synthetic OSDM elements. Markiran с `TEMP: remove after Etap 7 seed cleanup`.
 1. **RED** → пиши тестове, пусни `npm test`, **verify FAIL**
 2. **GREEN** → минимална имплементация, verify PASS
 3. **VISUAL** (само за Task 123) → screenshot compare чрез cursor-ide-browser
-4. **DONE** → `npm test && npm run type-check && npm run lint` + (за Task 122, 124) + `npx playwright test`
+4. **DONE** → `npm test && npm run type-check && npx eslint <files-changed-on-this-branch>` + (за Task 122, 124) + `npx playwright test`
 
 ### 📋 Последователност на таскове (не пропускай стъпки!)
 
@@ -104,6 +104,10 @@ synthetic OSDM elements. Markiran с `TEMP: remove after Etap 7 seed cleanup`.
   CabinLayout.tsx, SleeperLayout.tsx, CouchetteLayout.tsx, CompartmentLayout.tsx —
   всички остават като файлове. OpenSaloonLayout след рефактора просто
   не ги import-ва. Колегата ги трие в Етап 7.
+  → **Преди да маркираш таск 123 като готов:** `gitnexus context OpenSaloonLayout`
+  трябва да показва, че `cellRenderers`/`osdmRenderers`/`wallRenderers` НЕ са в
+  outgoing calls. Ако има остатъчен incoming/outgoing edge към някой от тези
+  legacy файлове — рефакторът не е приключен.
 
 - **SeatMapCanvas dispatcher НЕ се пипа.** Който определя кой renderer да се
   ползва за коя серия (sleeper → CabinLayout etc.) — стои. Етап 6 променя само

@@ -91,7 +91,7 @@
 - **VERIFY ALL:**
   - ✅ Tests pass: `npm test && npx playwright test`
   - ✅ Visual match: Screenshot съвпада с design mockup
-  - ✅ No linter errors: `npm run lint`
+  - ✅ No linter errors: `npx eslint <files-changed-on-this-branch>   # only fix branch-introduced errors, not pre-existing repo warnings`
   - ✅ TypeScript compiles: `npm run type-check`
 
 #### Ако таск НЯМА `"tddWorkflow"` (setup tasks):
@@ -112,21 +112,30 @@
    
 2. **Check Linter:**
    ```bash
-   npm run lint
+   npx eslint <files-changed-on-this-branch>   # only fix branch-introduced errors, not pre-existing repo warnings
    ```
 
-3. **Visual Comparison** (ако има designReference):
+3. **Impact / Change Sanity** (преди commit — особено при refactor/rename/move):
+   ```bash
+   gitnexus detect-changes     # map-ва git diff-а към засегнати processes
+   # Ако засегнати са повече symbol-и от очакваното — провери всеки:
+   # gitnexus impact <symbol> --direction upstream --minConfidence 0.8
+   ```
+   Целта: ако промяната визира 3 файла, а `detect-changes` казва "засегнати 47 flow-а" — спри и провери дали не си пробил нещо неочаквано.
+
+4. **Visual Comparison** (ако има designReference):
    - Use Playwright MCP screenshot
    - Compare with `designs/{task_id}.png`
    - Check: Layout, Colors, Typography, Spacing
 
-4. **IF ANYTHING FAILS:**
+5. **IF ANYTHING FAILS:**
    - Go back and fix
    - Re-run tests
+   - При паднал тест → `gitnexus context <failing-method>` или `gitnexus detect-changes` да видиш кой path е счупен преди да гадаеш.
    - Re-screenshot and compare
    - **ITERATE** until ALL verifications pass
 
-5. **ONLY WHEN ALL PASS:**
+6. **ONLY WHEN ALL PASS:**
    - Proceed to Step 4
 
 ### Step 4: Mark Complete
@@ -231,6 +240,28 @@ If NO (all tasks done) — output:
 
 **The Ralph loop will spawn a NEW agent with clean context for the next task.**
 
+## Code Intelligence: GitNexus
+
+**GitNexus е локален code-graph (вече индексиран — виж `gitnexus list`). Регистриран е като MCP сървър в Claude Code, така че имаш достъп до `mcp__gitnexus__*` tools, КАКТО И до CLI чрез Bash (`gitnexus <command>`). Ползвай го ВИНАГИ когато: ще пипаш съществуващ symbol; правиш refactor/rename; искаш да разбереш кой какво вика; проверяваш blast radius преди промяна; или тест е fail-нал и не знаеш кои execution flows са засегнати.**
+
+| Кога | Tool | Какво прави |
+|------|------|------------|
+| Преди да пипнеш symbol/file | `gitnexus context <name>` | Callers, callees, дефиниция, кои processes/clusters включват symbol-а |
+| Преди refactor/rename/move | `gitnexus impact <symbol> --direction upstream` | Blast radius — кой ще се счупи ако промениш. `--minConfidence 0.8` за уверени резултати. |
+| Multi-file rename | `gitnexus rename <old> <new> --dry-run` | Координирано преименуване във всички места. Винаги първо dry-run. |
+| Свободно търсене (концепт, не низ) | `gitnexus query "<фраза>"` | Hybrid (BM25 + semantic) — намира execution flows и symbols по смисъл, не само по буквален match |
+| След git diff, преди commit | `gitnexus detect-changes` | Map-ва променените редове към засегнати processes/symbols — преди да commit-неш, видиш кой flow е попадат в промяната |
+| Raw graph query | `gitnexus cypher "<MATCH …>"` | За сложни анализи; виж примерите в GitNexus README |
+
+**Контекст за обхвата:**
+- `--repo Transport-OSDM-Src` ограничава query-то само до .NET backend. Без флаг — всички индексирани repo-та.
+- Frontend (Admin-App) **не е индексиран** автоматично — ако таскът засяга frontend и държиш на cross-file impact, първо `gitnexus analyze C:/Users/kaloyan.georgiev/Projects/Admin-App` (еднократно за branch-а).
+- При `mcp__gitnexus__*` tool-овете предавай същите аргументи.
+
+**Output форматът** на повечето команди е JSON — режи го с `| head -N` или `| jq` за читаемост, не залива context-а.
+
+---
+
 ## Architecture Reference Files
 
 **ЗАДЪЛЖИТЕЛНО преди да започнеш таск прочети съответния файл. Патърните в тези файлове са ПРАВИЛА, не препоръки — не следваш ли ги, PR-ът ще получи коментари и ще се връща за преработка.**
@@ -247,6 +278,9 @@ If NO (all tasks done) — output:
 ### 🚨 [BE] Pre-flight checklist (чети преди ВСЕКИ backend таск)
 
 Преди да напишеш код в `RailRunService.API` / `.Application` / `.Infrastructure`, отвори `C:/Users/kaloyan.georgiev/Projects/railrun-backend-structure.md` секция **"Code Patterns"** и потвърди, че разбираш тези правила. Всички са извлечени от реални PR ревюта:
+
+**Преди да добавиш нов handler или da пипнеш съществуващ aggregate repo:** `gitnexus context I<Repo>Repository --repo Transport-OSDM-Src` за да видиш кой го inject-ва и каква е историческата употреба — да не направиш патърн дублиран или да счупиш съществуващ caller.
+
 
 1. **DTO location** — API request/response records/classes се дефинират в `*.API/DTOs/{Feature}*.cs`, НИКОГА вътре в `*Controller.cs`. Application-layer DTOs (commands/queries) са в `*.Application/DTOs/`.
 2. **Един логически write → един `SaveChangesAsync`.** Ако handler-ът пише в 2+ таблици (delete aggregate, replace child collection, create parent+child), използвай **custom `IXxxRepository` + `IUnitOfWork`**, НЕ верига от `AddAsync`/`DeleteAsync` върху generic `IRepository<T,long>` (всеки генеричен call е отделна транзакция → partial failure).
@@ -284,7 +318,7 @@ If NO (all tasks done) — output:
 # === Frontend ===
 cd "C:\Users\kaloyan.georgiev\Projects\Admin-App"
 npm run type-check          # TypeScript проверка
-npm run lint                # ESLint
+npx eslint <files-changed-on-this-branch>   # only fix branch-introduced errors, not pre-existing repo warnings                # ESLint
 npm test                    # Vitest unit/component тестове
 npm run dev                 # Dev server на http://localhost:5173
 
@@ -293,6 +327,13 @@ cd "C:\Users\kaloyan.georgiev\Projects\OSDM-Src\DotNetServices\RailRunService"
 dotnet build                # Build
 dotnet test                 # Unit тестове
 dotnet run --project RailRunService.API  # Стартира API
+
+# === Code Intelligence (GitNexus) ===
+gitnexus list                                        # Кои repo-та са индексирани
+gitnexus context <Symbol> --repo Transport-OSDM-Src  # Кой вика този symbol, кого вика той
+gitnexus impact <Symbol> --direction upstream --minConfidence 0.8  # Blast radius
+gitnexus query "<concept-phrase>"                    # Hybrid search по смисъл
+gitnexus detect-changes                              # Засегнати flows от git diff (преди commit)
 
 # === Database (SQL Project) ===
 cd "C:\Users\kaloyan.georgiev\Projects\OSDM-Src\SQLProjects\RailRunServiceSQL"
@@ -330,7 +371,7 @@ npm test
 npx playwright test
 
 # Linter
-npm run lint
+npx eslint <files-changed-on-this-branch>   # only fix branch-introduced errors, not pre-existing repo warnings
 
 # TypeScript
 npm run type-check
@@ -416,7 +457,7 @@ Mark `"passes": true` ONLY IF:
 
 1. ✅ Tests pass (npm test AND npx playwright test)
 2. ✅ Visual match (screenshot съвпада) - ако има designReference
-3. ✅ No linter errors (npm run lint)
+3. ✅ No linter errors (npx eslint <files-changed-on-this-branch>   # only fix branch-introduced errors, not pre-existing repo warnings)
 4. ✅ TypeScript compiles (npm run type-check)
 5. ✅ Git committed
 6. ✅ Logged in activity.md
