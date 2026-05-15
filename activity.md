@@ -1,3 +1,39 @@
+## [2026-05-16 01:55] - Task #156: [FE] CompositionEditorPage — оркестрация: `compositionKind` useMemo + disabledRule wiring + drop guard срещу stale drag
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 156.1: Wrote 4 failing tests in CompositionEditorPage.test.tsx:
+  1. Adding self-propelled wagon → locomotive hides, regular palette cards disabled
+  2. Removing only self-propelled wagon → locomotive reappears, all cards active
+  3. Drop regular on self-propelled composition → snackbar warning
+  4. Drop self-propelled on regular composition → snackbar warning
+- Ran tests — all 4 FAIL ✅
+
+### GREEN Phase
+- Step 156.2: In CompositionEditorPage.tsx:
+  - Added `compositionKind` useMemo (derives 'empty' | 'self-propelled' | 'regular' from wagons + deletedWagonIds + wagonTypes)
+  - Added `disabledRule` derivation (inverted mapping: self-propelled composition → 'regular' rule, regular composition → 'self-propelled' rule)
+  - Added `handleIncompatibleDrop` callback that shows context-aware snackbar
+  - Added belt-and-suspenders guard in `handleWagonDrop` for stale drag protection
+  - Wired `disabledRule` to `<WagonPalette>`
+  - Wired `hideLocomotive`, `compositionKind`, `onIncompatibleDrop` to `<WagonCanvas>`
+  - Exported `DisabledRule` and `CompositionKind` types from components/index.ts
+- Ran tests — all 4 PASS ✅
+
+**Files modified:**
+- src/app/features/compositions/pages/CompositionEditorPage.tsx
+- src/app/features/compositions/pages/__tests__/CompositionEditorPage.test.tsx
+- src/app/features/compositions/components/index.ts
+
+**Git commit:**
+- `feat(compositions): [FE] CompositionEditorPage — оркестрация: compositionKind useMemo + disabledRule wiring + drop guard срещу stale drag`
+
+---
+
 ## [2026-05-16 01:10] - Task #155: [FE] WagonPalette — показва ВСИЧКИ типове, disable + tooltip за несъвместимите (`disabledRule` prop)
 
 **Status:** ✅ Complete

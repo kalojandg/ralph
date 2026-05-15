@@ -1,4 +1,4 @@
-﻿[
+[
   {
     "id": 1,
     "category": "setup",
@@ -2817,7 +2817,6 @@
     ],
     "passes": true
   },
-
   {
     "id": 73,
     "category": "refactor",
@@ -5182,7 +5181,7 @@
         "action": "Working dir: frontend. `npm run test:run CompositionEditorPage` зелено. Manual: отвори editor; добави мотриса → виж локомотивът изчезва, regular карти приглушени; премахни → всичко се връща."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 157,
