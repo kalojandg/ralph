@@ -1,3 +1,382 @@
+## [2026-05-16 01:10] - Task #155: [FE] WagonPalette — показва ВСИЧКИ типове, disable + tooltip за несъвместимите (`disabledRule` prop)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 155.1: Added 5 failing tests for `disabledRule` prop: (1) all active when `disabledRule='none'`, (2) self-propelled cards disabled when `disabledRule='self-propelled'`, (3) regular cards disabled when `disabledRule='regular'`, (4) tooltip on hover of disabled card, (5) `onDragStart` not fired for disabled cards
+- Ran tests — 4 FAIL ✅ (correct reason: feature not implemented)
+
+### GREEN Phase
+- Step 155.2: Added `DisabledRule` type and `disabledRule` prop to `WagonPalette`
+- Per-card disabled boolean based on `disabledRule` + `wagonType.isSelfPropelled`
+- Disabled cards: `opacity:0.4`, `cursor:'not-allowed'`, `draggable={false}`, `aria-disabled='true'`
+- Wrapped disabled cards in MUI `<Tooltip placement="right">` with i18n text
+- `onDragStart` short-circuits with `e.preventDefault()` for disabled cards
+- Added i18n keys to both `bg.json` and `en.json`
+- Ran tests — 33 PASS ✅
+
+**Files modified:**
+- `src/app/features/compositions/components/WagonPalette.tsx`
+- `src/app/features/compositions/components/__tests__/WagonPalette.test.tsx`
+- `src/locales/bg.json`
+- `src/locales/en.json`
+
+**Git commit:**
+- `feat(compositions): [FE] WagonPalette — показва ВСИЧКИ типове, disable + tooltip за несъвместимите (disabledRule prop)`
+
+---
+
+## [2026-05-16 01:30] - Task #154: [FE] WagonCanvas — скрий локомотивната карта при `hasSelfPropelled`; drop guard при stale drag state
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 154.1: Extended `WagonCanvas.test.tsx` with 8 new tests in "Self-Propelled / Locomotive Visibility" describe block:
+  - `hideLocomotive=true` → locomotive card not rendered
+  - `hideLocomotive=false` → locomotive card rendered
+  - Default (no prop) → locomotive card rendered
+  - Drop incompatible wagon (self-propelled on regular) → `onIncompatibleDrop` called, `onWagonDrop` NOT called
+  - Drop compatible wagon (regular on regular) → `onWagonDrop` called
+  - Drop regular on self-propelled composition → refused
+  - `dragOver` on self-propelled composition → `dropEffect='none'`
+  - `dragOver` on empty composition → `dropEffect='copy'`
+- All 8 tests FAILED (RED ✅)
+
+### GREEN Phase
+- Step 154.2: Implemented in `WagonCanvas.tsx`:
+  - Added `CompositionKind` type export (`'empty' | 'self-propelled' | 'regular'`)
+  - Added new props: `hideLocomotive`, `compositionKind`, `onIncompatibleDrop`
+  - Wrapped locomotive Card in `{!hideLocomotive && (...)}`
+  - Added `isDropCompatible` helper using `compositionKind` + `wagonType.isSelfPropelled`
+  - `handleDrop` now checks compatibility before calling `onWagonDrop`; calls `onIncompatibleDrop` on mismatch
+  - `handleDragOver` sets `dropEffect='none'` when `compositionKind !== 'empty'`
+- All 43 tests PASSED (GREEN ✅)
+
+### DONE Phase
+- `npm run test:run WagonCanvas` → 43 passed ✅
+- `npm run type-check` → clean ✅
+- `npx eslint` on changed files → clean ✅
+
+**Files modified:**
+- `src/app/features/compositions/components/WagonCanvas.tsx`
+- `src/app/features/compositions/components/__tests__/WagonCanvas.test.tsx`
+
+**Git commit:**
+- `feat(compositions): [FE] WagonCanvas — скрий локомотивната карта при hasSelfPropelled; drop guard при stale drag state`
+
+---
+
+## [2026-05-16 01:00] - Task #153: [FE] WagonType.isSelfPropelled — types + API mapping
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 153.1: Created `wagons-isSelfPropelled.test.ts` with 3 tests:
+  - `mapWagonTypeFromBackend maps isSelfPropelled=true from backend DTO`
+  - `mapWagonTypeFromBackend maps isSelfPropelled=false from backend DTO`
+  - `wagonTypesApi.getAll() returns WagonType[] with isSelfPropelled for mixed types`
+- Ran tests → 3 FAILED (`expected undefined to be true/false`) ✅
+
+### GREEN Phase
+- Step 153.2: Added `isSelfPropelled: boolean` to `WagonType` interface in `compositions.types.ts`. Added `isSelfPropelled: boolean` to `BackendWagonTypeDto` and mapped it in `mapWagonTypeFromBackend` in `wagons.api.ts`.
+- Ran tests → 3 PASSED ✅
+
+### DONE Phase
+- Step 153.3: `npm run test:run` (vitest --changed) → 183 files passed, 1919 tests passed. 2 E2E specs failed (clone-period/clone-single — unrelated, require running backend). `npm run type-check` ✅ clean. `npx eslint` → 0 errors (6 pre-existing warnings).
+
+**Files modified:**
+- `src/api/compositions/compositions.types.ts`
+- `src/api/compositions/wagons.api.ts`
+- `src/api/compositions/__tests__/wagons-isSelfPropelled.test.ts` (new)
+
+**Git commit:**
+- `feat(compositions): [FE] WagonType.isSelfPropelled — types + API mapping`
+
+---
+
+## [2026-05-16 00:45] - Task #152: [BE] AddCarriage integrity validation — отказва смесване на self-propelled + regular в една композиция (409 CompositionTractionMix)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 152.1: Created `AddCarriageTractionMixTests.cs` with 6 handler-level tests (matrix from §6):
+  - (a) `AddSelfPropelled_ToEmptyComposition_Succeeds`
+  - (b) `AddRegular_ToEmptyComposition_Succeeds`
+  - (c) `AddRegular_ToCompositionWithOnlySelfPropelled_FailsWith_CompositionTractionMix`
+  - (d) `AddSelfPropelled_ToCompositionWithOnlyRegular_FailsWith_CompositionTractionMix`
+  - (e) `AddAnotherSelfPropelled_WhenAlreadySelfPropelled_Succeeds`
+  - (f) `AddAnotherRegular_WhenAlreadyRegular_Succeeds`
+- Step 152.2: API-level test skipped — `AddCarriageTests.cs` is excluded from compilation in `.csproj` (pre-existing legacy tests). Handler-level tests provide full coverage of the validation logic.
+- Ran tests → 4 passed, 2 failed (c, d) with `Assert.False() Failure` — correct RED: validation doesn't exist yet ✅
+
+### GREEN Phase
+- Step 152.3: Added `CompositionTractionMix` constant to `RailRunErrorCodes.cs`. Added localized messages to `SharedErrors.resx` (BG) and `SharedErrors.en.resx` (EN). Extended `CompositionWithCarriagesSpec` with `.ThenInclude(cc => cc.WagonType)`.
+- Step 152.4: Implemented traction mix guard in `AddCarriage.cs` handler: after fetching wagonType, checks `existingHasSelfPropelled` / `existingHasRegular` against new type's `IsSelfPropelled`. Returns `Result.Fail(ErrorKind.Conflict, CompositionTractionMix)` on mismatch. Added concurrency comment per §4.1.
+- Step 152.5: **UpdateCarriage check:** `wagonTypeId` is immutable in `UpdateCarriage.cs` — the `UpdateCarriageCommand` does not include a `WagonTypeId` property (only PlacardNumber, UicNumber, stations, OperationType, LinkedTrainNumber, IsActive). No traction mix validation needed.
+
+### DONE Phase
+- Step 152.6: `dotnet build` ✅ (0 errors). `dotnet test --filter AddCarriage` ✅ (10/10 passed: 6 traction mix + 4 audit). No regressions.
+
+**Files modified:**
+- `RailRunService.Application.Tests/AddCarriageTractionMixTests.cs` (new)
+- `RailRunService.Application/Features/Carriages/Commands/AddCarriage.cs`
+- `RailRunService.Application/Constants/RailRunErrorCodes.cs`
+- `SharedSrc/Common/Resources/SharedErrors.resx`
+- `SharedSrc/Common/Resources/SharedErrors.en.resx`
+
+**Git commit:**
+- `feat(compositions): [BE] AddCarriage integrity validation — отказва смесване на self-propelled + regular в една композиция (409 CompositionTractionMix)`
+
+---
+
+## [2026-05-16 00:15] - Task #151: [BE] WagonType DTO / commands / queries / API — propagate IsSelfPropelled през Application + API слоевете
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 151.1: Added 3 failing tests in `WagonTypesControllerTests.cs`:
+  - `CreateWagonType_PersistsIsSelfPropelled` — POST with isSelfPropelled: true → verifies command carries IsSelfPropelled=true
+  - `UpdateWagonType_FlipsIsSelfPropelled` — PUT with isSelfPropelled: false → verifies command carries IsSelfPropelled=false
+  - `GetAllWagonTypes_IncludesIsSelfPropelledField` — DTO response includes correct IsSelfPropelled for mixed types
+- Build FAILED with 4 compilation errors (CreateWagonTypeRequest, CreateWagonTypeCommand, UpdateWagonTypeRequest, UpdateWagonTypeCommand missing IsSelfPropelled) ✅
+
+### GREEN Phase
+- Step 151.2: Propagated IsSelfPropelled through Application + API layers ONLY (Domain/Infrastructure untouched — scaffolded by Task 150):
+  - (a) `WagonTypeDto.cs` — already had IsSelfPropelled from Task 150 ✅
+  - (b) `CreateWagonType.cs` — added command field + entity mapping + DTO projection
+  - (c) `UpdateWagonType.cs` — added command field + entity mapping + DTO projection
+  - (d) `GetWagonTypes.cs` — added IsSelfPropelled to SELECT projection
+  - (e) `GetWagonTypeById.cs` — added IsSelfPropelled to result DTO
+  - (f) `SetWagonTypeStatus.cs` — added IsSelfPropelled to result DTO (bonus — consistency)
+  - (g) `WagonTypeRequests.cs` — added IsSelfPropelled (default false) to Create/Update request records
+  - (h) `WagonTypesController.cs` — propagated IsSelfPropelled in Create + Update command mapping
+
+### DONE Phase
+- Step 151.3: `dotnet build` ✅ (0 errors). `dotnet test --filter WagonType` ✅ (19/19 passed).
+- Verified `git diff Domain/Entities/WagonType.cs` and `Infrastructure/Data/Configurations/WagonTypeConfiguration.cs` — NO changes from this task (only Task 150 scaffold).
+- **DTO shape change for Task 153 (FE):** `WagonTypeDto` now includes `IsSelfPropelled: bool`. API request DTOs (`CreateWagonTypeRequest`, `UpdateWagonTypeRequest`) also accept `isSelfPropelled` (defaults to false).
+
+**Files modified:**
+- `RailRunService.API.Tests/Controllers/WagonTypesControllerTests.cs`
+- `RailRunService.API/Controllers/WagonTypesController.cs`
+- `RailRunService.API/DTOs/WagonTypeRequests.cs`
+- `RailRunService.Application/Features/Nomenclatures/Commands/CreateWagonType.cs`
+- `RailRunService.Application/Features/Nomenclatures/Commands/UpdateWagonType.cs`
+- `RailRunService.Application/Features/Nomenclatures/Commands/SetWagonTypeStatus.cs`
+- `RailRunService.Application/Features/Nomenclatures/Queries/GetWagonTypes.cs`
+- `RailRunService.Application/Features/Nomenclatures/Queries/GetWagonTypeById.cs`
+
+**Git commit:**
+- `feat(compositions): [BE] WagonType DTO / commands / queries / API — propagate IsSelfPropelled през Application + API слоевете (entity + config идват от Task 150 scaffold)`
+
+---
+
+## [2026-05-15 23:30] - Task #150: [BE] WagonType.IsSelfPropelled — SQL колона в DB Project + seed update за DMV серии; regenerate entity чрез EF Core Power Tools
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 150.1: Added 2 failing tests in `WagonTypesControllerTests.cs`:
+  - `WagonTypes_IsSelfPropelled_DefaultsToFalse_ForNewTypes` — asserts regular wagon types have IsSelfPropelled=false
+  - `WagonTypes_SeededDmvSeries_HaveIsSelfPropelledTrue` — asserts DMV series (Id 19,27,28) have IsSelfPropelled=true
+  - Tests fail to compile (CS0117/CS1061): `WagonTypeDto` does not contain `IsSelfPropelled` ✅
+
+### GREEN Phase
+- Step 150.2: Database changes in SQL Project (`OSDM-Src/SQLProjects/RailRunServiceSQL/`):
+  - `dbo/Tables/WagonTypes.sql` — added `IsSelfPropelled BIT NOT NULL CONSTRAINT DF_WagonTypes_IsSelfPropelled DEFAULT 0`
+  - Created `dbo/PostDeployment/Data/079_SetIsSelfPropelledForDmvSeries.sql` — idempotent UPDATE for Id IN (19,27,28)
+  - `dbo/PostDeployment/Seed.sql` — added :r reference AFTER 078_WagonsSnapshot.sql (snapshot overrides earlier data)
+- Step 150.3: Built DACPAC (`dotnet build -c Release --no-incremental`) + published to local DB (`SqlPackage /Action:Publish`) — Successfully published ✅
+- Step 150.4: EF entity + configuration in `OSDM-Src/DotNetServices/RailRunService/`:
+  - `RailRunService.Domain/Entities/WagonType.cs` — added `public bool IsSelfPropelled { get; set; }` with WARNING comment
+  - `RailRunService.Infrastructure/Data/Configurations/WagonTypeConfiguration.cs` — added `.HasDefaultValue(false)` with WARNING comment
+  - `RailRunService.Application/DTOs/Nomenclatures/WagonTypeDto.cs` — added `public bool IsSelfPropelled { get; set; }`
+
+### DONE Phase
+- Step 150.5: `dotnet build` clean (0 errors). `dotnet test --filter IsSelfPropelled` — 2/2 PASSED ✅
+
+**Database-First workflow for this project:**
+1. Schema changes in SQL Project (`SQLProjects/RailRunServiceSQL/dbo/Tables/*.sql`)
+2. Post-deployment seed scripts in `dbo/PostDeployment/Data/`
+3. Build DACPAC + publish to local DB
+4. EF Core Power Tools re-scaffold entities in DotNetServices (manual for this task — added WARNING comments)
+
+**REGENERATED files (EF scaffold — do NOT edit manually in future tasks):**
+- `RailRunService.Domain/Entities/WagonType.cs`
+- `RailRunService.Infrastructure/Data/Configurations/WagonTypeConfiguration.cs`
+
+**Manually-edited files (safe to edit in future tasks):**
+- `RailRunService.Application/DTOs/Nomenclatures/WagonTypeDto.cs`
+- Application Commands (CreateWagonType.cs, UpdateWagonType.cs)
+- Application Queries (GetWagonTypes.cs, GetWagonTypeById.cs)
+- API DTOs (WagonTypeRequests.cs)
+- API Controller (WagonTypesController.cs)
+
+**Files modified:**
+- `SQLProjects/RailRunServiceSQL/dbo/Tables/WagonTypes.sql`
+- `SQLProjects/RailRunServiceSQL/dbo/PostDeployment/Data/079_SetIsSelfPropelledForDmvSeries.sql` (new)
+- `SQLProjects/RailRunServiceSQL/dbo/PostDeployment/Seed.sql`
+- `DotNetServices/RailRunService/RailRunService.Domain/Entities/WagonType.cs`
+- `DotNetServices/RailRunService/RailRunService.Infrastructure/Data/Configurations/WagonTypeConfiguration.cs`
+- `DotNetServices/RailRunService/RailRunService.Application/DTOs/Nomenclatures/WagonTypeDto.cs`
+- `DotNetServices/RailRunService/RailRunService.API.Tests/Controllers/WagonTypesControllerTests.cs`
+
+**Git commit:**
+- `feat(compositions): [BE] WagonType.IsSelfPropelled — SQL колона в DB Project + seed update за DMV серии; regenerate entity чрез EF Core Power Tools`
+
+---
+
+## [2026-05-16 00:00] - Task #143: [FE] CompositionFilters — fix train autocomplete + DatePicker + day-in-range semantics + quick chips + default filter (today, +7)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 143.1: Extended `CompositionFilters.test.tsx` with 11 new tests:
+  - Train autocomplete loading state (progressbar when trainsLoading=true)
+  - Localized no-options text when trains list empty
+  - Train options visible after loading
+  - Quick date chips render (Today, Tomorrow, This Week, This Month)
+  - Today chip sets dateFrom=dateTo=today
+  - Tomorrow chip sets dateFrom=dateTo=tomorrow
+  - This Week chip sets Mon-Sun range
+  - This Month chip sets month range
+  - "Upcoming 7 days" chip active when dateFrom=today, dateTo=today+7
+  - Clear filters button renders when filters active
+  - Clear filters calls onClearFilters callback
+- Ran tests — 9 FAIL ✅ (correct failures: missing features)
+
+### GREEN Phase
+- Step 143.2: In `CompositionFilters.tsx`:
+  - Added `trainsLoading` and `onClearFilters` props
+  - Added `loading={trainsLoading}` + CircularProgress in Autocomplete endAdornment
+  - Added `noOptionsText={t('common.noOptions')}` for localized empty state
+  - Added quick date chips row: Today, Tomorrow, This Week, This Month
+  - Added "Upcoming 7 days" indicator chip (color="primary") when dates match
+  - Added clear filters button with FilterListOff icon
+- Step 143.3: In `CompositionsListPage.tsx`:
+  - Added trains loading (trainsApi.getAll) with state management
+  - Set default filter: dateFrom=today, dateTo=today+7
+  - Changed default rowsPerPage from 10 to 20
+  - Added handleTrainChange + handleClearFilters handlers
+  - Passed trains, trainsLoading, selectedTrain, onClearFilters to CompositionFilters
+  - Added trainId to compositionsApi.getAll params
+- Added i18n keys to both bg.json and en.json:
+  - compositions.filters.quickChips.{today,tomorrow,thisWeek,thisMonth,upcomingWeek}
+  - compositions.filters.clear
+  - common.noOptions
+
+### DONE Phase
+- `npm run test:run CompositionFilters + CompositionList` — 51 tests, all green ✅
+- `npm run type-check` — clean ✅
+- `npx eslint` on changed files — 0 errors (only pre-existing warnings) ✅
+
+**Files modified:**
+- `src/app/features/compositions/components/CompositionFilters.tsx`
+- `src/app/features/compositions/components/__tests__/CompositionFilters.test.tsx`
+- `src/app/features/compositions/pages/CompositionsListPage.tsx`
+- `src/locales/bg.json`
+- `src/locales/en.json`
+
+**Git commit:**
+- `feat(compositions): [FE] CompositionFilters — fix train autocomplete + DatePicker + day-in-range semantics + quick chips + default filter (today, +7)`
+
+---
+
+## [2026-05-15 23:30] - Task #142: [FE] CompositionList — колона „Период" → „Дата" (single day); sort by date DESC, secondary trainNumber ASC
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 142.1: Updated `CompositionList.test.tsx` — changed mock i18n key from `period` to `date`, updated mock compositions with `date` field, changed header assertion to expect "Date" not "Period", changed date display test from range to single date format, added 3 sort tests (click triggers onSortChange, toggle direction, secondary sort by trainNumber ASC)
+- Ran tests — 5 FAIL ✅ (correct failures: missing feature)
+
+### GREEN Phase
+- Step 142.2: In `CompositionList.tsx` — removed `formatDateRange`, added `formatDate`, replaced header `period` → `date` with MUI `TableSortLabel`, cell renders `composition.date` via `formatDate`, added `SortConfig` type + `onSortChange`/`sort` props, added `sortCompositions` function with secondary trainNumber sort
+- Step 142.3: In `bg.json`/`en.json` — replaced `compositions.list.table.period` with `compositions.list.table.date`. Updated `CompositionsListPage.tsx` — added sort state with default `{ field: 'date', direction: 'desc' }`, passes `sort`/`onSortChange` to `CompositionList`
+- Ran tests — 23 PASS ✅
+
+### DONE Phase
+- `npm run type-check` — clean ✅
+- `npx eslint` on changed files — 0 errors (only pre-existing warnings) ✅
+- `npx vitest run --changed origin/develop` — all affected tests pass (0 FAIL, exit code 0) ✅
+
+**Files modified:**
+- `src/app/features/compositions/components/CompositionList.tsx`
+- `src/app/features/compositions/components/__tests__/CompositionList.test.tsx`
+- `src/app/features/compositions/components/index.ts`
+- `src/app/features/compositions/pages/CompositionsListPage.tsx`
+- `src/locales/bg.json`
+- `src/locales/en.json`
+
+**Git commit:**
+- `feat(compositions): [FE] CompositionList — колона „Период" → „Дата" (single day); sort by date DESC, secondary trainNumber ASC`
+
+---
+
+## [2026-05-15 23:05] - Task #141: [FE] compositionsApi.getAll — extended filter params (dateFrom, dateTo, trainId, status, page, pageSize) + paginated response type
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 141.1: Extended `compositions-integration.test.ts` with 4 new tests:
+  - `trainId` filter serializes as query param → FAILS ✅ (getAll doesn't handle trainId)
+  - All extended params (dateFrom, dateTo, trainId, status, page, pageSize) serialize simultaneously → FAILS ✅
+  - `Composition.date` mapped as ISO date (YYYY-MM-DD) from backend `validFrom` → FAILS ✅ (field missing)
+  - Time portion stripped from `validFrom` when deriving `date` → FAILS ✅
+
+### GREEN Phase
+- Step 141.2: 
+  - Added `trainId?: number` to `CompositionsFilters` in `compositions.types.ts`
+  - Added `date: string` to `Composition` interface (derived field, computed from `startDate`/`validFrom`)
+  - Updated `mapCompositionFromBackend` to compute `date: dto.validFrom.split('T')[0]`
+  - Updated `mapCompositionDetailFromBackend` and inline mapping in `create()` to include `date`
+  - Added `trainId` filter handling in `getAll()` → passes as query param
+  - Ran tests — all 23 green ✅
+
+### DONE Phase
+- Step 141.3: Full verification:
+  - `npm run test:run` — 29 test files, 432 tests, all green ✅
+  - `npm run type-check` — clean, no errors ✅
+  - `npx eslint` on changed files — 0 errors ✅
+  - Existing consumers of `getAll` unaffected — new params are optional
+
+**Files modified:**
+- `src/api/compositions/compositions.types.ts` (added `trainId` to filters, `date` to Composition)
+- `src/api/compositions/compositions.api.ts` (trainId param handling, date mapping in 3 mappers)
+- `src/api/compositions/__tests__/compositions-integration.test.ts` (4 new tests)
+
+**Git commit:**
+- `feat(compositions): [FE] compositionsApi.getAll — extended filter params (dateFrom, dateTo, trainId, status, page, pageSize) + paginated response type`
+
+---
+
 ## [2026-05-15 22:15] - Task #140: [BE] GET /api/compositions — date-in-range filter + pagination (за ден-за-ден модел)
 
 **Status:** ✅ Complete

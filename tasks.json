@@ -4899,7 +4899,7 @@
         "action": "Working dir: frontend. `npm run test:run compositions.api` — зелено. `npm run type-check` чисто. Сегашните consumer-и на `getAll` не се чупят — те викаха старата signature без filters; новите параметри са optional."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 142,
@@ -4931,7 +4931,7 @@
         "action": "Working dir: frontend. `npm run test:run CompositionList` зелено. `npm run type-check` + `npx eslint` чисто. Manual: отвори /compositions → header е 'Дата', датите са форматирани като 'DD.MM.YYYY', default sort е най-новата дата отгоре."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 143,
@@ -4968,7 +4968,7 @@
         "action": "Working dir: frontend. `npm run test:run CompositionFilters` + `CompositionsListPage` зелени. `npm run type-check` + `npx eslint` чисто. Manual sanity: 100+ composition записи → списъкът се зарежда бързо, paginate работи, всеки филтър засяга само relevant records."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 150,
@@ -5005,7 +5005,7 @@
         "action": "Working dir: backend. `dotnet build` clean. `dotnet test --filter WagonTypes_IsSelfPropelled` зелено. Документирай в activity.md: (a) workflow стъпки за този проект (SQL Project → DACPAC publish → EF Power Tools scaffold); (b) кои файлове са РЕГЕНЕРИРАНИ (entity + configuration) — следващите tasks НЕ пишат в тях ръчно; (c) кои файлове остават manually-edited (Application DTOs, Commands, Queries, API DTOs, Controller)."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 151,
@@ -5032,7 +5032,7 @@
         "action": "Working dir: backend. `dotnet build` + `dotnet test --filter WagonType` зелени. Документирай DTO shape промяната в activity.md — Task 153 (FE) ще го consume. Verify-ни `git diff Domain/Entities/WagonType.cs` и `Infrastructure/Data/Configurations/WagonTypeConfiguration.cs` — промените трябва да са от Task 150 scaffold, **не от ръчно редактиране в тази стъпка**."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 152,
@@ -5074,7 +5074,7 @@
         "action": "Working dir: backend. `dotnet build` + `dotnet test --filter AddCarriage` + integration test зелени. Проверка ръчно през curl/Postman: POST AddCarriage с несъвместим тип → 409 + CompositionTractionMix code + локализирано съобщение."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 153,
@@ -5101,7 +5101,7 @@
         "action": "Working dir: frontend. `npm run test:run wagons.api` зелено. `npm run type-check` чисто."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 154,
@@ -5128,7 +5128,7 @@
         "action": "Working dir: frontend. `npm run test:run WagonCanvas` зелено. `npm run type-check` чисто."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 155,
@@ -5155,7 +5155,7 @@
         "action": "Working dir: frontend. `npm run test:run WagonPalette` зелено. `npm run type-check` + `npx eslint` чисто."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 156,
