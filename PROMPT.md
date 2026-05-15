@@ -111,10 +111,14 @@
 
 1. **Run Tests:**
    ```bash
-   npm run test:run        # Vitest unit/component, CI-style single-run (НЕ ползвай `npm test` — то стартира watch mode и виси)
-   # E2E — само ако changeset-ът засяга UI flow / user journey / API contract:
-   # npm run e2e            # Playwright — глобален screen suite (~5-20 мин)
-   # npm run e2e -- e2e/tests/<feature>/<spec>.spec.ts    # ТАРГЕТИРАН — препоръчителен по време на TDD
+   # Unit/component — auto-selective чрез vitest --changed:
+   npx vitest run --changed origin/develop
+   # ИЛИ пълен suite ако changeset е голям/cross-cutting:
+   # npm run test:run
+
+   # E2E — селективен чрез select-e2e.ps1 (виж "⚡ Selective E2E" по-долу):
+   # $selection = powershell.exe -ExecutionPolicy Bypass -File C:/Users/kaloyan.georgiev/Projects/ralph/select-e2e.ps1
+   # if ($selection -eq 'FULL') { npm run e2e } elseif ($selection) { npm run e2e -- $selection.Split() }
    ```
    
 2. **Check Linter:**
@@ -382,6 +386,50 @@ SqlPackage /Action:Publish /SourceFile:bin/Release/RailRunServiceDb.dacpac /Targ
 **Правило:** избирай **най-ниското** ниво, на което сценариите дават смислен fail. Pure helper не се тества с E2E. UI flow не се тества с unit. Ако таскът засяга няколко нива — пишеш на всяко, но НЕ дублираш един и същ assertion.
 
 **Anti-pattern (от опит на team-а):** `if (await el.isVisible()) { await expect(el).toBeVisible(); }` — тестът минава винаги. Ако елементът трябва да е там — assert-вай го директно, без `if` guard. Failing test, който винаги passes, е по-лош от никакъв тест.
+
+### ⚡ Selective E2E (inner loop optimization)
+
+**Принцип:** Целият Playwright suite е скъп (5-20 мин). На всяка ралф итерация — пускай **САМО** specs, които могат да бъдат засегнати от твоя diff. CI/PR pipeline ще пусне пълния suite преди merge — селективното е само за вътрешния цикъл.
+
+**Recipe (когато DONE phase изисква E2E run):**
+
+```powershell
+# 1. Питай скрипта кои specs са нужни. По default сравнява срещу origin/develop.
+$selection = powershell.exe -ExecutionPolicy Bypass -File C:/Users/kaloyan.georgiev/Projects/ralph/select-e2e.ps1
+
+# 2. Реагирай според output-а:
+if ($selection -eq 'FULL') {
+    # Cross-cutting път е bumped (auth, routing, store, locales, shared/components, …).
+    # Path-mapping не може да тренсе global state side-effects → пълен suite.
+    npm run e2e
+}
+elseif ($selection) {
+    # 1+ feature маpнат → таргетиран run на конкретни spec файлове/папки.
+    npm run e2e -- $selection.Split()
+}
+else {
+    # Diff не съдържа UI-relevant промени (backend-only, docs, ralph/, чисто тест файлове).
+    # Skip E2E. Unit/component + lint + type-check са достатъчни.
+}
+```
+
+**Допълнително — Vitest вече знае самостоятелно:**
+```bash
+npx vitest run --changed origin/develop   # auto-selective unit/component (не изисква map)
+```
+
+**Кога да forced FULL (override на script-а):**
+- Преди да маркираш PR-а готов за code review (final safety net)
+- Когато бъг е репродуциран през journey, който не е в map-а (после допълни map-а)
+- Преди release / production deploy
+
+**Map maintenance:**
+- Map-ът е [`Admin-App/e2e/feature-map.json`](C:/Users/kaloyan.georgiev/Projects/Admin-App/e2e/feature-map.json) — entries са еднократно curated path↔spec mappings.
+- Ако script-ът върне „X changed file(s) found but none matched any feature" на stderr → добави нов entry в map-а или го добави в `ignored`.
+- `crossCutting` се разширява само ако имаш конкретен incident; не превентивно.
+
+**Защо не разчитаме само на GitNexus impact за E2E:**
+Playwright specs взаимодействат през DOM (`getByRole`, `getByLabel`) — нямат code-graph edges към компонентите. GitNexus `detect-changes` остава **отличен** за unit/integration impact (use it преди commit), но за E2E path-mapping е по-надеждно.
 
 ### 🎯 Testing Commands
 
