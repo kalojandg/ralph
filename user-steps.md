@@ -78,7 +78,7 @@ vi.mock('@/api/wagons/wagons.api', () => ({
 
 1. **Напиши тест** — тестът ТРЯБВА да ФЕЙЛВА
 2. **Имплементирай** минимален код за да минава тестът
-3. **Верифицирай:** `npm run type-check && npx eslint <files-changed-on-this-branch> && npm test`
+3. **Верифицирай:** `npm run type-check && npx eslint <files-changed-on-this-branch> && npm run test:run`
 4. **Всичко минава** → таскът е готов
 
 ### Snackbar / Toaster pattern:
@@ -226,10 +226,10 @@ CallMcpTool({
 
 ```bash
 # 1. Unit/Component tests
-npm test
+npm run test:run
 
 # 2. E2E Playwright tests
-npx playwright test
+npm run e2e
 
 # 3. Linter
 npx eslint <files-changed-on-this-branch>
@@ -253,13 +253,13 @@ npm run type-check
 - Fix component logic
 - Fix props handling
 - Fix state management
-- Re-run: `npm test`
+- Re-run: `npm run test:run`
 
 #### E2E Test Fails
 - Fix user interaction flow
 - Fix localStorage mock data
 - Fix navigation/routing
-- Re-run: `npx playwright test`
+- Re-run: `npm run e2e`
 
 #### Linter Fails
 - Fix code style issues
@@ -284,7 +284,7 @@ npm run type-check
 ```markdown
 Step 11.1 (RED): Write failing E2E test
   ↓
-Run: npx playwright test
+Run: npm run e2e
   ↓
 Verify: TEST FAILS ✅
   ↓
@@ -410,7 +410,7 @@ git commit -m "feat(compositions): {exact task.description from tasks.json}"
 3. **Check implementation** → does it match test?
 4. **Check imports** → everything imported correctly?
 5. **Check data** → localStorage mock data correct?
-6. **Run test in isolation** → `npm test -- ComponentName.test.tsx`
+6. **Run test in isolation** → `npm run test:run -- ComponentName.test.tsx`
 
 ### If Linter Fails
 
@@ -426,7 +426,7 @@ git commit -m "feat(compositions): {exact task.description from tasks.json}"
 **Task is complete ONLY when:**
 
 1. ✅ Tests written (for TDD tasks)
-2. ✅ Tests pass (npm test && npx playwright test)
+2. ✅ Tests pass (npm run test:run && npm run e2e)
 3. ✅ Screenshot taken (for designReference tasks)
 4. ✅ Design matches mockup (visual comparison ✅)
 5. ✅ Linter passes (npx eslint <files-changed-on-this-branch>)
@@ -492,10 +492,10 @@ git commit -m "feat(compositions): {exact task.description from tasks.json}"
 
 **Принцип: "Само местиш, не променяш"**
 
-1. **ПРЕДИ** всяка стъпка: `npm test && npm run type-check` → запиши baseline
+1. **ПРЕДИ** всяка стъпка: `npm run test:run && npm run type-check` → запиши baseline
 2. **ПРЕДИ** да извадиш функция/символ в нов файл: `gitnexus context <symbol>` → виж всички callers (incoming) и callees (outgoing). Ако броят е по-голям, отколкото очакваш — спри и преоцени scope-а. `gitnexus impact <symbol> --direction upstream --minConfidence 0.7` дава blast radius за смело преценяване колко refactor-а имаш.
 3. **Извличай** код в нов файл, добавяй `export` там и `import` в оригиналния
-4. **СЛЕД** всяка стъпка: `npm test && npm run type-check` → СЪЩИЯТ резултат. Плюс `gitnexus detect-changes` → засегнатите processes трябва да са СЪЩИТЕ като преди extract-а; ако са се появили нови flow-и — extract-ът е променил поведение, не просто организация.
+4. **СЛЕД** всяка стъпка: `npm run test:run && npm run type-check` → СЪЩИЯТ резултат. Плюс `gitnexus detect-changes` → засегнатите processes трябва да са СЪЩИТЕ като преди extract-а; ако са се появили нови flow-и — extract-ът е променил поведение, не просто организация.
 5. Ако тест фейлва → **ВЕДНАГА rollback** → `gitnexus context <failing-test-target>` за да видиш точните callers/callees преди да гадаеш → поправи
 6. **НИКОГА** не променяй rendering логика — само реорганизация на файлове
 
@@ -671,14 +671,14 @@ dedicated wall-tracks, няма по-тесни колони. Стените ж�
 
 За всеки таск (#96-#111):
 
-1. **RED** — напиши failing тест(ове). Пусни `npm test` → тестовете ФЕЙЛВАТ.
+1. **RED** — напиши failing тест(ове). Пусни `npm run test:run` → тестовете ФЕЙЛВАТ.
    Verify ФЕЙЛВАТ по правилната причина (модул липсва, тестван behavior
    не е имплементиран).
-2. **GREEN** — минимална имплементация. Пусни `npm test` → всички ПАСВАТ.
+2. **GREEN** — минимална имплементация. Пусни `npm run test:run` → всички ПАСВАТ.
 3. **REFACTOR** (по желание) — подобрения без да чупят тестовете.
 4. **VISUAL** (за UI таскове) — npm run dev + manual проверка (cursor-ide-browser
    MCP ако е наличен). Цвят, положение, cursor behavior.
-5. **DONE** — `npm test && npm run type-check && npx eslint <files-changed-on-this-branch>` — чисто.
+5. **DONE** — `npm run test:run && npm run type-check && npx eslint <files-changed-on-this-branch>` — чисто.
 
 ### 📁 Файлова структура
 
@@ -858,13 +858,13 @@ Lint / code review правило: ако имаш нужда да рендир�
 
 За всеки таск:
 
-1. **RED** — напиши failing тест(ове). `npm test` → ФЕЙЛВАТ по правилната причина
+1. **RED** — напиши failing тест(ове). `npm run test:run` → ФЕЙЛВАТ по правилната причина
    (модулът не съществува, компонентът не рендира expected element).
-2. **GREEN** — минимална имплементация. `npm test` → ПАСВАТ.
+2. **GREEN** — минимална имплементация. `npm run test:run` → ПАСВАТ.
 3. **VISUAL** (само Task 123) — screenshot compare с editor preview чрез
    cursor-ide-browser MCP. Визуален паритет задължителен.
-4. **DONE** — `npm test && npm run type-check && npx eslint <files-changed-on-this-branch>` + (за #122, #124) +
-   `npx playwright test` — чисто.
+4. **DONE** — `npm run test:run && npm run type-check && npx eslint <files-changed-on-this-branch>` + (за #122, #124) +
+   `npm run e2e` — чисто.
 
 ### 📁 Файлова структура (целева след Етап 6)
 
@@ -973,7 +973,7 @@ src/app/features/wagons/components/
 2. ✅ Съществуващите тестове — същият брой passing (нула регресия)
 3. ✅ `npm run type-check` чист
 4. ✅ `npx eslint <files-changed-on-this-branch>` — няма нови errors
-5. ✅ За Task 122/124: `npx playwright test` минава
+5. ✅ За Task 122/124: `npm run e2e` минава
 6. ✅ За Task 123: визуален screenshot compare е okay
 7. ✅ За Task 122/123: размерните таргети са постигнати (≤500 / ≤250 реда)
 8. ✅ Актуализиран activity.md запис

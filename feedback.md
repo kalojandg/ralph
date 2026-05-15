@@ -58,10 +58,10 @@ synthetic OSDM elements. Markiran с `TEMP: remove after Etap 7 seed cleanup`.
 
 ### 🧪 TDD ритуал за всеки таск
 
-1. **RED** → пиши тестове, пусни `npm test`, **verify FAIL**
+1. **RED** → пиши тестове, пусни `npm run test:run`, **verify FAIL**
 2. **GREEN** → минимална имплементация, verify PASS
 3. **VISUAL** (само за Task 123) → screenshot compare чрез cursor-ide-browser
-4. **DONE** → `npm test && npm run type-check && npx eslint <files-changed-on-this-branch>` + (за Task 122, 124) + `npx playwright test`
+4. **DONE** → `npm run test:run && npm run type-check && npx eslint <files-changed-on-this-branch>` + (за Task 122, 124) + `npm run e2e`
 
 ### 📋 Последователност на таскове (не пропускай стъпки!)
 

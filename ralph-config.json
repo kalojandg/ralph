@@ -37,8 +37,8 @@
   "tdd": {
     "enabled": true,
     "test_commands": {
-      "unit": "npm test",
-      "e2e": "npx playwright test",
+      "unit": "npm run test:run",
+      "e2e": "npm run e2e",
       "lint": "npm run lint",
       "typecheck": "npm run type-check"
     },

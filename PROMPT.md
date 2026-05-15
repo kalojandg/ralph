@@ -47,8 +47,13 @@
 
 **Phase RED (Write Failing Test):**
 - Изпълни steps с `"phase": "RED"`
-- Напиши failing test (unit test или E2E test с Playwright)
-- **RUN TEST** → verify it **FAILS**
+- Избери **правилното test ниво** според таска (виж "Test level selection" по-долу):
+  - Pure helper / util → Vitest unit (`*.test.ts` до файла)
+  - React компонент → Vitest + RTL component test (`*.test.tsx` до компонента)
+  - Backend handler → xUnit integration (`*Tests/*.cs`)
+  - Cross-feature user journey / routing / persisted state → Playwright E2E в [`e2e/tests/<feature>/<spec>.spec.ts`](C:/Users/kaloyan.georgiev/Projects/Admin-App/e2e/tests/)
+- Напиши failing test на избраното ниво
+- **RUN TEST** (`npm run test:run -- <path>` за unit/component или `npm run e2e -- <spec>` за E2E) → verify it **FAILS** **по правилната причина** (липсваща фичa, не сynтактична грешка / typo)
 - Ако не фейлва → тестът не тества правилното нещо!
 
 **Phase GREEN (Minimal Implementation):**
@@ -89,7 +94,7 @@
 **Phase DONE (Verification):**
 - Изпълни steps с `"phase": "DONE"`
 - **VERIFY ALL:**
-  - ✅ Tests pass: `npm test && npx playwright test`
+  - ✅ Tests pass: `npm run test:run` (unit/component) + `npm run e2e` **only when the change touches a UI flow / user journey** (виж "Test level selection" по-долу)
   - ✅ Visual match: Screenshot съвпада с design mockup
   - ✅ No linter errors: `npx eslint <files-changed-on-this-branch>   # only fix branch-introduced errors, not pre-existing repo warnings`
   - ✅ TypeScript compiles: `npm run type-check`
@@ -106,8 +111,10 @@
 
 1. **Run Tests:**
    ```bash
-   npm test                # Unit/component tests
-   npx playwright test     # E2E tests
+   npm run test:run        # Vitest unit/component, CI-style single-run (НЕ ползвай `npm test` — то стартира watch mode и виси)
+   # E2E — само ако changeset-ът засяга UI flow / user journey / API contract:
+   # npm run e2e            # Playwright — глобален screen suite (~5-20 мин)
+   # npm run e2e -- e2e/tests/<feature>/<spec>.spec.ts    # ТАРГЕТИРАН — препоръчителен по време на TDD
    ```
    
 2. **Check Linter:**
@@ -318,8 +325,9 @@ If NO (all tasks done) — output:
 # === Frontend ===
 cd "C:\Users\kaloyan.georgiev\Projects\Admin-App"
 npm run type-check          # TypeScript проверка
-npx eslint <files-changed-on-this-branch>   # only fix branch-introduced errors, not pre-existing repo warnings                # ESLint
-npm test                    # Vitest unit/component тестове
+npx eslint <files-changed-on-this-branch>   # only fix branch-introduced errors, not pre-existing repo warnings
+npm run test:run            # Vitest unit/component, CI-style (single run). НЕ ползвай `npm test` — то е watch mode.
+npm run e2e                 # Playwright (full suite); за TDD цикъл — таргетирай: npm run e2e -- e2e/tests/<spec>.spec.ts
 npm run dev                 # Dev server на http://localhost:5173
 
 # === Backend ===
@@ -357,18 +365,34 @@ SqlPackage /Action:Publish /SourceFile:bin/Release/RailRunServiceDb.dacpac /Targ
 
 1. **ONE TASK AT A TIME** - Never work on multiple tasks in parallel
 2. **ONE STEP AT A TIME** - Execute steps sequentially, verify after each
-3. **TESTS FIRST** (for TDD tasks) - Write failing test BEFORE implementation
+3. **TESTS FIRST** (for TDD tasks) - Write failing test BEFORE implementation. **Виж "Test level selection" — изборът на ниво (unit / integration / E2E) не е автоматичен; зависи от какво тества този таск.**
 4. **VISUAL FEEDBACK MANDATORY** (for designReference tasks) - Must screenshot and compare
 5. **ITERATE UNTIL PASS** - Don't mark complete until tests pass AND design matches
+
+### 🧪 Test level selection (RED phase — кое ниво пишеш?)
+
+| Какво променяш | Ниво на RED test | Къде | Команда |
+|---|---|---|---|
+| Pure helper / util / classifier / parse | **Unit** (Vitest) | `*.test.ts` до файла | `npm run test:run -- <path>` |
+| React компонент (rendering, state, interactions без routing/API) | **Component** (Vitest + RTL) | `*.test.tsx` до компонента | `npm run test:run -- <path>` |
+| Backend handler / command / query | **Integration** (xUnit) | `*Tests/*.cs` | `dotnet test --filter` |
+| Cross-feature user journey (multiple pages, routing, persisted state, auth) | **E2E** (Playwright) | [`e2e/tests/<feature>/<spec>.spec.ts`](C:/Users/kaloyan.georgiev/Projects/Admin-App/e2e/tests/) | `npm run e2e -- <spec>` |
+| API contract (FE→BE) | Integration + E2E | backend + `e2e/tests/` | `dotnet test` + `npm run e2e` |
+
+**Правило:** избирай **най-ниското** ниво, на което сценариите дават смислен fail. Pure helper не се тества с E2E. UI flow не се тества с unit. Ако таскът засяга няколко нива — пишеш на всяко, но НЕ дублираш един и същ assertion.
+
+**Anti-pattern (от опит на team-а):** `if (await el.isVisible()) { await expect(el).toBeVisible(); }` — тестът минава винаги. Ако елементът трябва да е там — assert-вай го директно, без `if` guard. Failing test, който винаги passes, е по-лош от никакъв тест.
 
 ### 🎯 Testing Commands
 
 ```bash
-# Unit/Component tests
-npm test
+# Unit/Component tests (Vitest, CI-style single run)
+npm run test:run                          # пълен suite
+npm run test:run -- src/.../X.test.tsx    # таргетиран
 
-# E2E tests
-npx playwright test
+# E2E tests (Playwright)
+npm run e2e                                # пълен suite — БАВЕН, рядко
+npm run e2e -- e2e/tests/<feature>/X.spec.ts   # таргетиран — за RED/GREEN цикъл
 
 # Linter
 npx eslint <files-changed-on-this-branch>   # only fix branch-introduced errors, not pre-existing repo warnings
@@ -455,9 +479,9 @@ compositionsApi.create(data) // → writes localStorage
 
 Mark `"passes": true` ONLY IF:
 
-1. ✅ Tests pass (npm test AND npx playwright test)
+1. ✅ Tests pass — `npm run test:run` ВИНАГИ; `npm run e2e` (таргетиран — `npm run e2e -- <spec>`) **само ако промяната засяга UI flow / journey / API contract** (виж "Test level selection")
 2. ✅ Visual match (screenshot съвпада) - ако има designReference
-3. ✅ No linter errors (npx eslint <files-changed-on-this-branch>   # only fix branch-introduced errors, not pre-existing repo warnings)
+3. ✅ No linter errors (npx eslint <files-changed-on-this-branch> — only fix branch-introduced errors, not pre-existing repo warnings)
 4. ✅ TypeScript compiles (npm run type-check)
 5. ✅ Git committed
 6. ✅ Logged in activity.md
