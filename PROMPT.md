@@ -424,7 +424,7 @@ npx vitest run --changed origin/develop   # auto-selective unit/component (не 
 - Преди release / production deploy
 
 **Map maintenance:**
-- Map-ът е [`Admin-App/e2e/feature-map.json`](C:/Users/kaloyan.georgiev/Projects/Admin-App/e2e/feature-map.json) — entries са еднократно curated path↔spec mappings.
+- Map-ът е [`ralph/feature-map.json`](C:/Users/kaloyan.georgiev/Projects/ralph/feature-map.json) — entries са еднократно curated path↔spec mappings. Държан в ralph/ за да не правим commit-и в Admin-App за инструмент на ralph.
 - Ако script-ът върне „X changed file(s) found but none matched any feature" на stderr → добави нов entry в map-а или го добави в `ignored`.
 - `crossCutting` се разширява само ако имаш конкретен incident; не превентивно.
 

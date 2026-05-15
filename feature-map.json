@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "_comment": "Maps changed source paths (in Admin-App) -> E2E spec paths/globs for selective Playwright runs in ralph's inner loop. Full suite still runs on CI/PR before merge — this is NOT a CI gate. Globs use minimatch syntax (** = recursive, * = single segment). All matching features contribute specs (union).",
+  "_consumed_by": "ralph/select-e2e.ps1",
+  "_paths_are_relative_to": "Admin-App/",
+
+  "features": {
+    "audit":         { "sources": ["src/app/features/audit/**"],         "specs": ["e2e/tests/audit/**"] },
+    "auth":          { "sources": ["src/app/features/auth/**"],          "specs": ["e2e/tests/auth/**"] },
+    "chief-cashier": { "sources": ["src/app/features/chief-cashier/**"], "specs": ["e2e/tests/chief-cashier/**"] },
+    "compositions":  { "sources": ["src/app/features/compositions/**"],  "specs": ["e2e/tests/compositions/**"] },
+    "groups":        { "sources": ["src/app/features/groups/**"],        "specs": ["e2e/tests/groups/**"] },
+    "iasutd":        { "sources": ["src/app/features/iasutd/**"],        "specs": ["e2e/tests/iasutd/**"] },
+    "nomenclatures": { "sources": ["src/app/features/nomenclatures/**"], "specs": ["e2e/tests/nomenclatures/**"] },
+    "roles":         { "sources": ["src/app/features/roles/**"],         "specs": ["e2e/tests/roles/**"] },
+    "tariffing":     { "sources": ["src/app/features/tariffing/**"],     "specs": ["e2e/tests/tariffing/**"] },
+    "users":         { "sources": ["src/app/features/users/**"],         "specs": ["e2e/tests/users/**"] },
+
+    "wagons": {
+      "_note": "wagonGrid shared layer is consumed by both wagons editor and compositions view → include both spec folders",
+      "sources": [
+        "src/app/features/wagons/**",
+        "src/app/shared/wagonGrid/**"
+      ],
+      "specs": [
+        "e2e/tests/wagons/**",
+        "e2e/tests/compositions/**"
+      ]
+    }
+  },
+
+  "crossCutting": {
+    "_comment": "If ANY changed file matches one of these globs, run the FULL E2E suite (script outputs 'FULL'). Path mapping cannot safely trace global state changes (auth, routing, i18n, theme, etc.) without missing regressions.",
+    "paths": [
+      "src/app/core/**",
+      "src/app/routes/**",
+      "src/app/layout/**",
+      "src/store/**",
+      "src/api/clients/**",
+      "src/api/config.ts",
+      "src/hooks/useTranslation.ts",
+      "src/locales/**",
+      "src/app/shared/components/**",
+      "playwright.config.ts",
+      "vite.config.*",
+      "tsconfig*.json",
+      "package.json",
+      "package-lock.json",
+      "e2e/fixtures/**",
+      "e2e/helpers/**",
+      "e2e/page-objects/**"
+    ]
+  },
+
+  "ignored": {
+    "_comment": "Changed files matching these globs neither map to specs nor trigger full suite. They simply don't require E2E (docs, configs unrelated to runtime).",
+    "paths": [
+      "**/*.md",
+      "DOCS/**",
+      "ralph/**",
+      "src/**/*.test.ts",
+      "src/**/*.test.tsx",
+      ".github/**",
+      ".vscode/**"
+    ]
+  }
+}

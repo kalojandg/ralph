@@ -40,13 +40,16 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+
 if (-not $AdminAppDir) {
     # $PSScriptRoot is unreliable in param defaults under -File invocation; resolve in body.
-    $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
     $AdminAppDir = Join-Path (Split-Path -Parent $scriptDir) 'Admin-App'
 }
 
-$mapPath = Join-Path $AdminAppDir 'e2e\feature-map.json'
+# Feature map lives alongside this script in ralph/ — keeps the optimization
+# self-contained (no commits required in the Admin-App repo).
+$mapPath = Join-Path $scriptDir 'feature-map.json'
 if (-not (Test-Path $mapPath)) {
     Write-Error "feature-map.json not found at $mapPath"
     exit 3
