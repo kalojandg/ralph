@@ -1,4 +1,4 @@
-[
+﻿[
   {
     "id": 1,
     "category": "setup",
@@ -4567,7 +4567,7 @@
         "action": "npm run test:run compositions.api.clone — зелено. npm run type-check чисто."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 131,
@@ -4609,7 +4609,7 @@
         "action": "npm run test:run mockStorage.clone — всички 7 зелени. npm run type-check чисто. Manual sanity: clear localStorage; reload app; в console: `await mockStorageService.cloneComposition(1, { targetTrainNumber: '8632', targetDate: '2026-07-01', overwrite: false })` → response има 0 bookings, новата композиция има startDate === endDate === '2026-07-01'."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 132,
@@ -4635,7 +4635,7 @@
         "action": "npm run test:run useCloneComposition — всички зелени. type-check чисто."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 133,
@@ -4673,7 +4673,7 @@
         "action": "npm run test:run CloneCompositionDialog — всички 8 зелени. type-check + lint чисто. Visual screenshot записан в `docs/composition/designs/clone-dialog-current.png` за бъдеща сравнение."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 134,
@@ -4704,7 +4704,7 @@
         "action": "npm run test:run — зелени. lint + type-check чисто."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 135,
@@ -4727,7 +4727,7 @@
         "action": "npm run test:run i18n.coverage (ако съществува) — 0 missing keys. Иначе manual: grep `t\\('compositions.clone\\.` в кода → всеки key съществува в двата файла."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 136,
@@ -4754,7 +4754,7 @@
         "action": "npm run test:run CloneCompositionDialog.conflictPreview — всички 6 зелени."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 137,
@@ -4791,7 +4791,7 @@
         "action": "npm run test:run cloneComposition.integration — двата теста зелени. type-check + lint чисто. Verify: тестовете НЕ import-ват `mockStorageService` или нещо от `src/services/mockBackend/` — единствената mock повърхност е `@/api/compositions/compositions.api`."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 138,
@@ -4818,7 +4818,7 @@
         "action": "npm run e2e tests/compositions/clone-single.spec.ts — passes. Cleanup: API DELETE на test compositions."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 139,
@@ -4845,7 +4845,7 @@
         "action": "npm run e2e -- e2e/tests/compositions/clone-period.spec.ts — passes. type-check + lint чисто. Cleanup: bulk DELETE на test compositions."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 140,
@@ -4872,7 +4872,7 @@
         "action": "Working dir: backend. `dotnet build` + `dotnet test --filter CompositionsList` зелени. Документирай в activity.md финалния query string contract (точните query params + response envelope shape) — Task 141 ще го consume на FE страна."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 141,

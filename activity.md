@@ -1,3 +1,341 @@
+## [2026-05-15 22:15] - Task #140: [BE] GET /api/compositions — date-in-range filter + pagination (за ден-за-ден модел)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 140.1: Wrote 2 integration tests in `GetCompositionsQueryHandlerTests.cs`:
+  - `CompositionsList_FilterByDateRange_ReturnsOnlyMatching` — seeds 3 day-by-day compositions (07-01, 07-02, 07-10) + 1 legacy multi-day (06-15→07-15); queries dateFrom=07-01, dateTo=07-05; asserts exactly 2 returned. FAILS ✅ (old overlap logic returns 3 — includes the multi-day composition)
+  - `CompositionsList_Pagination_RespectsSkipTake` — seeds 50 compositions; page=2, pageSize=10 → asserts items 11-20 + totalCount=50. PASSES ✅ (pagination already existed)
+
+### GREEN Phase
+- Step 140.2: Changed date filter in `GetCompositions.cs` from period-overlap (`ValidTo >= dateFrom`) to date-in-range (`ValidFrom >= dateFrom`). Both conditions now check `ValidFrom` — treating it as "the day" per Option (a) from §0.2.4. No changes needed for pagination (already implemented).
+- Ran tests — both green ✅
+
+### DONE Phase
+- Step 140.3: `dotnet build` clean ✅. `dotnet test --filter CompositionsList` — 2/2 green ✅.
+
+**Query string contract (for Task #141 FE consumption):**
+- `GET /api/compositions?trainNumber=&status=&dateFrom=2026-07-01&dateTo=2026-07-05&page=1&pageSize=20`
+- `dateFrom`/`dateTo`: filter by `ValidFrom BETWEEN @dateFrom AND @dateTo` (ValidFrom = the day in day-by-day model)
+- Response: `{ data: CompositionDto[], pagination: { currentPage, pageSize, totalItems, totalPages } }` (PaginatedResult envelope)
+
+**Files modified:**
+- `RailRunService.Application/Features/Compositions/Queries/GetCompositions.cs` (date filter logic)
+
+**Files created:**
+- `RailRunService.Application.Tests/GetCompositionsQueryHandlerTests.cs`
+
+**Git commit:**
+- `feat(compositions): [BE] GET /api/compositions — date-in-range filter + pagination (за ден-за-ден модел)`
+
+---
+
+## [2026-05-15 21:30] - Task #139: [E2E] Period clone — every-day-in-range + conflict + overwrite flow
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 139.1: Created `e2e/tests/compositions/clone-period.spec.ts` with two scenarios:
+  - **Scenario A (happy path):** Seeds source composition with 2 wagons + blocked seats, navigates UI to clone dialog, selects "Date Range", fills train number + dates 01.07.2026–05.07.2026, navigates through 4-step stepper, confirms clone. Verifies exactly 5 new compositions created via API, each with 2 carriages.
+  - **Scenario B (conflict + overwrite):** Pre-seeds target composition for 2026-07-03. Tests overwrite=false via direct API call (clone-for-period endpoint or sequential single clones fallback) — verifies 4 created + 1 skipped. Then tests overwrite=true via full UI flow — verifies 5 total compositions, original 07-03 replaced.
+
+### GREEN Phase
+- Step 139.2: Fixed radio button selector (`/date range|за период|period/i` to match English UI label "Date Range"). Replaced direct API response interception with `waitForDialogClosed` approach since FE falls back to sequential `/clone` calls when `/clone-for-period` returns 404. Added `Math.random()` to train name suffix for worker isolation. Improved `deleteComposition` to set Draft status before deletion.
+
+### DONE Phase
+- Step 139.3: Tests pass consistently (3/3 runs) ✅. `npm run type-check` clean ✅. `npx eslint` 0 errors ✅. afterAll cleanup deletes all cloned + source compositions via API.
+
+**Files created:**
+- `e2e/tests/compositions/clone-period.spec.ts`
+
+**Git commit:**
+- `feat(compositions): [E2E] Period clone — every-day-in-range + conflict + overwrite flow`
+
+---
+
+## [2026-05-15 20:06] - Task #138: [E2E] Single clone — Playwright full FE→BE→DB workflow
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → DONE (test passed immediately — clone endpoint and UI already implemented)
+
+**Steps completed:**
+- 138.1 (RED): Created `e2e/tests/compositions/clone-single.spec.ts` — full E2E Playwright test exercising clone composition flow through real FE→BE→DB. Setup creates source composition via API (POST /compositions), adds 2 wagons with valid station UICs, blocks seats, activates. Test navigates /compositions, clicks clone button, fills Single Day mode with train '8632' and date '01.07.2026', handles conflict preview, clicks Clone. Verifies: API response contains newCompositionId, success snackbar shown, cloned composition has 2 carriages via API verification.
+- 138.2 (GREEN): Skipped — test passed on first run
+- 138.3 (DONE): Test passes consistently (2/2 runs). afterAll cleanup deletes cloned and source compositions via API DELETE.
+
+**Infrastructure fix:** Rebuilt rail-run-service Docker container with hardcoded JWT secret (Jwt__Secret env var) because Azure KeyVault was inaccessible from Docker. This unblocked the clone endpoint which was added in a previous task but not available in the running container.
+
+**Files created:**
+- `e2e/tests/compositions/clone-single.spec.ts`
+
+**Files modified:**
+- `docker-compose.yml` (OSDM-Src/DotNetServices — added Jwt__Secret env var for rail-run-service)
+
+---
+
+## [2026-05-15 19:20] - Task #137: [FE] Integration test — full clone flow (FE → mocked compositionsApi → DOM + spy assertions)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 137.1-137.2: Created `cloneComposition.integration.test.tsx` with full wrapper (QueryClientProvider + Redux Provider + MemoryRouter). Mocked `@/api/compositions` at module level — `getAll` returns seeded comp1 (id=1, trainNumber='8631'), `clone` spy returns CloneResponse shape. Test `single clone — full flow`: renders CompositionsListPage, clicks clone button, navigates 4-step stepper, asserts clone spy args, Redux snackbar, dialog close, list refresh.
+- Step 137.3: Added `period clone — covers every day in range and skips conflicts` test. Mock: `getAll` conflict preview returns 1 existing comp for 07-04, `cloneForPeriod` returns 4 created + 1 skipped. Steps: period radio → date range 07-01..07-05 → conflict list rendered → overwrite checked → confirm. Asserts: `cloneForPeriod` called with `{ targetTrainNumber: '8632', startDate: '2026-07-01', endDate: '2026-07-05', overwrite: true }` (NO daysOfWeek field).
+- Ran tests — test 1 FAILS at assertion (4): list doesn't refresh after clone (useEffect deps unchanged). Test 2 PASSES ✅
+
+### GREEN Phase
+- Step 137.4: Added `refreshKey` state to CompositionsListPage. `handleCloneDialogClose` increments it; added to useEffect dependency array. After clone dialog closes, list re-fetches automatically.
+- Ran tests — both green ✅
+
+### DONE Phase
+- Step 137.5: All 20 clone-related tests green (2 integration + 10 dialog + 6 conflict preview + 2 hook) ✅
+- type-check clean ✅
+- lint: 0 errors ✅
+- Verified: tests do NOT import `mockStorageService` or `src/services/mockBackend/` — only mock surface is `@/api/compositions` ✅
+
+**Files modified:**
+- `src/app/features/compositions/components/__tests__/cloneComposition.integration.test.tsx` (new)
+- `src/app/features/compositions/pages/CompositionsListPage.tsx`
+
+**Git commit:**
+- `feat(compositions): [FE] Integration test — full clone flow (FE → mocked compositionsApi → DOM + spy assertions)`
+
+---
+
+## [2026-05-15 16:22] - Task #136: [FE] Conflict preview UI — list of existing compositions + overwrite checkbox в Step 3
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 136.1: Wrote 6 tests in `CloneCompositionDialog.conflictPreview.test.tsx` covering: no conflicts (text + Next enabled + no checkbox), 3 conflicts (list items + checkbox), overwrite unchecked (Next disabled), overwrite checked (Next enabled), loading (CircularProgress), error (Alert with conflictError key)
+- Ran tests — 5 passed, 1 failed (error test expects `conflictError` key, component used `conflictTitle`) ✅
+
+### GREEN Phase
+- Step 136.2: Extracted `<ConflictPreviewStep />` sub-component from CloneCompositionDialog's Step 3 (activeStep === 2) inline JSX
+- ConflictPreviewStep receives props: `conflicts`, `isLoading`, `isError`, `overwrite`, `onOverwriteChange`
+- Updated error state to use `compositions.clone.conflictError` key (proper error message vs. generic title)
+- Added `conflictError` i18n key to both bg.json ("Не може да се провери за конфликт") and en.json ("Unable to check for conflicts")
+- Ran tests — all 6 green ✅
+
+### DONE Phase
+- Step 136.3: All 14 CloneCompositionDialog tests green (8 existing + 6 new) ✅
+- type-check clean ✅
+- lint: 0 errors ✅
+
+**Files modified:**
+- `src/app/features/compositions/components/ConflictPreviewStep.tsx` (new)
+- `src/app/features/compositions/components/CloneCompositionDialog.tsx`
+- `src/app/features/compositions/components/__tests__/CloneCompositionDialog.conflictPreview.test.tsx` (new)
+- `src/locales/bg.json`
+- `src/locales/en.json`
+
+**Git commit:**
+- `feat(compositions): [FE] Conflict preview UI — list of existing compositions + overwrite checkbox в Step 3`
+
+---
+
+## [2026-05-15 16:00] - Task #135: [FE] i18n keys за clone — bg.json + en.json
+
+**Status:** ✅ Complete
+
+**What was done:**
+- Step 135.1: Added `compositions.clone` object with 20 keys to `src/locales/bg.json` — 16 from spec §4.6 + 3 extra keys used by CloneCompositionDialog code (`noConflicts`, `summarySingle`, `summaryPeriod`) + `title`
+- Step 135.2: Added mirrored English translations to `src/locales/en.json` — same 20 keys
+- Step 135.3: Manual verification — grepped all `t('compositions.clone.*')` usages in code, confirmed every key exists in both locale files. Both files validated as valid JSON.
+
+**Files modified:**
+- `src/locales/bg.json`
+- `src/locales/en.json`
+
+**Git commit:**
+- `feat(compositions): [FE] i18n keys за clone — bg.json + en.json`
+
+---
+
+## [2026-05-15 15:45] - Task #134: [FE] Wire 'Клониране' action в CompositionsListPage и CompositionDetailsPage
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 134.1: Added 3 failing tests to CompositionList.test.tsx — clone button rendered for all rows, onClone called with correct id on click
+- Added 3 failing tests to EditorHeader.test.tsx — clone button in header actions, onClone called on click, not rendered when composition is null
+- Ran tests — all 6 new tests FAIL (button not found) ✅
+
+### GREEN Phase
+- Step 134.2: Added `onClone` prop + ContentCopy IconButton to CompositionList.tsx (row actions column, after edit button)
+- Added `onClone` prop + outlined Button with ContentCopy icon to EditorHeader.tsx (right section, before Save button, only when composition exists)
+- Wired CloneCompositionDialog in CompositionsListPage.tsx (state: cloneDialogOpen + cloneSourceId)
+- Wired CloneCompositionDialog in CompositionEditorPage.tsx (state: cloneDialogOpen, sourceId from composition.id)
+- Added `common.clone` i18n key to bg.json ("Клониране") and en.json ("Clone")
+- Ran tests — all PASS ✅
+
+### DONE Phase
+- Step 134.4: 57 tests green (20 CompositionList + 37 EditorHeader) ✅
+- type-check clean ✅
+- lint: 0 errors (only pre-existing warnings) ✅
+- Visual phase skipped (no cursor-ide-browser MCP available in this environment)
+
+**Files modified:**
+- `src/app/features/compositions/components/CompositionList.tsx`
+- `src/app/features/compositions/components/EditorHeader.tsx`
+- `src/app/features/compositions/pages/CompositionsListPage.tsx`
+- `src/app/features/compositions/pages/CompositionEditorPage.tsx`
+- `src/app/features/compositions/components/__tests__/CompositionList.test.tsx`
+- `src/app/features/compositions/components/__tests__/EditorHeader.test.tsx`
+- `src/locales/bg.json`
+- `src/locales/en.json`
+
+**Git commit:**
+- `feat(compositions): [FE] Wire 'Клониране' action в CompositionsListPage и CompositionDetailsPage`
+
+---
+
+## [2026-05-15 15:30] - Task #133: [FE] CloneCompositionDialog — Stepper UI (4 steps: type, params, conflict preview, confirm)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 133.1: Wrote 8 failing tests in `CloneCompositionDialog.test.tsx` covering: Stepper rendering (4 steps), radio single/period controlling DatePicker count, no days-of-week ToggleButtonGroup, Step 2 validation (Next disabled when train/dates missing), Step 3 conflict list with overwrite checkbox, Step 4 summary with warning texts, success closes dialog, 409 conflict returns to Step 3
+- Ran tests — all FAIL (component does not exist) ✅
+
+### GREEN Phase
+- Step 133.2: Created `CloneCompositionDialog.tsx` with MUI Dialog, Stepper (4 steps), RadioGroup (single/period), Autocomplete (train number), DatePicker(s) (1 for single, 2 for period), conflict preview via `compositionsApi.getAll`, summary with blocked/sold seat warnings, confirmation with `useCloneComposition`/`useCloneCompositionForPeriod`
+- Step 133.3: Wired existing hooks (useCloneComposition for single, useCloneCompositionForPeriod for period), conflict preview via compositionsApi.getAll query
+- Ran tests — all 8 PASS ✅
+
+### DONE Phase
+- Step 133.5: `npm run test:run CloneCompositionDialog` — 8/8 green ✅
+- type-check clean ✅
+- lint clean ✅
+- No visual phase (design file `clone-dialog.png` not yet available per task notes)
+
+**Files modified:**
+- `src/app/features/compositions/components/CloneCompositionDialog.tsx` (new)
+- `src/app/features/compositions/components/__tests__/CloneCompositionDialog.test.tsx` (new)
+
+**Git commit:**
+- `feat(compositions): [FE] CloneCompositionDialog — Stepper UI (4 steps: type, params, conflict preview, confirm)`
+
+---
+
+## [2026-05-15 15:10] - Task #132: [FE] React Query hooks — useCloneComposition, useCloneCompositionForPeriod, useClonePreview
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Wrote `useCloneComposition.test.tsx` with 4 tests: success+invalidation, 409 conflict typed error, period clone success+invalidation, period clone fallback to sequential
+- Created stub hook files so imports resolve
+- Ran tests — all 4 FAIL (mutate is not a function) ✅
+
+### GREEN Phase
+- Created `compositions.queryKeys.ts` with `compositionsQueryKeys.all = ['compositions']`
+- Implemented `useCloneComposition.ts` — useMutation calling `compositionsApi.clone()`, checks success, throws on failure, invalidates `['compositions']` on success
+- Implemented `useCloneCompositionForPeriod.ts` — useMutation calling `compositionsApi.cloneForPeriod()`, falls back to sequential `compositionsApi.clone()` per-day when endpoint fails, aggregates results
+- Updated hooks `index.ts` to export new hooks + query keys
+- Ran tests — all 4 PASS ✅
+
+**Files modified:**
+- `src/app/features/compositions/hooks/compositions.queryKeys.ts` (new)
+- `src/app/features/compositions/hooks/useCloneComposition.ts` (new)
+- `src/app/features/compositions/hooks/useCloneCompositionForPeriod.ts` (new)
+- `src/app/features/compositions/hooks/useCloneComposition.test.tsx` (new)
+- `src/app/features/compositions/hooks/index.ts` (updated exports)
+
+**Git commit:**
+- `feat(compositions): [FE] React Query hooks — useCloneComposition, useCloneCompositionForPeriod, useClonePreview`
+
+---
+
+## [2026-05-15 14:55] - Task #131: [FE] LocalStorage mock — implement cloneComposition (carry blockedSeats, drop sold/reserved/availability)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 131.1: Created `src/services/mockBackend/seedData.ts` with seed composition #1 (Sofia-Burgas, 2026-06-01): carriage A has 2 blockedSeats (BrokenSeat#5, ServiceSeat#10), 3 bookings (sold seats #1,#2,#3), 1 reservation (locked seat #15); carriage B empty.
+- Step 131.2: Wrote `mockStorage.clone.test.ts` with 4 tests: copies blockedSeats drops bookings/reservations; assigns new IDs + draft status; persists to localStorage; does not mutate source.
+- Step 131.3: Added 3 more tests: creates one composition per day in closed range; skips conflicting dates without overwrite; overwrites conflicting dates when overwrite=true.
+- Ran tests → all 7 FAIL ✅ (Not implemented)
+
+### GREEN Phase
+- Step 131.4: Implemented `cloneComposition` in `mockStorage.ts` — deep clone via JSON.parse/stringify; strips bookings/reservations/seatAvailability/auditLog; keeps blockedSeats; assigns new IDs; sets startDate=endDate=targetDate, operationDays='1111111', status='draft'; conflict detection with overwrite support.
+- Step 131.5: Implemented `cloneCompositionForPeriod` — uses `expandDateRange` utility (new `src/utils/dateRange.ts`) to generate closed `[startDate, endDate]` range; loops and catches ConflictError per date for skip/overwrite behavior.
+- Ran tests → all 7 PASS ✅
+
+### DONE Phase
+- `npx vitest run --changed origin/develop` — 252 tests, all green
+- `npm run type-check` — clean
+- `npx eslint` on changed files — no errors
+
+**Files modified:**
+- `src/services/mockBackend/mockStorage.types.ts` (new)
+- `src/services/mockBackend/seedData.ts` (new)
+- `src/services/mockBackend/mockStorage.ts` (new)
+- `src/services/mockBackend/__tests__/mockStorage.clone.test.ts` (new)
+- `src/utils/dateRange.ts` (new)
+
+**Git commit:**
+- `feat(compositions): [FE] LocalStorage mock — implement cloneComposition (carry blockedSeats, drop sold/reserved/availability)`
+
+---
+
+## [2026-05-15 14:42] - Task #130: [FE] API layer — compositionsApi.clone(), cloneForPeriod() + types
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 130.1: Wrote failing test `compositions.api.clone.test.ts` with 3 tests:
+  1. `clone(sourceId, dto)` → POST /api/compositions/{id}/clone with correct body shape
+  2. `cloneForPeriod(sourceId, dto)` → POST /api/compositions/{id}/clone-for-period (no daysOfWeek)
+  3. 409 conflict response propagated as typed error
+- Ran test → all 3 FAIL ✅ (functions don't exist yet)
+
+### GREEN Phase
+- Step 130.2: Added types to `compositions.types.ts`: `CloneCompositionDto`, `CloneCompositionPeriodDto`, `CloneResponse`, `SkippedCloneItem`, `ClonePeriodResponse`
+- Added `clone()` and `cloneForPeriod()` methods to `compositionsApi` in `compositions.api.ts`
+- Ran test → all 3 PASS ✅
+
+### DONE Phase
+- Step 130.3: `npx vitest run --changed origin/develop` — 245 tests, all green
+- `npm run type-check` — clean
+- `npx eslint` on changed files — no errors
+
+**Files modified:**
+- `src/api/compositions/__tests__/compositions.api.clone.test.ts` (new)
+- `src/api/compositions/compositions.types.ts` (added clone types)
+- `src/api/compositions/compositions.api.ts` (added clone, cloneForPeriod methods)
+
+**Git commit:**
+- `feat(compositions): [FE] API layer — compositionsApi.clone(), cloneForPeriod() + types`
+
+---
+
 ## [2026-05-15 HH:MM] - Task #125: [BE] Verify existing /clone endpoint(s); gap-fill само ако нещо липсва — НЕ пипай DB
 
 **Status:** ✅ Complete
