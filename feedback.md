@@ -193,3 +193,57 @@ migration "за да заобиколиш".
 
 - Task #113-#124 не са завършени → продължи с Етап 6
 - Task #125 audit показва schema проблем → STOP, ескалирай (не пиши migration)
+
+---
+
+## 🚂 Етап 8 — Self-propelled (мотриса) interlock (Tasks #150–#158)
+
+> **TIMING:** Влиза в сила КОГАТО Етап 7 (Tasks #125, #130–#143) са с `"passes": true`.
+> Преди това — игнорирай.
+
+Когато първият `passes:false` task в `tasks.json` е #150 (вместо #125 или Етап 7 нещо):
+
+**Continue with:** Task #150 — [BE] WagonType.IsSelfPropelled SQL колона + EF migration + seed за DMV серии
+
+### 📜 Задължително преди първия таск от Етап 8
+
+Прочети **в този ред**:
+
+1. **`C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/composition-self-propelled-plan.md`** — спецификацията.
+   - §0–§2 — бизнес правило (без смес „мотриса + локомотив с вагони"); source of truth `WagonType.IsSelfPropelled`
+   - §3 — SQL колона + seed update (DMV серии: 10, 31-1-4, 31-2-3)
+   - §4 — Backend: entity/DTO/commands + integrity validation в AddCarriage (§4.1 е Critical)
+   - §5 — Frontend: types, canvas hide-locomotive, palette disable, page orchestration, i18n
+   - §6 — Tests matrix (6 unit + 1 API integration + E2E interlock)
+   - §7 — отворени въпроси (read + apply решенията)
+2. **`C:/Users/kaloyan.georgiev/Projects/railrun-backend-structure.md`** — за BE задачите (Aggregate Repositories, IUnitOfWork pattern).
+3. **`C:/Users/kaloyan.georgiev/Projects/admin-app-frontend-structure.md`** — за FE задачите.
+
+### ✅ Зелени линии за Етап 8
+
+- ✅ **SQL Project схемата се обновява** — добавяме нова колона `IsSelfPropelled BIT` в `OSDM-Src/SQLProjects/RailRunServiceSQL/dbo/Tables/WagonTypes.sql` за нова domain функционалност. Това е различно от Етап 7 (clone) където schema промени бяха забранени.
+- ✅ **Нов numbered script** `dbo/PostDeployment/Data/079_SetIsSelfPropelledForDmvSeries.sql` с UPDATE statement за DMV серии (Id=19, 27, 28). Регистрира се в `Seed.sql` **СЛЕД** `078_WagonsSnapshot.sql` (snapshot-ът overrides и би нулирал флага).
+- ❌ **НЕ модифицирай `003_Wagon_Types.sql`** — той е initial INSERT seed, който НЕ ре-run-ва върху съществуващи редове в dev/prod DBs (Azure). Промени в него не достигат до съществуващи записи.
+- ✅ DACPAC build + sqlpackage publish за прилагане на промяната към локалната DB
+- ⚠️ **EF Core Power Tools** е канонично решение (database-first scaffold), но е GUI операция в VS/VS Code → НЕ е driver-able от ралф автономно. За автономно изпълнение: **manual property addition** в `WagonType.cs` (един ред: `public bool IsSelfPropelled { get; set; }`) + `WagonTypeConfiguration.cs` (един ред: `entity.Property(e => e.IsSelfPropelled).HasDefaultValue(false);`). Добави `// NOTE: Manual addition matching DB schema. Full re-scaffold may rewrite this file — re-add if missing.` за бъдеща safety. Това е exactly what Power Tools би генерирал; следващ re-scaffold от dev-а ще даде същия output.
+- ❌ **НЕ пишем `dotnet ef migrations add`** — този проект е Database-First, не Code-First. Code-First migration ще се конфликтва с DACPAC source-а.
+
+### 🎯 Бизнес правило guard rails (за всеки таск)
+
+- #152 е Critical TDD task — 6 unit теста матрица + 1 API integration test (DevTools/curl bypass защита)
+- #155 палитрата показва **ВСИЧКИ** wagonTypes — disable + tooltip за несъвместимите, не hide. Това е UX изискване от клиента.
+- #154/#156 — локомотивът „изчезва" е чисто визуално (`!hasSelfPropelled` около статичната Card в WagonCanvas); няма entity промяна.
+
+### 📋 Подетапи на Етап 8
+
+- **8A: BE foundation** (#150-#151) — SQL колона + DTO propagation (entity + EF config през EF Power Tools)
+- **8B: BE integrity** (#152) — AddCarriage validation + 409 + локализирано съобщение
+- **8C: FE foundation** (#153) — types + API mapping
+- **8D: FE UI — composition editor** (#154-#157) — canvas hide-locomotive, palette disable, page orchestration, i18n
+- **8E: FE UI — wagon creation form** (#159) — toggle 'Самоходна' в metadata формата; може паралелно с 8D
+- **8F: E2E** (#158) — full FE+BE interlock
+
+### 🛑 Не правиш Етап 8 ако
+
+- Етап 7 (Tasks #125, #130-#143) не е завършен → продължи с него
+- Task #150 audit показва конфликт с други pending миграции → STOP, ескалирай

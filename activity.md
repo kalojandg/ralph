@@ -1,3 +1,47 @@
+## [2026-05-15] - 📋 NEW STAGE: Етап 8 — Self-propelled (мотриса) interlock (Tasks #150–#158)
+
+**Status:** Tasks queued (all `passes: false`); execution starts AFTER Етап 7 (clone) is fully green.
+
+Спецификация: [`DOCS/composition-self-propelled-plan.md`](DOCS/composition-self-propelled-plan.md). Цел: предотвратяване на смес „мотриса + локомотив с вагони" в композиция. Защитата е на 2 слоя — UI disable + BE 409 (CompositionTractionMix). Source of truth: `WagonType.IsSelfPropelled` (нов BIT флаг).
+
+Tasks по ред:
+- #150 [BE] SQL колона в DB Project (`WagonTypes.sql`) + нов numbered script `079_SetIsSelfPropelledForDmvSeries.sql` (UPDATE за DMV Id=19/27/28, регистриран в `Seed.sql` СЛЕД `078_WagonsSnapshot.sql`); DACPAC publish; **manual property addition** в WagonType.cs + WagonTypeConfiguration.cs (за автономно ралф изпълнение — EF Core Power Tools GUI не е driver-able; manual edit съвпада с output на full re-scaffold). **НЕ** пипа `003_Wagon_Types.sql` (initial seed, не re-run-ва). **НЕ** ползва Code-First `dotnet ef migrations`.
+- #151 [BE] Application + API слоеве propagate IsSelfPropelled (entity + EF config идват от Task 150 scaffold)
+- #152 [BE] AddCarriage integrity validation (Critical TDD)
+- #153 [FE] Types + API mapping
+- #154 [FE] WagonCanvas — hide locomotive + drop guard
+- #155 [FE] WagonPalette — disabled cards + tooltip
+- #156 [FE] CompositionEditorPage orchestration
+- #157 [FE] i18n keys (tooltips + snackbar errors)
+- #158 [E2E] Full interlock workflow
+- #159 [FE] WagonCreationPage — IsSelfPropelled toggle в metadata формата (за нови wagon types, не само seed-натите)
+
+**Зависимост:** Етап 8 НЕ започва преди Етап 7 (#125, #130–#143) да е изцяло passes:true. След Етап 7 → ralph автоматично продължава с #150.
+
+---
+
+## [2026-05-15] - 📋 EXTENDED: Етап 7 — Clone tasks aligned with spec + 4 new list/filter tasks
+
+Tasks #125, #130–#139 преработени съобразно [`DOCS/composition-clone-spec.md`](DOCS/composition-clone-spec.md): премахнато days-of-week (ден-за-ден модел §0.1), getClonePreview заменено с existing GET /api/compositions filter (§2.3), §0.2.4 Option (a) добавено в #125 (clone пише `StartDate=EndDate=targetDate`, `OperationDays='1111111'`).
+
+Нови задачи добавени за §0.2.1-§0.2.3 (UI последици на ден-за-ден модела):
+- #140 [BE] GET /compositions: date-in-range filter + pagination
+- #141 [FE] compositionsApi.getAll: extended filter params + paginated response
+- #142 [FE] CompositionList: колона „Период" → „Дата" + sort
+- #143 [FE] CompositionFilters: train autocomplete fix, LocalizationProvider, quick chips, default 7-day filter
+
+---
+
+## [2026-05-15] - ⚠️ REVERTED: Tasks #125, #130–#139 (composition cloning, Етап 7)
+
+**Status:** Reverted — work discarded by the user (had to clone a fresh checkout).
+
+Tasks 125 and 130–139 (composition cloning, Етап 7) have been flipped back to `passes: false` in `tasks.json`. The previous completion entries below are kept as historical record but should NOT be treated as "done" — ralph will re-execute these tasks. Any new completion entries override the old ones.
+
+Next task pointer (feedback.md §"Continue with") still applies: start with Task #125.
+
+---
+
 ## [2026-05-06 10:15] - Task #139: [E2E] Period clone — days-of-week filter + conflict + overwrite flow
 
 **Status:** ✅ Complete

@@ -130,7 +130,8 @@
    ```bash
    gitnexus detect-changes     # map-ва git diff-а към засегнати processes
    # Ако засегнати са повече symbol-и от очакваното — провери всеки:
-   # gitnexus impact <symbol> --direction upstream --minConfidence 0.8
+   # gitnexus impact <symbol> --direction upstream --depth 2 --include-tests
+   # (--minConfidence е MCP-only; за CLI филтрирай ръчно `confidence > 0.7` в JSON output-а)
    ```
    Целта: ако промяната визира 3 файла, а `detect-changes` казва "засегнати 47 flow-а" — спри и провери дали не си пробил нещо неочаквано.
 
@@ -258,7 +259,7 @@ If NO (all tasks done) — output:
 | Кога | Tool | Какво прави |
 |------|------|------------|
 | Преди да пипнеш symbol/file | `gitnexus context <name>` | Callers, callees, дефиниция, кои processes/clusters включват symbol-а |
-| Преди refactor/rename/move | `gitnexus impact <symbol> --direction upstream` | Blast radius — кой ще се счупи ако промениш. `--minConfidence 0.8` за уверени резултати. |
+| Преди refactor/rename/move | `gitnexus impact <symbol> --direction upstream` | Blast radius — кой ще се счупи ако промениш. **CLI флагове:** `--depth N` (default 3), `--include-tests`. **MCP-only:** `minConfidence` (CLI няма такъв флаг — фалбек: филтрирай ръчно по `confidence` поле в JSON output-а). |
 | Multi-file rename | `gitnexus rename <old> <new> --dry-run` | Координирано преименуване във всички места. Винаги първо dry-run. |
 | Свободно търсене (концепт, не низ) | `gitnexus query "<фраза>"` | Hybrid (BM25 + semantic) — намира execution flows и symbols по смисъл, не само по буквален match |
 | След git diff, преди commit | `gitnexus detect-changes` | Map-ва променените редове към засегнати processes/symbols — преди да commit-неш, видиш кой flow е попадат в промяната |
@@ -343,7 +344,7 @@ dotnet run --project RailRunService.API  # Стартира API
 # === Code Intelligence (GitNexus) ===
 gitnexus list                                        # Кои repo-та са индексирани
 gitnexus context <Symbol> --repo Transport-OSDM-Src  # Кой вика този symbol, кого вика той
-gitnexus impact <Symbol> --direction upstream --minConfidence 0.8  # Blast radius
+gitnexus impact <Symbol> --direction upstream --depth 2 --include-tests  # Blast radius (CLI; minConfidence е само MCP-flag — за CLI филтрирай confidence в JSON)
 gitnexus query "<concept-phrase>"                    # Hybrid search по смисъл
 gitnexus detect-changes                              # Засегнати flows от git diff (преди commit)
 
@@ -390,6 +391,16 @@ SqlPackage /Action:Publish /SourceFile:bin/Release/RailRunServiceDb.dacpac /Targ
 ### ⚡ Selective E2E (inner loop optimization)
 
 **Принцип:** Целият Playwright suite е скъп (5-20 мин). На всяка ралф итерация — пускай **САМО** specs, които могат да бъдат засегнати от твоя diff. CI/PR pipeline ще пусне пълния suite преди merge — селективното е само за вътрешния цикъл.
+
+**🟢 Dev server за E2E — auto-managed чрез Playwright `webServer`:** Проверено в [`e2e/playwright.config.ts`](C:/Users/kaloyan.georgiev/Projects/Admin-App/e2e/playwright.config.ts) (използваният config за `npm run e2e`):
+- `webServer.command: 'npm run dev'` — Playwright сам стартира dev server-а
+- `webServer.url: 'http://localhost:3000'` (не 5173 — `npm run dev` е конфигуриран да слуша на 3000)
+- `webServer.reuseExistingServer: true` — ако вече има running dev server, го reuse-ва
+- `webServer.timeout: 120_000` — изчаква до 120s за startup
+
+→ **Ралф НЕ трябва ръчно да fork-ва `npm run dev`** преди `npm run e2e` — Playwright ще го направи. Първият E2E run в сесия плаща 30-60s startup; следващи run-ове (с reuseExistingServer) са бързи.
+
+**Tip за дълга ралф нощна сесия:** Ако пускаш много iterations с E2E — fork `npm run dev` веднъж в background (Bash tool с `run_in_background: true`) в началото на сесията; webServer ще detect-не съществуващия и ще пропусне 30-60s startup за всеки следващ E2E run. Спестява време × N iterations.
 
 **Recipe (когато DONE phase изисква E2E run):**
 

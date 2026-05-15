@@ -4528,7 +4528,7 @@
       {
         "id": "125.4",
         "phase": "GREEN",
-        "action": "Само за Branch C (endpoint липсва). Имплементирай минимум: (a) `CloneCompositionCommand(long SourceId, string TargetTrainNumber, DateOnly TargetDate, bool Overwrite)` + Handler в `Application/Features/Compositions/Commands/CloneComposition.cs`. (b) `CompositionRepository.CloneAsync`: `_context.Compositions.Include(c => c.Carriages).ThenInclude(ca => ca.BlockedSeats).Include(c => c.Carriages).ThenInclude(ca => ca.RouteSegments).AsNoTracking().First(...)` → manual deep-clone (нови PK, set nav properties parent←child) → `AddAsync` → handler вика `IUnitOfWork.SaveChangesAsync` ВЕДНЪЖ. **НЕ** Include-вай Bookings/SeatAvailability — те остават trip-scoped. (c) Endpoint `[HttpPost(\"{id:long}/clone\")]` в CompositionsController. (d) DTOs в `RailRunService.API/DTOs/Compositions/`. (e) Conflict detection: ако target slot е зает → 409 с existingCompositionId; FE-то показва confirm dialog; повторното извикване с overwrite=true изтрива старата (reuse `DeleteAsync` от existing repo)."
+        "action": "Само за Branch C (endpoint липсва). Имплементирай минимум: (a) `CloneCompositionCommand(long SourceId, string TargetTrainNumber, DateOnly TargetDate, bool Overwrite)` + Handler в `Application/Features/Compositions/Commands/CloneComposition.cs`. (b) `CompositionRepository.CloneAsync`: `_context.Compositions.Include(c => c.Carriages).ThenInclude(ca => ca.BlockedSeats).Include(c => c.Carriages).ThenInclude(ca => ca.RouteSegments).AsNoTracking().First(...)` → manual deep-clone (нови PK, set nav properties parent←child) → `AddAsync` → handler вика `IUnitOfWork.SaveChangesAsync` ВЕДНЪЖ. **НЕ** Include-вай Bookings/SeatAvailability — те остават trip-scoped. (c) Endpoint `[HttpPost(\"{id:long}/clone\")]` в CompositionsController. (d) DTOs в `RailRunService.API/DTOs/Compositions/`. (e) Conflict detection: ако target slot е зает → 409 с existingCompositionId; FE-то показва confirm dialog; повторното извикване с overwrite=true изтрива старата (reuse `DeleteAsync` от existing repo). (f) **§0.2.4 Option (a) — ден-за-ден модел БЕЗ schema промяна:** новата композиция пише `StartDate = EndDate = TargetDate` и `OperationDays = \"1111111\"` (всички дни). Без SQL migration. Това задава ден-за-ден UX без да чупи съществуващия schema. Conflict detection чете composition със StartDate == TargetDate (или TargetDate between StartDate-EndDate, ако има legacy multi-day записи)."
       },
       {
         "id": "125.5",
@@ -4541,33 +4541,33 @@
         "action": "Working dir: backend. `dotnet build` + `dotnet test --filter CloneEndpoint` зелени. Документирай в `C:\\Projects\\ralph\\activity.md` за Task 125: (a) кой branch (A/B/C) се случи; (b) финалния API contract (използвай се от FE Task 130); (c) дали /clone-for-period съществува или FE ще loop-ва. **Гаранция:** няма промени в SQL проекта; няма EF migration файлове; всички writes минават през existing entities."
       }
     ],
-    "passes": true
+    "passes": false
   },
   {
     "id": 130,
     "category": "frontend",
     "repo": "frontend",
-    "description": "[FE] API layer — compositionsApi.clone(), cloneForPeriod(), getClonePreview() + types",
+    "description": "[FE] API layer — compositionsApi.clone(), cloneForPeriod() + types",
     "tddWorkflow": true,
-    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md §4.1",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md §4.1 + §2.3 (без /clone-preview — ползва existing GET /api/compositions)",
     "steps": [
       {
         "id": "130.1",
         "phase": "RED",
-        "action": "Напиши `compositions.api.clone.test.ts`. Mock apiClient.post/get. Test 1: `clone(sourceId, dto)` извиква POST /api/compositions/{sourceId}/clone с правилен body shape; връща CloneResponse. Test 2: `cloneForPeriod()` POST към /clone-for-period. Test 3: `getClonePreview()` GET с query string; daysOfWeek се сериализира като CSV. Test 4: 409 response се прехвърля през axios interceptor като typed error. ФЕЙЛВАТ."
+        "action": "Напиши `compositions.api.clone.test.ts`. Mock apiClient.post/get. Test 1: `clone(sourceId, dto)` извиква POST /api/compositions/{sourceId}/clone с правилен body shape (`{ targetTrainNumber, targetDate, overwrite }`); връща CloneResponse. Test 2: `cloneForPeriod(sourceId, dto)` POST към /clone-for-period с body `{ targetTrainNumber, startDate, endDate, overwrite }` (БЕЗ daysOfWeek). Test 3: 409 response се прехвърля през axios interceptor като typed error. ФЕЙЛВАТ. **Бележка:** conflict preview НЕ е отделна функция — ползва се existing `compositionsApi.getAll({trainNumber, dateFrom, dateTo})` (§2.3 от спецификацията)."
       },
       {
         "id": "130.2",
         "phase": "GREEN",
-        "action": "Добави в `src/api/compositions/compositions.api.ts`: `clone`, `cloneForPeriod`, `getClonePreview`. Добави в `compositions.types.ts`: `CloneCompositionDto`, `CloneCompositionPeriodDto`, `CloneResponse`, `ClonePeriodResponse`, `ClonePreviewItem`, `SkippedCloneItem`, `DayOfWeek` union type ('MON'|'TUE'|'WED'|'THU'|'FRI'|'SAT'|'SUN')."
+        "action": "Добави в `src/api/compositions/compositions.api.ts`: `clone`, `cloneForPeriod`. Добави в `compositions.types.ts`: `CloneCompositionDto { targetTrainNumber: string; targetDate: string; overwrite: boolean }`, `CloneCompositionPeriodDto { targetTrainNumber: string; startDate: string; endDate: string; overwrite: boolean }` (БЕЗ daysOfWeek поле), `CloneResponse`, `ClonePeriodResponse { createdCompositionIds: number[]; skipped: SkippedCloneItem[]; totalRequested, totalCreated, totalSkipped }`, `SkippedCloneItem`. **НЕ добавяй** `DayOfWeek` union, `ClonePreviewItem`, `getClonePreview` — ден-за-ден моделът не ползва дни от седмицата, conflict preview минава през existing list endpoint."
       },
       {
         "id": "130.3",
         "phase": "DONE",
-        "action": "npm test compositions.api.clone — зелено. npm run type-check чисто."
+        "action": "npm run test:run compositions.api.clone — зелено. npm run type-check чисто."
       }
     ],
-    "passes": true
+    "passes": false
   },
   {
     "id": 131,
@@ -4591,30 +4591,25 @@
       {
         "id": "131.3",
         "phase": "RED",
-        "action": "Test 5: `cloneCompositionForPeriod_ExpandsDates` — start 2026-07-01 (Wed), end 2026-07-08 (Wed), days=[MON,WED] → 3 нови composition записи (07-01, 07-06, 07-08). Test 6: `cloneCompositionForPeriod_ConflictDetectionWithoutOverwrite` — ако вече съществува target slot → пропуска го, връща в skipped. Test 7: `cloneCompositionForPeriod_OverwriteTrue` — изтрива старата + създава нова. ФЕЙЛВАТ."
+        "action": "Test 5: `cloneCompositionForPeriod_CreatesOnePerDay` — start 2026-07-01, end 2026-07-05 (затворен обхват, 5 дни) → **5 нови composition записи** (07-01, 07-02, 07-03, 07-04, 07-05). **БЕЗ daysOfWeek филтър** — всеки ден в обхвата получава композиция (§0.1 / §4.4 от спека). Test 6: `cloneCompositionForPeriod_ConflictDetectionWithoutOverwrite` — ако вече съществува target slot за дадена дата → пропуска само тази дата, връща я в skipped, но продължава с останалите. Test 7: `cloneCompositionForPeriod_OverwriteTrue` — изтрива съществуваща композиция за деня + създава нова. ФЕЙЛВАТ."
       },
       {
         "id": "131.4",
         "phase": "GREEN",
-        "action": "В `src/services/mockBackend/mockStorage.ts` имплементирай `cloneComposition(sourceId, dto): CloneResponse`. Стъпки: (a) намери source; ако липсва → throw NotFoundError; (b) `JSON.parse(JSON.stringify(source))` за дълбоко копие; (c) **filter**: изтрий полетата `bookings`, `reservations`, `seatAvailability`, `auditLog` от composition И от всяка carriage; (d) запази `blockedSeats`, `serviceSeats`, `routeSegments`; (e) подмени id (nanoid), trainNumber, date, status='Draft'; (f) ако overwrite + conflict → изтрий conflicting от store; ако !overwrite + conflict → throw ConflictError; (g) push в localStorage; (h) върни CloneResponse."
+        "action": "В `src/services/mockBackend/mockStorage.ts` имплементирай `cloneComposition(sourceId, dto): CloneResponse`. Стъпки: (a) намери source; ако липсва → throw NotFoundError; (b) `JSON.parse(JSON.stringify(source))` за дълбоко копие; (c) **filter**: изтрий полетата `bookings`, `reservations`, `seatAvailability`, `auditLog` от composition И от всяка carriage; (d) запази `blockedSeats`, `serviceSeats`, `routeSegments`; (e) подмени id (nanoid), trainNumber, status='Draft'; **(f) §0.2.4 Option (a):** клонингът пише `startDate = endDate = targetDate` и `operationDays = '1111111'` (всички дни активни) — задава ден-за-ден UX без schema промяна; (g) ако overwrite + conflict → изтрий conflicting от store; ако !overwrite + conflict → throw ConflictError; (h) push в localStorage; (i) върни CloneResponse."
       },
       {
         "id": "131.5",
         "phase": "GREEN",
-        "action": "Имплементирай `cloneCompositionForPeriod(sourceId, dto): ClonePeriodResponse`. Reuse helper `expandDateRange(start, end, daysOfWeek)` (нов файл `src/utils/dateRange.ts` — ще се reuse-ва и в UI). Loop-ва, catch-ва ConflictError → push в skipped, continue. Връща aggregate result."
+        "action": "Имплементирай `cloneCompositionForPeriod(sourceId, dto): ClonePeriodResponse`. Reuse helper `expandDateRange(startDate, endDate)` (нов файл `src/utils/dateRange.ts` — връща **всички дни** в затворения интервал `[startDate, endDate]`, БЕЗ daysOfWeek филтър). Helper-ът ще се reuse-ва в UI summary текста. Loop-ва, catch-ва ConflictError за конкретна дата → push в `skipped[]`, continue с останалите. Връща aggregate result {createdCompositionIds, skipped, totalRequested=endDate-startDate+1, totalCreated, totalSkipped}."
       },
       {
         "id": "131.6",
-        "phase": "GREEN",
-        "action": "Имплементирай `getClonePreview(sourceId, params)` — read-only, не мутира state."
-      },
-      {
-        "id": "131.7",
         "phase": "DONE",
-        "action": "npm test mockStorage.clone — всички 7 зелени. npm run type-check чисто. Manual sanity: clear localStorage; reload app; в console: `await mockStorageService.cloneComposition(1, { targetTrainNumber: '8632', targetDate: '2026-07-01', overwrite: false })` → response има 0 bookings."
+        "action": "npm run test:run mockStorage.clone — всички 7 зелени. npm run type-check чисто. Manual sanity: clear localStorage; reload app; в console: `await mockStorageService.cloneComposition(1, { targetTrainNumber: '8632', targetDate: '2026-07-01', overwrite: false })` → response има 0 bookings, новата композиция има startDate === endDate === '2026-07-01'."
       }
     ],
-    "passes": true
+    "passes": false
   },
   {
     "id": 132,
@@ -4622,25 +4617,25 @@
     "repo": "frontend",
     "description": "[FE] React Query hooks — useCloneComposition, useCloneCompositionForPeriod, useClonePreview",
     "tddWorkflow": true,
-    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md §4.3",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md §4.3 + §2.3 (conflict preview ползва existing useCompositions filter)",
     "steps": [
       {
         "id": "132.1",
         "phase": "RED",
-        "action": "Напиши `useCloneComposition.test.tsx`. Test 1: success path — mock API resolves; assert mutation.isSuccess; assert queryClient.invalidateQueries called с ['compositions']. Test 2: 409 conflict error — mutation.error има typed `code: 'TARGET_OCCUPIED'` и `existingCompositionId`. Test 3: useCloneCompositionForPeriod — invalidates ['compositions'] след success. Test 4: useClonePreview — query се disable-ва ако params не са валидни (enabled: false). ФЕЙЛВАТ."
+        "action": "Напиши `useCloneComposition.test.tsx`. Test 1: success path — mock API resolves; assert mutation.isSuccess; assert queryClient.invalidateQueries called с ['compositions']. Test 2: 409 conflict error — mutation.error има typed `code: 'TARGET_OCCUPIED'` и `existingCompositionId`. Test 3: useCloneCompositionForPeriod — invalidates ['compositions'] след success; ако BE няма /clone-for-period endpoint → hook-ът sequential loop-ва над useCloneComposition за всеки ден от обхвата и aggregate-ва skipped[]. ФЕЙЛВАТ. **Бележка:** няма separate `useClonePreview` hook — conflict preview ползва existing `useCompositions({ trainNumber, dateFrom: startDate, dateTo: endDate })` директно от dialog-а."
       },
       {
         "id": "132.2",
         "phase": "GREEN",
-        "action": "Създай в `src/app/features/compositions/hooks/`: `useCloneComposition.ts`, `useCloneCompositionForPeriod.ts`, `useClonePreview.ts`. Reuse query key factory от `compositions.queryKeys.ts`."
+        "action": "Създай в `src/app/features/compositions/hooks/`: `useCloneComposition.ts`, `useCloneCompositionForPeriod.ts`. **НЕ създавай** `useClonePreview.ts` — за conflict preview dialog-ът ползва existing `useCompositions` query от §0.2.3 (getAll с date-in-range филтър). Reuse query key factory от `compositions.queryKeys.ts`."
       },
       {
         "id": "132.3",
         "phase": "DONE",
-        "action": "npm test useCloneComposition — всички зелени. type-check чисто."
+        "action": "npm run test:run useCloneComposition — всички зелени. type-check чисто."
       }
     ],
-    "passes": true
+    "passes": false
   },
   {
     "id": 133,
@@ -4655,30 +4650,30 @@
       {
         "id": "133.1",
         "phase": "RED",
-        "action": "Напиши `CloneCompositionDialog.test.tsx`. Test 1: render dialog с sourceId=1; assert MUI Stepper присъства с 4 стъпки. Test 2: Step 1 — radio 'За един ден' / 'За период'; selected='период' → Step 2 показва date range picker; selected='един ден' → Step 2 показва single date picker. Test 3: Step 2 (period) — ToggleButtonGroup за 7-те дни от седмицата; default всички избрани; може да се разкарват. Test 4: Step 2 валидация — Next disabled ако TargetTrainNumber празен или дати невалидни. Test 5: Step 3 — извиква useClonePreview; ако има conflicts — рендира список + checkbox 'Презапиши'. Test 6: Step 4 — показва summary + warning text за blocked vs sold; бутон 'Клонирай' извиква useCloneComposition. Test 7: success → snackbar + close. Test 8: 409 conflict → grid step 3 reopens. ФЕЙЛВАТ."
+        "action": "Напиши `CloneCompositionDialog.test.tsx`. Test 1: render dialog с sourceId=1; assert MUI Stepper присъства с 4 стъпки. Test 2: Step 1 — radio 'За един ден' / 'За период'; selected='един ден' → Step 2 показва **един** single date picker (targetDate); selected='период' → Step 2 показва **два** date picker-а (startDate, endDate). Test 3: **БЕЗ days-of-week** — не trябва да има ToggleButtonGroup за дни от седмицата (§0.1 от спека: всички дни в обхвата получават композиция). Test 4: Step 2 валидация — Next disabled ако TargetTrainNumber празен или дати невалидни; за period: `endDate >= startDate`; soft warning при range > 92 дни. Test 5: Step 3 — извиква existing `useCompositions({ trainNumber, dateFrom, dateTo })` (НЕ /clone-preview); ако има conflicts → рендира списък с дати + checkbox 'Презапиши'. Test 6: Step 4 — показва summary 'Ще се създадат N композиции — по една за всеки ден от X до Y'; warning text за blocked vs sold; бутон 'Клонирай' извиква useCloneComposition (за един ден) или useCloneCompositionForPeriod (за период). Test 7: success → snackbar 'успешно' + close. Test 8: 409 conflict → връща се в Step 3. ФЕЙЛВАТ."
       },
       {
         "id": "133.2",
         "phase": "GREEN",
-        "action": "Създай `src/app/features/compositions/components/CloneCompositionDialog.tsx`. MUI: Dialog, Stepper, RadioGroup, DatePicker (от @mui/x-date-pickers), ToggleButtonGroup, Checkbox, Alert (за warning). State: useState за active step + form state. На step 4 — Alert severity='warning' с текст: t('compositions.clone.blockedSeatsCarriedOver') + t('compositions.clone.soldSeatsNotCarriedOver')."
+        "action": "Създай `src/app/features/compositions/components/CloneCompositionDialog.tsx`. MUI: Dialog, Stepper, RadioGroup, DatePicker (от @mui/x-date-pickers), Checkbox, Alert (за warning). **БЕЗ ToggleButtonGroup за дни от седмицата.** State: useState за active step + form state ({ mode: 'single'|'period', targetTrainNumber, targetDate (single mode), startDate, endDate (period mode), overwrite }). Step 2 conditional render: single mode → 1 DatePicker; period mode → 2 DatePickers (start + end). На step 4 — summary включва изчислен брой дни (endDate - startDate + 1 за period; 1 за single) + Alert severity='warning' с текст: t('compositions.clone.blockedSeatsCarriedOver') + t('compositions.clone.soldSeatsNotCarriedOver')."
       },
       {
         "id": "133.3",
         "phase": "GREEN",
-        "action": "Wire useCloneComposition / useCloneCompositionForPeriod според Step 1 selection."
+        "action": "Wire useCloneComposition (single mode) / useCloneCompositionForPeriod (period mode) според Step 1 selection. Step 3 conflict preview: ползва existing `useCompositions({ trainNumber, dateFrom: single ? targetDate : startDate, dateTo: single ? targetDate : endDate })` — БЕЗ нов /clone-preview endpoint."
       },
       {
         "id": "133.4",
         "phase": "VISUAL",
-        "action": "npm run dev. Open /compositions; trigger CloneCompositionDialog (от row action — добави в Task 134). Step through всички 4 стъпки. Screenshot всяка стъпка с cursor-ide-browser MCP. Проверка: layout MUI стандартен, warning alert е видим и четим, ToggleButtonGroup за дните е разпознаваем (active state ясно различим от inactive)."
+        "action": "npm run dev. Open /compositions; trigger CloneCompositionDialog (от row action — добави в Task 134). Step through всички 4 стъпки в двата режима (single + period). Screenshot всяка стъпка с cursor-ide-browser MCP. Проверка: layout MUI стандартен, warning alert е видим и четим, single mode има 1 date picker, period mode има 2 date picker-а, summary текстът за period показва коректен брой дни."
       },
       {
         "id": "133.5",
         "phase": "DONE",
-        "action": "npm test CloneCompositionDialog — всички 8 зелени. type-check + lint чисто. Visual screenshot записан в `docs/composition/designs/clone-dialog-current.png` за бъдеща сравнение."
+        "action": "npm run test:run CloneCompositionDialog — всички 8 зелени. type-check + lint чисто. Visual screenshot записан в `docs/composition/designs/clone-dialog-current.png` за бъдеща сравнение."
       }
     ],
-    "passes": true
+    "passes": false
   },
   {
     "id": 134,
@@ -4706,10 +4701,10 @@
       {
         "id": "134.4",
         "phase": "DONE",
-        "action": "npm test — зелени. lint + type-check чисто."
+        "action": "npm run test:run — зелени. lint + type-check чисто."
       }
     ],
-    "passes": true
+    "passes": false
   },
   {
     "id": 135,
@@ -4721,7 +4716,7 @@
     "steps": [
       {
         "id": "135.1",
-        "action": "В `src/locales/bg.json` добави под `compositions.clone`: title='Клониране на композиция', singleDay='За един ден', period='За период', targetTrain='Целеви влак', targetDate='Целева дата', startDate='Начална дата', endDate='Крайна дата', daysOfWeek='Дни от седмицата', overwriteWarning='Съществуват активни композиции в този период. Презаписването ще ги изтрие.', blockedSeatsCarriedOver='Блокираните места ще бъдат пренесени (счупени седалки, технически проблеми, служебни места).', soldSeatsNotCarriedOver='Продадените билети и резервациите НЯМА да бъдат пренесени (свързани са с конкретен маршрут и дата).', confirmExecute='Клонирай', success='Композицията е клонирана успешно.', successPeriod='Създадени {{count}} композиции, пропуснати {{skipped}}.', conflictTitle='Конфликт с активни композиции', conflictWarning='За избрания период има {{count}} активни композиции. Маркирайте „Презапиши“ за да продължите.', errorSourceEmpty='Изходната композиция няма вагони.', errorRangeTooLarge='Периодът не може да бъде повече от 365 дни.'"
+        "action": "В `src/locales/bg.json` добави под `compositions.clone` (16 ключа по §4.6 на спека): title='Клониране на композиция', singleDay='За един ден', period='За период', targetTrain='Целеви влак', targetDate='Целева дата', startDate='Начална дата', endDate='Крайна дата', overwriteWarning='Съществуват активни композиции в този период. Презаписването ще ги изтрие.', blockedSeatsCarriedOver='Блокираните места ще бъдат пренесени (счупени седалки, технически проблеми, служебни места).', soldSeatsNotCarriedOver='Продадените билети и резервациите НЯМА да бъдат пренесени (свързани са с конкретен маршрут и дата).', confirmExecute='Клонирай', success='Композицията е клонирана успешно.', successPeriod='Създадени {{count}} композиции, пропуснати {{skipped}}.', conflictTitle='Конфликт с активни композиции', conflictWarning='За избрания период има {{count}} активни композиции. Маркирайте „Презапиши“ за да продължите.', errorSourceEmpty='Изходната композиция няма вагони.', errorRangeTooLarge='Периодът не може да бъде повече от 92 дни.'. **БЕЗ daysOfWeek ключ** — функционалността е премахната съобразно ден-за-ден модела (§0.1)."
       },
       {
         "id": "135.2",
@@ -4729,10 +4724,10 @@
       },
       {
         "id": "135.3",
-        "action": "npm test i18n.coverage (ако съществува) — 0 missing keys. Иначе manual: grep `t\\('compositions.clone\\.` в кода → всеки key съществува в двата файла."
+        "action": "npm run test:run i18n.coverage (ако съществува) — 0 missing keys. Иначе manual: grep `t\\('compositions.clone\\.` в кода → всеки key съществува в двата файла."
       }
     ],
-    "passes": true
+    "passes": false
   },
   {
     "id": 136,
@@ -4746,20 +4741,20 @@
       {
         "id": "136.1",
         "phase": "RED",
-        "action": "Напиши `CloneCompositionDialog.conflictPreview.test.tsx`. Test 1: ако useClonePreview връща [] → Step 3 показва само 'Няма конфликти' и Next е enabled без overwrite checkbox. Test 2: useClonePreview връща 3 items → рендира MUI List с 3 items (date + train + composition id); overwrite checkbox visible. Test 3: overwrite unchecked → Next disabled. Test 4: overwrite checked → Next enabled и form state има overwrite=true. Test 5: useClonePreview е loading → показва Skeleton/CircularProgress. Test 6: useClonePreview error → Alert error 'Не може да се провери конфликт'. ФЕЙЛВАТ."
+        "action": "Напиши `CloneCompositionDialog.conflictPreview.test.tsx`. **Бележка:** preview ползва existing `useCompositions({ trainNumber, dateFrom, dateTo })` (§2.3 от спека), НЕ separate /clone-preview endpoint. Mock-ва се `useCompositions` hook-а. Test 1: ако useCompositions връща [] (няма съществуващи композиции за trainNumber+date range) → Step 3 показва само 'Няма конфликти' и Next е enabled без overwrite checkbox. Test 2: useCompositions връща 3 items → рендира MUI List с 3 items (date + train + composition id); overwrite checkbox visible. Test 3: overwrite unchecked → Next disabled. Test 4: overwrite checked → Next enabled и form state има overwrite=true. Test 5: useCompositions е loading → показва Skeleton/CircularProgress. Test 6: useCompositions error → Alert error 'Не може да се провери конфликт'. ФЕЙЛВАТ."
       },
       {
         "id": "136.2",
         "phase": "GREEN",
-        "action": "В CloneCompositionDialog Step 3 контейнера: extract в sub-component `<ConflictPreviewStep />`. Render conditionals според preview.data."
+        "action": "В CloneCompositionDialog Step 3 контейнера: extract в sub-component `<ConflictPreviewStep />`. Render conditionals според useCompositions result. Component reads { isLoading, isError, data } и filter-ва само композициите със същия trainNumber + дата в [startDate, endDate]."
       },
       {
         "id": "136.3",
         "phase": "DONE",
-        "action": "npm test CloneCompositionDialog.conflictPreview — всички 6 зелени."
+        "action": "npm run test:run CloneCompositionDialog.conflictPreview — всички 6 зелени."
       }
     ],
-    "passes": true
+    "passes": false
   },
   {
     "id": 137,
@@ -4773,7 +4768,7 @@
       {
         "id": "137.1",
         "phase": "RED",
-        "action": "Създай `__tests__/cloneComposition.integration.test.tsx`. Setup: `vi.mock('@/api/compositions/compositions.api')` — `getCompositions` returns seeded list с composition #1 (id=1, trainNumber='8631', date='2026-06-01', 2 carriages); първото извикване връща [comp1], второто (след invalidate) връща [comp1, cloned] където cloned има id=99, trainNumber='8632', date='2026-07-01', status='Draft'. `clone` spy returns `{ id: 99, trainNumber: '8632', date: '2026-07-01', status: 'Draft' }` (CloneResponse shape от Task 130). `getClonePreview` returns `{ conflicts: [] }`. Render `<CompositionsListPage>` обвито в QueryClientProvider + Redux Provider + MemoryRouter (по pattern на UsersListPage.test.tsx)."
+        "action": "Създай `__tests__/cloneComposition.integration.test.tsx`. Setup: `vi.mock('@/api/compositions/compositions.api')` — `getAll` returns seeded list с composition #1 (id=1, trainNumber='8631', startDate=endDate='2026-06-01', 2 carriages); първото извикване връща [comp1], второто (след invalidate) връща [comp1, cloned] където cloned има id=99, trainNumber='8632', startDate=endDate='2026-07-01', status='Draft'. `clone` spy returns `{ newCompositionId: 99, carriagesCloned: 2, blockedSeatsCloned: 0, warnings: [] }` (CloneResponse shape от §2.1 / Task 130). За conflict preview — `getAll` се mock-ва да върне [] за нов trainNumber+date range. **БЕЗ getClonePreview** — preview ползва existing list endpoint. Render `<CompositionsListPage>` обвито в QueryClientProvider + Redux Provider + MemoryRouter (по pattern на UsersListPage.test.tsx)."
       },
       {
         "id": "137.2",
@@ -4783,7 +4778,7 @@
       {
         "id": "137.3",
         "phase": "RED",
-        "action": "Втори тест `period clone — expands dates and skips conflicts`. Mock setup: `cloneForPeriod` spy returns `ClonePeriodResponse` с `created: [{date: '2026-07-01'}, {date: '2026-07-03'}, {date: '2026-07-08'}, {date: '2026-07-10'}, {date: '2026-07-15'}]` и `skipped: [{date: '2026-07-06', reason: 'TARGET_OCCUPIED'}]`. `getClonePreview` returns `{ conflicts: [{date: '2026-07-06', existingCompositionId: 42}] }`. Steps: open dialog → Step 1: select 'За период' → Step 2: start='2026-07-01', end='2026-07-15', days=[MON,WED,FRI] → Step 3: assert conflict list rendered с 1 item за 07-06; tick 'Презапиши' checkbox → Step 4: click 'Клонирай'. Assertions: `cloneForPeriod` spy called once с body `{ targetTrainNumber, startDate: '2026-07-01', endDate: '2026-07-15', daysOfWeek: ['MON','WED','FRI'], overwrite: true }`; success snackbar shows 'Създадени 5, пропуснати 1' (или подобен i18n string match). ФЕЙЛВА."
+        "action": "Втори тест `period clone — covers every day in range and skips conflicts`. Mock setup: `cloneForPeriod` spy returns `ClonePeriodResponse` с `createdCompositionIds: [101,102,103,104]` (за дати 07-01, 07-02, 07-03, 07-05) и `skipped: [{date: '2026-07-04', reason: 'TARGET_OCCUPIED', existingCompositionId: 42}]` (5 искани дни от 07-01 до 07-05, 1 пропуснат). За conflict preview — `getAll` mock връща съществуваща композиция за 07-04 (за да се появи в Step 3). Steps: open dialog → Step 1: select 'За период' → Step 2: targetTrainNumber='8632', startDate='2026-07-01', endDate='2026-07-05' (**БЕЗ days-of-week toggle — той не съществува**) → Step 3: assert conflict list rendered с 1 item за 07-04; tick 'Презапиши' checkbox → Step 4: assert summary text 'Ще се създадат 5 композиции'; click 'Клонирай'. Assertions: `cloneForPeriod` spy called once с body `{ targetTrainNumber: '8632', startDate: '2026-07-01', endDate: '2026-07-05', overwrite: true }` (**БЕЗ daysOfWeek поле**); success snackbar shows 'Създадени 4, пропуснати 1'. ФЕЙЛВА."
       },
       {
         "id": "137.4",
@@ -4793,10 +4788,10 @@
       {
         "id": "137.5",
         "phase": "DONE",
-        "action": "npm test cloneComposition.integration — двата теста зелени. type-check + lint чисто. Verify: тестовете НЕ import-ват `mockStorageService` или нещо от `src/services/mockBackend/` — единствената mock повърхност е `@/api/compositions/compositions.api`."
+        "action": "npm run test:run cloneComposition.integration — двата теста зелени. type-check + lint чисто. Verify: тестовете НЕ import-ват `mockStorageService` или нещо от `src/services/mockBackend/` — единствената mock повърхност е `@/api/compositions/compositions.api`."
       }
     ],
-    "passes": true
+    "passes": false
   },
   {
     "id": 138,
@@ -4820,36 +4815,450 @@
       {
         "id": "138.3",
         "phase": "DONE",
-        "action": "npx playwright test tests/compositions/clone-single.spec.ts — passes. Cleanup: API DELETE на test compositions."
+        "action": "npm run e2e tests/compositions/clone-single.spec.ts — passes. Cleanup: API DELETE на test compositions."
       }
     ],
-    "passes": true
+    "passes": false
   },
   {
     "id": 139,
     "category": "e2e",
     "repo": "frontend",
-    "description": "[E2E] Period clone — days-of-week filter + conflict + overwrite flow",
+    "description": "[E2E] Period clone — every-day-in-range + conflict + overwrite flow",
     "tddWorkflow": true,
-    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md §5.3",
-    "notes": "ИЗИСКВА реален BE (Tasks 125-129) да са завършени. **РАБОТНА ДИРЕКТОРИЯ: САМО frontend** (`C:\\Projects\\BDZ Project\\Admin-App`). Същото правило като Task 138: само Playwright spec файлове в `tests/`; НЕ редактирай backend / SQL проектите.",
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/composition-clone-spec.md §5.3 + §0.1 (ден-за-ден модел, БЕЗ days-of-week)",
+    "notes": "ИЗИСКВА реален BE (Task 125) да е завършен. **РАБОТНА ДИРЕКТОРИЯ: САМО frontend** (`C:\\Users\\kaloyan.georgiev\\Projects\\Admin-App`). Същото правило като Task 138: само Playwright spec файлове в `e2e/tests/`; НЕ редактирай backend / SQL проектите. **БЕЗ days-of-week стъпка в UI flow-а** — функционалността е премахната по спецификацията.",
     "steps": [
       {
         "id": "139.1",
         "phase": "RED",
-        "action": "Създай `tests/compositions/clone-period.spec.ts`. Scenario A (happy path): seed source composition; clone-for-period '2026-07-01' → '2026-07-31', days=[MON,TUE,WED,THU,FRI]; verify 23 (или коректен брой) created, всичките имат blocked seats, нито една — sold. Scenario B (conflict + overwrite): pre-seed target slot; clone-for-period в същия период с overwrite=false → check skipped[].length > 0; повтори с overwrite=true → assert старият slot е изтрит и заменен."
+        "action": "Създай `e2e/tests/compositions/clone-period.spec.ts`. Scenario A (happy path): seed source composition с 2 blocked seats; в UI отвори clone dialog → Step 1 'За период' → Step 2 startDate='2026-07-01', endDate='2026-07-05' (без day-of-week toggle, той не съществува) → Step 3 'Няма конфликти' → Step 4 summary 'Ще се създадат 5 композиции' → Клонирай. Verify: **точно 5 нови композиции** (по една за всеки ден от 07-01 до 07-05, затворен обхват); всяка с 2 blocked seats; **0 bookings**. Scenario B (conflict + overwrite): pre-seed target композиция за 2026-07-03; clone-for-period 07-01..07-05 с overwrite=false → check skipped[].length === 1 (за 07-03), created === 4; повтори с overwrite=true → assert старата 07-03 е изтрита и заменена, общо 5 нови записа."
       },
       {
         "id": "139.2",
         "phase": "GREEN",
-        "action": "Ако фейлва: BE date expansion logic (Task 128) е най-вероятният culprit — провери timezone handling, edge cases (29 февруари, end-of-month). Поправи."
+        "action": "Ако фейлва: най-вероятните причини — (a) BE `/clone-for-period` (ако съществува) не expand-ва коректно range-а; (b) FE loop в `useCloneCompositionForPeriod` пропуска ден поради off-by-one в `expandDateRange`; (c) timezone handling (DST преход в края на октомври); (d) end-of-month edge cases. Поправи в съответния layer."
       },
       {
         "id": "139.3",
         "phase": "DONE",
-        "action": "npx playwright test tests/compositions/clone-period.spec.ts — passes. type-check + lint чисто. Cleanup: bulk DELETE на test compositions."
+        "action": "npm run e2e -- e2e/tests/compositions/clone-period.spec.ts — passes. type-check + lint чисто. Cleanup: bulk DELETE на test compositions."
       }
     ],
-    "passes": true
+    "passes": false
+  },
+  {
+    "id": 140,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[BE] GET /api/compositions — date-in-range filter + pagination (за ден-за-ден модел)",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/composition-clone-spec.md §0.2.3 + §0.2.4 Option (a)",
+    "notes": "Подготвителен таск за UI промените в §0.2.1-§0.2.3 — frontend списъкът става ден-за-ден и ще има стотици/хиляди записи. Без backend pagination + day-range филтър, UI ще е неизползваем. **БЕЗ schema промени** — `Composition.StartDate` / `EndDate` остават; clone (Task 125) ги задава равни на target деня; новият филтър третира StartDate като 'деня' (Option (a) от §0.2.4). РАБОТНА ДИРЕКТОРИЯ: само backend.",
+    "steps": [
+      {
+        "id": "140.1",
+        "phase": "RED",
+        "action": "Working dir: backend. Напиши integration test `CompositionsList_FilterByDateRange_ReturnsOnlyMatching` в `Application.Tests/Features/Compositions/`: seed 3 композиции с StartDate=EndDate в [2026-07-01, 2026-07-02, 2026-07-10]; GET с dateFrom=2026-07-01, dateTo=2026-07-05 → връща точно 2 (07-01, 07-02). Test 2: `CompositionsList_Pagination_RespectsSkipTake` — seed 50 композиции; GET ?page=2&pageSize=10 → връща items 11-20 + totalCount=50. ФЕЙЛВАТ."
+      },
+      {
+        "id": "140.2",
+        "phase": "GREEN",
+        "action": "Working dir: backend. Отвори `GetCompositions` query handler в `Application/Features/Compositions/Queries/`. Промени филтър от 'intersects period' към `StartDate BETWEEN @dateFrom AND @dateTo` (StartDate е деня в Option (a)). Добави `Page` / `PageSize` параметри в query DTO; handler-ът прилага `.Skip((page-1)*pageSize).Take(pageSize)` след филтрите. Response shape: `{ items: CompositionDto[], totalCount: int, page: int, pageSize: int }` (paginated envelope; reuse ако вече има generic). Update Controller endpoint signature accordingly."
+      },
+      {
+        "id": "140.3",
+        "phase": "DONE",
+        "action": "Working dir: backend. `dotnet build` + `dotnet test --filter CompositionsList` зелени. Документирай в activity.md финалния query string contract (точните query params + response envelope shape) — Task 141 ще го consume на FE страна."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 141,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] compositionsApi.getAll — extended filter params (dateFrom, dateTo, trainId, status, page, pageSize) + paginated response type",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/composition-clone-spec.md §0.2.3",
+    "notes": "Подготвя API layer-а за новия списъчен UX (Tasks 142, 143). Зависи от Task 140 — финалния query contract от backend-а е документиран в activity.md.",
+    "steps": [
+      {
+        "id": "141.1",
+        "phase": "RED",
+        "action": "Working dir: frontend. Разшири `compositions.api.test.ts`: Test 1 — `getAll({ dateFrom, dateTo, trainId, status, page, pageSize })` сериализира всички params в query string (ISO дати, числа); Test 2 — response се deserializ-ва като `PaginatedResponse<Composition>` ({ items, totalCount, page, pageSize }); Test 3 — `Composition` типът има `date: string` (computed от startDate; виж 141.2). ФЕЙЛВАТ."
+      },
+      {
+        "id": "141.2",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. В `compositions.types.ts`: разшири `CompositionsFilters` с полета `dateFrom?: string`, `dateTo?: string`, `trainId?: number`, `status?: string`, `page?: number`, `pageSize?: number`. Добави `PaginatedResponse<T> { items: T[]; totalCount: number; page: number; pageSize: number }`. В `Composition` тип: добави **derived getter** `date: string` (computed от `startDate` при mapping от backend response — `mapCompositionFromBackend`); запази `startDate`/`endDate` като сурови backend полета за compatibility. В `compositions.api.ts`: `getAll(filters)` връща `PaginatedResponse<Composition>`."
+      },
+      {
+        "id": "141.3",
+        "phase": "DONE",
+        "action": "Working dir: frontend. `npm run test:run compositions.api` — зелено. `npm run type-check` чисто. Сегашните consumer-и на `getAll` не се чупят — те викаха старата signature без filters; новите параметри са optional."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 142,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] CompositionList — колона „Период\" → „Дата\" (single day); sort by date DESC, secondary trainNumber ASC",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/composition-clone-spec.md §0.2.1",
+    "notes": "Зависи от Task 141 (Composition.date derived field). Ден-за-ден модел означава една дата на ред, не диапазон.",
+    "steps": [
+      {
+        "id": "142.1",
+        "phase": "RED",
+        "action": "Working dir: frontend. Разшири `CompositionList.test.tsx`: Test 1 — header показва 'Дата' (`compositions.list.table.date`), НЕ 'Период'. Test 2 — cell съдържа форматирана единична дата (`formatDate(comp.date)` като '01.07.2026'), не диапазон. Test 3 — клик на header 'Дата' тригерира sort callback с `{ field: 'date', direction: 'desc' }`; повторен клик — `'asc'`. Test 4 — secondary sort: при равни дати, sorted by `trainNumber ASC`. ФЕЙЛВАТ."
+      },
+      {
+        "id": "142.2",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. В `CompositionList.tsx`: премахни `formatDateRange` helper, замени с `formatDate`. Header column key: 'date' (вместо 'period'). Cell rendering чете `composition.date` (от Task 141 derived field). Sort indicator на header (MUI TableSortLabel). Sort callback (prop `onSortChange`) — подава `{ field, direction }` нагоре към `CompositionsListPage`. Default sort при mount: `{ field: 'date', direction: 'desc' }`."
+      },
+      {
+        "id": "142.3",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. В `bg.json` / `en.json`: премахни `compositions.list.table.period`; добави `compositions.list.table.date` (bg: 'Дата', en: 'Date'). Update `CompositionsListPage.tsx` да поддържа sort state (`useState<{field, direction}>`) и да го предава в `compositionsApi.getAll` params (Task 141)."
+      },
+      {
+        "id": "142.4",
+        "phase": "DONE",
+        "action": "Working dir: frontend. `npm run test:run CompositionList` зелено. `npm run type-check` + `npx eslint` чисто. Manual: отвори /compositions → header е 'Дата', датите са форматирани като 'DD.MM.YYYY', default sort е най-новата дата отгоре."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 143,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] CompositionFilters — fix train autocomplete + DatePicker + day-in-range semantics + quick chips + default filter (today, +7)",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/composition-clone-spec.md §0.2.2",
+    "notes": "Адресира 6 различни проблема в сегашните филтри (от user скрийншоти). Зависи от Task 141 (extended getAll params) и Task 142 (sort state на parent page-а).",
+    "steps": [
+      {
+        "id": "143.1",
+        "phase": "RED",
+        "action": "Working dir: frontend. Разшири `CompositionFilters.test.tsx`: Test 1 — train autocomplete показва loading state когато `trainsApi.getAll` е pending; empty state 'Няма налични влакове' (не raw 'No options'); опции се показват след load. Test 2 — DatePicker полета (start/end) отварят MUI X Date Popper при клик на icon или text field; ползва `LocalizationProvider` от parent. Test 3 — quick chips 'Днес' / 'Утре' / 'Тази седмица' / 'Този месец' задават съответен `[dateFrom, dateTo]` диапазон. Test 4 — default filter при mount: `dateFrom = today`, `dateTo = today + 7 days` с visible chip 'Идващи 7 дни'. Test 5 — clear бутон reset-ва всички полета (включително default). ФЕЙЛВАТ."
+      },
+      {
+        "id": "143.2",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. Поправки в `CompositionFilters.tsx`: (1) Train Autocomplete — добави `loading` prop базиран на `useTrains().isPending`, `noOptionsText={t('common.noOptions')}` localized; (2) Date Picker-ите — увери се че root layout (или CompositionsListPage) обвива в `<LocalizationProvider dateAdapter={AdapterDateFns}>`; ползвай MUI X `DatePicker` (вече дефиниран); (3) добави `<Stack direction='row' gap={1}>` с MUI Chips: 'Днес', 'Утре', 'Тази седмица' (Mon..Sun), 'Този месец'; всеки chip onClick задава съответния диапазон; (4) при mount: задай default `dateFrom=today, dateTo=today+7`; show 'Идващи 7 дни' chip-as-indicator. Семантиката на филтъра вече е 'Composition.date в [dateFrom, dateTo]' (Task 140 backend, Task 141 API)."
+      },
+      {
+        "id": "143.3",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. В `CompositionsListPage.tsx`: wire pagination state (`page`, `pageSize` defaults 1/20); pass to `useCompositions(filters + sort + pagination)`. Render MUI `<TablePagination>` отдолу. Когато filters/sort се променят → reset page към 1. i18n: добави `compositions.filters.quickChips.today/tomorrow/thisWeek/thisMonth/upcomingWeek` + `common.noOptions` ('Няма опции' / 'No options')."
+      },
+      {
+        "id": "143.4",
+        "phase": "VISUAL",
+        "action": "Working dir: frontend. `npm run dev` → /compositions. Screenshot с cursor-ide-browser MCP: (a) filters bar показва train autocomplete с реални опции; (b) DatePicker отваря calendar popper при клик; (c) quick chips са видими и кликабилни; (d) default 'Идващи 7 дни' chip е активен при свежо отваряне; (e) под таблицата има TablePagination control."
+      },
+      {
+        "id": "143.5",
+        "phase": "DONE",
+        "action": "Working dir: frontend. `npm run test:run CompositionFilters` + `CompositionsListPage` зелени. `npm run type-check` + `npx eslint` чисто. Manual sanity: 100+ composition записи → списъкът се зарежда бързо, paginate работи, всеки филтър засяга само relevant records."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 150,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[BE] WagonType.IsSelfPropelled — SQL колона в DB Project + seed update за DMV серии; regenerate entity чрез EF Core Power Tools",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/composition-self-propelled-plan.md §2 + §3",
+    "notes": "Първи таск от Етап 8. **Workflow в този проект е Database-First, НЕ Code-First**: schema живее в SQL Project-а (`OSDM-Src/SQLProjects/RailRunServiceSQL/`); промените се правят чрез `*.sql` файлове + post-deployment scripts; DACPAC се build-ва и publish-ва към локалната DB; накрая в DotNetServices **EF Core Power Tools** ре-scaffold-ват entity класовете + DbContext configuration от обновената DB. **НЕ пишем `dotnet ef migrations add`** — този проект не ползва Code-First migrations. Source of truth: `WagonType.IsSelfPropelled BIT NOT NULL DEFAULT 0`.",
+    "steps": [
+      {
+        "id": "150.1",
+        "phase": "RED",
+        "action": "Working dir: backend. Напиши integration test `WagonTypes_IsSelfPropelled_DefaultsToFalse_ForNewTypes` + `WagonTypes_SeededDmvSeries_HaveIsSelfPropelledTrue`: след publish на DACPAC + post-deployment seed, query-ни WagonTypes — assert (a) случайно избран тип (напр. серия 32) има IsSelfPropelled=0; (b) Id=19 (серия 10 DMV), Id=27 (31-1-4), Id=28 (31-2-3) имат IsSelfPropelled=1. ФЕЙЛВА (колоната не съществува)."
+      },
+      {
+        "id": "150.2",
+        "phase": "GREEN",
+        "action": "Working dir: `OSDM-Src/SQLProjects/RailRunServiceSQL/` (DB Project, **не** DotNetServices). (a) В `dbo/Tables/WagonTypes.sql`: добави колона `IsSelfPropelled BIT NOT NULL CONSTRAINT DF_WagonTypes_IsSelfPropelled DEFAULT 0`. DACPAC автоматично ще ADD COLUMN при publish — съществуващи редове получават default 0. (b) **НЕ модифицирай** `003_Wagon_Types.sql` — той е initial seed (INSERT pattern), който е вече изпълнен на dev/prod DBs и НЕ се re-run-ва върху съществуващи записи. Промените там няма да достигнат до Azure dev DB. (c) Създай **нов script** `dbo/PostDeployment/Data/079_SetIsSelfPropelledForDmvSeries.sql` със съдържание: `PRINT 'Setting IsSelfPropelled=1 for DMV series (10, 31-1-4, 31-2-3)...'; UPDATE [dbo].[WagonTypes] SET IsSelfPropelled = 1 WHERE Id IN (19, 27, 28); GO`. UPDATE-ът е idempotent — безопасно е да се пусне многократно. (d) В `dbo/PostDeployment/Seed.sql`: добави reference към новия script **СЛЕД** `078_WagonsSnapshot.sql` (защото snapshot-ът overrides всичко прие него и ще нулира флага, ако се пусне последен) — добави `PRINT 'Setting IsSelfPropelled flag for DMV series...';` + `:r .\\Data\\079_SetIsSelfPropelledForDmvSeries.sql`."
+      },
+      {
+        "id": "150.3",
+        "phase": "GREEN",
+        "action": "Working dir: `OSDM-Src/SQLProjects/RailRunServiceSQL/`. Build DACPAC: `dotnet build -c Release --no-incremental`. Publish към локалната DB: `sqlpackage /Action:Publish /SourceFile:bin/Release/RailRunServiceDb.dacpac /TargetConnectionString:\"Server=localhost,14430;Database=RailRunServiceDB;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;Encrypt=True;Connect Timeout=60;Command Timeout=0\"`. Verify: `Successfully published database`. Ако publish-ът се счупи на data-loss guard — drop databases + republish (само за dev DB)."
+      },
+      {
+        "id": "150.4",
+        "phase": "GREEN",
+        "action": "Working dir: `OSDM-Src/DotNetServices/RailRunService/`. **Pragmatic shortcut за автономно изпълнение:** EF Core Power Tools regen е GUI операция в VS/VS Code (right-click → Reverse Engineer) и НЕ може да се driver-не от ралф CLI. За единично additive поле минималната манипулация (която exactly reproduce-ва Power Tools output-а) е: (a) В `Domain/Entities/WagonType.cs`: добави един ред `public bool IsSelfPropelled { get; set; }` редом с останалите свойства. (b) В `Infrastructure/Data/Configurations/WagonTypeConfiguration.cs`: добави в `Configure(EntityTypeBuilder<WagonType> entity)` метода реда `entity.Property(e => e.IsSelfPropelled).HasDefaultValue(false);` (под другите Property конфигурации). Това е exactly what EF Power Tools би генерирал; следващ пълен re-scaffold от dev-а ще даде същия резултат и няма да конфликтва. **WARNING коментар:** добави `// NOTE: Manual addition matching DB schema (079_SetIsSelfPropelledForDmvSeries.sql). EF Core Power Tools full re-scaffold may rewrite this file — re-add if missing.` над всяка от двете промени."
+      },
+      {
+        "id": "150.5",
+        "phase": "DONE",
+        "action": "Working dir: backend. `dotnet build` clean. `dotnet test --filter WagonTypes_IsSelfPropelled` зелено. Документирай в activity.md: (a) workflow стъпки за този проект (SQL Project → DACPAC publish → EF Power Tools scaffold); (b) кои файлове са РЕГЕНЕРИРАНИ (entity + configuration) — следващите tasks НЕ пишат в тях ръчно; (c) кои файлове остават manually-edited (Application DTOs, Commands, Queries, API DTOs, Controller)."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 151,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[BE] WagonType DTO / commands / queries / API — propagate IsSelfPropelled през Application + API слоевете (entity + config идват от Task 150 scaffold)",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/composition-self-propelled-plan.md §4 (таблицата)",
+    "notes": "Зависи от Task 150 (колоната съществува в DB И entity + EF configuration са регенерирани от EF Core Power Tools). Този таск прокарва полето през Application DTO → Commands (Create/Update) → Queries (GetAll/GetById) → API DTOs → Controller. **Не пипа** `Domain/Entities/WagonType.cs` и `Infrastructure/Data/Configurations/WagonTypeConfiguration.cs` — те са регенерирани и manual edits ще се загубят при следващия scaffold.",
+    "steps": [
+      {
+        "id": "151.1",
+        "phase": "RED",
+        "action": "Working dir: backend. Разшири `WagonTypesControllerTests.cs`: Test 1 — `CreateWagonType_PersistsIsSelfPropelled` — POST с `isSelfPropelled: true` → GET връща `isSelfPropelled: true`. Test 2 — `UpdateWagonType_FlipsIsSelfPropelled` — PUT с `isSelfPropelled: false` → GET връща false. Test 3 — `GetAllWagonTypes_IncludesIsSelfPropelledField` — DTO response има полето за всички записи. ФЕЙЛВАТ."
+      },
+      {
+        "id": "151.2",
+        "phase": "GREEN",
+        "action": "Working dir: backend. **САМО Application + API слоеве (не Domain/Infrastructure — те са scaffold-нати от Task 150).** Добави полето в: (a) `Application/DTOs/Nomenclatures/WagonTypeDto.cs` — поле `bool IsSelfPropelled`; (b) `Application/Features/Nomenclatures/Commands/CreateWagonType.cs` и `UpdateWagonType.cs` — command field + entity mapping (`entity.IsSelfPropelled = request.IsSelfPropelled`); (c) `Application/Features/Nomenclatures/Queries/GetWagonTypes.cs` и `GetWagonTypeById.cs` — се връща в DTO projection; (d) `API/DTOs/WagonTypeRequests.cs` — Create/Update API request/response DTOs; (e) `API/Controllers/WagonTypesController.cs` — прокарва полето в командите/queries. **БЕЗ нов endpoint за filtering** — depo-то връща всичко, FE решава disable локално."
+      },
+      {
+        "id": "151.3",
+        "phase": "DONE",
+        "action": "Working dir: backend. `dotnet build` + `dotnet test --filter WagonType` зелени. Документирай DTO shape промяната в activity.md — Task 153 (FE) ще го consume. Verify-ни `git diff Domain/Entities/WagonType.cs` и `Infrastructure/Data/Configurations/WagonTypeConfiguration.cs` — промените трябва да са от Task 150 scaffold, **не от ръчно редактиране в тази стъпка**."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 152,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[BE] AddCarriage integrity validation — отказва смесване на self-propelled + regular в една композиция (409 CompositionTractionMix)",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/composition-self-propelled-plan.md §4.1",
+    "notes": "**Critical TDD task.** Без този слой UI правилото е заобиколимо от DevTools/curl. Зависи от Task 151 (WagonType има IsSelfPropelled полето). Concurrency: §4.1 препоръка (a) — приемливо за първа итерация, race race-овете рядки в admin workflow.",
+    "steps": [
+      {
+        "id": "152.1",
+        "phase": "RED",
+        "action": "Working dir: backend. Разшири `AddCarriageCommandHandlerTests.cs` с 6 теста (matrix от §6 на спека): (a) `AddSelfPropelled_ToEmptyComposition_Succeeds`; (b) `AddRegular_ToEmptyComposition_Succeeds`; (c) `AddRegular_ToCompositionWithOnlySelfPropelled_FailsWith_CompositionTractionMix`; (d) `AddSelfPropelled_ToCompositionWithOnlyRegular_FailsWith_CompositionTractionMix`; (e) `AddAnotherSelfPropelled_WhenAlreadySelfPropelled_Succeeds`; (f) `AddAnotherRegular_WhenAlreadyRegular_Succeeds`. ФЕЙЛВАТ (валидацията не съществува)."
+      },
+      {
+        "id": "152.2",
+        "phase": "RED",
+        "action": "Working dir: backend. Допълнително API integration test `AddCarriage_ApiBypass_ReturnsConflict409` в `RailRunService.API.Tests`: POST към реалния endpoint с несъвместим тип → assert HTTP 409 + ErrorCode='CompositionTractionMix'. Това е DevTools/curl bypass защитата."
+      },
+      {
+        "id": "152.3",
+        "phase": "GREEN",
+        "action": "Working dir: backend. (1) В `RailRunErrorCodes.cs`: добави константа `CompositionTractionMix`. (2) В `Resources/SharedErrors.resx` (BG) + `SharedErrors.en.resx` (EN): добави съобщенията — BG: 'Не може да се смесват мотриса и обикновен локомотив с вагони в една композиция.', EN: 'Cannot mix self-propelled and regular wagons in the same composition.'. (3) Разшири `CompositionWithCarriagesSpec` (или еквивалент) да include-ва `ThenInclude(cc => cc.WagonType)` — нужно за проверката."
+      },
+      {
+        "id": "152.4",
+        "phase": "GREEN",
+        "action": "Working dir: backend. В `AddCarriage.cs` handler-а: преди `_carriageRepo.AddAsync`, имплементирай алгоритъма от §4.1: fetch composition с CompositionCarriages.WagonType; fetch WagonType за request.WagonTypeId; ако (newType.IsSelfPropelled && existingHasRegular) или (!newType.IsSelfPropelled && existingHasSelfPropelled) → `Result.Fail(ErrorKind.Conflict, RailRunErrorCodes.CompositionTractionMix)`. Иначе → продължи. Добави inline коментар за концурентност-та (race-овете са acceptable за първа итерация)."
+      },
+      {
+        "id": "152.5",
+        "phase": "GREEN",
+        "action": "Working dir: backend. **UpdateCarriage check:** провери дали `wagonTypeId` е mutable в `UpdateCarriage.cs`. Ако ДА — добави същата валидация преди save. Ако НЕ — документирай в коментар защо не е нужна (полето е immutable). Документирай решението в activity.md."
+      },
+      {
+        "id": "152.6",
+        "phase": "DONE",
+        "action": "Working dir: backend. `dotnet build` + `dotnet test --filter AddCarriage` + integration test зелени. Проверка ръчно през curl/Postman: POST AddCarriage с несъвместим тип → 409 + CompositionTractionMix code + локализирано съобщение."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 153,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] WagonType.isSelfPropelled — types + API mapping",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/composition-self-propelled-plan.md §5.1",
+    "notes": "Зависи от Task 151 (BE DTO има полето).",
+    "steps": [
+      {
+        "id": "153.1",
+        "phase": "RED",
+        "action": "Working dir: frontend. Разшири `wagons.api.test.ts` (или където е mapping-ът): Test 1 — `mapWagonTypeFromBackend` чете `isSelfPropelled` от `BackendWagonTypeDto` и го прокарва във frontend `WagonType`. Test 2 — `wagonTypesApi.getAll()` връща `WagonType[]` с попълнено поле. ФЕЙЛВА."
+      },
+      {
+        "id": "153.2",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. В `src/api/compositions/compositions.types.ts`: добави `isSelfPropelled: boolean` в `WagonType`. В `src/api/compositions/wagons.api.ts`: добави полето в `BackendWagonTypeDto` и в `mapWagonTypeFromBackend`."
+      },
+      {
+        "id": "153.3",
+        "phase": "DONE",
+        "action": "Working dir: frontend. `npm run test:run wagons.api` зелено. `npm run type-check` чисто."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 154,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] WagonCanvas — скрий локомотивната карта при `hasSelfPropelled`; drop guard при stale drag state",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/composition-self-propelled-plan.md §5.2",
+    "notes": "Зависи от Task 153. Локомотивът сега е статична Card в `WagonCanvas.tsx:292-320` — само визуално го скриваме, без entity промяна.",
+    "steps": [
+      {
+        "id": "154.1",
+        "phase": "RED",
+        "action": "Working dir: frontend. Разшири `WagonCanvas.test.tsx`: Test 1 — `hasSelfPropelled=true` (composition съдържа поне 1 wagon с `WagonType.isSelfPropelled=true`) → локомотивната Card не се рендира. Test 2 — `hasSelfPropelled=false` (празна composition или само regular) → локомотивната Card се рендира. Test 3 — `handleDrop` отказва drop на regular wagon когато `compositionKind='self-propelled'` (не извиква onWagonDrop, ИЛИ извиква нов `onIncompatibleDrop` за snackbar). Test 4 — `handleDragOver` задава `dropEffect='none'` при несъвместим drag. ФЕЙЛВАТ."
+      },
+      {
+        "id": "154.2",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. В `WagonCanvas.tsx`: (1) Добави prop `hideLocomotive: boolean` (или derive от wagons + wagonTypeById helper). Wrap-ни локомотивната Card в `{!hideLocomotive && (...)}` (ред 292-320). (2) В `handleDrop` (ред 222-233): провери съвместимостта спрямо текущото състояние; ако несъвместимо — извикай `onIncompatibleDrop?.()` ИЛИ skip-ни callback-а + dispatch snackbar. (3) В `handleDragOver` (ред 235-238): когато текущо влаченият елемент е несъвместим — `event.dataTransfer.dropEffect = 'none'` + visual feedback (червена рамка вместо синя)."
+      },
+      {
+        "id": "154.3",
+        "phase": "DONE",
+        "action": "Working dir: frontend. `npm run test:run WagonCanvas` зелено. `npm run type-check` чисто."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 155,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] WagonPalette — показва ВСИЧКИ типове, disable + tooltip за несъвместимите (`disabledRule` prop)",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/composition-self-propelled-plan.md §5.3",
+    "notes": "Зависи от Task 153 (wagonTypes имат isSelfPropelled). 'Депото' показва всичко; несъвместимите карти са визуално приглушени с tooltip обясняващ защо.",
+    "steps": [
+      {
+        "id": "155.1",
+        "phase": "RED",
+        "action": "Working dir: frontend. Разшири `WagonPalette.test.tsx`: Test 1 — при `disabledRule='none'` всички 5 wagonTypes (mix от self-propelled и regular) са визуализирани и draggable. Test 2 — при `disabledRule='self-propelled'` картите с `isSelfPropelled=true` имат `opacity:0.4`, `cursor:'not-allowed'`, `draggable={false}` и `aria-disabled='true'`; картите с `isSelfPropelled=false` остават active. Test 3 — при `disabledRule='regular'` — огледално. Test 4 — hover на disabled card показва Tooltip с правилен текст (`compositions.editor.palette.tooltipSelfPropelledBlocked` или `tooltipRegularBlocked` според причината). Test 5 — `onDragStart` на disabled card НЕ зарежда `dataTransfer` (short-circuit). ФЕЙЛВАТ."
+      },
+      {
+        "id": "155.2",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. В `WagonPalette.tsx`: (1) дефинирай тип `DisabledRule = 'none' | 'self-propelled' | 'regular'` и добави го като prop. (2) Замени сегашното `filteredWagonTypes` (ред 68) с **render-all** + per-card disabled boolean: `const isDisabled = (disabledRule === 'self-propelled' && wagonType.isSelfPropelled) || (disabledRule === 'regular' && !wagonType.isSelfPropelled)`. (3) Обвий всяка disabled card в MUI `<Tooltip placement='right' title={t(...)}>` с правилния i18n key. (4) Disabled card: `opacity:0.4`, `cursor:'not-allowed'`, `draggable={false}`, `aria-disabled='true'`, `role='option'` запазено. (5) `onDragStart`: ако disabled → `event.preventDefault()` и return."
+      },
+      {
+        "id": "155.3",
+        "phase": "DONE",
+        "action": "Working dir: frontend. `npm run test:run WagonPalette` зелено. `npm run type-check` + `npx eslint` чисто."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 156,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] CompositionEditorPage — оркестрация: `compositionKind` useMemo + disabledRule wiring + drop guard срещу stale drag",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/composition-self-propelled-plan.md §5.4",
+    "notes": "Зависи от Tasks 153, 154, 155. Свързва palette + canvas през derived state. Един useQuery на mount за wagonTypes (§5.3.2).",
+    "steps": [
+      {
+        "id": "156.1",
+        "phase": "RED",
+        "action": "Working dir: frontend. Разшири `CompositionEditorPage.test.tsx`: Test 1 — добавяне на първа мотриса в празна композиция → локомотивната карта изчезва от canvas, regular wagons в palette стават disabled. Test 2 — премахване на единствената мотриса → локомотивът се появява обратно, всички palette карти стават active. Test 3 — drop на regular когато composition е self-propelled → snackbar 'compositions.errors.cannotAddRegularToSelfPropelled' (severity warning). Test 4 — обратно: drop на self-propelled когато composition е regular → snackbar 'compositions.errors.cannotAddSelfPropelledToTrain'. ФЕЙЛВАТ."
+      },
+      {
+        "id": "156.2",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. В `CompositionEditorPage.tsx`: (1) `useQuery({ queryKey: ['wagon-types','all'], queryFn: wagonTypesApi.getAll, staleTime: 5*60_000 })` веднъж на mount. (2) `compositionKind` useMemo според spec §5.4 (виж изчислението). (3) `disabledRule` derived: `self-propelled` / `regular` / `none`. (4) Подай `<WagonPalette wagonTypes={...} disabledRule={disabledRule} ... />`. (5) Подай `<WagonCanvas hideLocomotive={compositionKind === 'self-propelled'} ... />`. (6) В `handleWagonDrop` guard: ако несъвместим → `dispatch(showSnackbar({severity:'warning', message: t(...)}))` и return без добавяне."
+      },
+      {
+        "id": "156.3",
+        "phase": "DONE",
+        "action": "Working dir: frontend. `npm run test:run CompositionEditorPage` зелено. Manual: отвори editor; добави мотриса → виж локомотивът изчезва, regular карти приглушени; премахни → всичко се връща."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 157,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] i18n — нови ключове за tooltip-и + snackbar съобщения (bg + en)",
+    "tddWorkflow": false,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/composition-self-propelled-plan.md §5.5",
+    "steps": [
+      {
+        "id": "157.1",
+        "action": "В `src/locales/bg.json`: `compositions.editor.palette.tooltipSelfPropelledBlocked`='Мотриса не може да се добави към влак с локомотив и вагони. Премахнете всички вагони, за да добавите мотриса.', `compositions.editor.palette.tooltipRegularBlocked`='Обикновените вагони не могат да се комбинират с мотриса. Премахнете мотрисата, за да добавите обикновени вагони.', `compositions.errors.cannotAddRegularToSelfPropelled`='Не може да добавите обикновен вагон към композиция с мотриса.', `compositions.errors.cannotAddSelfPropelledToTrain`='Не може да добавите мотриса към влак с обикновени вагони.'"
+      },
+      {
+        "id": "157.2",
+        "action": "В `src/locales/en.json`: огледално EN съответствие. tooltipSelfPropelledBlocked='Self-propelled units cannot be added to a train with a locomotive and wagons. Remove all wagons first.', tooltipRegularBlocked='Regular wagons cannot be combined with a self-propelled unit. Remove the self-propelled unit first.', cannotAddRegularToSelfPropelled='Cannot add a regular wagon to a composition with a self-propelled unit.', cannotAddSelfPropelledToTrain='Cannot add a self-propelled unit to a train with regular wagons.'"
+      },
+      {
+        "id": "157.3",
+        "action": "Manual: grep `t\\('compositions.editor.palette.tooltip` и `t\\('compositions.errors.cannot` в кода → всеки key съществува в двата файла."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 158,
+    "category": "e2e",
+    "repo": "frontend",
+    "description": "[E2E] Self-propelled / regular interlock — full FE→BE→DB workflow",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/composition-self-propelled-plan.md §6",
+    "notes": "Изисква Tasks 150-157 завършени. Тества цялата верига: UI disable + BE rejection. РАБОТНА ДИРЕКТОРИЯ: само frontend.",
+    "steps": [
+      {
+        "id": "158.1",
+        "phase": "RED",
+        "action": "Working dir: frontend. Създай `e2e/tests/compositions/self-propelled-interlock.spec.ts`. Scenario A: създай празна composition; drag мотриса от palette → drop в canvas → assert (a) локомотивът изчезва, (b) всички regular wagon карти в palette са disabled и hover показва tooltip. Scenario B: drag мотриса; опитай drag на regular вагон → dropEffect='none', не се добавя; snackbar 'cannotAddRegularToSelfPropelled' се появява. Scenario C: премахни мотрисата → assert локомотивът се появява, palette карти отново active. Scenario D (BE bypass): през Playwright APIRequestContext POST AddCarriage с несъвместим тип → assert HTTP 409 + ErrorCode='CompositionTractionMix'."
+      },
+      {
+        "id": "158.2",
+        "phase": "DONE",
+        "action": "Working dir: frontend. `npm run e2e -- e2e/tests/compositions/self-propelled-interlock.spec.ts` — passes. type-check + lint чисто."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 159,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] WagonCreationPage — IsSelfPropelled checkbox/switch в metadata формата (create + edit mode); persist към backend",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/composition-self-propelled-plan.md §4 (имплицитно: source-of-truth е WagonType — нови wagon types трябва да могат да зададат флага)",
+    "notes": "Зависи от Task 151 (BE Create/Update commands приемат IsSelfPropelled) и Task 153 (FE WagonType type има полето + API mapping). Може да се изпълнява паралелно с #154-#156 (composition editor работа). Без този таск админ-ите не могат да създадат нов мотриса тип през UI — само seed-натите DMV (Id 19, 27, 28) ще имат IsSelfPropelled=true; нови серии ще се регистрират като regular wagons по подразбиране.",
+    "steps": [
+      {
+        "id": "159.1",
+        "phase": "RED",
+        "action": "Working dir: frontend. Разшири `WagonCreationPage.test.tsx` (или нов `WagonCreationPage.metadata.test.tsx`): Test 1 — формата рендира Checkbox/Switch с label 'Самоходна (мотриса)' / 'Self-propelled (DMV)' (i18n key `wagons.creation.metadata.isSelfPropelled`). Test 2 — default state е unchecked (false). Test 3 — Toggle на checkbox-а update-ва metadata state. Test 4 (create mode) — при Save, `createWagonType.mutateAsync` се извиква с `dto.isSelfPropelled: true` ако checkbox-ът е checked. Test 5 (edit mode) — при load на съществуващ wagon type, ако GET response има `isSelfPropelled: true` → checkbox-ът е initially checked; при Save, `updateWagonType.mutateAsync` подава `isSelfPropelled` в DTO-то. ФЕЙЛВАТ."
+      },
+      {
+        "id": "159.2",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. (a) В `useWagonDraft` (или където е дефинирано `WagonMetadata` type-а): добави `isSelfPropelled: boolean` в metadata shape, default `false`. Persist в localStorage за non-edit mode (като останалите metadata fields). (b) В `WagonCreationPage.tsx` Metadata секцията: добави `<FormControlLabel control={<Switch checked={metadata.isSelfPropelled} onChange={(e) => setMetadata({ ...metadata, isSelfPropelled: e.target.checked })} />} label={t('wagons.creation.metadata.isSelfPropelled')} />` под compartmentType / capacity полетата. (c) В edit-mode load (около ред 219-235): GET response shape ще съдържа `isSelfPropelled` (от Task 151 GET endpoint) → `setMetadata({ ..., isSelfPropelled: wt.isSelfPropelled ?? false })`. (d) В Save handler (около ред 485 за update, и similar за create): добави `isSelfPropelled: metadata.isSelfPropelled` в dto."
+      },
+      {
+        "id": "159.3",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. i18n keys: добави в `bg.json` под `wagons.creation.metadata`: `isSelfPropelled='Самоходна (мотриса)'`, `isSelfPropelledHelper='Включи за мотрисни серии (DMV) — те не могат да се комбинират с обикновени вагони в композиция.'`. В `en.json`: огледално EN — `isSelfPropelled='Self-propelled (DMV)'`, `isSelfPropelledHelper='Enable for self-propelled multiple-unit series (DMV) — they cannot be mixed with regular wagons in a composition.'`. FormControlLabel може да приема `<FormHelperText>` под switch-а с helper текста."
+      },
+      {
+        "id": "159.4",
+        "phase": "DONE",
+        "action": "Working dir: frontend. `npm run test:run WagonCreationPage` зелено. `npm run type-check` + `npx eslint src/app/features/wagons/pages/WagonCreationPage.tsx` чисто. Manual sanity: (a) /wagons/new → toggle 'Самоходна' → Save → backend получава isSelfPropelled=true → GET връща truthy → reload в edit mode → checkbox е checked. (b) Edit на съществуващ DMV wagon (Id 19, 27 или 28) → switch-ът е initially ON; flip-ни към OFF + Save → BE update приема false → backend integrity (Task 152) ще започне да трактува тази серия като regular в композициите."
+      }
+    ],
+    "passes": false
   }
 ]

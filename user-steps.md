@@ -493,7 +493,7 @@ git commit -m "feat(compositions): {exact task.description from tasks.json}"
 **Принцип: "Само местиш, не променяш"**
 
 1. **ПРЕДИ** всяка стъпка: `npm run test:run && npm run type-check` → запиши baseline
-2. **ПРЕДИ** да извадиш функция/символ в нов файл: `gitnexus context <symbol>` → виж всички callers (incoming) и callees (outgoing). Ако броят е по-голям, отколкото очакваш — спри и преоцени scope-а. `gitnexus impact <symbol> --direction upstream --minConfidence 0.7` дава blast radius за смело преценяване колко refactor-а имаш.
+2. **ПРЕДИ** да извадиш функция/символ в нов файл: `gitnexus context <symbol>` → виж всички callers (incoming) и callees (outgoing). Ако броят е по-голям, отколкото очакваш — спри и преоцени scope-а. `gitnexus impact <symbol> --direction upstream --depth 2 --include-tests` дава blast radius (CLI флагове; `--minConfidence` е MCP-only — за CLI филтрирай ръчно по `confidence > 0.7` в JSON output-а).
 3. **Извличай** код в нов файл, добавяй `export` там и `import` в оригиналния
 4. **СЛЕД** всяка стъпка: `npm run test:run && npm run type-check` → СЪЩИЯТ резултат. Плюс `gitnexus detect-changes` → засегнатите processes трябва да са СЪЩИТЕ като преди extract-а; ако са се появили нови flow-и — extract-ът е променил поведение, не просто организация.
 5. Ако тест фейлва → **ВЕДНАГА rollback** → `gitnexus context <failing-test-target>` за да видиш точните callers/callees преди да гадаеш → поправи
@@ -521,7 +521,7 @@ layoutRenderers/
 1. Command/Query → Handler → Controller endpoint
 2. Валидация в Handler-а
 3. **Преди да добавиш нов Command/Query**, провери дали вече има подобен handler: `gitnexus query "<concept>" --repo Transport-OSDM-Src` (напр. `gitnexus query "duplicate placard validation"`). Ако намериш съществуващ handler за подобна функционалност — следвай патърна, не преоткривай.
-4. **Преди да промениш съществуващ DTO или Repository interface**: `gitnexus impact <DtoName> --direction upstream --minConfidence 0.8` за да видиш кои handlers/controllers/tests ще тряба да обновиш.
+4. **Преди да промениш съществуващ DTO или Repository interface**: `gitnexus impact <DtoName> --direction upstream --depth 2 --include-tests` за да видиш кои handlers/controllers/tests ще тряба да обновиш (CLI флагове; `--minConfidence` е MCP-only).
 5. `dotnet build && dotnet test` след всяка стъпка
 6. **НЕ създавай миграции в SQL проекта** — таблиците вече съществуват (CoachLayouts, SeatDefinitions, WagonTypes)
 
