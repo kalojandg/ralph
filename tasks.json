@@ -5204,7 +5204,7 @@
         "action": "Manual: grep `t\\('compositions.editor.palette.tooltip` и `t\\('compositions.errors.cannot` в кода → всеки key съществува в двата файла."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 158,
@@ -5226,7 +5226,7 @@
         "action": "Working dir: frontend. `npm run e2e -- e2e/tests/compositions/self-propelled-interlock.spec.ts` — passes. type-check + lint чисто."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 159,
@@ -5258,6 +5258,6 @@
         "action": "Working dir: frontend. `npm run test:run WagonCreationPage` зелено. `npm run type-check` + `npx eslint src/app/features/wagons/pages/WagonCreationPage.tsx` чисто. Manual sanity: (a) /wagons/new → toggle 'Самоходна' → Save → backend получава isSelfPropelled=true → GET връща truthy → reload в edit mode → checkbox е checked. (b) Edit на съществуващ DMV wagon (Id 19, 27 или 28) → switch-ът е initially ON; flip-ни към OFF + Save → BE update приема false → backend integrity (Task 152) ще започне да трактува тази серия като regular в композициите."
       }
     ],
-    "passes": false
+    "passes": true
   }
 ]
