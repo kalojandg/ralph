@@ -5259,5 +5259,298 @@
       }
     ],
     "passes": true
+  },
+  {
+    "id": 160,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[BE] Schema — добави административни/identity полета към `WagonTypes` (ParentWagonTypeId self-FK, InventoryNumber, Operator, HomeDepot, ManufactureYear, Notes)",
+    "tddWorkflow": false,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-plan.md §2.2",
+    "notes": "Foundation за всички следващи tasks. Никой unique constraint върху InventoryNumber на този етап — application-level uniqueness в Task 161. Filtered unique index остава за follow-up след backfill на legacy серии.",
+    "steps": [
+      {
+        "id": "160.1",
+        "action": "Working dir: backend. В `OSDM-Src/SQLProjects/RailRunServiceSQL/dbo/Tables/WagonTypes.sql` добави колоните: `ParentWagonTypeId BIGINT NULL`, `InventoryNumber NVARCHAR(20) NULL`, `Operator NVARCHAR(10) NULL`, `HomeDepot NVARCHAR(50) NULL`, `ManufactureYear INT NULL`, `Notes NVARCHAR(MAX) NULL`. Добави FK: `CONSTRAINT FK_WagonTypes_Parent FOREIGN KEY (ParentWagonTypeId) REFERENCES dbo.WagonTypes(Id)`. Build на SQL project трябва да мине без warnings."
+      },
+      {
+        "id": "160.2",
+        "action": "Working dir: backend. Обнови `RailRunService.Domain/Entities/WagonType.cs` (+ partial behavior file ако вече има) с новите property-та (всички nullable). Обнови EF mapping в `RailRunService.Infrastructure/Persistence/Configurations/WagonTypeConfiguration.cs` (или подобен) с column-types/max-lengths. `dotnet build` на цялата solution чисто."
+      },
+      {
+        "id": "160.3",
+        "action": "Working dir: backend. Регенерирай (или ръчно adjust) DTO-то `WagonTypeDto` да surface-ва новите полета в `GET /api/wagon-types/{id}` (read path само). Update Swagger примера ако е manually maintained. `dotnet test RailRunService.Application.Tests` зелено — съществуващите тестове не трябва да се чупят."
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 161,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[BE] CloneWagonTypeCommand + handler — копира WagonType + CoachLayout + SeatDefinitions в нов запис с unique series/inventory",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-plan.md §2.1",
+    "notes": "Зависи от Task 160 (schema). Един `SaveChangesAsync` чрез aggregate репо. Bicycle/wheelchair retrofit overrides добавят SeatDefinitions с подходящ AccommodationType — не пипат source-а.",
+    "steps": [
+      {
+        "id": "161.1",
+        "phase": "RED",
+        "action": "Working dir: backend. Създай `RailRunService.Application.Tests/CloneWagonTypeCommandHandlerTests.cs` с 6 теста: (a) happy path — копира всички SeatDefinitions с нов LayoutId, `cloned.WagonType.ParentWagonTypeId == source.Id`; (b) override BicycleSpaces=2 → добавя 2 SeatDefinition-а с `AccommodationType=STORAGE, AccommodationSubType=BICYCLE`; (c) override WheelchairSpaces=1 → 1 SeatDefinition с `AccommodationType=WHEELCHAIR_SPACE`; (d) Conflict `WagonTypeSeriesNameDuplicate` ако NewSeriesName съществува; (e) Conflict `WagonTypeInventoryNumberDuplicate` ако InventoryNumber е попълнен и съществува; (f) NotFound ако SourceWagonTypeId не съществува. Build червен — handler/command още не съществуват."
+      },
+      {
+        "id": "161.2",
+        "phase": "GREEN",
+        "action": "Working dir: backend. Създай `RailRunService.Application/Features/Nomenclatures/Commands/CloneWagonType.cs` с `CloneWagonTypeCommand` (всички полета per spec §2.1) + handler. Handler: (1) `await _wagonTypeRepo.GetByIdWithLayoutAndSeatsAsync(SourceWagonTypeId)` чрез aggregate репо — нов method ако липсва; (2) duplicate checks (case-insensitive trim); (3) build new WagonType + CoachLayout + SeatDefinitions in-memory; (4) append overrides; (5) единствен `SaveChangesAsync` чрез aggregate репо. Добави нови RailRunErrorCodes constants. Тестовете зелени."
+      },
+      {
+        "id": "161.3",
+        "phase": "GREEN",
+        "action": "Working dir: backend. Експонирай `POST /api/wagon-types/{id}/clone` в `WagonTypesController` (или съответния controller). Request body = `CloneWagonTypeRequest` (mirror на command-а, DataAnnotations за MaxLength + Required). ProducesResponseType за 200/400/404/409. Manual smoke: curl с валиден source → 200; повторение → 409."
+      },
+      {
+        "id": "161.4",
+        "phase": "DONE",
+        "action": "Working dir: backend. `dotnet test RailRunService.Application.Tests` зелено (6 нови + всички съществуващи минават). Build чисто. Линт по convention (`dotnet format`) ако има в pipeline."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 162,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[BE] GetAvailableWagonTypesForCompositionQuery — връща списък с `isAvailable` flag за палитрата",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-plan.md §2.3",
+    "notes": "Single-day model: collision = същият WagonTypeId присъства в ДРУГА Active композиция със същия StartDate. Drafts не резервират. Връща и за заетите types окупиращата `compositionId/trainNumber` за tooltip-а.",
+    "steps": [
+      {
+        "id": "162.1",
+        "phase": "RED",
+        "action": "Working dir: backend. `RailRunService.Application.Tests/GetAvailableWagonTypesForCompositionQueryHandlerTests.cs`: Test 1 — празна БД → всички types са `isAvailable=true`. Test 2 — друга ACTIVE композиция със същия StartDate ползва WagonType X → X е `isAvailable=false` + `OccupiedByCompositionId`+`OccupiedByTrainNumber` са попълнени. Test 3 — DRAFT композиция със същия StartDate ползва Y → Y остава available (drafts не резервират). Test 4 — текущата композиция сама ползва Z → Z остава available (не блокираме себе си)."
+      },
+      {
+        "id": "162.2",
+        "phase": "GREEN",
+        "action": "Working dir: backend. Създай `RailRunService.Application/Features/Nomenclatures/Queries/GetAvailableWagonTypesForComposition.cs`. Query field: `CompositionId`. Handler логика per spec §2.3: зареди composition (404 ако липсва) → намери overlapping Active compositions → distinct WagonTypeIds от техните CompositionCarriages → join с всички Active WagonTypes → projection към `AvailableWagonTypeDto { WagonTypeId, IsAvailable, OccupiedByCompositionId, OccupiedByTrainNumber }`. Тестовете зелени."
+      },
+      {
+        "id": "162.3",
+        "phase": "GREEN",
+        "action": "Working dir: backend. Експонирай `GET /api/wagon-types/available?compositionId=N` в `WagonTypesController`. ProducesResponseType: 200 (List<AvailableWagonTypeDto>) / 404. Manual smoke срещу seed данни."
+      },
+      {
+        "id": "162.4",
+        "phase": "DONE",
+        "action": "Working dir: backend. Тестове зелени. Performance sanity: при ~100 wagon types и ~50 compositions заявката трябва да е <100ms (две indexed queries + in-memory join)."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 163,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] API + types за clone и available — `wagonsApi.clone()`, `wagonsApi.getAvailable()`, `CloneWagonTypeDto`, `AvailableWagonType` + integration test",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-plan.md §3.3",
+    "notes": "Зависи от Task 161 + 162 (BE endpoints). Без UI промени — само API layer + types + integration test.",
+    "steps": [
+      {
+        "id": "163.1",
+        "phase": "RED",
+        "action": "Working dir: frontend. Разшири `src/api/wagons/wagons.types.ts` с `CloneWagonTypeDto`, `AvailableWagonType` (`{ wagonTypeId, isAvailable, occupiedByCompositionId?, occupiedByTrainNumber? }`), и съответния error type. Създай `src/api/wagons/__tests__/wagons-clone-availability.integration.test.ts` с тестове: (a) `wagonsApi.clone(sourceId, dto)` сериализира POST /rail-run-service/api/wagon-types/{id}/clone с правилен body; (b) `wagonsApi.getAvailable(compositionId)` сериализира GET с query param; (c) error mapping за 409 (WagonTypeSeriesNameDuplicate, WagonTypeInventoryNumberDuplicate). Тестовете фейлват."
+      },
+      {
+        "id": "163.2",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. Добави `clone(sourceId, dto)` и `getAvailable(compositionId)` методи в `src/api/wagons/wagons.api.ts`. Map backend errorCode → typed FE error (за consume от `useCloneWagonType`). Integration tests зелени."
+      },
+      {
+        "id": "163.3",
+        "phase": "DONE",
+        "action": "Working dir: frontend. `npm run test:run wagons-clone-availability` зелено. `npm run type-check` чисто. `npx eslint src/api/wagons/**` без нови warnings."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 164,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] `useCloneWagonType` hook — React Query mutation + cache invalidation на `['wagon-types']`",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-plan.md §3.3",
+    "notes": "Зависи от Task 163. Структура и invalidation pattern огледално на `useCloneComposition` (компонент-от-PR-bdzr-89).",
+    "steps": [
+      {
+        "id": "164.1",
+        "phase": "RED",
+        "action": "Working dir: frontend. `src/app/features/wagons/hooks/useCloneWagonType.test.tsx`: Test 1 — успешен clone извиква `wagonsApi.clone` с подадените args + `queryClient.invalidateQueries({ queryKey: ['wagon-types'] })`. Test 2 — 409 conflict с code `WagonTypeSeriesNameDuplicate` propagates като typed error до caller-а. Тестовете фейлват."
+      },
+      {
+        "id": "164.2",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. Създай `src/app/features/wagons/hooks/useCloneWagonType.ts` — `useMutation` обвива `wagonsApi.clone`; `onSuccess` invalidate-ва `['wagon-types']`. Експортирай от `src/app/features/wagons/hooks/index.ts`. Тестовете зелени."
+      },
+      {
+        "id": "164.3",
+        "phase": "DONE",
+        "action": "Working dir: frontend. `npm run test:run useCloneWagonType` зелено. Type-check + ESLint чисто."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 165,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] `CloneWagonTypeDialog` компонент — source preview, mandatory series/inventory, optional metadata + retrofit overrides, FE validation",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-plan.md §3.2",
+    "notes": "Зависи от Task 164. По модел на `CloneCompositionDialog` от PR bdzr-89 (stepless, single dialog с form). Default seriesName = `${source.seriesName} #${counter}` където counter = броя clones засега (от подаден `existingClones` prop или derived от full list).",
+    "steps": [
+      {
+        "id": "165.1",
+        "phase": "RED",
+        "action": "Working dir: frontend. Създай `src/app/features/wagons/components/__tests__/CloneWagonTypeDialog.test.tsx`. Минимум 8 теста: (1) рендира source preview с подадените props (read-only series, capacity, seat count); (2) default seriesName е `${source.seriesName} #001`; (3) submit с минимални required полета извиква `useCloneWagonType.mutate` с правилен DTO; (4) FE валидация — empty seriesName дисейбълва Submit; (5) FE валидация — seriesName в `existingClones` показва грешка; (6) retrofit override BicycleSpaces=2 подава `overrideBicycleSpaces: 2` в DTO-то; (7) success → onClose извикан, navigate към `/wagons/${newId}/edit` ако checkbox 'openLayoutAfter' е ON; (8) 409 от BE с `errorCode='WagonTypeInventoryNumberDuplicate'` показва inline грешка под InventoryNumber полето."
+      },
+      {
+        "id": "165.2",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. Имплементирай `src/app/features/wagons/components/CloneWagonTypeDialog.tsx` (MUI Dialog, eager form state, не Stepper — само един раздел). Use `useCloneWagonType`. След successful mutation → ако checkbox 'openLayoutAfter' (default ON) е чекнат → `navigate('/wagons/' + result.id + '/edit')`. Display всички полета per spec §3.2. Тестовете зелени."
+      },
+      {
+        "id": "165.3",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. i18n keys per spec §3.5 — добави в `src/locales/bg.json` и `src/locales/en.json`. Update import в dialog да ползва `useTranslation`. Manual sanity че всеки key се рендира коректно."
+      },
+      {
+        "id": "165.4",
+        "phase": "DONE",
+        "action": "Working dir: frontend. `npm run test:run CloneWagonTypeDialog` зелено. Type-check + ESLint чисто. Manual: отвори modal, попълни поле, submit → виж нов запис в /wagons листа."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 166,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] WagonTypesListPage — `Клонирай` action в row menu + интеграция на dialog-а",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-plan.md §3.1",
+    "notes": "Зависи от Task 165. Преди да започнеш, потвърди името на текущата list страница (примерно `WagonTypesListPage.tsx` или `WagonsListPage.tsx`) през GitNexus `query`. Не четеш randomly — намери symbol-а първо.",
+    "steps": [
+      {
+        "id": "166.1",
+        "phase": "RED",
+        "action": "Working dir: frontend. Разшири теста на list страницата (или създай нов `WagonsListPage.clone.test.tsx`): Test 1 — row-level action menu съдържа 'Клонирай' елемент. Test 2 — клик отваря `CloneWagonTypeDialog` с source = ред-овия wagonType. Test 3 — успешен clone затваря dialog-а + invalidates list query. Тестовете фейлват."
+      },
+      {
+        "id": "166.2",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. Добави MenuItem 'Клонирай' към action menu-то в list page-а. State за `cloneSourceWagonType` + `cloneDialogOpen`. Render `<CloneWagonTypeDialog open={cloneDialogOpen} onClose={...} source={cloneSourceWagonType} existingClones={wagonTypes.filter(...)} />`. Тестовете зелени."
+      },
+      {
+        "id": "166.3",
+        "phase": "DONE",
+        "action": "Working dir: frontend. `npm run test:run` за list page зелено. Type-check + ESLint чисто. Manual sanity: row → 'Клонирай' → попълни → submit → виж нов запис в таблицата след invalidate."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 167,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] CompositionEditorPage — палитрата филтрира заетите wagon types през `GET /wagon-types/available`",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-plan.md §3.4",
+    "notes": "Зависи от Task 162 (BE endpoint) + Task 163 (FE API). Този task НЕ премахва traction-mix логиката — двата филтъра композират.",
+    "steps": [
+      {
+        "id": "167.1",
+        "phase": "RED",
+        "action": "Working dir: frontend. Разшири `CompositionEditorPage.test.tsx`: Test 1 — на mount компонентът вика `wagonsApi.getAvailable(compositionId)` (mock-vatе). Test 2 — wagon type, помечен от BE като `isAvailable=false`, е disabled в палитрата с tooltip 'compositions.editor.palette.tooltipOccupiedByComposition' interpolated с trainNumber. Test 3 — available types остават изцяло функционални (drag, drop). Test 4 — съществуващата traction-mix логика продължава да работи (combinations: regular composition + available SP type все още disabled заради traction-mix). Тестовете фейлват."
+      },
+      {
+        "id": "167.2",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. В `CompositionEditorPage.tsx`: добави `useQuery({ queryKey: ['wagon-types', 'available', compositionId], queryFn: () => wagonsApi.getAvailable(compositionId), enabled: composition?.id != null, staleTime: 30_000 })`. Build availability map (`Record<wagonTypeId, AvailableWagonType>`). Подай към `<WagonPalette>` чрез нов prop `availability` (Record<long, AvailableWagonType>) или extend `disabledRule`. Updates `WagonPalette` да композира двата disabled източника (traction OR not-available). Тестовете зелени."
+      },
+      {
+        "id": "167.3",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. i18n key `compositions.editor.palette.tooltipOccupiedByComposition` с `{trainNumber}` placeholder в `bg.json` + `en.json` (per spec §3.5). Tooltip-ът трябва да приоритизира 'occupied' над 'traction-mix' (по-конкретното съобщение печели)."
+      },
+      {
+        "id": "167.4",
+        "phase": "DONE",
+        "action": "Working dir: frontend. `npm run test:run CompositionEditorPage` + `WagonPalette` зелено. Type-check + ESLint чисто. Manual: seed-вай 2 композиции на същия StartDate, addv WagonType X в първата → отвори editor-а на втората → виж X като disabled с tooltip."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 168,
+    "category": "e2e",
+    "repo": "frontend",
+    "description": "[E2E] Clone wagon type — full flow (admin role)",
+    "tddWorkflow": false,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-plan.md §4",
+    "notes": "Зависи от Tasks 161, 165, 166. Skip на readonly project (no write permission). Тестът сам seed-ва source wagon type през BE API ако е нужно (по образец на composition save-flow e2e от PR bdzr-89).",
+    "steps": [
+      {
+        "id": "168.1",
+        "action": "Working dir: frontend. Създай `e2e/tests/wagons/clone-wagon-type.spec.ts`. `test.skip(testInfo.project.name === 'readonly', 'clone requires write')`. Setup: вземи JWT от localStorage, GET `/api/wagon-types` за да намериш Active source с поне 1 SeatDefinition; ако няма — `test.skip`. Drive UI: отвори /wagons, action menu на source реда → 'Клонирай' → попълни уникален seriesName (с `Date.now()` суфикс) + inventoryNumber + bicycleSpaces=1 → Submit. Assert: redirect към `/wagons/${newId}/edit`; GET `/api/wagon-types/{newId}` връща ParentWagonTypeId=source.id, ManufactureYear nullable, SeatDefinitions включват 1 запис с AccommodationType=STORAGE/BICYCLE. Cleanup: DELETE `/api/wagon-types/{newId}` ако endpoint-ът съществува, иначе остави + commit в feedback.md."
+      },
+      {
+        "id": "168.2",
+        "action": "Working dir: frontend. `npx playwright test e2e/tests/wagons/clone-wagon-type.spec.ts --project=admin` зелено. Type-check + ESLint чисто."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 169,
+    "category": "e2e",
+    "repo": "frontend",
+    "description": "[E2E] Palette availability — wagon type зает от друга композиция е disabled с tooltip",
+    "tddWorkflow": false,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-plan.md §4",
+    "notes": "Зависи от Tasks 162, 167. Setup-ва два композиции на същата дата през BE API; cleanup в finally.",
+    "steps": [
+      {
+        "id": "169.1",
+        "action": "Working dir: frontend. Създай `e2e/tests/compositions/palette-availability.spec.ts`. Setup: clone-ни произволна композиция (с поне 1 wagon type) на target date D (5 години в бъдеще + workerIndex) → composition A. Запази X = първият WagonTypeId на A. Активирай A (SetCompositionStatus → ACTIVE). Clone-ни втора композиция за същия D със същия train number (или различен — провери че filter-ът е по StartDate, не по train) → composition B (DRAFT). Drive UI: отвори editor за B → GET `/wagon-types/available?compositionId=B` връща X с `isAvailable=false`. В палитрата X е disabled. Hover → tooltip контейнерът е видим и съдържа train number-а на A. Cleanup в finally: archive A + delete A + delete B."
+      },
+      {
+        "id": "169.2",
+        "action": "Working dir: frontend. `npx playwright test e2e/tests/compositions/palette-availability.spec.ts --project=admin` зелено. Skip на readonly. Type-check + ESLint чисто."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 170,
+    "category": "docs",
+    "repo": "shared",
+    "description": "[DOCS] Обнови `wagon-inventory-spec.md` §0.6 (open issues) + добави cross-link към `physical-wagons-plan.md`",
+    "tddWorkflow": false,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/wagon-inventory-spec.md §0.6",
+    "notes": "Не пипай §1-§5 (upgrade path за Опция D — те остават като справочен материал).",
+    "steps": [
+      {
+        "id": "170.1",
+        "action": "Working dir: any. В `wagon-inventory-spec.md` §0.4 добави линк към `ralph/DOCS/physical-wagons-plan.md` като 'имплементационен план'. В §0.6 отбележи че point #1 (SeriesName drift) се покрива от Task 160 чрез новата колона `ParentWagonTypeId`."
+      },
+      {
+        "id": "170.2",
+        "action": "Working dir: any. Manual review: spec → plan → tasks chain е consistent. Никакви broken links."
+      }
+    ],
+    "passes": false
   }
 ]

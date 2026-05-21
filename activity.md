@@ -1,3 +1,41 @@
+## [2026-05-21 12:00] - Task #160: [BE] Schema — добави административни/identity полета към WagonTypes (ParentWagonTypeId self-FK, InventoryNumber, Operator, HomeDepot, ManufactureYear, Notes)
+
+**Status:** ✅ Complete
+
+**What was done:**
+### Step 160.1 — SQL Schema
+- Added 6 columns to `WagonTypes.sql`: `ParentWagonTypeId BIGINT NULL`, `InventoryNumber NVARCHAR(20) NULL`, `Operator NVARCHAR(10) NULL`, `HomeDepot NVARCHAR(50) NULL`, `ManufactureYear INT NULL`, `Notes NVARCHAR(MAX) NULL`
+- Added self-FK: `CONSTRAINT FK_WagonTypes_Parent FOREIGN KEY (ParentWagonTypeId) REFERENCES dbo.WagonTypes(Id)`
+- SQL project build: 0 warnings, 0 errors ✅
+
+### Step 160.2 — Domain Entity + EF Config
+- Added all 6 nullable properties + `ParentWagonType` / `ChildWagonTypes` nav properties to `WagonType.Behavior.cs`
+- Configured `InventoryNumber` (max 20), `Operator` (max 10), `HomeDepot` (max 50) lengths in `WagonTypeConfiguration.cs`
+- Configured self-referencing FK with `DeleteBehavior.Restrict`
+- `dotnet build` clean ✅
+
+### Step 160.3 — DTO + Handler Mappings
+- Added 6 new fields to `WagonTypeDto.cs`
+- Updated inline mapping in 5 handlers: GetWagonTypes, GetWagonTypeById, CreateWagonType, UpdateWagonType, SetWagonTypeStatus
+- `dotnet test Application.Tests`: 129 passed ✅
+- `dotnet test API.Tests`: 47 passed ✅
+
+**Files modified:**
+- `SQLProjects/RailRunServiceSQL/dbo/Tables/WagonTypes.sql`
+- `RailRunService.Domain/Entities/WagonType.Behavior.cs`
+- `RailRunService.Infrastructure/Data/Configurations/WagonTypeConfiguration.cs`
+- `RailRunService.Application/DTOs/Nomenclatures/WagonTypeDto.cs`
+- `RailRunService.Application/Features/Nomenclatures/Queries/GetWagonTypes.cs`
+- `RailRunService.Application/Features/Nomenclatures/Queries/GetWagonTypeById.cs`
+- `RailRunService.Application/Features/Nomenclatures/Commands/CreateWagonType.cs`
+- `RailRunService.Application/Features/Nomenclatures/Commands/UpdateWagonType.cs`
+- `RailRunService.Application/Features/Nomenclatures/Commands/SetWagonTypeStatus.cs`
+
+**Git commit:**
+- `feat(compositions): [BE] Schema — добави административни/identity полета към WagonTypes (ParentWagonTypeId self-FK, InventoryNumber, Operator, HomeDepot, ManufactureYear, Notes)`
+
+---
+
 ## [2026-05-16 04:00] - Task #159: [FE] WagonCreationPage — IsSelfPropelled checkbox/switch в metadata формата (create + edit mode); persist към backend
 
 **Status:** ✅ Complete
@@ -4042,5 +4080,43 @@ TDD workflow гарантира:
 - `src/locales/en.json` (added wagons.creation.unsavedChanges keys)
 
 **Git commit:** `feat(compositions): [FE] Navigation guard — предупреждение при опит за напускане на страницата с незапазени промени`
+
+---
+## [2026-05-21 10:00] - Planning: Tasks #160–#170 — Physical wagons (Option B+, clone WagonType + placard-based availability)
+
+**Status:** 📋 Planned (no code yet — artifacts only)
+
+**Why these tasks exist:**
+User refinement of `wagon-inventory-spec.md` §0.4 (Super-MVP Option B): the "physical wagon" identity stays inside `WagonType` (a clone of the template represents one physical asset), but with two non-trivial additions over the original Option B:
+1. Cloning a wagon type is now explicitly modelled as creating a new operational asset — placard number / inventory number are the operational identifiers, surfaced in the clone dialog and validated server-side.
+2. The composition palette no longer trusts the dispatcher blindly. It calls `GET /api/wagon-types/available?compositionId=N` and disables wagon types that are already assigned to another ACTIVE composition with the same `StartDate`, with a localized tooltip. Still less strict than spec Option C (no temporal range — we lean on the single-day model).
+
+**Artifacts created:**
+- `ralph/DOCS/physical-wagons-plan.md` — implementation plan, ~7 sections (business framing, BE, FE, e2e, open issues). All tasks reference this via `specRef`.
+- `ralph/tasks.json` — 11 new entries (Tasks #160–#170):
+  - **BE foundation (#160):** schema extension on `WagonTypes` (ParentWagonTypeId self-FK + Inventory/Operator/HomeDepot/etc).
+  - **BE clone (#161):** `CloneWagonTypeCommand` + handler + endpoint `POST /api/wagon-types/{id}/clone`, copies WagonType + CoachLayout + SeatDefinitions; retrofit overrides for bicycle/wheelchair.
+  - **BE availability (#162):** `GetAvailableWagonTypesForCompositionQuery` + endpoint `GET /api/wagon-types/available?compositionId=N`, single-day collision detection ignoring DRAFT.
+  - **FE API layer (#163):** `wagonsApi.clone()` + `wagonsApi.getAvailable()` + types + integration test.
+  - **FE hook (#164):** `useCloneWagonType` (mutation + invalidation).
+  - **FE dialog (#165):** `CloneWagonTypeDialog` with source preview, mandatory series/inventory, optional metadata, retrofit overrides, "open in editor after" navigation.
+  - **FE list integration (#166):** action menu entry on wagon-types list page.
+  - **FE editor integration (#167):** palette consumes availability + traction-mix composition, tooltip i18n.
+  - **E2E (#168):** clone-wagon-type happy path.
+  - **E2E (#169):** palette availability disabled-state assertion.
+  - **DOCS (#170):** cross-link spec → plan.
+
+**Not in scope (deferred):**
+- `PhysicalWagon` / `WagonAssignment` tables (Option D).
+- Geographic-chain availability (Option D).
+- BP-COMP-12 audit log (Option D).
+- Filtered UNIQUE index on `InventoryNumber` — applied only after legacy WagonTypes are backfilled.
+
+**Verification:**
+- `tasks.json` parses (`ConvertFrom-Json` clean, 156 entries, max id 170).
+- Plan cross-references existing PR-bdzr-89 artifacts (e.g. `useCloneComposition` as a template for `useCloneWagonType`; clone-composition save-flow e2e as a template for clone-wagon-type e2e).
+- GitNexus snapshot used to confirm extension points (no random file reads): `WagonPalette`, `CompositionEditorPage.handleWagonDrop`, `AddCarriageCommandHandler`, `WagonTypeRepository`.
+
+**Next:** Ralph kicks off `Task #160` (schema foundation). Tasks #161–#162 can be parallelised. Tasks #163–#167 chain on BE delivery. Tasks #168–#170 are the verification/docs tail.
 
 ---
