@@ -5531,7 +5531,7 @@
         "action": "Working dir: frontend. `npx playwright test e2e/tests/compositions/palette-availability.spec.ts --project=admin` зелено. Skip на readonly. Type-check + ESLint чисто."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 170,
@@ -5551,6 +5551,6 @@
         "action": "Working dir: any. Manual review: spec → plan → tasks chain е consistent. Никакви broken links."
       }
     ],
-    "passes": false
+    "passes": true
   }
 ]

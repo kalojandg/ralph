@@ -1,3 +1,51 @@
+## [2026-05-21] - Task #170: [DOCS] Обнови `wagon-inventory-spec.md` §0.6 (open issues) + добави cross-link към `physical-wagons-plan.md`
+
+**Status:** ✅ Complete
+
+**Phase:** N/A (docs task, no TDD workflow)
+
+**What was done:**
+- Step 170.1: Added cross-link in §0.4 to `ralph/DOCS/physical-wagons-plan.md` as implementation plan. Updated §0.6 point #1 (SeriesName drift) — marked as covered by Task 160 via `ParentWagonTypeId` self-FK column.
+- Step 170.2: Manual review — verified spec → plan → tasks chain is consistent. Plan links back to `../wagon-inventory-spec.md`, spec now links forward to plan. No broken links.
+
+**Files modified:**
+- `C:/Users/kaloyan.georgiev/Projects/wagon-inventory-spec.md`
+- `C:/Users/kaloyan.georgiev/Projects/ralph/tasks.json`
+- `C:/Users/kaloyan.georgiev/Projects/ralph/activity.md`
+
+**Git commit:**
+- `feat(compositions): [DOCS] Обнови wagon-inventory-spec.md §0.6 (open issues) + добави cross-link към physical-wagons-plan.md`
+
+---
+
+## [2026-05-21] - Task #169: [E2E] Palette availability — wagon type зает от друга композиция е disabled с tooltip
+
+**Status:** ✅ Complete
+
+**Phase:** E2E (no TDD workflow)
+
+### What was done
+- Rewrote `e2e/tests/compositions/palette-availability.spec.ts` to follow the proven create-from-scratch pattern (instead of cloning arbitrary compositions)
+- Test creates composition A with a wagon, activates it, creates composition B (DRAFT) for the same date with a DIFFERENT train number — verifying the availability filter is by date, not by train number
+- Navigates to B's editor → verifies wagon type used by A is `aria-disabled="true"`, `draggable="false"`, and shows tooltip on hover
+- Cleanup in finally: resets A to DRAFT + deletes A + deletes B
+
+### Infrastructure fix required
+- Published SQL schema to local DB — `CompositionCarriages.IsActive` column was missing (backend returned 500 on `set-status`). Fixed by running `SqlPackage /Action:Publish`.
+
+### Verification
+- `npm run e2e -- e2e/tests/compositions/palette-availability.spec.ts` — ✅ 1 passed, 1 skipped (readonly)
+- `npm run type-check` — ✅ clean
+- `npx eslint e2e/tests/compositions/palette-availability.spec.ts` — ✅ clean
+
+**Files modified:**
+- `e2e/tests/compositions/palette-availability.spec.ts`
+
+**Git commit:**
+- `feat(compositions): [E2E] Palette availability — wagon type зает от друга композиция е disabled с tooltip`
+
+---
+
 ## [2026-05-21] - Task #168: [E2E] Clone wagon type — full flow (admin role)
 
 **Status:** ✅ Complete
