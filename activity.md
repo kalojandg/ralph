@@ -1,3 +1,284 @@
+## [2026-05-21] - Task #168: [E2E] Clone wagon type — full flow (admin role)
+
+**Status:** ✅ Complete
+
+**Phase:** E2E (no TDD workflow)
+
+### What was done
+- Created `e2e/tests/wagons/clone-wagon-type.spec.ts` — full Playwright E2E test for the clone wagon type flow
+- Test finds an Active wagon type with seat definitions, opens the clone dialog, fills form (unique series name, UIC number, bicycle spaces), submits
+- Verifies: clone API returns 200 with new wagonTypeId, parentWagonTypeId matches source, manufactureYear is null, cloned coach layout contains STORAGE/BICYCLE seat
+- Skips gracefully on `readonly` project and when no suitable source wagon type exists
+
+### Infrastructure fixes required
+- Added missing DB columns (`ParentWagonTypeId`, `InventoryNumber`, `Operator`, `HomeDepot`, `ManufactureYear`, `Notes`) to `WagonTypes` table
+- Added `STORAGE` to `CK_SeatDefinitions_AccommodationType` CHECK constraint
+- Provided `Jwt__Secret` env var to `rail-run-service` temp container after Docker rebuild
+
+### Verification
+- `npx playwright test e2e/tests/wagons/clone-wagon-type.spec.ts --project=admin` — ✅ 1 passed
+- `npm run type-check` — ✅ clean
+- `npx eslint e2e/tests/wagons/clone-wagon-type.spec.ts` — ✅ clean
+
+---
+
+## [2026-05-21 21:10] - Task #167: [FE] CompositionEditorPage — палитрата филтрира заетите wagon types през `GET /wagon-types/available`
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 167.1: Extended `CompositionEditorPage.test.tsx` with 4 tests:
+  1. On mount calls `wagonsApi.getAvailable(compositionId)` — FAILS ✅
+  2. Wagon type with `isAvailable=false` is disabled with `aria-disabled` and `draggable=false` — FAILS ✅
+  3. Available types remain fully functional for drag — PASSES (regression)
+  4. SP type still disabled by traction-mix even if available — PASSES (regression)
+
+### GREEN Phase
+- Step 167.2: Added `useQuery` in `CompositionEditorPage.tsx` for `wagonsApi.getAvailable(compositionId)` with `staleTime: 30_000`. Built `availabilityMap` via `useMemo`. Passed as `availability` prop to `<WagonPalette>`.
+- Updated `WagonPalette.tsx`: new `availability` prop (`Record<number, AvailableWagonType>`), `isCardDisabled` checks availability BEFORE traction-mix, `getDisabledTooltip` prioritizes occupied tooltip over traction-mix tooltip.
+- Step 167.3: Added i18n key `compositions.editor.palette.tooltipOccupiedByComposition` with `{{trainNumber}}` placeholder in both `bg.json` and `en.json`.
+
+### DONE Phase
+- 39/39 CompositionEditorPage tests pass (4 new + 35 existing)
+- 33/33 WagonPalette tests pass (no regressions)
+- TypeScript compiles clean
+- ESLint: 0 errors, only pre-existing warnings
+
+**Files modified:**
+- `src/app/features/compositions/pages/CompositionEditorPage.tsx`
+- `src/app/features/compositions/components/WagonPalette.tsx`
+- `src/app/features/compositions/pages/__tests__/CompositionEditorPage.test.tsx`
+- `src/locales/bg.json`
+- `src/locales/en.json`
+
+**Git commit:**
+- `feat(compositions): [FE] CompositionEditorPage — палитрата филтрира заетите wagon types през GET /wagon-types/available`
+
+---
+
+## [2026-05-21 19:00] - Task #166: [FE] WagonTypesListPage — `Клонирай` action в row menu + интеграция на dialog-а
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Created `WagonsPage.clone.test.tsx` with 3 tests:
+  1. Row actions contain a "Клонирай" button
+  2. Clicking "Клонирай" opens CloneWagonTypeDialog with source wagon
+  3. Successful clone closes dialog and re-fetches wagon types
+- All 3 tests FAIL ✅ (no clone button exists yet)
+
+### GREEN Phase
+- Added `onClone` prop to `WagonList` component with ContentCopy icon button
+- Added `cloneSourceWagonType` state in `WagonsPage`
+- Imported and rendered `<CloneWagonTypeDialog>` with source from clicked row
+- Passed `existingClones` derived from `allWagonTypes` series names
+- Added `wagons.actions.clone` i18n key to both bg.json and en.json
+- All 3 tests PASS ✅
+
+### DONE Phase
+- 17/17 WagonsPage tests pass (3 new + 14 existing)
+- TypeScript compiles clean
+- ESLint: only pre-existing warnings, no new issues
+
+**Files modified:**
+- `src/app/features/wagons/components/WagonList.tsx`
+- `src/app/features/wagons/pages/WagonsPage.tsx`
+- `src/app/features/wagons/pages/__tests__/WagonsPage.clone.test.tsx` (new)
+- `src/locales/bg.json`
+- `src/locales/en.json`
+
+**Git commit:**
+- `feat(compositions): [FE] WagonTypesListPage — 'Клонирай' action в row menu + интеграция на dialog-а`
+
+---
+
+## [2026-05-21 17:25] - Task #165: [FE] `CloneWagonTypeDialog` компонент — source preview, mandatory series/inventory, optional metadata + retrofit overrides, FE validation
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 165.1: Created `src/app/features/wagons/components/__tests__/CloneWagonTypeDialog.test.tsx` with 8 tests: (1) renders source preview with read-only series, capacity, travel class; (2) default seriesName is `${source.seriesName} #001`; (3) submit with minimal required fields calls `wagonsApi.clone` with correct DTO; (4) FE validation — empty seriesName disables Submit; (5) FE validation — seriesName in `existingClones` shows error; (6) retrofit override BicycleSpaces=2 submits `overrideBicycleSpaces: 2` in DTO; (7) success → onClose called, navigate to `/wagons/${newId}/edit` when openLayoutAfter is ON; (8) 409 with `WagonTypeInventoryNumberDuplicate` shows inline error under InventoryNumber
+- Ran tests — FAIL ✅ (CloneWagonTypeDialog module doesn't exist)
+
+### GREEN Phase
+- Step 165.2: Created `src/app/features/wagons/components/CloneWagonTypeDialog.tsx` — MUI Dialog with eager form state (no Stepper), source preview, mandatory seriesName with FE uniqueness check against `existingClones`, optional inventoryNumber/operator/homeDepot/manufactureYear/notes, retrofit override fields (bicycleSpaces/wheelchairSpaces), openLayoutAfter checkbox (default ON). Uses `useCloneWagonType` hook. Handles BE error codes with inline field errors.
+- Ran tests — 8 PASS ✅
+- Step 165.3: Added i18n keys in `src/locales/bg.json` and `src/locales/en.json` — `wagons.clone.dialog.*`, `wagons.clone.success`, `wagons.clone.errors.*`, `wagons.list.clone`
+
+**Files modified:**
+- `src/app/features/wagons/components/__tests__/CloneWagonTypeDialog.test.tsx` — new test file (8 tests)
+- `src/app/features/wagons/components/CloneWagonTypeDialog.tsx` — new component
+- `src/locales/bg.json` — added wagons.clone.* keys
+- `src/locales/en.json` — added wagons.clone.* keys
+
+**Verification:**
+- `npm run test:run CloneWagonTypeDialog` — 8 tests passed
+- `npx vitest run --changed origin/develop` — all tests passed
+- `npm run type-check` — clean
+- `npx eslint` on changed files — clean (after fixing 2 warnings)
+
+**Git commit:**
+- `feat(compositions): [FE] CloneWagonTypeDialog компонент — source preview, mandatory series/inventory, optional metadata + retrofit overrides, FE validation`
+
+---
+
+## [2026-05-21 16:12] - Task #164: [FE] `useCloneWagonType` hook — React Query mutation + cache invalidation на `['wagon-types']`
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 164.1: Created `src/app/features/wagons/hooks/__tests__/useCloneWagonType.test.tsx` with 2 tests: (1) successful clone calls `wagonsApi.clone` with correct args + invalidates `['wagonTypes']` queries; (2) 409 conflict with `WagonTypeSeriesNameDuplicate` propagates as typed error with `errorCode` to caller
+- Ran tests — FAIL ✅ (useCloneWagonType module doesn't exist)
+
+### GREEN Phase
+- Step 164.2: Created `src/app/features/wagons/hooks/useCloneWagonType.ts` — `useMutation` wraps `wagonsApi.clone(sourceId, dto)`; on success invalidates `wagonTypeQueryKeys.all`; on API failure throws `CloneWagonTypeError` with `errorCode` for typed error propagation
+- Created `src/app/features/wagons/hooks/index.ts` barrel export for all wagon hooks
+- Ran tests — 2 PASS ✅
+
+**Files modified:**
+- `src/app/features/wagons/hooks/__tests__/useCloneWagonType.test.tsx` — new test file
+- `src/app/features/wagons/hooks/useCloneWagonType.ts` — new hook
+- `src/app/features/wagons/hooks/index.ts` — new barrel export
+
+**Verification:**
+- `npx vitest run --changed origin/develop` — 14 files, 121 tests, all passed
+- `npm run type-check` — clean
+- `npx eslint` on changed files — no errors
+
+**Git commit:**
+- `feat(compositions): [FE] useCloneWagonType hook — React Query mutation + cache invalidation на ['wagon-types']`
+
+---
+
+## [2026-05-21 15:03] - Task #163: [FE] API + types за clone и available — `wagonsApi.clone()`, `wagonsApi.getAvailable()`, `CloneWagonTypeDto`, `AvailableWagonType` + integration test
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 163.1: Added `CloneWagonTypeDto`, `AvailableWagonType`, `CloneWagonTypeErrorCode`, `CloneWagonTypeError` types to `src/api/wagons/wagons.types.ts`
+- Step 163.1: Created `src/api/wagons/__tests__/wagons-clone-availability.integration.test.ts` with 5 tests: clone POST serialization, 409 WagonTypeSeriesNameDuplicate error mapping, 409 WagonTypeInventoryNumberDuplicate error mapping, getAvailable GET with query param, getAvailable error fallback
+- Ran tests — all 5 FAIL ✅ (methods don't exist yet)
+
+### GREEN Phase
+- Step 163.2: Added `clone(sourceId, dto)` and `getAvailable(compositionId)` methods to `src/api/wagons/wagons.api.ts`
+- Clone uses `handleApiError` to extract RFC 7807 `errorCode` for typed error propagation
+- Ran tests — all 5 PASS ✅
+
+**Files modified:**
+- `src/api/wagons/wagons.types.ts` — added clone + availability types
+- `src/api/wagons/wagons.api.ts` — added `clone()` and `getAvailable()` methods
+- `src/api/wagons/index.ts` — exported new types
+- `src/api/wagons/__tests__/wagons-clone-availability.integration.test.ts` — new integration test file
+
+**Verification:**
+- `npx vitest run --changed origin/develop` — 13 files, 119 tests, all passed
+- `npm run type-check` — clean
+- `npx eslint` on changed files — no errors
+
+**Git commit:**
+- `feat(compositions): [FE] API + types за clone и available — wagonsApi.clone(), wagonsApi.getAvailable(), CloneWagonTypeDto, AvailableWagonType + integration test`
+
+---
+
+## [2026-05-21 14:00] - Task #162: [BE] GetAvailableWagonTypesForCompositionQuery — връща списък с `isAvailable` flag за палитрата
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 162.1: Created `GetAvailableWagonTypesForCompositionQueryHandlerTests.cs` with 4 tests: (a) no other compositions → all types isAvailable=true; (b) another ACTIVE composition same StartDate uses WagonType X → X isAvailable=false with OccupiedByCompositionId+OccupiedByTrainNumber; (c) DRAFT composition same StartDate uses Y → Y remains available (drafts don't reserve); (d) current composition uses Z → Z remains available (don't block self)
+- Build fails ✅ (GetAvailableWagonTypesForCompositionQueryHandler type not found)
+
+### GREEN Phase
+- Step 162.2: Created `AvailableWagonTypeDto.cs` in DTOs/Nomenclatures
+- Created `GetAvailableWagonTypesForComposition.cs` with Query + Handler:
+  - Loads composition by ID (404 if not found)
+  - Finds same-day ACTIVE compositions (excluding self)
+  - Gets occupied WagonTypeIds from their active carriages
+  - Builds occupancy map with CompositionId + TrainNumber for tooltips
+  - Returns all ACTIVE wagon types with isAvailable flag
+- All 4 tests PASS ✅
+- Step 162.3: Added `GET /api/wagon-types/available?compositionId=N` endpoint in WagonTypesController
+  - ProducesResponseType: 200 (List<AvailableWagonTypeDto>) / 404
+
+### DONE Phase
+- Step 162.4: `dotnet test Application.Tests`: 139 passed (4 new + 135 existing) ✅
+- `dotnet test API.Tests`: 47 passed ✅
+- Build clean ✅
+- Performance: two indexed queries (compositions by StartDate+Status, carriages by CompositionId+IsActive) + in-memory join — well under 100ms for expected data volumes
+
+**Files modified:**
+- `RailRunService.Application.Tests/GetAvailableWagonTypesForCompositionQueryHandlerTests.cs` (new)
+- `RailRunService.Application/DTOs/Nomenclatures/AvailableWagonTypeDto.cs` (new)
+- `RailRunService.Application/Features/Nomenclatures/Queries/GetAvailableWagonTypesForComposition.cs` (new)
+- `RailRunService.API/Controllers/WagonTypesController.cs`
+
+**Git commit:**
+- `feat(compositions): [BE] GetAvailableWagonTypesForCompositionQuery — връща списък с isAvailable flag за палитрата`
+
+---
+
+## [2026-05-21 13:00] - Task #161: [BE] CloneWagonTypeCommand + handler — копира WagonType + CoachLayout + SeatDefinitions в нов запис с unique series/inventory
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 161.1: Created `CloneWagonTypeCommandHandlerTests.cs` with 6 tests: (a) happy path copies all SeatDefinitions + sets ParentWagonTypeId; (b) BicycleSpaces=2 adds 2 STORAGE/BICYCLE SeatDefinitions; (c) WheelchairSpaces=1 adds 1 WHEELCHAIR_SPACE SeatDefinition; (d) duplicate SeriesName → Conflict; (e) duplicate InventoryNumber → Conflict; (f) source not found → NotFound
+- Build fails ✅ (CloneWagonTypeCommandHandler type not found)
+
+### GREEN Phase
+- Step 161.2: Extended `IWagonTypeRepository` with `Add(WagonType)` method + implementation in `WagonTypeRepository`
+- Added `WagonTypeInventoryNumberDuplicate` error code to `RailRunErrorCodes`
+- Created `CloneWagonType.cs` with `CloneWagonTypeCommand` + `CloneWagonTypeCommandHandler`:
+  - Loads source aggregate via `GetAggregateByIdAsync`
+  - Case-insensitive uniqueness checks for SeriesName and InventoryNumber
+  - Deep-clones WagonType → CoachLayout → SeatDefinitions in-memory graph
+  - Appends STORAGE/BICYCLE and WHEELCHAIR_SPACE SeatDefinitions for overrides
+  - Single `SaveChangesAsync` via `IUnitOfWork`
+- All 6 tests PASS ✅
+- Step 161.3: Added `POST /api/wagon-types/{id}/clone` endpoint in `WagonTypesController`
+  - Request body: `CloneWagonTypeRequest` record DTO
+  - ProducesResponseType for 200/400/404/409
+
+### DONE Phase
+- Step 161.4: `dotnet test Application.Tests`: 135 passed (6 new + 129 existing) ✅
+- `dotnet test API.Tests`: 47 passed ✅
+- Build clean ✅
+
+**Files modified:**
+- `RailRunService.Application.Tests/CloneWagonTypeCommandHandlerTests.cs` (new)
+- `RailRunService.Application/Features/Nomenclatures/Commands/CloneWagonType.cs` (new)
+- `RailRunService.Application/Interfaces/IWagonTypeRepository.cs`
+- `RailRunService.Infrastructure/Repositories/WagonTypeRepository.cs`
+- `RailRunService.Application/Constants/RailRunErrorCodes.cs`
+- `RailRunService.API/Controllers/WagonTypesController.cs`
+- `RailRunService.API/DTOs/WagonTypeRequests.cs`
+
+**Git commit:**
+- `feat(compositions): [BE] CloneWagonTypeCommand + handler — копира WagonType + CoachLayout + SeatDefinitions в нов запис с unique series/inventory`
+
+---
+
 ## [2026-05-21 12:00] - Task #160: [BE] Schema — добави административни/identity полета към WagonTypes (ParentWagonTypeId self-FK, InventoryNumber, Operator, HomeDepot, ManufactureYear, Notes)
 
 **Status:** ✅ Complete

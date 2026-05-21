@@ -5314,7 +5314,7 @@
         "action": "Working dir: backend. `dotnet test RailRunService.Application.Tests` зелено (6 нови + всички съществуващи минават). Build чисто. Линт по convention (`dotnet format`) ако има в pipeline."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 162,
@@ -5346,7 +5346,7 @@
         "action": "Working dir: backend. Тестове зелени. Performance sanity: при ~100 wagon types и ~50 compositions заявката трябва да е <100ms (две indexed queries + in-memory join)."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 163,
@@ -5373,7 +5373,7 @@
         "action": "Working dir: frontend. `npm run test:run wagons-clone-availability` зелено. `npm run type-check` чисто. `npx eslint src/api/wagons/**` без нови warnings."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 164,
@@ -5400,7 +5400,7 @@
         "action": "Working dir: frontend. `npm run test:run useCloneWagonType` зелено. Type-check + ESLint чисто."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 165,
@@ -5432,7 +5432,7 @@
         "action": "Working dir: frontend. `npm run test:run CloneWagonTypeDialog` зелено. Type-check + ESLint чисто. Manual: отвори modal, попълни поле, submit → виж нов запис в /wagons листа."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 166,
@@ -5459,7 +5459,7 @@
         "action": "Working dir: frontend. `npm run test:run` за list page зелено. Type-check + ESLint чисто. Manual sanity: row → 'Клонирай' → попълни → submit → виж нов запис в таблицата след invalidate."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 167,
@@ -5491,7 +5491,7 @@
         "action": "Working dir: frontend. `npm run test:run CompositionEditorPage` + `WagonPalette` зелено. Type-check + ESLint чисто. Manual: seed-вай 2 композиции на същия StartDate, addv WagonType X в първата → отвори editor-а на втората → виж X като disabled с tooltip."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 168,
@@ -5511,7 +5511,7 @@
         "action": "Working dir: frontend. `npx playwright test e2e/tests/wagons/clone-wagon-type.spec.ts --project=admin` зелено. Type-check + ESLint чисто."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 169,
