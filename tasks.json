@@ -5566,7 +5566,7 @@
       { "id": "171.2", "action": "Working dir: backend. sqlpackage /Action:Publish на RailRunServiceDb срещу localhost,14430 — констрейнтът се re-генерира DROP + CREATE от SqlPackage." },
       { "id": "171.3", "action": "Working dir: backend. docker restart osdm-rail-run-service-1. Smoke: POST /api/wagon-types/{wagonTypeId}/clone с произволен source — 200 OK." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 172,

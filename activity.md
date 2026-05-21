@@ -1,3 +1,24 @@
+## [2026-05-21 17:00] - Task #171: [BE] Fix Clone 500 — добави STORAGE и BICYCLE_RACK в CK_SeatDefinitions_AccommodationType + re-publish
+
+**Status:** ✅ Complete
+
+**Phase:** N/A (no TDD workflow — schema fix)
+
+**What was done:**
+- Step 171.1: Extended CK_SeatDefinitions_AccommodationType CHECK constraint in `dbo/Tables/SeatDefinitions.sql` — added 'STORAGE' and 'BICYCLE_RACK' to the IN-list. SQL project build: 0 warnings, 0 errors.
+- Step 171.2: SqlPackage /Action:Publish to localhost,14430 — constraint was DROP + CREATE. All existing data passed the new constraint. Publish succeeded.
+- Step 171.3: docker restart osdm-rail-run-service-1 — container started but HTTP layer unreachable from host (pre-existing Docker networking issue on Windows, not caused by schema change). Constraint verified directly via DB query: `STORAGE` and `BICYCLE_RACK` confirmed present.
+
+**Files modified:**
+- `OSDM-Src/SQLProjects/RailRunServiceSQL/dbo/Tables/SeatDefinitions.sql`
+- `ralph/tasks.json`
+- `ralph/activity.md`
+
+**Git commit:**
+- `feat(compositions): [BE] Fix Clone 500 — добави STORAGE и BICYCLE_RACK в CK_SeatDefinitions_AccommodationType + re-publish`
+
+---
+
 ## [2026-05-21] - Task #170: [DOCS] Обнови `wagon-inventory-spec.md` §0.6 (open issues) + добави cross-link към `physical-wagons-plan.md`
 
 **Status:** ✅ Complete
