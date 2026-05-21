@@ -1,3 +1,152 @@
+## [2026-05-21 21:15] - Task #176: [FE] WagonPalette — disable картата ако wagonTypeId е в текущата draft композиция
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 176.1: Wrote 2 failing tests in WagonPalette.test.tsx:
+  - usedWagonTypeIds disables card with tooltipAlreadyInComposition — FAILS ✅
+  - alreadyInComposition tooltip takes priority over occupiedByOtherComposition — FAILS ✅
+
+### GREEN Phase
+- Step 176.2: Added `usedWagonTypeIds?: Set<number>` prop to WagonPaletteProps. Updated `isCardDisabled` to check usedWagonTypeIds first. Updated `getDisabledTooltip` with tooltip priority: alreadyInComposition > occupiedByOtherComposition > tractionMix. All tests green ✅
+- Step 176.3: In CompositionEditorPage.tsx: derived `usedWagonTypeIds` via useMemo from wagons + subRoutes (excluding deleted). Passed to `<WagonPalette usedWagonTypeIds={...} />`. Updated existing CompositionEditorPage test that expected card-1 draggable (now correctly disabled since wagonTypeId 1 is in composition) ✅
+- Step 176.4: Added i18n keys — bg: 'Вагонът е поставен в композицията.'; en: 'Wagon is already in the composition.' ✅
+
+### DONE Phase
+- Step 176.5: 35 WagonPalette tests pass ✅, 42 CompositionEditorPage tests pass ✅, TypeScript compiles ✅, ESLint 0 errors ✅
+
+**Files modified:**
+- src/app/features/compositions/components/WagonPalette.tsx
+- src/app/features/compositions/components/__tests__/WagonPalette.test.tsx
+- src/app/features/compositions/pages/CompositionEditorPage.tsx
+- src/app/features/compositions/pages/__tests__/CompositionEditorPage.test.tsx
+- src/locales/bg.json
+- src/locales/en.json
+
+**Git commit:**
+- `feat(compositions): [FE] WagonPalette — disable картата ако wagonTypeId е в текущата draft композиция`
+
+---
+
+## [2026-05-21 21:20] - Task #175: [FE] Премахни auto-generation на placard/wagonNumber в CompositionEditorPage
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 175.1: Extended CompositionEditorPage.test.tsx with 3 tests:
+  - drop should set placardNumber and wagonNumber from wagonType, not generate them — FAILS ✅
+  - drop of second wagonType should NOT have W-prefix wagonNumber — FAILS ✅
+  - sub-route drop should use wagonType.placardNumber — FAILS ✅
+
+### GREEN Phase
+- Step 175.2: Added `placardNumber: string` and `inventoryNumber: string | null` to WagonType interface (compositions.types.ts). Added `placardNumber` to WagonTypeDto (wagons.types.ts). Deleted `generateUniquePlacard` callback and all call-sites. Updated `handleWagonDrop` and `handleSubRouteWagonDrop` to read `placardNumber` and `inventoryNumber` from wagonType instead of generating them. All 3 new tests PASS ✅
+- Step 175.3: Removed `placardNumber` and `uicNumber` from `SaveCarriageAddDto` and `SaveCarriageUpdateDto` types. Removed placard/uic from DTO build in `useCompositionPersistence.ts`. Updated persistence test assertions to match. All 5 persistence tests PASS ✅
+
+### DONE Phase
+- Step 175.4: TypeScript compiles ✅, ESLint 0 errors ✅, 123 composition tests pass (42 editor + 5 persistence + 76 component) ✅
+
+**Files modified:**
+- src/api/compositions/compositions.types.ts
+- src/api/wagons/wagons.types.ts
+- src/app/features/compositions/pages/CompositionEditorPage.tsx
+- src/app/features/compositions/pages/__tests__/CompositionEditorPage.test.tsx
+- src/app/features/compositions/hooks/useCompositionPersistence.ts
+- src/app/features/compositions/hooks/useCompositionPersistence.test.tsx
+
+**Git commit:**
+- `feat(compositions): [FE] Премахни auto-generation на placard/wagonNumber в CompositionEditorPage`
+
+---
+
+## [2026-05-21 20:00] - Task #174: [BE] AddCarriage + SaveCompositionWagons — placard/uic от WagonType + reject duplicate wagonTypeId per composition
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 174.1: Created AddCarriageWagonIdentityTests.cs with 3 tests:
+  - HappyPath_PlacardAndUicComeFromWagonType_NotFromRequest — FAILS ✅
+  - DuplicateWagonTypeId_InComposition_ReturnsConflict — FAILS ✅
+  - SameWagonTypeId_ButInactive_AllowsAdd — PASSES (edge case)
+- Added SaveCompositionWagons tests:
+  - BulkSave_PlacardAndUicComeFromWagonType_NotFromRequest — FAILS ✅
+  - BulkSave_DuplicateWagonTypeIdWithinBatch_ReturnsConflict — FAILS ✅
+  - BulkSave_WagonTypeIdAlreadyInSurvivingCarriages_ReturnsConflict — FAILS ✅
+
+### GREEN Phase
+- Added RailRunErrorCodes.WagonAlreadyInComposition = "WAGON_ALREADY_IN_COMPOSITION"
+- AddCarriage.cs: replaced placard uniqueness check with wagonTypeId uniqueness (active only); carriage.PlacardNumber = wagonType.PlacardNumber, carriage.UicNumber = wagonType.InventoryNumber
+- SaveCompositionWagons.cs: added wagonTypeId uniqueness check (surviving + batch + updated carriages); set placard/uic from WagonType lookup instead of request DTO
+- Updated 3 existing SaveCompositionWagons tests to use distinct WagonTypeIds (physical wagon model)
+- All 6 new tests PASS ✅
+
+### DONE Phase
+- Build succeeded, 144 Application tests + 47 API tests all green
+
+**Files modified:**
+- RailRunService.Application/Constants/RailRunErrorCodes.cs
+- RailRunService.Application/Features/Carriages/Commands/AddCarriage.cs
+- RailRunService.Application/Features/Compositions/Commands/SaveCompositionWagons.cs
+- RailRunService.Application.Tests/AddCarriageWagonIdentityTests.cs (new)
+- RailRunService.Application.Tests/SaveCompositionWagonsCommandHandlerTests.cs
+
+**Git commit:**
+- `feat(compositions): [BE] AddCarriage + SaveCompositionWagons — placard/uic от WagonType + reject duplicate wagonTypeId per composition`
+
+---
+
+## [2026-05-21 19:15] - Task #173: [BE] CloneWagonTypeCommand — placardNumber required, премахни bicycle/wheelchair overrides
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 173.1: Added PlacardNumber to CloneWagonTypeCommand; added WagonTypePlacardNumberRequired + WagonTypePlacardDuplicate error codes
+- Wrote test Clone_WithoutPlacardNumber_ReturnsValidation — FAILS ✅
+- Wrote test Clone_DuplicatePlacardNumber_ReturnsConflict — FAILS ✅
+- Updated happy path to assert PlacardNumber — FAILS ✅
+- Removed Clone_WithBicycleOverride and Clone_WithWheelchairOverride tests
+
+### GREEN Phase
+- Step 173.2: Rewrote CloneWagonType.cs — removed OverrideBicycleSpaces, OverrideWheelchairSpaces, AppendOverrideSeats
+- Added PlacardNumber validation (required + uniqueness check)
+- Handler sets clonedWagonType.PlacardNumber = request.PlacardNumber.Trim()
+- Updated CloneWagonTypeRequest DTO: added PlacardNumber [Required], removed override fields
+- Updated controller mapping
+- Added PlacardNumber to WagonTypeDto + all handlers that construct it
+- All 6 CloneWagonType tests PASS ✅
+
+### DONE Phase
+- Step 173.3: Build succeeded, 139 Application tests + 47 API tests all green
+
+**Files modified:**
+- RailRunService.Application/Features/Nomenclatures/Commands/CloneWagonType.cs
+- RailRunService.Application/Constants/RailRunErrorCodes.cs
+- RailRunService.Application/DTOs/Nomenclatures/WagonTypeDto.cs
+- RailRunService.Application.Tests/CloneWagonTypeCommandHandlerTests.cs
+- RailRunService.API/DTOs/WagonTypeRequests.cs
+- RailRunService.API/Controllers/WagonTypesController.cs
+- RailRunService.Application/Features/Nomenclatures/Commands/CreateWagonType.cs
+- RailRunService.Application/Features/Nomenclatures/Commands/UpdateWagonType.cs
+- RailRunService.Application/Features/Nomenclatures/Commands/SetWagonTypeStatus.cs
+- RailRunService.Application/Features/Nomenclatures/Queries/GetWagonTypeById.cs
+- RailRunService.Application/Features/Nomenclatures/Queries/GetWagonTypes.cs
+
+**Git commit:**
+- `feat(compositions): [BE] CloneWagonTypeCommand — placardNumber required, премахни bicycle/wheelchair overrides`
+
+---
+
 ## [2026-05-21 18:30] - Task #172: [BE] WagonTypes — PlacardNumber NOT NULL UNIQUE + filtered-unique InventoryNumber
 
 **Status:** ✅ Complete

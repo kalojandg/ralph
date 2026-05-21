@@ -5598,7 +5598,7 @@
       { "id": "173.2", "phase": "GREEN", "action": "Working dir: backend. В CloneWagonType.cs: премахни OverrideBicycleSpaces, OverrideWheelchairSpaces, AppendOverrideSeats. Добави PlacardNumber като задължително поле в command + request DTO ([Required]). Handler задава clonedWagonType.PlacardNumber = request.PlacardNumber.Trim(). Дубликат проверка → WagonTypePlacardDuplicate. Тестовете зелени." },
       { "id": "173.3", "phase": "DONE", "action": "Working dir: backend. Build + tests зелени. Manual: POST /api/wagon-types/{id}/clone с {newSeriesName, placardNumber} → 200; повторение → 409." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 174,
@@ -5613,7 +5613,7 @@
       { "id": "174.2", "phase": "GREEN", "action": "Working dir: backend. (1) Add RailRunErrorCodes.WagonAlreadyInComposition='WAGON_ALREADY_IN_COMPOSITION'. (2) AddCarriage.cs: пре-зареди WagonType.PlacardNumber + InventoryNumber; задай ги на новия carriage; премахни доверие към request placard/uic. Преди insert провери composition.CompositionCarriages.Any(c => c.WagonTypeId == request.WagonTypeId && c.IsActive). (3) SaveCompositionWagons.cs: batch load на WagonType-ите за NewCarriages, set placard/uic от тях, uniqueness check на wagonTypeId (включи updatedCarriages в expected set). Тестовете зелени." },
       { "id": "174.3", "phase": "DONE", "action": "Working dir: backend. Build + tests зелени. Manual: POST /api/compositions/{id}/save-wagons с два carriage entries със същия wagonTypeId → 409 errorCode='WAGON_ALREADY_IN_COMPOSITION'." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 175,
@@ -5629,7 +5629,7 @@
       { "id": "175.3", "phase": "GREEN", "action": "Working dir: frontend. Update useCompositionPersistence.ts: премахни placard/uic от DTO build. Запази в SaveCompositionWagonsDto само wagonTypeId, sequenceNumber, route info. Update съответните FE tests." },
       { "id": "175.4", "phase": "DONE", "action": "Working dir: frontend. npm run test:run на compositions feature зелено. Manual: drop в композиция → placard/wagonNumber съответстват на /wagons/{id}/edit." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 176,
@@ -5646,7 +5646,7 @@
       { "id": "176.4", "phase": "GREEN", "action": "Working dir: frontend. i18n: compositions.editor.palette.tooltipAlreadyInComposition — bg: 'Вагонът е поставен в композицията.'; en: 'Wagon is already in the composition.'" },
       { "id": "176.5", "phase": "DONE", "action": "Working dir: frontend. npm run test:run WagonPalette CompositionEditorPage зелено. Manual: drop wagon X → веднага става disabled; махам го → пак става enabled." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 177,
