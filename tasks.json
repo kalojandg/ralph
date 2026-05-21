@@ -5583,7 +5583,7 @@
       { "id": "172.4", "action": "Working dir: backend. dotnet test RailRunService.Application.Tests — всички съществуващи тестове минават (фабриките/builders задават PlacardNumber)." },
       { "id": "172.5", "action": "Working dir: backend. Re-publish + restart container — sqlpackage /Action:Publish минава успешно." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 173,

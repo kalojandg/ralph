@@ -1,3 +1,28 @@
+## [2026-05-21 18:30] - Task #172: [BE] WagonTypes — PlacardNumber NOT NULL UNIQUE + filtered-unique InventoryNumber
+
+**Status:** ✅ Complete
+
+**Phase:** N/A (no TDD workflow — schema + domain change)
+
+**What was done:**
+- Step 172.1: Created pre-deploy script `007_BackfillWagonTypePlacardNumber.sql` — adds PlacardNumber column as NULL if missing, then backfills all existing rows with `SeriesName + '-' + Id`. Uses dynamic SQL (`sp_executesql`) to avoid parse-time column validation. Registered in `Seed.sql`.
+- Step 172.2: Updated `Tables/WagonTypes.sql` — added `PlacardNumber NVARCHAR(20) NOT NULL`, `CONSTRAINT UQ_WagonTypes_PlacardNumber UNIQUE (PlacardNumber)`, and filtered unique index `UX_WagonTypes_InventoryNumber ON (InventoryNumber) WHERE InventoryNumber IS NOT NULL`.
+- Step 172.3: Added `PlacardNumber` (non-nullable string) to `WagonType.Behavior.cs`. Updated `WagonTypeConfiguration.cs` with `IsRequired()` + unique index for PlacardNumber, and filtered unique index for InventoryNumber. `dotnet build` — 0 errors.
+- Step 172.4: `dotnet test` — all 186 tests pass (139 Application + 47 API). Test factories don't set PlacardNumber but it's `= null!` with no runtime enforcement in mocked repos.
+- Step 172.5: DACPAC build + SqlPackage /Action:Publish with `/p:BlockOnPossibleDataLoss=False` — successfully published. Verified schema: PlacardNumber NOT NULL + UQ, InventoryNumber filtered UNIQUE. `docker restart osdm-rail-run-service-1`.
+
+**Files modified:**
+- `SQLProjects/RailRunServiceSQL/dbo/PreDeployment/Data/007_BackfillWagonTypePlacardNumber.sql` (new)
+- `SQLProjects/RailRunServiceSQL/dbo/PreDeployment/Seed.sql`
+- `SQLProjects/RailRunServiceSQL/dbo/Tables/WagonTypes.sql`
+- `DotNetServices/RailRunService/RailRunService.Domain/Entities/WagonType.Behavior.cs`
+- `DotNetServices/RailRunService/RailRunService.Infrastructure/Data/Configurations/WagonTypeConfiguration.cs`
+
+**Git commit:**
+- `feat(compositions): [BE] WagonTypes — PlacardNumber NOT NULL UNIQUE + filtered-unique InventoryNumber`
+
+---
+
 ## [2026-05-21 17:00] - Task #171: [BE] Fix Clone 500 — добави STORAGE и BICYCLE_RACK в CK_SeatDefinitions_AccommodationType + re-publish
 
 **Status:** ✅ Complete
