@@ -5552,5 +5552,160 @@
       }
     ],
     "passes": true
+  },
+  {
+    "id": 171,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[BE] Fix Clone 500 — добави STORAGE и BICYCLE_RACK в CK_SeatDefinitions_AccommodationType + re-publish",
+    "tddWorkflow": false,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-fix.md §1.1",
+    "notes": "Без тая корекция clone с OverrideBicycleSpaces>0 връща HTTP 500 (CHECK constraint violation). STORAGE е стойността, която CloneWagonType.cs insert-ва за bicycle SeatDefinitions; BICYCLE_RACK добавяме превантивно. Activity log на 168 спомена ръчния fix, но не е merge-нат в декларативната схема — затова при re-publish се връща обратно.",
+    "steps": [
+      { "id": "171.1", "action": "Working dir: backend. В OSDM-Src/SQLProjects/RailRunServiceSQL/dbo/Tables/SeatDefinitions.sql разшири CK_SeatDefinitions_AccommodationType IN-листа с 'STORAGE' и 'BICYCLE_RACK'. Build на sqlproj без warnings." },
+      { "id": "171.2", "action": "Working dir: backend. sqlpackage /Action:Publish на RailRunServiceDb срещу localhost,14430 — констрейнтът се re-генерира DROP + CREATE от SqlPackage." },
+      { "id": "171.3", "action": "Working dir: backend. docker restart osdm-rail-run-service-1. Smoke: POST /api/wagon-types/{wagonTypeId}/clone с произволен source — 200 OK." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 172,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[BE] WagonTypes — PlacardNumber NOT NULL UNIQUE + filtered-unique InventoryNumber",
+    "tddWorkflow": false,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-fix.md §1.2 + §1.3",
+    "notes": "Двуфазно: (а) pre-deploy скрипт populates PlacardNumber за existing редовете преди NOT NULL да се enforce-не; (б) declarative schema добавя NOT NULL + UNIQUE.",
+    "steps": [
+      { "id": "172.1", "action": "Working dir: backend. Нов pre-deploy скрипт OSDM-Src/SQLProjects/RailRunServiceSQL/dbo/PreDeployment/Data/007_BackfillWagonTypePlacardNumber.sql (idempotent чрез _ApplyOnce): за всеки WagonTypes ред с NULL/празно PlacardNumber → set PlacardNumber = SeriesName + '-' + CAST(Id AS VARCHAR(10)). Регистрирай в PreDeployment/Seed.sql." },
+      { "id": "172.2", "action": "Working dir: backend. В Tables/WagonTypes.sql: промени PlacardNumber NVARCHAR(20) NULL → NOT NULL. Добави CONSTRAINT UQ_WagonTypes_PlacardNumber UNIQUE (PlacardNumber). Добави филтриран unique index: CREATE UNIQUE NONCLUSTERED INDEX UX_WagonTypes_InventoryNumber ON dbo.WagonTypes(InventoryNumber) WHERE InventoryNumber IS NOT NULL." },
+      { "id": "172.3", "action": "Working dir: backend. Update Domain entity WagonType.cs: PlacardNumber става string (без ?), InventoryNumber остава string?. EF mapping WagonTypeConfiguration.cs — IsRequired() за PlacardNumber + HasIndex unique. dotnet build чисто." },
+      { "id": "172.4", "action": "Working dir: backend. dotnet test RailRunService.Application.Tests — всички съществуващи тестове минават (фабриките/builders задават PlacardNumber)." },
+      { "id": "172.5", "action": "Working dir: backend. Re-publish + restart container — sqlpackage /Action:Publish минава успешно." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 173,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[BE] CloneWagonTypeCommand — placardNumber required, премахни bicycle/wheelchair overrides",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-fix.md §1.4",
+    "notes": "Зависи от Tasks 171 + 172. След тоя task clone-ът копира SeatDefinitions 1:1. Retrofit-ите се правят през съществуващия layout editor.",
+    "steps": [
+      { "id": "173.1", "phase": "RED", "action": "Working dir: backend. Разшири CloneWagonTypeCommandHandlerTests.cs: Test — clone без placard → Validation (WagonTypePlacardNumberRequired). Test — дубликат placard → Conflict (WagonTypePlacardDuplicate). Премахни тестовете за OverrideBicycleSpaces/OverrideWheelchairSpaces. Фейлват." },
+      { "id": "173.2", "phase": "GREEN", "action": "Working dir: backend. В CloneWagonType.cs: премахни OverrideBicycleSpaces, OverrideWheelchairSpaces, AppendOverrideSeats. Добави PlacardNumber като задължително поле в command + request DTO ([Required]). Handler задава clonedWagonType.PlacardNumber = request.PlacardNumber.Trim(). Дубликат проверка → WagonTypePlacardDuplicate. Тестовете зелени." },
+      { "id": "173.3", "phase": "DONE", "action": "Working dir: backend. Build + tests зелени. Manual: POST /api/wagon-types/{id}/clone с {newSeriesName, placardNumber} → 200; повторение → 409." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 174,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[BE] AddCarriage + SaveCompositionWagons — placard/uic от WagonType + reject duplicate wagonTypeId per composition",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-fix.md §1.5",
+    "notes": "Зависи от Task 172. Премахваме доверието към client-supplied placard/uic — четат се от WagonType. Дубликат wagonTypeId хваща се на handler level.",
+    "steps": [
+      { "id": "174.1", "phase": "RED", "action": "Working dir: backend. Тестове: (a) AddCarriageCommandHandlerTests — happy path използва WagonType.PlacardNumber; persisted CompositionCarriage има placard от WagonType. (b) Test — wagonTypeId вече в композицията → Conflict(WagonAlreadyInComposition). (c) SaveCompositionWagonsCommandHandlerTests — двата случая огледално. Фейлват." },
+      { "id": "174.2", "phase": "GREEN", "action": "Working dir: backend. (1) Add RailRunErrorCodes.WagonAlreadyInComposition='WAGON_ALREADY_IN_COMPOSITION'. (2) AddCarriage.cs: пре-зареди WagonType.PlacardNumber + InventoryNumber; задай ги на новия carriage; премахни доверие към request placard/uic. Преди insert провери composition.CompositionCarriages.Any(c => c.WagonTypeId == request.WagonTypeId && c.IsActive). (3) SaveCompositionWagons.cs: batch load на WagonType-ите за NewCarriages, set placard/uic от тях, uniqueness check на wagonTypeId (включи updatedCarriages в expected set). Тестовете зелени." },
+      { "id": "174.3", "phase": "DONE", "action": "Working dir: backend. Build + tests зелени. Manual: POST /api/compositions/{id}/save-wagons с два carriage entries със същия wagonTypeId → 409 errorCode='WAGON_ALREADY_IN_COMPOSITION'." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 175,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Премахни auto-generation на placard/wagonNumber в CompositionEditorPage",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-fix.md §2.1",
+    "notes": "Зависи от Task 172 + Task 174. FE drop взима placard/uic от wagonType.",
+    "steps": [
+      { "id": "175.1", "phase": "RED", "action": "Working dir: frontend. Разшири CompositionEditorPage.test.tsx: Test — drop на wagonType с PlacardNumber='15-63-A', InventoryNumber='51 52 19-70 001-3' → новият DraftWagon има точно тези стойности (read-only). Test — drop на втора wagonType → carriage НЯМА W0001 префикс. Test — sub-route drop също чете от wagonType. Фейлват." },
+      { "id": "175.2", "phase": "GREEN", "action": "Working dir: frontend. В CompositionEditorPage.tsx: (1) Изтрий generateUniquePlacard (lines 112-119) + call-sites. (2) handleWagonDrop (около 685-700): placardNumber: wagonType.placardNumber, wagonNumber: wagonType.inventoryNumber ?? ''. (3) handleSubRouteWagonDrop (около 540-560): същото. (4) Премахни wagonNumber: `W${...}`. (5) Update FE WagonType type (src/api/wagons/wagons.types.ts) — добави placardNumber: string mandatory. Тестовете зелени." },
+      { "id": "175.3", "phase": "GREEN", "action": "Working dir: frontend. Update useCompositionPersistence.ts: премахни placard/uic от DTO build. Запази в SaveCompositionWagonsDto само wagonTypeId, sequenceNumber, route info. Update съответните FE tests." },
+      { "id": "175.4", "phase": "DONE", "action": "Working dir: frontend. npm run test:run на compositions feature зелено. Manual: drop в композиция → placard/wagonNumber съответстват на /wagons/{id}/edit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 176,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] WagonPalette — disable картата ако wagonTypeId е в текущата draft композиция",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-fix.md §2.2",
+    "notes": "Зависи от Task 175. Комбинира BE availability (cross-composition) с локалния draft state.",
+    "steps": [
+      { "id": "176.1", "phase": "RED", "action": "Working dir: frontend. WagonPalette.test.tsx: Test — нов prop usedWagonTypeIds: Set<number>. Когато usedWagonTypeIds.has(wt.id) → картата е disabled с tooltip compositions.editor.palette.tooltipAlreadyInComposition. Test — комбинация BE-occupied + локално-used → disabled (приоритет на конкретното съобщение)." },
+      { "id": "176.2", "phase": "GREEN", "action": "Working dir: frontend. Добави prop usedWagonTypeIds: Set<number>. isCardDisabled връща true ако usedWagonTypeIds.has(wt.id) OR съществуваща disabled логика. Tooltip-priority: alreadyInComposition > occupiedByOtherComposition > tractionMix. Тестовете зелени." },
+      { "id": "176.3", "phase": "GREEN", "action": "Working dir: frontend. В CompositionEditorPage.tsx: derive usedWagonTypeIds = useMemo(() => new Set([...wagons.map(w => w.wagonTypeId), ...subRoutes.flatMap(sr => sr.wagons.map(w => w.wagonTypeId))]), [wagons, subRoutes]). Подай в <WagonPalette usedWagonTypeIds={...} />." },
+      { "id": "176.4", "phase": "GREEN", "action": "Working dir: frontend. i18n: compositions.editor.palette.tooltipAlreadyInComposition — bg: 'Вагонът е поставен в композицията.'; en: 'Wagon is already in the composition.'" },
+      { "id": "176.5", "phase": "DONE", "action": "Working dir: frontend. npm run test:run WagonPalette CompositionEditorPage зелено. Manual: drop wagon X → веднага става disabled; махам го → пак става enabled." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 177,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] WagonCreationPage + CloneWagonTypeDialog — PlacardNumber required + auto-increment default",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-fix.md §2.3",
+    "notes": "Зависи от Task 172 + Task 173. Идентичността се задава при създаване, не при добавяне в композиция.",
+    "steps": [
+      { "id": "177.1", "phase": "RED", "action": "Working dir: frontend. (a) WagonCreationPage.metadata.test.tsx: Test — PlacardNumber field rendered + required; submit с празно → грешка; submit с дубликат → API 409 → inline error. (b) CloneWagonTypeDialog.test.tsx: default placard = `${source.placardNumber}-${counter}` (counter = existingClones.length + 1). Test — submit с дубликат → inline error mapping. Фейлват." },
+      { "id": "177.2", "phase": "GREEN", "action": "Working dir: frontend. (a) WagonCreationPage.tsx: добави PlacardNumber TextField до SeriesName с required flag. Update useWagonDraft schema. Pass в useCreateWagonType.mutateAsync DTO. (b) CloneWagonTypeDialog.tsx: добави PlacardNumber TextField, default `${source.placardNumber}-${String(counter).padStart(3, '0')}`. Премахни Bicycle/Wheelchair override полета. Тестовете зелени." },
+      { "id": "177.3", "phase": "GREEN", "action": "Working dir: frontend. i18n: wagons.creation.metadata.placardNumber = 'Плакатен номер *', wagons.clone.dialog.placardNumber = 'Плакатен номер на клона', error keys за duplicate." },
+      { "id": "177.4", "phase": "DONE", "action": "Working dir: frontend. npm run test:run WagonCreationPage CloneWagonTypeDialog зелено. Manual end-to-end: създай вагон placard 'TEST-001' → запази → в композиция drop → виж 'TEST-001'." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 178,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] WagonPropertiesPanel — Placard/WagonNumber read-only + link to wagon management",
+    "tddWorkflow": true,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-fix.md §2.4",
+    "notes": "Зависи от Task 175. Идентификацията се вижда но не може да се edit-ва — линк към /wagons/{id}/edit за смяна.",
+    "steps": [
+      { "id": "178.1", "phase": "RED", "action": "Working dir: frontend. Разшири WagonPropertiesPanel.test.tsx: Test — Placard/WagonNumber input-ите са readonly. Test — има малка бележка с линк 'Идентификацията се управлява от /wagons/{id}/edit'. Фейлват." },
+      { "id": "178.2", "phase": "GREEN", "action": "Working dir: frontend. Замени <TextField> за placard/wagonNumber с <Chip label={...} variant='outlined' /> или TextField с InputProps={{ readOnly: true }}. Под тях — <Typography variant='caption'><Link to={`/wagons/${wagonTypeId}/edit`}>Управление на вагона</Link></Typography>. Тестовете зелени." },
+      { "id": "178.3", "phase": "DONE", "action": "Working dir: frontend. Type-check + ESLint чисто. Manual: properties panel → placard виден но не editable → клик линка → отива на edit страницата." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 179,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] UI rename — 'Wagon Types' → 'Управление на вагони' (sidebar + breadcrumb + i18n)",
+    "tddWorkflow": false,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-fix.md §2.5",
+    "notes": "Cosmetic, но езиково важно — модулът вече не управлява TYPE концепцията, а physical assets.",
+    "steps": [
+      { "id": "179.1", "action": "Working dir: frontend. Намери в Sidebar / Navigation config-а текущия label за wagon types path-а. Промени на 'Управление на вагони' (bg) / 'Wagon Management' (en). Update breadcrumb override за /wagons route-а." },
+      { "id": "179.2", "action": "Working dir: frontend. Update i18n keys: wagons.list.title, wagons.creation.title. Запази съществуващите routes неизменени (URLs остават /wagons)." },
+      { "id": "179.3", "action": "Working dir: frontend. Type-check + ESLint чисто. Manual: sidebar → 'Управление на вагони'; страницата същия route, ново заглавие." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 180,
+    "category": "e2e",
+    "repo": "frontend",
+    "description": "[E2E] Physical wagon flow — създаване → drop → палитра filter → clone → втори drop",
+    "tddWorkflow": false,
+    "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-fix.md §0",
+    "notes": "Зависи от Tasks 171-178. Скип на readonly. Сценарият демонстрира пълния модел end-to-end.",
+    "steps": [
+      { "id": "180.1", "action": "Working dir: frontend. Създай e2e/tests/wagons/physical-wagon-flow.spec.ts. Setup чрез BE API: създай draft composition X на future date D. Drive UI: (1) Open /wagons; намери source WagonType. Запази source.PlacardNumber. (2) Open /compositions/{X}/edit; drag source → drop. Assert: палитрата показва source като disabled с tooltip 'Вагонът е поставен в композицията'. Assert carriage показва source.PlacardNumber. (3) Опитай drag на същия source отново → dropEffect=none. (4) Navigate to /wagons; clone на source с PlacardNumber `${source.PlacardNumber}-CLONE`. (5) Назад в composition editor; reload палитрата → новият клон се появява като активна карта. Drag → drop. Assert: 2 carriages, и двете disabled в палитрата. (6) Save → 200; reload → 2 carriage-а с правилните placard-и." },
+      { "id": "180.2", "action": "Working dir: frontend. Cleanup в finally: DELETE composition + clone. npx playwright test --project=admin зелено." }
+    ],
+    "passes": false
   }
 ]

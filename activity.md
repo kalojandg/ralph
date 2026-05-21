@@ -4449,3 +4449,37 @@ User refinement of `wagon-inventory-spec.md` §0.4 (Super-MVP Option B): the "ph
 **Next:** Ralph kicks off `Task #160` (schema foundation). Tasks #161–#162 can be parallelised. Tasks #163–#167 chain on BE delivery. Tasks #168–#170 are the verification/docs tail.
 
 ---
+
+## [2026-05-21 22:30] - Planning: Tasks #171–#180 — Physical wagons model correction
+
+**Status:** 📋 Planned (no code yet)
+
+**Why:**
+Първият проход (Tasks #160–#170) изгради скелета — клон endpoint + availability query + Clone dialog + палитра filter за cross-composition — но **НЕ изпълни ключовия инвариант** от изискването: всеки ред в "Управление на вагони" да представлява един физически вагон, който се идентифицира с уникален placard, и веднъж сложен в композиция → globally busy (включително вътре в текущия draft). User-feedback (2026-05-21 22:00):
+1. Clone връща HTTP 500 (`CK_SeatDefinitions_AccommodationType` missing `STORAGE` / `BICYCLE_RACK`).
+2. Drop генерира placard `#15-63-001..004` + wagonNumber `W0001..W0005` авто-incrementирано, с дубликати на W-номерата.
+3. Палитрата НЕ skрива wagonType-а след drop в текущата draft композиция.
+4. Един и същ wagonTypeId може да се добави многократно (само placard-низа е unique-checked).
+5. `WagonTypes.PlacardNumber` няма NOT NULL + UNIQUE constraint.
+
+**Artifacts:**
+- `ralph/DOCS/physical-wagons-fix.md` — план за корекцията (§0 дефицит, §1 BE, §2 FE, §3 deferred).
+- `ralph/tasks.json` — 10 нови entries (#171–#180):
+  - **#171 (BE):** Fix `CK_SeatDefinitions_AccommodationType` — добави `STORAGE` + `BICYCLE_RACK`. Бърза unblock на clone.
+  - **#172 (BE):** Schema — `WagonTypes.PlacardNumber NOT NULL UNIQUE` + filtered-unique `InventoryNumber`. Pre-deploy backfill за legacy редове.
+  - **#173 (BE):** `CloneWagonTypeCommand` — `PlacardNumber` mandatory, премахни bicycle/wheelchair overrides.
+  - **#174 (BE):** `AddCarriage` + `SaveCompositionWagons` — placard/uic от `WagonType`; reject duplicate `wagonTypeId` per composition.
+  - **#175 (FE):** Премахни `generateUniquePlacard` + `W${tempId}`. Drop чете от `WagonType.placardNumber/inventoryNumber`.
+  - **#176 (FE):** `WagonPalette` приема `usedWagonTypeIds: Set<number>`; disable + tooltip за карти в текущия draft.
+  - **#177 (FE):** `WagonCreationPage` + `CloneWagonTypeDialog` — `PlacardNumber` required + auto-increment default.
+  - **#178 (FE):** `WagonPropertiesPanel` — Placard/WagonNumber read-only + линк към `/wagons/{id}/edit`.
+  - **#179 (FE):** UI rename — "Wagon Types" → "Управление на вагони".
+  - **#180 (E2E):** Physical wagon flow — drop → globally busy → clone → втори drop.
+
+**Verification:**
+- `tasks.json` parses (166 total, 10 pending, next: #171).
+- Plan е concrete: file paths + line numbers где е известно (CompositionEditorPage:112-119, 547, 687, 697).
+
+**Next:** Ralph kicks #171 (5-минутен SQL constraint fix + re-publish) → разблокира clone. После #172 (schema foundation), останалите се чейнват.
+
+---
