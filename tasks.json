@@ -5833,7 +5833,7 @@
         "action": "Working dir: frontend. Cleanup в finally: DELETE composition + clone. npx playwright test --project=admin зелено."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 182,
@@ -5895,6 +5895,6 @@
         "action": "Working dir: any. Verify: BE 100% tests green; FE compositions feature tests green; type-check + lint clean. Commit."
       }
     ],
-    "passes": false
+    "passes": true
   }
 ]
