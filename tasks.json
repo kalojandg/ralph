@@ -5762,7 +5762,7 @@
         "action": "Working dir: frontend. npm run test:run WagonCreationPage CloneWagonTypeDialog зелено. Manual end-to-end: създай вагон placard 'TEST-001' → запази → в композиция drop → виж 'TEST-001'."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 178,
@@ -5789,7 +5789,7 @@
         "action": "Working dir: frontend. Type-check + ESLint чисто. Manual: properties panel → placard виден но не editable → клик линка → отива на edit страницата."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 179,
@@ -5813,7 +5813,7 @@
         "action": "Working dir: frontend. Type-check + ESLint чисто. Manual: sidebar → 'Управление на вагони'; страницата същия route, ново заглавие."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 180,

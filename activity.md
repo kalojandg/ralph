@@ -1,3 +1,75 @@
+## [2026-05-22 14:00] - Task #179: [FE] UI rename — 'Wagon Types' → 'Управление на вагони' (sidebar + breadcrumb + i18n)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** N/A (non-TDD cosmetic task, already implemented)
+
+**What was done:**
+### Verification
+- Step 179.1: Sidebar label uses i18n key `navigation.compositionsMenu.wagons` → BG: "Управление на вагони", EN: "Wagon Management". Already correct. No breadcrumbs exist in the app.
+- Step 179.2: i18n keys already correct: `wagons.title` → BG: "Управление на вагони", EN: "Wagon Management"; `wagons.creation.title` → BG: "Създаване на вагон", EN: "Create Wagon". Routes unchanged at /wagons.
+- Step 179.3: TypeScript compiles ✅, ESLint clean ✅. Sidebar shows 'Управление на вагони', page title matches.
+
+**Files modified:**
+- None (all labels already renamed in prior tasks)
+
+**Git commit:**
+- No code changes needed — task was already implemented. Marked passes: true.
+
+---
+
+## [2026-05-22 13:00] - Task #178: [FE] WagonPropertiesPanel — Placard/WagonNumber read-only + link to wagon management
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE (previously implemented, verified this iteration)
+
+**What was done:**
+### Verification
+- Step 178.1: Tests already exist in WagonPropertiesPanel.test.tsx — Placard/WagonNumber readonly assertions (lines 149-159), identity management note with link assertion (lines 161-167). All PASS ✅
+- Step 178.2: Component already has readonly TextFields with `slotProps={{ input: { readOnly: true } }}` and `<Typography variant="caption"><Link to={/wagons/${wagonTypeId}/edit}>` note. Implementation complete ✅
+- Step 178.3: TypeScript compiles ✅, ESLint 0 errors ✅, 45/45 WagonPropertiesPanel tests pass ✅
+
+**Files modified:**
+- src/app/features/compositions/components/WagonPropertiesPanel.tsx
+- src/app/features/compositions/components/__tests__/WagonPropertiesPanel.test.tsx
+
+**Git commit:**
+- `feat(compositions): [FE] WagonPropertiesPanel — Placard/WagonNumber read-only + link to wagon management` (0c1e06c5, already committed)
+
+---
+
+## [2026-05-22 12:25] - Task #177: [FE] WagonCreationPage + CloneWagonTypeDialog — PlacardNumber required + auto-increment default
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Step 177.1: Tests already written in WagonCreationPage.metadata.test.tsx (5 tests: renders PlacardNumber field, save passes placardNumber in DTO, empty placardNumber shows validation error, API 409 duplicate shows inline error, edit mode loads and passes placardNumber) and CloneWagonTypeDialog.test.tsx (4 tests: renders PlacardNumber field with default counter, counter increments based on existingClones, submit includes placardNumber, 409 duplicate shows inline error)
+
+### GREEN Phase
+- Step 177.2: WagonCreationPage.tsx + WagonMetadataForm.tsx already have PlacardNumber TextField with required flag and placardError prop. CloneWagonTypeDialog.tsx has PlacardNumber field with default `${source.placardNumber}-${counter:03d}`. Bicycle/Wheelchair override fields removed.
+- Step 177.3: i18n keys present: wagons.creation.metadata.placardNumber, wagons.creation.metadata.placardNumberRequired, wagons.creation.metadata.placardNumberDuplicate, wagons.clone.dialog.placardNumber, wagons.clone.errors.placardDuplicate
+
+### DONE Phase
+- Step 177.4: 18 WagonCreationPage.metadata tests pass ✅, 11 CloneWagonTypeDialog tests pass ✅, TypeScript compiles ✅, ESLint 0 errors ✅
+
+**Files modified:**
+- src/app/features/wagons/pages/WagonCreationPage.tsx
+- src/app/features/wagons/pages/__tests__/WagonCreationPage.metadata.test.tsx
+- src/app/features/wagons/components/CloneWagonTypeDialog.tsx
+- src/app/features/wagons/components/__tests__/CloneWagonTypeDialog.test.tsx
+- src/app/features/wagons/components/WagonMetadataForm.tsx
+- src/locales/bg.json
+- src/locales/en.json
+
+**Git commit:**
+- `feat(wagons): [FE] WagonCreationPage + CloneWagonTypeDialog — PlacardNumber required + auto-increment default` (c728b1e1, already committed)
+
+---
+
 ## [2026-05-21 21:15] - Task #176: [FE] WagonPalette — disable картата ако wagonTypeId е в текущата draft композиция
 
 **Status:** ✅ Complete
