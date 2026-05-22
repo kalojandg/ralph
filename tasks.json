@@ -5839,53 +5839,58 @@
     "id": 182,
     "category": "backend",
     "repo": "backend",
-    "description": "[BE+FE] Wagon availability — geographic + temporal chain check (spec gamma approach)",
+    "description": "[BE+FE] Wagon availability — segment-aware temporal overlap (per carriage sub-segment)",
     "tddWorkflow": true,
     "specRef": "C:/Users/kaloyan.georgiev/Projects/ralph/DOCS/physical-wagons-availability.md",
-    "notes": "Replaces date-only filter from Task #162 with full chain check: temporal overlap + 30min buffer + geographic continuity (prev.endStation == curr.startStation). Uses existing GetTripStopsRequest RPC (NomenclatureService unchanged). New TripScheduleService in RailRun mirrors StopPlaceService caching pattern. Out of scope: deadhead movements, real-time GPS, multi-wagon shared groups.",
+    "notes": "Replaces date-only filter from Task #162. Schedule-based; per-carriage segment derivation (carriage may occupy only a sub-window of the composition trip). No geographic chain, no buffer, no real-time GPS. Touching boundaries OK. Different dates -> always free. Tooltip shows segment route + segment time.",
     "steps": [
       {
         "id": "182.1",
         "phase": "RED",
-        "action": "Working dir: backend. Add TripScheduleServiceTests.cs in RailRunService.Infrastructure.Tests: cache hit/miss, RPC success deriving correct StartStation/EndStation/StartSeconds/EndSeconds from sorted stops, RPC failure -> null. Add GetAvailableWagonTypesForCompositionQueryHandlerTests cases T1-T8 per plan §2.5. All RED."
+        "action": "Working dir: backend. Add TripScheduleServiceTests.cs (cache, RPC ok, RPC fail). Add TripStopExtensionsTests.cs (GetFullTripWindow + GetSegmentWindow + missing-stop fallback). Add GetAvailableWagonTypesForCompositionQueryHandlerTests cases T1-T10 per plan §2.5 (T1 no-target-trip, T2 segment non-overlap, T3 segment overlap, T4 carriage detached before target, T5 carriage active during target, T6 touching boundary, T7 corrupt-segment-stations fallback to full trip, T8 peer no-trip, T9 different-date, T10 tooltip data resolves names). All RED."
       },
       {
         "id": "182.2",
         "phase": "GREEN",
-        "action": "Working dir: backend. Create RailRunService.Application/Interfaces/ITripScheduleService.cs + TripScheduleWindow record. Implement RailRunService.Infrastructure/Services/TripScheduleService.cs mirroring StopPlaceService.cs (IRequestClient<GetTripStopsRequest>, IMemoryCache, 1h TTL). Register в ServiceCollectionExtensions.AddInfrastructureServices."
+        "action": "Working dir: backend. Create RailRunService.Application/Interfaces/ITripScheduleService.cs: GetStopsAsync(long tripId) -> Task<IReadOnlyList<TripStopInfo>?>. Record TripStopInfo(StopCode, StopName, ArrivalSeconds, DepartureSeconds, StopSequence). Implement TripScheduleService.cs mirroring StopPlaceService.cs (IRequestClient<GetTripStopsRequest>, IMemoryCache 1h TTL, key TripStops:{tripId}). Register in ServiceCollectionExtensions.AddInfrastructureServices. TripScheduleServiceTests green."
       },
       {
         "id": "182.3",
         "phase": "GREEN",
-        "action": "Working dir: backend. Update RailRunService.Application/DTOs/Nomenclatures/AvailableWagonTypeDto.cs: replace flat OccupiedByCompositionId/OccupiedByTrainNumber with nested Conflict object + WagonAvailabilityConflictDto per plan §2.4. Add RailRunService.Application/Constants/WagonAvailabilityConstants.cs with BufferMinutes=30."
+        "action": "Working dir: backend. Create RailRunService.Application/Extensions/TripStopExtensions.cs with GetFullTripWindow() and GetSegmentWindow(startUic, endUic) per plan §2.2. Both return null when data insufficient. Tests green."
       },
       {
         "id": "182.4",
         "phase": "GREEN",
-        "action": "Working dir: backend. Update GetAvailableWagonTypesForCompositionQueryHandler per plan §2.3: load target trip window, iterate peer compositions, fetch each peer window, run chain check (temporal overlap | buffer violation | geographic mismatch). Project results to AvailableWagonTypeDto with Conflict populated. T1-T8 tests green."
+        "action": "Working dir: backend. Update RailRunService.Application/DTOs/Nomenclatures/AvailableWagonTypeDto.cs per plan §2.4: replace OccupiedByCompositionId/OccupiedByTrainNumber with WagonAvailabilityConflictDto containing PeerCompositionId, PeerTrainNumber, SegmentStartStationUic, SegmentStartStationName, SegmentEndStationUic, SegmentEndStationName, SegmentStartTime (HH:mm), SegmentEndTime (HH:mm)."
       },
       {
         "id": "182.5",
         "phase": "GREEN",
-        "action": "Working dir: frontend. Update src/api/wagons/wagons.types.ts: AvailableWagonType.conflict per plan §3.1. Remove legacy occupiedByCompositionId/occupiedByTrainNumber. Adjust mapper в src/api/wagons/wagons.api.ts."
+        "action": "Working dir: backend. Update GetAvailableWagonTypesForCompositionQueryHandler per plan §2.3: load target trip full window. Iterate peer compositions on same date except target, for each fetch peer trip stops, for each peer carriage compute SEGMENT window via TripStopExtensions.GetSegmentWindow(carriage.StartStationUic, carriage.EndStationUic). Apply interval overlap target ∩ segment. Add fallback to full trip window when segment stations missing. Populate Conflict with resolved station names from segment stops. T1-T10 tests green."
       },
       {
         "id": "182.6",
         "phase": "GREEN",
-        "action": "Working dir: frontend. Update WagonPalette tooltip rendering: switch by conflict.reason -> use i18n keys compositions.editor.palette.tooltipTemporalOverlap / tooltipBufferViolation / tooltipGeographicMismatch с interpolated peer fields. Add bg+en i18n entries."
+        "action": "Working dir: frontend. Update src/api/wagons/wagons.types.ts: AvailableWagonType.conflict per plan §3.1 (peerTrainNumber, segmentStartStationUic/Name, segmentEndStationUic/Name, segmentStartTime, segmentEndTime). Remove legacy fields. Adjust mapper in src/api/wagons/wagons.api.ts."
       },
       {
         "id": "182.7",
         "phase": "GREEN",
-        "action": "Working dir: frontend. Update WagonPalette.test.tsx + CompositionEditorPage.test.tsx: assert tooltip contains correct localized substrings per conflict.reason. Tests green."
+        "action": "Working dir: frontend. Update WagonPalette tooltip: when conflict present, render i18n compositions.editor.palette.tooltipOccupiedByComposition with peerTrainNumber, segmentStartStationName, segmentEndStationName, segmentStartTime, segmentEndTime interpolated. bg: \"Вагонът е в композиция {peerTrainNumber} ({segmentStartStationName}-{segmentEndStationName}, {segmentStartTime}-{segmentEndTime}).\" en: \"Wagon is in composition {peerTrainNumber} ({segmentStartStationName}-{segmentEndStationName}, {segmentStartTime}-{segmentEndTime}).\""
       },
       {
         "id": "182.8",
-        "phase": "DONE",
-        "action": "Working dir: backend. Rebuild rail-run-service image (docker compose build rail-run-service && docker compose up -d --force-recreate rail-run-service). Smoke per plan §5 manual e2e steps 1-5."
+        "phase": "GREEN",
+        "action": "Working dir: frontend. Update WagonPalette.test.tsx + CompositionEditorPage.test.tsx: assert tooltip contains train number + segment stations + HH:mm-HH:mm. Tests green."
       },
       {
         "id": "182.9",
+        "phase": "DONE",
+        "action": "Working dir: backend. Rebuild rail-run-service image (docker compose build rail-run-service && docker compose up -d --force-recreate rail-run-service). Smoke per plan §5 manual e2e steps 1-5 (segment-aware behavior)."
+      },
+      {
+        "id": "182.10",
         "phase": "DONE",
         "action": "Working dir: any. Verify: BE 100% tests green; FE compositions feature tests green; type-check + lint clean. Commit."
       }
