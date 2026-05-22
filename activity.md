@@ -4678,3 +4678,37 @@ User refinement of `wagon-inventory-spec.md` §0.4 (Super-MVP Option B): the "ph
 **Next:** Ralph kicks #171 (5-минутен SQL constraint fix + re-publish) → разблокира clone. После #172 (schema foundation), останалите се чейнват.
 
 ---
+
+## [2026-05-22] - Planning: Task #182 — Geographic + temporal chain availability check
+
+**Status:** 📋 Planned
+
+**Why:**
+Task #162 (от Tasks #160–#170 серията) имплементира availability check, който е САМО date-based: блокира wagonType-а за всяка ACTIVE композиция със същия `StartDate`. Прекалено грубо за реалния dispatcher workflow.
+
+User feedback 2026-05-22:
+> разписание... все още няма да е с данните в реално време... не искаме да блокираме потенциално „телепортация" — да тръгне от Бургас в 2, при положение че в 12 е пристигнал в София примерно.
+
+Спецификация: [wagon-inventory-spec.md](../../wagon-inventory-spec.md) §0.5.3 approach γ (geographic chain). Pseudo-algoritm-ът в §0.5.5 — реализиран от тоя task.
+
+**Artifacts:**
+- `ralph/DOCS/physical-wagons-availability.md` — пълен plan (4 секции BE, 1 FE, edge cases, e2e checklist).
+- `ralph/tasks.json` — entry #182 (passes=false, TDD).
+
+**Scope:**
+- BE — нов `ITripScheduleService` в RailRunService (caching mirror на `StopPlaceService`).
+- BE — handler upgrade: temporal overlap + buffer (30 min) + geographic continuity (prev.endStation == curr.startStation).
+- BE — `AvailableWagonTypeDto.Conflict` — nested обект с `reason` + peer composition details.
+- NomenclatureService — БЕЗ промени (`GetTripStopsResponse` вече има `ArrivalSeconds`/`DepartureSeconds`).
+- FE — tooltip switch по `conflict.reason` с 3 i18n key-а.
+- 8 unit tests (T1-T8) + UI tooltip tests.
+
+**Out of scope (deferred):**
+- Deadhead empty-runs.
+- Real-time GPS data.
+- Configurable buffer per train/station.
+- Multi-wagon shared compositions.
+
+**Next:** Ralph kicks #182 след #177-#180 (FE довършвания + e2e). Container rebuild на rail-run-service нужен в края.
+
+---
