@@ -5896,5 +5896,119 @@
       }
     ],
     "passes": true
+  },
+  {
+    "id": 184,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[BE] AddCarriage/UpdateCarriage — segment-aware conflict validation (defense-in-depth)",
+    "tddWorkflow": true,
+    "specRef": null,
+    "notes": "Task #182 made the READ path (GetAvailableWagonTypesForCompositionQueryHandler) segment-aware against peer compositions. The WRITE path is still composition-wide: AddCarriage.cs:102-103 rejects ANY second carriage with same WagonTypeId in the same composition regardless of segment, and does no peer-composition check at all. Repro: compositions 30290 (БВ 3624-23.05.2026 TripId=201) + 30291 (ПВ 30157-23.05.2026 TripId=601) both contain WagonTypeId=2 with segments departing Карнобат at 17:03/17:15 in opposite directions — saved without complaint. Reuse ITripScheduleService + TripStopExtensions.GetSegmentWindow from Task #182. Touching boundaries OK (end <= other.start OR start >= other.end). Different dates -> always free. Same-comp without TripId (legacy data) -> keep current blanket reject as fail-safe.",
+    "steps": [
+      {
+        "id": "184.1",
+        "phase": "RED",
+        "action": "Working dir: backend. Add RailRunService.Application.Tests/Carriages/AddCarriageSegmentConflictTests.cs cases: S1 same-comp same-WagonTypeId non-overlapping segments -> success (Бургас(5283020)→Карнобат(5238009) then Карнобат(5238009)→София(5216000) — touching boundary at Карнобат); S2 same-comp same-WagonTypeId overlapping segments -> Conflict ErrorCode=WagonSegmentConflict with args (this-composition placeholder, startName, endName, startTime HH:mm, endTime HH:mm); S3 same-comp same-WagonTypeId composition.TripId is null -> fall back to legacy blanket reject behavior (existing WagonAlreadyInComposition error code) so existing tests stay green; S4 peer-comp same StartDate overlapping segment (the 30290/30291 Карнобат-departing repro) -> Conflict with peer.TrainNumber in args; S5 peer-comp same date non-overlapping (e.g. 30290 Бургас→Карнобат vs 30291 Карнобат→Варна — touching at Карнобат) -> success; S6 peer-comp different StartDate -> success regardless of segments; S7 peer with null TripId -> skipped (cannot derive segment, fail-open since the data is unusable for the check); S8 ITripScheduleService returns null for target trip stops -> Conflict WagonSegmentConflictUnknown (fail-closed, audit warning published); S9 target trip stops missing the requested StartStationUic or EndStationUic -> fail-closed Conflict WagonSegmentConflictUnknown. All RED."
+      },
+      {
+        "id": "184.2",
+        "phase": "GREEN",
+        "action": "Working dir: backend. Add constants to RailRunService.Application/Constants/RailRunErrorCodes.cs: WagonSegmentConflict, WagonSegmentConflictUnknown. Add to SharedSrc/Common/Resources/SharedErrors.resx (bg) and SharedErrors.en.resx (en) — WagonSegmentConflict bg='Вагонът е зает в композиция {0} на сегмент {1}-{2} ({3}-{4}).' en='Wagon is busy in composition {0} on segment {1}-{2} ({3}-{4}).' For same-composition path the {0} placeholder is rendered with the literal localized 'тази композиция'/'this composition' (add WagonSegmentConflictSelfComposition resource for the substitution). WagonSegmentConflictUnknown bg='Не може да се провери наличието на вагона. Опитайте отново.' en='Could not verify wagon availability. Please try again.'"
+      },
+      {
+        "id": "184.3",
+        "phase": "GREEN",
+        "action": "Working dir: backend. Create RailRunService.Application/Services/CarriageConflictDetector.cs (internal sealed) — single source of truth shared by AddCarriage + UpdateCarriage. Public method: Task<Result> CheckConflictAsync(Composition target, long wagonTypeId, string requestedStartUic, string requestedEndUic, long? excludeCarriageId, CancellationToken ct). Resolves target trip stops via ITripScheduleService, computes incoming segment window via TripStopExtensions.GetSegmentWindow. Returns Result.Fail(WagonSegmentConflictUnknown) if window can't be computed (Task 184.1 S8/S9). Iterates target.CompositionCarriages.Where(c => c.IsActive && c.WagonTypeId==wagonTypeId && c.Id!=excludeCarriageId), computes each segment window, checks overlap. On hit -> Result.Fail(WagonSegmentConflict, 'тази композиция', startName, endName, startTime, endTime). Then loads peer compositions: same StartDate, Id != target.Id, has IsActive carriage with WagonTypeId==wagonTypeId AND non-null TripId, joined via specification. For each peer carriage fetch peer trip stops, compute peer segment window, overlap with incoming; on hit -> Result.Fail(WagonSegmentConflict, peer.TrainNumber, ...). Register the service in ServiceCollectionExtensions.AddInfrastructureServices."
+      },
+      {
+        "id": "184.4",
+        "phase": "GREEN",
+        "action": "Working dir: backend. In AddCarriage.cs replace lines 102-103 (Any(WagonTypeId && IsActive) -> WagonAlreadyInComposition). New behavior: if composition.TripId == null -> keep legacy WagonAlreadyInComposition reject (Task 184.1 S3). Otherwise call _carriageConflictDetector.CheckConflictAsync(composition, request.WagonTypeId, request.StartStationUic, request.EndStationUic, excludeCarriageId: null, ct). On non-Ok result -> return the same Result type (carry over ErrorCode + ErrorArgs). Inject ICarriageConflictDetector via ctor. The pessimistic LockForUpdateAsync stays — the conflict check must run inside the same transaction."
+      },
+      {
+        "id": "184.5",
+        "phase": "GREEN",
+        "action": "Working dir: backend. Mirror the same check in UpdateCarriage.cs IF (and only if) it permits changing WagonTypeId/StartStationUic/EndStationUic. Pass excludeCarriageId = carriage.Id so the carriage being edited doesn't conflict with itself. Add UpdateCarriageSegmentConflictTests.cs equivalents of S1-S6 from 184.1. If UpdateCarriage doesn't touch those fields today, document it in the test file with a single skipped placeholder and move on."
+      },
+      {
+        "id": "184.6",
+        "phase": "GREEN",
+        "action": "Working dir: backend. Audit: when CheckConflictAsync returns WagonSegmentConflictUnknown, publish an audit warning event (level=Warning, category=Business, status=Failed) so we can spot ITripScheduleService outages in logs. Use existing AuditEventBuilder pattern (see catch block in AddCarriage.cs:159-174)."
+      },
+      {
+        "id": "184.7",
+        "phase": "DONE",
+        "action": "Working dir: backend. dotnet test RailRunService.Application.Tests + RailRunService.API.Tests green. docker compose build rail-run-service && docker compose up -d --force-recreate rail-run-service. Smoke: with the user's existing 30290 + 30291 data on localhost SQL, hit POST /api/compositions/{30291}/wagons with WagonTypeId=2 + Карнобат(5238009)→Варна(5229030) -> expect 409 + errorCode=WagonSegmentConflict mentioning 'БВ 3624-23.05.2026'."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 185,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] WagonPalette segment-aware drop validation + conflict snackbar",
+    "tddWorkflow": true,
+    "specRef": null,
+    "notes": "User repro on composition 30290 (БВ 3624-23.05.2026, two sub-routes: Бургас→Карнобат detach and Карнобат→София attach): the palette dims every wagon type already in any sub-route of the draft (CompositionEditorPage.tsx:134-140 builds usedWagonTypeIds union; WagonPalette.tsx:149 returns true on first match). Result: a wagon that participates in two NON-overlapping sub-routes of the same composition cannot be placed twice from the palette, even though that's the whole point of the segment-handover model. Replace with segment-aware behavior: NEVER blanket-disable from local draft; validate at drop time against in-memory sub-routes AND backend (409 from Task 184 surfaced as snackbar). Peer-composition tooltip from Task #182 stays untouched.",
+    "steps": [
+      {
+        "id": "185.1",
+        "phase": "RED",
+        "action": "Working dir: frontend. Update WagonPalette.test.tsx: in the 'usedWagonTypeIds (local draft disable)' suite — (a) replace 'should disable card and show tooltip when wagonTypeId is in usedWagonTypeIds' with 'should NOT disable card when wagonTypeId is in some but not all candidate sub-routes' (card stays enabled); (b) keep the test for 'disable when canFitAnywhere is false' under the new prop name draftSegmentFit; (c) add 'enabled even when wagonTypeId is in main wagons array, as long as at least one sub-route segment is free'. Update SubRouteComposition.test.tsx with two new tests: onDrop dispatches showSnackbar(severity:error) + does NOT call addWagonToSubRoute when the dropped wagon type already occupies an overlapping sub-route in the same draft; onDrop succeeds and adds when the existing sub-routes are non-overlapping (touching boundary at the shared stop)."
+      },
+      {
+        "id": "185.2",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. WagonPalette.tsx props: remove usedWagonTypeIds?: Set<number>; add draftSegmentFit?: Record<number, { canFitAnywhere: boolean }>. isCardDisabled rule (lines 148-157): drop the `if (usedWagonTypeIds?.has(wagonType.id)) return true;` line; insert `if (draftSegmentFit && draftSegmentFit[wagonType.id]?.canFitAnywhere === false) return true;` after the traction-compat clause; keep the cross-composition availability check unchanged. getDisabledTooltip: rename the 'tooltipAlreadyInComposition' branch to 'tooltipNoFreeSegment' triggered by draftSegmentFit[id].canFitAnywhere === false."
+      },
+      {
+        "id": "185.3",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. CompositionEditorPage.tsx: replace usedWagonTypeIds useMemo (lines 134-140) with draftSegmentFit useMemo. For each wagonType.id, iterate subRoutes; treat a sub-route as 'occupied' for that wagonTypeId only when it contains a live carriage of that type. canFitAnywhere = subRoutes.some(sr => !occupiedSet.has(sr.id) && !overlapsWithExistingPlacementsForThisType(sr, occupiedSubRoutes)). Overlap helper: use stopSequence from tripStops state (loaded around CompositionEditorPage.tsx:178-191) — for sub-routes A (startSeqA..endSeqA) and B (startSeqB..endSeqB), overlap iff startSeqA < endSeqB AND startSeqB < endSeqA (touching boundaries excluded). Wire prop into WagonPalette at line 814."
+      },
+      {
+        "id": "185.4",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. SubRouteComposition.tsx onDrop: before mutating draft, compute conflict against THIS sub-route. Pull the dropped wagonType from event.dataTransfer JSON. Look up other sub-routes in the draft that contain this wagonType.id, derive their stopSequence windows from the same tripStops index, compare with this sub-route's window using the strict overlap predicate (touching = no conflict). On conflict dispatch showSnackbar({severity:'error', message: t('compositions.editor.wagonBusyInSegment', { wagonLabel, conflictStart, conflictEnd, conflictStartTime, conflictEndTime })}) and abort early. Pass the conflict context up via the onDrop callback signature so CompositionEditorPage can also short-circuit save dirtying."
+      },
+      {
+        "id": "185.5",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. Wire backend conflict (Task 184): in useCompositionPersistence.ts catch the AddCarriage 409 response. Detect errorCode === 'WagonSegmentConflict' OR 'WagonSegmentConflictUnknown' on the AxiosError; map to localized snackbar via the standard handleApiError + i18n keys 'compositions.errors.wagonSegmentConflict' / 'compositions.errors.wagonSegmentConflictUnknown' (interpolate errorArgs[0..4]). On either error, roll back the optimistic draft entry that triggered the call so the UI doesn't show a ghost carriage. Add a test for useCompositionPersistence."
+      },
+      {
+        "id": "185.6",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. i18n: add keys to BOTH src/locales/bg.json and src/locales/en.json in the same commit (per CLAUDE.md rule). bg: compositions.editor.palette.tooltipNoFreeSegment='Няма свободен сегмент в тази композиция за този вагон.'; compositions.editor.wagonBusyInSegment='Вагонът {wagonLabel} вече е в сегмент {conflictStart}-{conflictEnd} ({conflictStartTime}-{conflictEndTime}) от тази композиция.'; compositions.errors.wagonSegmentConflict='Вагонът е зает в композиция {peerTrainNumber} на сегмент {segmentStart}-{segmentEnd} ({segmentStartTime}-{segmentEndTime}).'; compositions.errors.wagonSegmentConflictUnknown='Не може да се провери наличието на вагона. Опитайте отново.' English equivalents."
+      },
+      {
+        "id": "185.7",
+        "phase": "DONE",
+        "action": "Working dir: frontend. npm run type-check + npm run lint + npm run test:run all green. Manual smoke: (1) open composition 30290 БВ 3624 23.05.2026 — drag wagon-type 15-63 into Бургас→Карнобат sub-route AND Карнобат→София sub-route; both drops succeed (touching boundary at Карнобат). (2) drag same wagon-type into Карнобат→София a SECOND time — drop rejected with snackbar 'Вагонът ... вече е в сегмент Карнобат-София ...'. (3) open composition 30291 ПВ 30157 23.05.2026 and drag the same wagon-type into Карнобат→Варна sub-route — drop fails on save with snackbar mentioning 'композиция БВ 3624-23.05.2026'."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 186,
+    "category": "e2e",
+    "repo": "frontend",
+    "description": "[E2E] Segment-aware wagon availability — non-overlap allowed, overlap rejected (intra + cross composition)",
+    "tddWorkflow": false,
+    "specRef": null,
+    "notes": "Depends on Tasks 184 + 185. End-to-end exercise of the Burgas-Karnobat-Sofia ↔ Karnobat-Varna handover scenario described by the user (real GTFS trip pair 199/201 BDZ_RAIL:3624 + 601 BDZ_RAIL:30157 — common active date 2026-05-23, 12-minute layover at Карнобат). Cleanup in finally; skip on readonly.",
+    "steps": [
+      {
+        "id": "186.1",
+        "action": "Working dir: frontend. Create e2e/tests/compositions/segment-availability.spec.ts. Setup via BE API: composition A=POST /api/compositions {trainNumber:'БВ 3624-23.05.2026', tripId:201, startDate:'2026-05-23', operationDays:'0000100'}; composition B=POST {trainNumber:'ПВ 30157-23.05.2026', tripId:601, startDate:'2026-05-23', operationDays:'1111111'}. Reserve a WagonTypeId WT-X (any non-self-propelled 15-63 from /api/wagon-types). Scenario 1 (intra, non-overlap): open editor of A; drag WT-X into sub-route Бургас(5283020)→Карнобат(5238009); drag WT-X into sub-route Карнобат(5238009)→София(5216000); assert both carriages persisted (GET shows 2 rows). Scenario 2 (intra, overlap): drag WT-X into Карнобат→София a second time; assert snackbar matches /вече е в сегмент Карнобат-София/. Scenario 3 (cross-comp, overlap): open editor of B; drag WT-X into sub-route Карнобат(5238009)→Варна(5229030); assert snackbar matches /композиция БВ 3624-23\\.05\\.2026/; GET /api/compositions/{B}/wagons shows zero carriages of WT-X. Scenario 4 (different date): PATCH B startDate -> '2026-05-24'; retry the Карнобат→Варна drop; assert it succeeds (no peer overlap on that date)."
+      },
+      {
+        "id": "186.2",
+        "action": "Working dir: frontend. Cleanup in afterAll: DELETE /api/compositions/{A} and /api/compositions/{B}. Run npx playwright test e2e/tests/compositions/segment-availability.spec.ts --project=admin — green."
+      }
+    ],
+    "passes": false
   }
 ]

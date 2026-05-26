@@ -1,3 +1,27 @@
+## [2026-05-26] - Queued Tasks #184–#186: Wagon availability — segment-aware WRITE path + FE drop validation + E2E
+
+**Status:** 📥 Queued (passes: false) — awaiting Ralph iteration
+
+**Trigger:** Manual repro on dev DB. Compositions 30290 (`БВ 3624-23.05.2026`, TripId=201) and 30291 (`ПВ 30157-23.05.2026`, TripId=601) both saved with the same `WagonTypeId=2` carriage on Карнобат-departing segments (Карнобат→София 17:03–22:27 vs Карнобат→Варна 17:15–20:18) on the same StartDate. Backend accepted without conflict; FE palette blanket-dimmed every wagon-type already in any sub-route of the draft.
+
+**Gap:**
+- Task #182 made the READ path (`GetAvailableWagonTypesForCompositionQueryHandler`) segment-aware, but the WRITE path (`AddCarriage.cs:102-103`) still rejects ANY second carriage with same `WagonTypeId` in the same composition and does **no** peer-composition overlap check.
+- `WagonPalette.tsx:149` + `CompositionEditorPage.tsx:134-140` blanket-disable cards via `usedWagonTypeIds` regardless of which sub-route is the drop target — the segment-handover scenario can't even be exercised from the UI.
+
+**What was queued:**
+- **#184 [BE]** — `CarriageConflictDetector` service shared by AddCarriage + UpdateCarriage. Reuses `ITripScheduleService` + `TripStopExtensions.GetSegmentWindow` from #182. Same-composition same-WagonType overlap check + peer-composition same-date overlap check. New error codes `WagonSegmentConflict` + `WagonSegmentConflictUnknown`. Fail-closed when trip stops unresolvable. TDD: 9 RED cases (S1-S9).
+- **#185 [FE]** — Replace `usedWagonTypeIds` with `draftSegmentFit` (per-wagon-type can-fit-anywhere computed against in-memory sub-routes via stopSequence overlap). `SubRouteComposition.onDrop` validates pre-drop; snackbar on conflict. `useCompositionPersistence` catches 409 from #184 + rolls back optimistic add. New i18n keys in bg+en same commit.
+- **#186 [E2E]** — Playwright spec at `e2e/tests/compositions/segment-availability.spec.ts`. 4 scenarios on real trip pair 199/201 (3624) + 601 (30157), common active date 2026-05-23, 12-min layover at Карнобат: intra non-overlap, intra overlap, cross-comp overlap, different-date.
+
+**Dependencies:** #184 must complete before #185 step 5.5 can verify the rollback path end-to-end; #186 depends on both.
+
+**Files modified in this queue-add:**
+- `ralph/tasks.json` (3 task entries appended)
+- `ralph/feedback.md` (Етап pointer + stage briefing)
+- `ralph/activity.md` (this entry)
+
+---
+
 ## [2026-05-22 17:30] - Task #182: [BE+FE] Wagon availability — segment-aware temporal overlap (per carriage sub-segment)
 
 **Status:** ✅ Complete

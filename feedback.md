@@ -4,14 +4,56 @@
 
 ## Last Iteration Summary
 
-**Iteration:** Етап 5 завършен (Tasks #96-#112)
-**Status:** ✅ Walls feature в OsdmGrid работи end-to-end
+**Iteration:** Tasks през #182 завършени (последен: [BE+FE] Wagon availability — segment-aware temporal overlap READ path)
+**Status:** ✅ READ path сегмент-aware. **Открита дупка във WRITE path-а и UI палитрата** — виж новата секция по-долу.
 
 ---
 
 ## Feedback for Next Iteration
 
 <!-- Ralph will read this before next iteration -->
+
+**Continue with:** Task #184 — [BE] AddCarriage/UpdateCarriage — segment-aware conflict validation (defense-in-depth)
+
+**🚂 НАЧАЛО НА ЕТАП 12: Wagon Availability — WRITE-path + FE drop validation (Tasks #184–#186)**
+
+### 📜 Задължително преди първия таск от Етап 12
+
+Прочети **в този ред**:
+
+1. **`C:/Users/kaloyan.georgiev/Projects/ralph/activity.md`** — entry-то "[2026-05-26] - Queued Tasks #184–#186" обяснява _защо_ са нужни (reproducible scenario с композиции 30290 + 30291 на dev DB).
+2. **`C:/Users/kaloyan.georgiev/Projects/ralph/tasks.json`** — Task #182 (passes: true) е contextual reference: реюзваш `ITripScheduleService` + `TripStopExtensions.GetSegmentWindow` (вече съществуват в `RailRunService.Application/Extensions/` + `Application/Interfaces/`). НЕ ги преписваш.
+3. **`C:/Users/kaloyan.georgiev/Projects/railrun-backend-structure.md`** §"Code Patterns" — `IUnitOfWork`, pessimistic lock pattern в AddCarriage остава.
+4. (за #185) **`C:/Users/kaloyan.georgiev/Projects/admin-app-frontend-structure.md`** + React Query / Zustand snackbar pattern.
+
+### 🎯 Архитектурни правила за Етап 12 (кратко)
+
+- **Single source of truth за overlap detection:** новият `CarriageConflictDetector` в `RailRunService.Application/Services/` ще се инжектира в `AddCarriage` И `UpdateCarriage`. НЕ дублирай логиката inline в handler-ите.
+- **Same-comp без TripId → legacy blanket reject** като fail-safe (запазва текущия test surface). Това избягва regression на seed data без trip-ове.
+- **Touching boundaries = no overlap.** Wagon-ът, който detach-ва в Карнобат и attach-ва в Карнобат за друга композиция, **трябва да мине**. Тест S5 в 184.1 точно това проверява.
+- **Fail-closed при липсваща schedule информация** (`ITripScheduleService` връща null, или липсва start/end stop в trip stops) → `WagonSegmentConflictUnknown` + audit warning. По-добре да забраним save-а отколкото мълчаливо да приемем conflict.
+- **FE НЕ blanket-disable-ва от draft.** Replace `usedWagonTypeIds: Set<number>` с `draftSegmentFit: Record<number, {canFitAnywhere: boolean}>`. Палитрата дисейблва само ако: traction-incompat ИЛИ cross-composition `availability.isAvailable===false` ИЛИ `canFitAnywhere===false` (т.е. нЯма свободен сегмент в композицията).
+- **Snackbar copy:** локализирано чрез errorCode + errorArgs interpolation (виж Task 182.7 за съществуващия pattern с `peerTrainNumber`/`segmentStartStationName`/…). НЕ hard-code-вай низове.
+
+### 🚨 Червени линии за Етап 12
+
+- ❌ Не сменяй existing public DTO shape извън `AvailableWagonTypeDto` (тя вече беше пипана в #182).
+- ❌ Не пипай SQL схемата — никакви migrations нужни.
+- ❌ Не разширявай scope-а до WagonInventory / cross-day check / GPS — те са out-of-scope (потвърдено в #182 notes).
+- ✅ Реюзваш `TripStopExtensions.GetSegmentWindow` 1:1 — ако намериш бъг в него, добавяй RED тест в съществуващия `TripStopExtensionsTests.cs` преди да fix-ваш.
+
+### 📋 Подетапи на Етап 12
+
+- **12A: BE WRITE-path** (#184) — `CarriageConflictDetector` + `AddCarriage`/`UpdateCarriage` rewire + error codes + resx. Изисква 9 RED теста S1-S9 преди GREEN.
+- **12B: FE drop validation** (#185) — `WagonPalette` props refactor, `CompositionEditorPage` `draftSegmentFit` derivation, `SubRouteComposition.onDrop` overlap guard, `useCompositionPersistence` 409 handling, i18n.
+- **12C: E2E** (#186) — single Playwright spec, 4 сценария, real GTFS trip pair 199/201 + 601. Cleanup в `afterAll`.
+
+### 🛑 Не правиш Етап 12 ако
+
+- Task #182 не е с `passes: true` → върни се и довърши него (READ path е предусловие).
+- Локалният dev DB не съдържа GtfsTrips replica за TripId-та 199, 201, 601 → провери в `RailRunServiceDB.GtfsTrips` (виж раздел "snapshot 2026-05-26" в auto-memory). При липсваща replica → ескалирай, а не сейдвай ad hoc.
+
+---
 
 **Continue with:** Task #113 — [AUDIT] OSDM spec compliance — field-by-field review (no code)
 
