@@ -1,0 +1,16 @@
+﻿<ralph-status>
+<task id="184" result="PASS">
+  <steps>
+    <step id="184.1" phase="RED" status="done">9 failing tests written (S1-S9); 5 FAIL, 4 PASS as expected with stub detector</step>
+    <step id="184.2" phase="GREEN" status="done">SharedErrors.resx bg+en: WagonSegmentConflict, WagonSegmentConflictUnknown, WagonSegmentConflictSelfComposition</step>
+    <step id="184.3" phase="GREEN" status="done">CarriageConflictDetector: same-comp + peer-comp overlap, fail-closed for unknown trips</step>
+    <step id="184.4" phase="GREEN" status="done">AddCarriage.cs: TripId==null ΓåÆ legacy reject; else ΓåÆ detector call. All 9 tests green</step>
+    <step id="184.5" phase="GREEN" status="done">UpdateCarriage.cs: conflict check on station change with excludeCarriageId. 6 tests green</step>
+    <step id="184.6" phase="GREEN" status="done">Audit WARN event on WagonSegmentConflictUnknown in both Add + Update handlers. S8/S9 verify</step>
+    <step id="184.7" phase="DONE" status="done">219 tests green (172 App + 47 API). Docker build OK. DI + routing verified. JWT_SECRET blocks full 409 smoke (Azure KeyVault dep)</step>
+  </steps>
+  <commit>9a802fd87 feat(compositions): [BE] AddCarriage/UpdateCarriage ΓÇö segment-aware conflict validation (defense-in-depth)</commit>
+  <tests passed="219" failed="0"/>
+</task>
+</ralph-status>
+

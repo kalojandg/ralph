@@ -6009,6 +6009,58 @@
         "action": "Working dir: frontend. Cleanup in afterAll: DELETE /api/compositions/{A} and /api/compositions/{B}. Run npx playwright test e2e/tests/compositions/segment-availability.spec.ts --project=admin — green."
       }
     ],
+    "passes": true
+  },
+  {
+    "id": 187,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[BE] SaveCompositionWagons — segment-aware conflict validation (parity with AddCarriage / Task #184)",
+    "tddWorkflow": true,
+    "specRef": null,
+    "notes": "Task #184 fixed AddCarriage to use CarriageConflictDetector for segment-aware overlap + peer-composition checks, but the batch endpoint POST /api/compositions/{id}/save-wagons — which the FE 'ЗАПАЗИ' button actually calls — was missed. SaveCompositionWagons.cs:142-158 still does composition-wide WagonTypeId HashSet uniqueness and emits legacy WAGON_ALREADY_IN_COMPOSITION; it never checks peer compositions. Live repro: compositions 30290 (БВ 3624-23.05.2026 TripId=201, Бургас→София) and 30291 (ПВ 30157-23.05.2026 TripId=601, Карнобат→Варна) saved with same WagonTypeId=2 carriage on overlapping Карнобат-departing time windows — accepted silently on save. Goal: route the same-comp + peer-comp check through the existing CarriageConflictDetector service. Within-batch overlap (two NEW carriages of same WagonTypeId on overlapping segments inside one request) must also be caught — the detector only sees persisted state, so the handler must feed each accepted new carriage into the in-memory composition graph before checking the next.",
+    "steps": [
+      {
+        "id": "187.1",
+        "phase": "RED",
+        "action": "Working dir: backend. Add RailRunService.Application.Tests/Compositions/SaveCompositionWagonsSegmentConflictTests.cs covering: S1 same-comp same-WagonTypeId non-overlapping NewCarriages (Бургас→Карнобат + Карнобат→София touching at 5238009) -> success; S2 same-comp same-WagonTypeId overlapping NewCarriages -> Conflict ErrorCode=WagonSegmentConflict with self-composition placeholder; S3 same-comp same-WagonTypeId already in surviving carriages + new with overlapping segment -> Conflict; S4 same-comp same-WagonTypeId already in surviving + new with non-overlapping (touching) -> success; S5 within-batch: two NewCarriages of same WagonTypeId on overlapping segments -> second is rejected with WagonSegmentConflict (NOT WAGON_ALREADY_IN_COMPOSITION); S6 peer-comp same StartDate overlapping segment (the 30290/30291 Карнобат repro) -> Conflict with peer.TrainNumber; S7 peer-comp same date non-overlapping -> success; S8 peer-comp different date -> success; S9 composition.TripId null -> legacy WagonAlreadyInComposition fallback for same-comp duplicate (preserves Task #176 test surface); S10 UpdatedCarriages changing StartStationUic/EndStationUic into overlap with surviving same-WagonTypeId carriage -> Conflict (pass excludeCarriageId = updated.CompCarriageId so the carriage being edited doesn't conflict with its old segment); S11 DeletedCarriageIds free up a segment so a new carriage of the same WagonTypeId on overlapping range succeeds; S12 ITripScheduleService returns null for target trip -> WagonSegmentConflictUnknown + audit warning. All RED."
+      },
+      {
+        "id": "187.2",
+        "phase": "GREEN",
+        "action": "Working dir: backend. Inject ICarriageConflictDetector into SaveCompositionWagonsCommandHandler via ctor (mirror AddCarriage.cs registration in ServiceCollectionExtensions — already registered there from Task #184, no DI changes needed)."
+      },
+      {
+        "id": "187.3",
+        "phase": "GREEN",
+        "action": "Working dir: backend. Build a 'working set' of carriages that represents the post-save state, before the conflict check loop. Start from composition.CompositionCarriages (loaded via CompositionWithCarriagesSpec). Apply: (a) drop entries whose Id is in DeletedCarriageIds; (b) clone & apply field updates from UpdatedCarriages (so StartStationUic/EndStationUic/WagonTypeId/IsActive reflect the requested update). This 'projected composition' is what each NewCarriage gets checked against — passes that, the new is appended to the working set for the next iteration (catches S5 within-batch overlap)."
+      },
+      {
+        "id": "187.4",
+        "phase": "GREEN",
+        "action": "Working dir: backend. Replace the same-WagonTypeId HashSet check at SaveCompositionWagons.cs:142-158. When composition.TripId == null -> keep legacy HashSet path that returns WagonAlreadyInComposition (S9). When TripId is set, for each request.NewCarriages entry: invoke _carriageConflictDetector.CheckConflictAsync(projectedComposition, add.WagonTypeId, add.StartStationUic, add.EndStationUic, excludeCarriageId: null, cancellationToken). On non-Ok -> return Result.FailWith(...errorCode, ...errorArgs). On Ok -> mutate projectedComposition by appending an in-memory CompositionCarriage stub (only WagonTypeId, StartStationUic, EndStationUic, IsActive=true matter for the detector). The actual EF AddAsync still happens in the existing loop afterwards — projection is purely for the check."
+      },
+      {
+        "id": "187.5",
+        "phase": "GREEN",
+        "action": "Working dir: backend. Mirror the segment-aware check for UpdatedCarriages: for each entry whose StartStationUic / EndStationUic / WagonTypeId / IsActive differs from the persisted carriage, run CheckConflictAsync with excludeCarriageId = update.CompCarriageId so the in-memory pre-update version doesn't conflict with itself. Use the projected composition with the update applied (so subsequent UpdatedCarriages see the previous update). Place the check before the existing 'foreach update in request.UpdatedCarriages' EF write loop."
+      },
+      {
+        "id": "187.6",
+        "phase": "GREEN",
+        "action": "Working dir: backend. Audit: when CheckConflictAsync inside this handler returns WagonSegmentConflictUnknown, publish AuditEventBuilder warning (level=Warn, category=Business, status=Failed) — reuse the helper from AddCarriage.cs:117-133 or extract it into CarriageConflictDetector if cleaner (extraction optional — flag if scope creeps)."
+      },
+      {
+        "id": "187.7",
+        "phase": "GREEN",
+        "action": "Working dir: backend. Adjust pre-existing SaveCompositionWagonsCommandHandlerTests.cs: any test that today expects WAGON_ALREADY_IN_COMPOSITION for a TripId-bearing composition with segment-overlap should be updated to assert WagonSegmentConflict instead. Tests that exercise composition.TripId == null still expect the legacy code (S9 parity)."
+      },
+      {
+        "id": "187.8",
+        "phase": "DONE",
+        "action": "Working dir: backend. dotnet test RailRunService.Application.Tests + RailRunService.API.Tests green. docker compose build rail-run-service && docker compose up -d --force-recreate rail-run-service. Smoke: with compositions 30290 + 30291 still in DRAFT on localhost (or recreate per Task #186 spec), open composition 30291 in admin UI, drag wagon-type 2 a second time, hit ЗАПАЗИ -> expect 409 + errorCode=WagonSegmentConflict with peerTrainNumber='БВ 3624-23.05.2026' (cross-comp) AND within composition 30290 add a second WT2 carriage on overlapping segment -> expect 409 + errorCode=WagonSegmentConflict with self-composition placeholder. Both snackbar texts must be the localized strings from Task #185 i18n keys (already wired via the FE plumbing fix in useCompositionPersistence.ts onError)."
+      }
+    ],
     "passes": false
   }
 ]

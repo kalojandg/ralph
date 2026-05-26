@@ -4,14 +4,57 @@
 
 ## Last Iteration Summary
 
-**Iteration:** Tasks през #182 завършени (последен: [BE+FE] Wagon availability — segment-aware temporal overlap READ path)
-**Status:** ✅ READ path сегмент-aware. **Открита дупка във WRITE path-а и UI палитрата** — виж новата секция по-долу.
+**Iteration:** Tasks #184-#186 завършени (segment-aware AddCarriage + FE palette/drop validation + E2E)
+**Status:** ✅ AddCarriage path е segment-aware. **Открит остатъчен gap в SaveCompositionWagons batch handler-а** — той е реалният endpoint, който FE "ЗАПАЗИ" бутонът удря, и още не е покрит. Виж #187 по-долу.
 
 ---
 
 ## Feedback for Next Iteration
 
 <!-- Ralph will read this before next iteration -->
+
+**Continue with:** Task #187 — [BE] SaveCompositionWagons segment-aware conflict validation (parity with #184)
+
+**🚂 ЕТАП 12 (продължение): SaveCompositionWagons parity (Task #187)**
+
+### Защо още един таск след #184?
+
+Task #184 поправи `AddCarriage.cs` (per-carriage POST `/api/compositions/{id}/wagons`), но FE "ЗАПАЗИ" бутонът извиква **`POST /api/compositions/{id}/save-wagons`** — batch endpoint, който минава през `SaveCompositionWagons.cs`. Този handler има СВОЯ собствена композиция-широка `HashSet<WagonTypeId>` проверка (lines 142-158) и emit-ва legacy `WAGON_ALREADY_IN_COMPOSITION` без segment context, без peer-composition check, и без within-batch detection (два NewCarriages в едно request с overlap минават).
+
+Repro потвърден на 2026-05-26 от user-а: композиции 30290 (БВ 3624) + 30291 (ПВ 30157) на 23.05.2026 със същия WagonTypeId=2 в overlapping Карнобат-departing segments — save минава мълчешком.
+
+### 📜 Задължително преди Task #187
+
+1. **`C:/Users/kaloyan.georgiev/Projects/ralph/activity.md`** entry "[2026-05-26] - Queued Task #187" — пълен контекст за дупката и какво трябва.
+2. **Tasks #182 + #184** в `tasks.json` (passes:true) — реюзваш `ICarriageConflictDetector` без нови услуги или DI промени. Сервисът е вече регистриран.
+3. **`C:/Users/kaloyan.georgiev/Projects/OSDM-Src/DotNetServices/RailRunService/RailRunService.Application/Features/Compositions/Commands/SaveCompositionWagons.cs`** — handler-ът, в който променяш. Виж lines 99-205 (stop validation + delete + add + update + reorder секции).
+4. **`C:/Users/kaloyan.georgiev/Projects/OSDM-Src/DotNetServices/RailRunService/RailRunService.Application/Services/CarriageConflictDetector.cs`** — service-ът, който инжектираш. Не пипай негова логика — само го извикваш.
+
+### 🎯 Архитектурни правила за #187
+
+- **Projected composition pattern.** Преди checks: клонирай `composition.CompositionCarriages` в memory, премахни `DeletedCarriageIds`, приложи `UpdatedCarriages` field updates. Това е "post-save state" на което се правят всички conflict checks. След като NewCarriage мине, append-ваш in-memory stub в projection-а, за да хване S5 (within-batch overlap).
+- **excludeCarriageId за updates.** При проверка на `UpdatedCarriages`, подай `excludeCarriageId = update.CompCarriageId` — иначе carriage-ът ще конфликтва със собствения си pre-update сегмент.
+- **Legacy fallback за TripId == null.** Запази съществуващия HashSet path само в този клон — преserve-ва Task #176 test surface.
+- **Reuse, don't duplicate.** Целта е да routnem всичко през съществуващия `CarriageConflictDetector`. Не дублирай overlap логика inline в handler-а.
+
+### 🚨 Червени линии за #187
+
+- ❌ Не пипай `CarriageConflictDetector.cs` (тестван и заключен от #184).
+- ❌ Не въвеждай нова public DTO / endpoint — само вътрешна handler промяна.
+- ❌ Не пипай SQL.
+- ✅ Pessimistic lock (`LockForUpdateAsync`) остава — checks се правят INSIDE the transaction.
+
+### 📋 Подетапи (само #187 в този sub-stage)
+
+- **12D: BE batch parity** (#187) — `SaveCompositionWagonsCommandHandler` injection + projected composition + per-NewCarriage detector loop + UpdatedCarriages mirror + tests update.
+
+### 🛑 Не правиш #187 ако
+
+- #184 не е passes:true → върни се и довърши него (споделяш `CarriageConflictDetector` оттам).
+
+---
+
+## ⏪ Историчен контекст: ЕТАП 12 initial (Tasks #184-#186) — passes:true
 
 **Continue with:** Task #184 — [BE] AddCarriage/UpdateCarriage — segment-aware conflict validation (defense-in-depth)
 

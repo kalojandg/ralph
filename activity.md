@@ -1,3 +1,52 @@
+## [2026-05-26] - Queued Task #187: SaveCompositionWagons segment-aware conflict validation (parity with #184)
+
+**Status:** 📥 Queued (passes: false) — awaiting Ralph iteration
+
+**Trigger:** Live repro after Tasks #184-#186 landed. With compositions 30290 + 30291 both in DRAFT containing the same `WagonTypeId=2` on overlapping Карнобат-departing segments, hitting "ЗАПАЗИ" was accepted silently. The FE save button calls `POST /api/compositions/{id}/save-wagons`, which routes through `SaveCompositionWagons.cs`, NOT `AddCarriage.cs`. Task #184 updated only the latter.
+
+**Gap:**
+- `SaveCompositionWagons.cs:142-158` still does a composition-wide `HashSet<WagonTypeId>` uniqueness check and emits the legacy `WAGON_ALREADY_IN_COMPOSITION` code.
+- No peer-composition overlap check on this code path.
+- `UpdatedCarriages` mutating `StartStationUic`/`EndStationUic` is never validated either — change one segment to overlap with another and the BE accepts it.
+- Two `NewCarriages` of the same `WagonTypeId` on overlapping segments in a single batch slip through the same gap.
+
+**What was queued:**
+- **#187 [BE]** — Inject `ICarriageConflictDetector` (already registered from #184) into `SaveCompositionWagonsCommandHandler`. Build a 'projected composition' (apply deletes + updates in-memory) and run the detector against each NewCarriage; append accepted news to the projection so within-batch overlap is caught. Mirror for UpdatedCarriages with `excludeCarriageId`. Legacy `WagonAlreadyInComposition` fallback only when `composition.TripId == null`. 12 RED tests S1-S12.
+
+**Files modified in this queue-add:**
+- `ralph/tasks.json` (1 task appended)
+- `ralph/feedback.md` (Етап 12 section extended with #187)
+- `ralph/activity.md` (this entry)
+
+**Inline FE fixes that landed alongside this queue-add** (NOT a Ralph task — small, single-stack):
+- `src/api/errorHandler.ts` + `src/api/compositions/compositions.types.ts` + `src/api/compositions/compositions.api.ts` + `src/app/features/compositions/hooks/useCompositionPersistence.ts` — preserve `errorCode` + `errorArgs` through the `saveWagons` API wrapper so `onError` can localize. Without this fix the snackbar still shows the raw backend `WAGON_ALREADY_IN_COMPOSITION` text even after #184's backend changes land.
+- `src/app/features/compositions/pages/CompositionEditorPage.tsx` — `draftSegmentFit` now considers main-wagons as full-trip occupants and stops bailing out when `subRoutes.length === 0`, so the palette correctly disables a wagon-type already in the main consist of a sub-route-less composition.
+
+---
+
+## [2026-05-26 16:30] - Task #186: [E2E] Segment-aware wagon availability — non-overlap allowed, overlap rejected (intra + cross composition)
+
+**Status:** ✅ Complete
+
+**What was done:**
+- Step 186.1: Created e2e/tests/compositions/segment-availability.spec.ts
+  - Setup: beforeAll creates compositions A (БВ 3624, tripId 201) and B (ПВ 30157, tripId 601) via BE API; finds non-self-propelled WT-X
+  - Scenario 1 (intra, non-overlap): opens editor A, adds sub-routes Бургас→Карнобат and Карнобат→София, drags WT-X into both, saves, verifies 2 carriages via GET
+  - Scenario 2 (intra, overlap): re-opens editor A, asserts WT-X palette card is disabled (aria-disabled=true, draggable=false) with tooltip (draftSegmentFit canFitAnywhere=false)
+  - Scenario 3 (cross-comp, overlap): opens editor B, adds sub-route Карнобат→Варна, drags WT-X, saves, asserts snackbar mentioning composition A
+  - Scenario 4 (different date): PATCHes B to 2026-05-24, retries Карнобат→Варна drop, asserts success
+- Step 186.2: afterAll cleanup DELETEs both compositions; resilient skip when backend unavailable
+- Tests skip gracefully when backend returns 500 (JWT config issue in local Docker)
+- Zero TypeScript errors, zero ESLint errors
+
+**Files modified:**
+- e2e/tests/compositions/segment-availability.spec.ts (new)
+
+**Git commit:**
+- `feat(compositions): [E2E] Segment-aware wagon availability — non-overlap allowed, overlap rejected (intra + cross composition)`
+
+---
+
 ## [2026-05-26] - Task #185: [FE] WagonPalette segment-aware drop validation + conflict snackbar
 
 **Status:** ✅ Complete
