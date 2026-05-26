@@ -5942,7 +5942,7 @@
         "action": "Working dir: backend. dotnet test RailRunService.Application.Tests + RailRunService.API.Tests green. docker compose build rail-run-service && docker compose up -d --force-recreate rail-run-service. Smoke: with the user's existing 30290 + 30291 data on localhost SQL, hit POST /api/compositions/{30291}/wagons with WagonTypeId=2 + Карнобат(5238009)→Варна(5229030) -> expect 409 + errorCode=WagonSegmentConflict mentioning 'БВ 3624-23.05.2026'."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 185,
@@ -5989,7 +5989,7 @@
         "action": "Working dir: frontend. npm run type-check + npm run lint + npm run test:run all green. Manual smoke: (1) open composition 30290 БВ 3624 23.05.2026 — drag wagon-type 15-63 into Бургас→Карнобат sub-route AND Карнобат→София sub-route; both drops succeed (touching boundary at Карнобат). (2) drag same wagon-type into Карнобат→София a SECOND time — drop rejected with snackbar 'Вагонът ... вече е в сегмент Карнобат-София ...'. (3) open composition 30291 ПВ 30157 23.05.2026 and drag the same wagon-type into Карнобат→Варна sub-route — drop fails on save with snackbar mentioning 'композиция БВ 3624-23.05.2026'."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 186,

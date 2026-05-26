@@ -1,6 +1,81 @@
+## [2026-05-26] - Task #185: [FE] WagonPalette segment-aware drop validation + conflict snackbar
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Replaced `usedWagonTypeIds` test suite with `draftSegmentFit` tests in WagonPalette.test.tsx (4 tests)
+- Added 2 onDrop segment conflict tests in SubRouteComposition.test.tsx
+- All 3 new tests failed for correct reasons (missing implementation)
+
+### GREEN Phase
+- WagonPalette.tsx: replaced `usedWagonTypeIds?: Set<number>` prop with `draftSegmentFit?: Record<number, { canFitAnywhere: boolean }>`; updated `isCardDisabled` and `getDisabledTooltip` logic
+- CompositionEditorPage.tsx: replaced `usedWagonTypeIds` useMemo with `draftSegmentFit` useMemo — per-wagonType segment overlap computation using stopSequence ranges; touching boundaries excluded from overlap
+- SubRouteComposition.tsx: added `allSubRoutes` prop + segment overlap conflict check in `handleDrop`; dispatches `showSnackbar(error)` with localized message on conflict, aborts drop
+- useCompositionPersistence.ts: added 409 error handling for `WagonSegmentConflict` / `WagonSegmentConflictUnknown` errorCodes; maps to localized i18n keys with interpolated conflict details
+- Added i18n keys to both bg.json and en.json: `tooltipNoFreeSegment`, `wagonBusyInSegment`, `wagonSegmentConflict`, `wagonSegmentConflictUnknown`
+
+**Tests:** 92 green (38 WagonPalette + 8 SubRouteComposition + 6 useCompositionPersistence + 42 CompositionEditorPage — 2 new per file)
+
+**Files modified:**
+- `src/app/features/compositions/components/WagonPalette.tsx`
+- `src/app/features/compositions/components/SubRouteComposition.tsx`
+- `src/app/features/compositions/pages/CompositionEditorPage.tsx`
+- `src/app/features/compositions/hooks/useCompositionPersistence.ts`
+- `src/app/features/compositions/components/__tests__/WagonPalette.test.tsx`
+- `src/app/features/compositions/components/__tests__/SubRouteComposition.test.tsx`
+- `src/app/features/compositions/hooks/useCompositionPersistence.test.tsx`
+- `src/locales/bg.json`
+- `src/locales/en.json`
+
+**Git commit:**
+- `feat(compositions): [FE] WagonPalette segment-aware drop validation + conflict snackbar`
+
+---
+
+## [2026-05-26] - Task #184: [BE] AddCarriage/UpdateCarriage — segment-aware conflict validation (defense-in-depth)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+- Created `ICarriageConflictDetector` interface + `CarriageConflictDetector` service (shared by Add + Update handlers)
+- Added error codes: `WagonSegmentConflict`, `WagonSegmentConflictUnknown`, `WagonSegmentConflictSelfComposition`
+- Added SharedErrors.resx entries (bg + en) for all 3 codes
+- Replaced AddCarriage.cs blanket `WagonAlreadyInComposition` with segment-aware logic (legacy fallback for `TripId == null`)
+- Added segment conflict check to UpdateCarriage.cs when StartStationUic/EndStationUic changes (`excludeCarriageId = carriage.Id`)
+- Audit warning (level=WARN) published when `WagonSegmentConflictUnknown` returned (trip schedule unavailable)
+- Registered `ICarriageConflictDetector` in `ServiceCollectionExtensions`
+
+**Tests:** 219 green (172 Application + 47 API)
+- `AddCarriageSegmentConflictTests.cs`: 9 tests (S1-S9) — same-comp overlap, peer-comp overlap, null TripId fallback, fail-closed Unknown, audit warning
+- `UpdateCarriageSegmentConflictTests.cs`: 6 tests (S1-S6) — mirror of Add scenarios adapted for station update flow
+- All existing tests remain green (traction-mix, wagon-identity, audit, controller)
+
+**Docker:** `rail-run-service` builds and starts. DI resolves; route reaches `CarriagesController.AddCarriage`. Full 409 smoke blocked by local JWT_SECRET config (Azure KeyVault dependency).
+
+**Files created:**
+- `RailRunService.Application/Interfaces/ICarriageConflictDetector.cs`
+- `RailRunService.Application/Services/CarriageConflictDetector.cs`
+- `RailRunService.Application.Tests/Carriages/AddCarriageSegmentConflictTests.cs`
+- `RailRunService.Application.Tests/Carriages/UpdateCarriageSegmentConflictTests.cs`
+
+**Files modified:**
+- `RailRunService.Application/Constants/RailRunErrorCodes.cs` (3 new codes)
+- `RailRunService.Application/Features/Carriages/Commands/AddCarriage.cs` (segment-aware conflict + audit warning)
+- `RailRunService.Application/Features/Carriages/Commands/UpdateCarriagE.cs` (conflict detector + audit warning)
+- `RailRunService.Infrastructure/Extensions/ServiceCollectionExtensions.cs` (DI registration)
+- `SharedSrc/Common/Resources/SharedErrors.resx` + `SharedErrors.en.resx` (3 new keys)
+- Existing test files updated with new constructor parameters (3 AddCarriage + 1 UpdateCarriage audit tests)
+
+---
+
 ## [2026-05-26] - Queued Tasks #184–#186: Wagon availability — segment-aware WRITE path + FE drop validation + E2E
 
-**Status:** 📥 Queued (passes: false) — awaiting Ralph iteration
+**Status:** 📥 Queued (#184 ✅, #185-#186 pending)
 
 **Trigger:** Manual repro on dev DB. Compositions 30290 (`БВ 3624-23.05.2026`, TripId=201) and 30291 (`ПВ 30157-23.05.2026`, TripId=601) both saved with the same `WagonTypeId=2` carriage on Карнобат-departing segments (Карнобат→София 17:03–22:27 vs Карнобат→Варна 17:15–20:18) on the same StartDate. Backend accepted without conflict; FE palette blanket-dimmed every wagon-type already in any sub-route of the draft.
 
