@@ -4,14 +4,36 @@
 
 ## Last Iteration Summary
 
-**Iteration:** Tasks #184-#187 завършени (segment-aware AddCarriage + SaveCompositionWagons batch + FE palette/drop validation + E2E)
-**Status:** ✅ Конфликт-проверките са пълни и работят (4/5 user сценария потвърдени). Остава само QoL: блокиране при дроп вместо при save. Виж #188.
+**Iteration:** Tasks #184-#188 завършени (segment-aware checks + FE palette/drop guard + dialog). Плюс inline fix: availability READ peer filter изравнен със save-проверката (махнат Status==ACTIVE).
+**Status:** ✅ Single-composition конфликтите работят и при drop, и при save, и за DRAFT композиции. Следва: clone-for-period да пропуска конфликтни дни. Виж #189.
 
 ---
 
 ## Feedback for Next Iteration
 
 <!-- Ralph will read this before next iteration -->
+
+**Continue with:** Task #189 — [BE+FE] Clone-for-period — skip whole day on wagon conflict
+
+**🧬 ЕТАП 13: clone-for-period conflict skip (Task #189)**
+
+### Критично за #189
+
+- **Reuse, не нова логика:** инжектирай съществуващия `ICarriageConflictDetector` (от #184) в `CloneCompositionForPeriodCommandHandler`. НЕ пиши нов overlap алгоритъм.
+- **Skip целия ден:** при конфликт на който и да е вагон за дадена дата — пропусни датата изцяло (Reason='WAGON_CONFLICT'), не създавай частична композиция, не показвай диалог per конфликт. Това е продуктовото решение на user-а.
+- **Skip-and-report вече съществува:** `CloneCompositionForPeriod.cs` трупа `SkippedClonePeriodItem` (Reason='TARGET_OCCUPIED'). Конфликтът е просто нов Reason. Surfacing е POST-RUN (съществуващото summary), без pre-flight dry-run.
+- **Fail-closed:** `WagonSegmentConflictUnknown` от детектора → също skip на тази дата, не abort на целия период.
+- **TripId null** → пропусни проверката, клонирай нормално (не блокирай trip-less композиции).
+
+Пълен контекст: `ralph/activity.md` entry "[2026-05-26] - Queued Task #189". Regression: TARGET_OCCUPIED skip и happy-path clone тестовете остават зелени.
+
+### ⚠️ Преди да тестваш ръчно #189 (или каквото и да е свързано с availability)
+
+`rail-run-service` image трябва да е rebuild-нат след inline fix-а от 2026-05-27 (Status филтър махнат от availability READ). Ако drop guard-ът / clone-ът не виждат DRAFT peer-и — контейнерът е стар: `docker compose build rail-run-service && docker compose up -d --force-recreate rail-run-service`.
+
+---
+
+## ⏪ Историчен контекст: ЕТАП 12 финал — drop-time guard (Task #188, passes:true)
 
 **Continue with:** Task #188 — [FE] Drop-time availability guard (QoL, timing-only — НЕ променяй check логиката)
 

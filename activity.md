@@ -1,6 +1,61 @@
-## [2026-05-26] - Queued Task #188: Drop-time availability guard (QoL, timing-only)
+## [2026-05-27] - Inline fix: availability READ peer filter aligned with save-time check (Status filter removed)
+
+**Status:** ✅ Done inline (not a Ralph task) — backend single-file change + 1 regression test.
+
+**Problem:** `GetAvailableWagonTypesForComposition.cs` filtered peer compositions by `Status == "ACTIVE"`, but the save-time `CarriageConflictDetector` (`PeerCompositionsWithCarriagesSpec`) has NO status filter. The user's test compositions are all DRAFT, so the drop-time guard (Task #188) + palette disable (#185) — both fed by the availability READ — never saw the DRAFT peer, while ЗАПАЗИ still rejected via the detector. Symptom: "conflict only fires on save, not on drop".
+
+**Fix:** Removed `c.Status == "ACTIVE"` from the peer query in `GetAvailableWagonTypesForComposition.cs` so the READ path matches the WRITE path (peers selected by StartDate + Id != target only). Added regression test `T3b_DraftPeer_StillConflicts` (11/11 green). **Requires `docker compose build rail-run-service && up -d --force-recreate` to take effect in the running container.**
+
+**Files:** `GetAvailableWagonTypesForComposition.cs`, `GetAvailableWagonTypesForCompositionQueryHandlerTests.cs`.
+
+**Open nuance (not addressed):** the detector also counts ARCHIVED peers. For full symmetry both paths could exclude only ARCHIVED — a separate product decision, deferred.
+
+---
+
+## [2026-05-26] - Queued Task #189: Clone-for-period — skip whole day on wagon conflict
 
 **Status:** 📥 Queued (passes: false) — awaiting Ralph iteration
+
+**Decision (user, 2026-05-26):** When cloning across a date range, a date whose clone would have a wagon conflict is SKIPPED WHOLE (no partial composition, no per-conflict dialog). Surfaced POST-RUN via the existing skip-and-report summary. MVP — no pre-flight dry-run.
+
+**Why it fits cleanly:** `CloneCompositionForPeriod.cs` already accumulates `SkippedClonePeriodItem` (Reason='TARGET_OCCUPIED') per date and reports them. A wagon conflict is just another `Reason='WAGON_CONFLICT'`. Reuses the existing `ICarriageConflictDetector` (Task #184) — no new overlap logic.
+
+**What was queued:**
+- **#189 [BE+FE]** — inject `ICarriageConflictDetector` into the clone handler; per target date, build the in-memory clone (existing DeepClone), check each carriage against peers on that date; first conflict -> skip the date with `WAGON_CONFLICT` + structured detail, continue. Extend `SkippedClonePeriodItem` with conflict fields; FE renders WAGON_CONFLICT vs TARGET_OCCUPIED groups in `CloneCompositionDialog`. Fail-closed on `WagonSegmentConflictUnknown`. 6 RED cases C1-C6.
+
+**Files modified in this queue-add:**
+- `ralph/tasks.json` (1 task appended)
+- `ralph/feedback.md` (Continue-with pointer → #189)
+- `ralph/activity.md` (this entry)
+
+---
+
+## [2026-05-27] - Task #188: [FE] Drop-time availability guard — block conflicting wagon at drop with a dialog, instead of only at save
+
+**Status:** ✅ Complete
+
+**What was done:**
+- Step 188.1 (RED): Created `WagonConflictDialog.test.tsx` (4 tests) and added "Drop-time Availability Guard" describe block to `CompositionEditorPage.test.tsx` (3 tests: blocks drop + opens dialog when unavailable, allows drop when available, invalidates availability on save). Added sub-route overlap → `onConflict` callback test to `SubRouteComposition.test.tsx`. All new tests RED.
+- Steps 188.2–188.6 (GREEN): Created `WagonConflictDialog.tsx` (MUI Dialog, presentational). Added `refetchOnMount: 'always'` to availability useQuery. Added availability guard at top of `handleWagonDrop` and `handleSubRouteWagonDrop` — consults existing `availabilityMap`, opens dialog on conflict, aborts drop. Added `onConflict` callback to `SubRouteComposition` so in-draft overlap surfaces via dialog instead of snackbar. Added `['wagon-types', 'available']` invalidation in `useCompositionPersistence` onSuccess. Added i18n keys for `conflictDialog.title` and `conflictDialog.dismiss` in bg.json + en.json. Exported from components/index.ts.
+- Step 188.7 (DONE): All 95 composition tests pass. TypeScript clean. ESLint 0 new errors. Manual smoke deferred (browser MCP not available).
+
+**Files changed:**
+- `src/app/features/compositions/components/WagonConflictDialog.tsx` (NEW)
+- `src/app/features/compositions/components/__tests__/WagonConflictDialog.test.tsx` (NEW)
+- `src/app/features/compositions/components/SubRouteComposition.tsx` (onConflict callback)
+- `src/app/features/compositions/components/__tests__/SubRouteComposition.test.tsx` (onConflict test)
+- `src/app/features/compositions/components/index.ts` (export)
+- `src/app/features/compositions/pages/CompositionEditorPage.tsx` (dialog state, availability guard, refetchOnMount)
+- `src/app/features/compositions/pages/__tests__/CompositionEditorPage.test.tsx` (3 guard tests)
+- `src/app/features/compositions/hooks/useCompositionPersistence.ts` (invalidate availability)
+- `src/locales/bg.json` (conflictDialog keys)
+- `src/locales/en.json` (conflictDialog keys)
+
+---
+
+## [2026-05-26] - Queued Task #188: Drop-time availability guard (QoL, timing-only)
+
+**Status:** ✅ Superseded by completion above
 
 **Trigger:** User asked whether availability is known BEFORE save. It is — `/wagon-types/available` (Task #182) is fetched into `availabilityMap` and already disables conflicting palette cards. But the snapshot is mount-time only (staleTime 30s), so when a peer composition gains the wagon AFTER the editor opened, the card stays enabled, the user drops freely, and the conflict only surfaces as a red banner on ЗАПАЗИ.
 

@@ -6108,6 +6108,53 @@
         "action": "Working dir: frontend. npm run test:run + npm run type-check + npx eslint <changed files> all green. Manual smoke across at least 2 of the user's junction scenarios (see ralph/activity.md 'junction handover scenarios'): (1) Горна Оряховица БВ 4661 + ПВ 40112 on 2026-05-20 — create A with the wagon, open B, attempt to drag the SAME wagon into the Г.Оряховица→Русе segment -> dialog appears, wagon NOT dropped; (2) Карнобат 30290/30291 repro -> same. Verify that dropping a non-conflicting wagon still works unchanged (no dialog, normal add). Verify ЗАПАЗИ on a clean composition still shows the success snackbar."
       }
     ],
+    "passes": true
+  },
+  {
+    "id": 189,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[BE+FE] Clone-for-period — skip whole day on wagon conflict (reuse CarriageConflictDetector + skip-and-report)",
+    "tddWorkflow": true,
+    "specRef": null,
+    "notes": "Product decision (user, 2026-05-26): when cloning a composition across a date range, if a target date would have a wagon-availability conflict with a peer composition on that date, SKIP THE WHOLE DAY — do not create a partial composition, do not pop a dialog per conflict. The clone handler already uses skip-and-report (CloneCompositionForPeriod.cs accumulates SkippedClonePeriodItem with Reason='TARGET_OCCUPIED'); a wagon conflict becomes another Reason. REUSE the existing ICarriageConflictDetector (Task #184) — DO NOT write a new overlap algorithm. Surfacing is POST-RUN (the existing summary), not a pre-flight dry-run. MVP only. Cross-ref: ralph/activity.md '[2026-05-26] - Queued Task #189'.",
+    "steps": [
+      {
+        "id": "189.1",
+        "phase": "RED",
+        "action": "Working dir: backend. Extend CloneCompositionForPeriodCommandHandlerTests.cs: C1 target date with a wagon-conflicting peer (same StartDate, overlapping segment, same WagonTypeId) -> that date is SKIPPED with Reason='WAGON_CONFLICT', NOT created; other clean dates in the range still created. C2 conflict on SOME dates only -> mixed result (created N, skipped M, both reported). C3 source carriage with a peer on a NON-overlapping segment / different date -> NOT skipped (created normally). C4 the skipped item carries readable conflict detail (peer train number + conflicting wagon + segment). C5 TARGET_OCCUPIED (existing reason) still works unchanged — no regression. C6 source composition with TripId null -> conflict check is skipped (cannot derive segments), clone proceeds as today. All RED."
+      },
+      {
+        "id": "189.2",
+        "phase": "GREEN",
+        "action": "Working dir: backend. Extend SkippedClonePeriodItem (CloneCompositionPeriodDto.cs) with optional structured conflict fields so the summary is localizable: ConflictPeerTrainNumber (string?), ConflictWagonLabel (string?), ConflictSegmentStartName/EndName (string?), ConflictSegmentStartTime/EndTime (string? HH:mm). Keep Reason as the discriminator ('TARGET_OCCUPIED' | 'WAGON_CONFLICT'). A plain 'WAGON_CONFLICT' literal mirrors the existing 'TARGET_OCCUPIED' literal."
+      },
+      {
+        "id": "189.3",
+        "phase": "GREEN",
+        "action": "Working dir: backend. Inject ICarriageConflictDetector into CloneCompositionForPeriodCommandHandler. In the per-date loop in Handle(), AFTER the TARGET_OCCUPIED check and the (optional) overwrite-delete, but BEFORE _compositionRepo.Add(cloned): build the in-memory cloned composition via the existing DeepClone (it already sets TripId, StartDate=date, carriages). If cloned.TripId is not null, iterate cloned.CompositionCarriages and call _carriageConflictDetector.CheckConflictAsync(cloned, carriage.WagonTypeId, carriage.StartStationUic, carriage.EndStationUic, excludeCarriageId: null, ct). On the FIRST carriage returning non-Ok, record SkippedClonePeriodItem{Date=date, Reason='WAGON_CONFLICT', + conflict detail from Result.ErrorArgs}, `continue` to the next date WITHOUT Add/SaveChanges. Note: cloned carriages have Id=0 and the clone isn't persisted, so the detector's same-composition loop compares siblings (safe if source was internally valid) and its peer query excludes by target.Id (0 matches nothing real) — verify via C3."
+      },
+      {
+        "id": "189.4",
+        "phase": "GREEN",
+        "action": "Working dir: backend. Keep per-date transactional behavior (one SaveChanges per created date). Conflict check runs before Add+SaveChanges so skipped dates persist NOTHING — confirm no stray inserts. WagonSegmentConflictUnknown from the detector (trip schedule unavailable) -> also skip that date with Reason='WAGON_CONFLICT' (fail-closed: don't clone what can't be verified); do not abort the whole period."
+      },
+      {
+        "id": "189.5",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. Update src/api/compositions/compositions.types.ts SkippedCloneItem with the new optional conflict fields. In CloneCompositionDialog.tsx render the post-run summary so WAGON_CONFLICT rows show the localized line (peer train + segment + time), grouped separately from TARGET_OCCUPIED rows. Reuse compositions.errors.wagonSegmentConflict for the conflict text; add bg+en keys for the clone summary section headers (compositions.clone.skippedConflict / compositions.clone.skippedOccupied) in the same commit."
+      },
+      {
+        "id": "189.6",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. Update CloneCompositionDialog.test.tsx: a clone result mixing created + WAGON_CONFLICT skipped + TARGET_OCCUPIED skipped renders all three groups; the conflict row shows the peer train number. Mock the API response shape with the new fields."
+      },
+      {
+        "id": "189.7",
+        "phase": "DONE",
+        "action": "Working dir: backend then frontend. dotnet test RailRunService.Application.Tests green; docker compose build rail-run-service && docker compose up -d --force-recreate rail-run-service. FE: npm run test:run + type-check + npx eslint <changed> green. Manual smoke: composition БВ 3624 with a wagon on 2026-05-20; clone another composition that reuses the SAME wagon on an overlapping segment across 2026-05-18..2026-05-22 -> only 2026-05-20 is skipped with a WAGON_CONFLICT row naming БВ 3624, the other 4 dates created. No per-conflict dialog; one summary."
+      }
+    ],
     "passes": false
   }
 ]
