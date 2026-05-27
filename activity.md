@@ -1,3 +1,50 @@
+## [2026-05-27 15:10] - Task #189: [BE+FE] Clone-for-period — skip whole day on wagon conflict
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Wrote 6 test cases (C1-C6) in CloneCompositionForPeriodCommandHandlerTests.cs
+- C1: Wagon conflict skips day with WAGON_CONFLICT reason
+- C2: Mixed created + skipped across date range
+- C3: Non-overlapping peer → created normally (regression guard)
+- C4: Skipped item carries full conflict detail (peer train, segment, times)
+- C5: TARGET_OCCUPIED still works after detector added (regression guard)
+- C6: TripId null → conflict check skipped, clone proceeds
+- Verified: C1, C2, C4 FAIL; C3, C5, C6 PASS → correct RED
+
+### GREEN Phase
+- Extended SkippedClonePeriodItem with optional conflict fields (ConflictPeerTrainNumber, ConflictWagonLabel, ConflictSegmentStartName/EndName, ConflictSegmentStartTime/EndTime)
+- Injected ICarriageConflictDetector into CloneCompositionForPeriodCommandHandler
+- Added CheckCarriageConflicts() — iterates cloned carriages after TARGET_OCCUPIED check but before Add/SaveChanges; on first conflict returns SkippedClonePeriodItem with WAGON_CONFLICT + detail from Result.ErrorArgs
+- TripId null guard: skips conflict check entirely (fail-open for unresolvable trips)
+- Frontend: updated SkippedCloneItem type, CloneCompositionDialog shows post-run summary grouped by WAGON_CONFLICT / TARGET_OCCUPIED with localized conflict text
+- Added FE test: mixed clone result renders both sections
+
+### DONE Phase
+- Backend: 191/191 tests pass
+- Frontend: 9/9 CloneCompositionDialog tests pass
+- TypeScript: clean
+- ESLint: 0 new errors/warnings
+- Docker: rail-run-service rebuilt + restarted
+
+**Files modified:**
+- `RailRunService.Application/DTOs/Compositions/CloneCompositionPeriodDto.cs`
+- `RailRunService.Application/Features/Compositions/Commands/CloneCompositionForPeriod.cs`
+- `RailRunService.Application.Tests/CloneCompositionForPeriodCommandHandlerTests.cs`
+- `Admin-App/src/api/compositions/compositions.types.ts`
+- `Admin-App/src/app/features/compositions/components/CloneCompositionDialog.tsx`
+- `Admin-App/src/app/features/compositions/components/__tests__/CloneCompositionDialog.test.tsx`
+- `Admin-App/src/locales/bg.json`
+- `Admin-App/src/locales/en.json`
+
+**Git commit:**
+- `feat(compositions): [BE+FE] Clone-for-period — skip whole day on wagon conflict (reuse CarriageConflictDetector + skip-and-report)`
+
+---
+
 ## [2026-05-27] - Inline fix: availability READ peer filter aligned with save-time check (Status filter removed)
 
 **Status:** ✅ Done inline (not a Ralph task) — backend single-file change + 1 regression test.

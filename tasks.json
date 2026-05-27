@@ -6155,6 +6155,6 @@
         "action": "Working dir: backend then frontend. dotnet test RailRunService.Application.Tests green; docker compose build rail-run-service && docker compose up -d --force-recreate rail-run-service. FE: npm run test:run + type-check + npx eslint <changed> green. Manual smoke: composition БВ 3624 with a wagon on 2026-05-20; clone another composition that reuses the SAME wagon on an overlapping segment across 2026-05-18..2026-05-22 -> only 2026-05-20 is skipped with a WAGON_CONFLICT row naming БВ 3624, the other 4 dates created. No per-conflict dialog; one summary."
       }
     ],
-    "passes": false
+    "passes": true
   }
 ]
