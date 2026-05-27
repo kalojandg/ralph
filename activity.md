@@ -1,26 +1,49 @@
-## [2026-05-26] - Queued Task #187: SaveCompositionWagons segment-aware conflict validation (parity with #184)
+## [2026-05-26] - Queued Task #188: Drop-time availability guard (QoL, timing-only)
 
 **Status:** 📥 Queued (passes: false) — awaiting Ralph iteration
 
-**Trigger:** Live repro after Tasks #184-#186 landed. With compositions 30290 + 30291 both in DRAFT containing the same `WagonTypeId=2` on overlapping Карнобат-departing segments, hitting "ЗАПАЗИ" was accepted silently. The FE save button calls `POST /api/compositions/{id}/save-wagons`, which routes through `SaveCompositionWagons.cs`, NOT `AddCarriage.cs`. Task #184 updated only the latter.
+**Trigger:** User asked whether availability is known BEFORE save. It is — `/wagon-types/available` (Task #182) is fetched into `availabilityMap` and already disables conflicting palette cards. But the snapshot is mount-time only (staleTime 30s), so when a peer composition gains the wagon AFTER the editor opened, the card stays enabled, the user drops freely, and the conflict only surfaces as a red banner on ЗАПАЗИ.
 
-**Gap:**
-- `SaveCompositionWagons.cs:142-158` still does a composition-wide `HashSet<WagonTypeId>` uniqueness check and emits the legacy `WAGON_ALREADY_IN_COMPOSITION` code.
-- No peer-composition overlap check on this code path.
-- `UpdatedCarriages` mutating `StartStationUic`/`EndStationUic` is never validated either — change one segment to overlap with another and the BE accepts it.
-- Two `NewCarriages` of the same `WagonTypeId` on overlapping segments in a single batch slip through the same gap.
+**Hard constraint (user, verbatim intent):** This is QoL only. CHECK LOGIC MUST NOT CHANGE — not the BE CarriageConflictDetector, not the availability query, not the draftSegmentFit overlap math. They are correct and tested for 4/5 of the user's scenarios. #188 changes only (a) snapshot freshness and (b) the moment/surface of an already-known result (block at drop with a dialog, not just at save).
 
 **What was queued:**
-- **#187 [BE]** — Inject `ICarriageConflictDetector` (already registered from #184) into `SaveCompositionWagonsCommandHandler`. Build a 'projected composition' (apply deletes + updates in-memory) and run the detector against each NewCarriage; append accepted news to the projection so within-batch overlap is caught. Mirror for UpdatedCarriages with `excludeCarriageId`. Legacy `WagonAlreadyInComposition` fallback only when `composition.TripId == null`. 12 RED tests S1-S12.
+- **#188 [FE]** — refetchOnMount:'always' on the availability query + invalidate ['wagon-types','available'] after save; new thin `WagonConflictDialog`; drop handlers consult the EXISTING availabilityMap + EXISTING in-draft overlap helper and, on conflict, open the dialog + abort the drop (no draft mutation). Replaces Task #185's drop-time snackbar with the dialog so the user doesn't get both. Save-path snackbars stay as the stale-snapshot safety net. Reuses existing i18n keys (compositions.errors.wagonSegmentConflict / compositions.editor.wagonBusyInSegment) + 2 new dialog keys.
 
 **Files modified in this queue-add:**
 - `ralph/tasks.json` (1 task appended)
-- `ralph/feedback.md` (Етап 12 section extended with #187)
+- `ralph/feedback.md` (Continue-with pointer → #188)
 - `ralph/activity.md` (this entry)
 
-**Inline FE fixes that landed alongside this queue-add** (NOT a Ralph task — small, single-stack):
-- `src/api/errorHandler.ts` + `src/api/compositions/compositions.types.ts` + `src/api/compositions/compositions.api.ts` + `src/app/features/compositions/hooks/useCompositionPersistence.ts` — preserve `errorCode` + `errorArgs` through the `saveWagons` API wrapper so `onError` can localize. Without this fix the snackbar still shows the raw backend `WAGON_ALREADY_IN_COMPOSITION` text even after #184's backend changes land.
-- `src/app/features/compositions/pages/CompositionEditorPage.tsx` — `draftSegmentFit` now considers main-wagons as full-trip occupants and stops bailing out when `subRoutes.length === 0`, so the palette correctly disables a wagon-type already in the main consist of a sub-route-less composition.
+---
+
+## [2026-05-26] - Task #187: [BE] SaveCompositionWagons — segment-aware conflict validation (parity with AddCarriage / Task #184)
+
+**Status:** ✅ Complete
+
+**What was done:**
+- Step 187.1 (RED): Created `SaveCompositionWagonsSegmentConflictTests.cs` with 12 test scenarios (S1-S12) covering segment-aware conflict detection for the batch save endpoint. Updated existing `SaveCompositionWagonsCommandHandlerTests.cs` constructor to accept 8th parameter (`ICarriageConflictDetector`). Tests failed with CS1729 (constructor mismatch) — RED confirmed.
+- Step 187.2 (GREEN): Injected `ICarriageConflictDetector` into `SaveCompositionWagonsCommandHandler`. Built projected composition (apply deletes + updates in-memory) before conflict checks. Two-path logic: `TripId == null` → legacy HashSet check; `TripId != null` → loop through `_carriageConflictDetector.CheckConflictAsync()` for each NewCarriage, appending accepted carriages to projection for within-batch overlap detection. Added UpdatedCarriages conflict check with `excludeCarriageId`. Added audit warning for `WagonSegmentConflictUnknown`. All 184 Application + 47 API tests passed — GREEN confirmed.
+
+**Test scenarios (S1-S12):**
+- S1: same-comp non-overlapping → success
+- S2: same-comp overlapping → WagonSegmentConflict
+- S3: surviving + new overlapping → Conflict
+- S4: surviving + new touching → success
+- S5: within-batch overlap → WagonSegmentConflict
+- S6: peer-comp overlap → Conflict with peer TrainNumber in ErrorArgs
+- S7: peer-comp non-overlapping → success
+- S8: peer-comp different date → success
+- S9: TripId null → legacy WagonAlreadyInComposition, detector never called
+- S10: UpdatedCarriage segment overlap → Conflict, excludeCarriageId verified
+- S11: Deleted carriage frees segment → new carriage succeeds
+- S12: Trip schedule null → WagonSegmentConflictUnknown + audit warning published
+
+**Files modified:**
+- `RailRunService.Application/Features/Compositions/Commands/SaveCompositionWagons.cs` (handler: +ICarriageConflictDetector, projected composition, segment-aware checks)
+- `RailRunService.Application.Tests/Compositions/SaveCompositionWagonsSegmentConflictTests.cs` (new — 12 tests)
+- `RailRunService.Application.Tests/SaveCompositionWagonsCommandHandlerTests.cs` (constructor updated for 8th param)
+
+**Git commit:** `766b08753` — `feat(compositions): [BE] SaveCompositionWagons — segment-aware conflict validation (parity with AddCarriage / Task #184)`
 
 ---
 

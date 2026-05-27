@@ -6061,6 +6061,53 @@
         "action": "Working dir: backend. dotnet test RailRunService.Application.Tests + RailRunService.API.Tests green. docker compose build rail-run-service && docker compose up -d --force-recreate rail-run-service. Smoke: with compositions 30290 + 30291 still in DRAFT on localhost (or recreate per Task #186 spec), open composition 30291 in admin UI, drag wagon-type 2 a second time, hit ЗАПАЗИ -> expect 409 + errorCode=WagonSegmentConflict with peerTrainNumber='БВ 3624-23.05.2026' (cross-comp) AND within composition 30290 add a second WT2 carriage on overlapping segment -> expect 409 + errorCode=WagonSegmentConflict with self-composition placeholder. Both snackbar texts must be the localized strings from Task #185 i18n keys (already wired via the FE plumbing fix in useCompositionPersistence.ts onError)."
       }
     ],
+    "passes": true
+  },
+  {
+    "id": 188,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[FE] Drop-time availability guard — block conflicting wagon at drop with a dialog, instead of only at save",
+    "tddWorkflow": true,
+    "specRef": null,
+    "notes": "QUALITY-OF-LIFE / timing-only change. The conflict CHECKS are already correct and tested end-to-end (Tasks #182 READ availability, #184/#187 BE write-path, #185 FE palette disable + in-draft onDrop overlap). User confirmed they work for 4/5 tested compositions. THIS TASK MUST NOT CHANGE ANY CHECK LOGIC — not the backend CarriageConflictDetector, not the /wagon-types/available query, not the draftSegmentFit overlap math. It only changes WHEN the existing knowledge is surfaced (at drop, not just at save) and keeps the availability snapshot fresh. Problem today: /wagon-types/available is fetched once on editor mount (staleTime 30s); if a peer composition gains the wagon AFTER the editor opened, the palette card stays enabled (stale), the user drops it, and the conflict only surfaces as a red banner on ЗАПАЗИ. Desired: on drop, consult the (refreshed) availability + in-draft overlap that ALREADY exist; if conflict, open a blocking dialog with the same localized text and DO NOT add the wagon to the draft.",
+    "steps": [
+      {
+        "id": "188.1",
+        "phase": "RED",
+        "action": "Working dir: frontend. Add tests, no logic rewrites. (a) CompositionEditorPage.test.tsx: assert the availability useQuery is configured to refetch on mount (refetchOnMount:'always' or staleTime:0) and that a successful save invalidates queryKey ['wagon-types','available']. (b) New WagonConflictDialog.test.tsx: renders the localized conflict message + a single 'Разбрах' / 'Got it' dismiss button; calls onClose. (c) CompositionEditorPage.test.tsx + SubRouteComposition.test.tsx: dropping a wagon whose wagonTypeId has availabilityMap[id].isAvailable===false opens the dialog and does NOT add the wagon to draft (assert wagons/subRoute length unchanged); dropping an available wagon adds it as before (regression guard — existing happy-path tests must stay green). All new tests RED."
+      },
+      {
+        "id": "188.2",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. Freshness only — no check changes. In CompositionEditorPage.tsx, change the availability useQuery (currently staleTime:30_000) to refetchOnMount:'always' (keep a small staleTime if desired, but force a refetch when the editor opens). In useCompositionPersistence.ts onSuccess, ALSO invalidate queryKey ['wagon-types','available'] (currently only ['compositions'] is invalidated) so re-entering any editor re-checks peers. Do not touch the query function or its parameters."
+      },
+      {
+        "id": "188.3",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. Create src/app/features/compositions/components/WagonConflictDialog.tsx — a thin MUI Dialog (presentational, no fetching). Props: open, title, message, onClose. Title i18n compositions.editor.conflictDialog.title ('Вагонът не може да се добави' / 'Wagon cannot be added'), single action button compositions.editor.conflictDialog.dismiss ('Разбрах' / 'Got it'). The `message` is passed in already-localized by the caller (reuse existing keys — see 188.4). Add bg+en keys for title+dismiss in the same commit."
+      },
+      {
+        "id": "188.4",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. Wire the guard at the point of use ONLY, reusing existing data. In CompositionEditorPage.tsx add dialog state (open + message). In handleWagonDrop AND handleSubRouteWagonDrop, BEFORE adding the draft wagon, evaluate the ALREADY-COMPUTED sources in priority order: (1) availabilityMap[wagonType.id] — if present and isAvailable===false, build message from its `conflict` via the EXISTING key compositions.errors.wagonSegmentConflict (peer composition case); (2) the in-draft segment overlap that Task #185 already computes (draftSegmentFit / the SubRouteComposition overlap helper) — build message via the EXISTING key compositions.editor.wagonBusyInSegment. If either fires: set dialog message, open dialog, RETURN without mutating draft. If neither fires: proceed exactly as today. Do NOT introduce a new overlap algorithm — call the same helpers."
+      },
+      {
+        "id": "188.5",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. Reconcile with Task #185's existing onDrop snackbar in SubRouteComposition.tsx: the sub-route in-draft overlap should now surface through the SAME dialog (lift the decision to the parent's handleSubRouteWagonDrop, or have SubRouteComposition call an onConflict(message) callback that the page maps to the dialog). Remove the now-duplicated drop-time snackbar so the user doesn't get BOTH a snackbar and a dialog. Save-path snackbars in useCompositionPersistence.onError stay untouched (that's the safety net for stale-snapshot edge cases the guard can't see)."
+      },
+      {
+        "id": "188.6",
+        "phase": "GREEN",
+        "action": "Working dir: frontend. The palette card disable from Task #185 stays as the first-line preventive cue. The dialog is the fallback for cases the disabled-card can't cover (stale availability snapshot, or same-composition multi-segment where the card is intentionally still enabled). Confirm the palette card is NOT additionally disabled by this task — drop guard is independent."
+      },
+      {
+        "id": "188.7",
+        "phase": "DONE",
+        "action": "Working dir: frontend. npm run test:run + npm run type-check + npx eslint <changed files> all green. Manual smoke across at least 2 of the user's junction scenarios (see ralph/activity.md 'junction handover scenarios'): (1) Горна Оряховица БВ 4661 + ПВ 40112 on 2026-05-20 — create A with the wagon, open B, attempt to drag the SAME wagon into the Г.Оряховица→Русе segment -> dialog appears, wagon NOT dropped; (2) Карнобат 30290/30291 repro -> same. Verify that dropping a non-conflicting wagon still works unchanged (no dialog, normal add). Verify ЗАПАЗИ on a clean composition still shows the success snackbar."
+      }
+    ],
     "passes": false
   }
 ]

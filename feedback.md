@@ -4,14 +4,32 @@
 
 ## Last Iteration Summary
 
-**Iteration:** Tasks #184-#186 завършени (segment-aware AddCarriage + FE palette/drop validation + E2E)
-**Status:** ✅ AddCarriage path е segment-aware. **Открит остатъчен gap в SaveCompositionWagons batch handler-а** — той е реалният endpoint, който FE "ЗАПАЗИ" бутонът удря, и още не е покрит. Виж #187 по-долу.
+**Iteration:** Tasks #184-#187 завършени (segment-aware AddCarriage + SaveCompositionWagons batch + FE palette/drop validation + E2E)
+**Status:** ✅ Конфликт-проверките са пълни и работят (4/5 user сценария потвърдени). Остава само QoL: блокиране при дроп вместо при save. Виж #188.
 
 ---
 
 ## Feedback for Next Iteration
 
 <!-- Ralph will read this before next iteration -->
+
+**Continue with:** Task #188 — [FE] Drop-time availability guard (QoL, timing-only — НЕ променяй check логиката)
+
+**🚦 ЕТАП 12 (финал): drop-time guard (Task #188)**
+
+### Критично за #188
+
+Това е **timing/UX-only** промяна. Проверките вече са правилни (Tasks #182/#184/#185/#187). **НЕ пипай:** BE `CarriageConflictDetector`, `/wagon-types/available` query, `draftSegmentFit` overlap математиката. Само:
+1. Свежест: `refetchOnMount:'always'` на availability query + invalidate `['wagon-types','available']` след save.
+2. Нов тънък `WagonConflictDialog` (presentational).
+3. Drop handler-ите четат СЪЩЕСТВУВАЩИТЕ `availabilityMap` + in-draft overlap helper; при конфликт → отваря диалог + abort на дропа (без мутация на draft-а).
+4. Замества drop-time снакбара от #185 с диалога (без двоен feedback). Save-path снакбарите остават.
+
+Пълен контекст: `ralph/activity.md` entry "[2026-05-26] - Queued Task #188". Regression guard: happy-path drop тестовете трябва да останат зелени.
+
+---
+
+## ⏪ Историчен контекст: SaveCompositionWagons parity (Task #187, passes:true)
 
 **Continue with:** Task #187 — [BE] SaveCompositionWagons segment-aware conflict validation (parity with #184)
 
