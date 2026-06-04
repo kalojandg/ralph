@@ -5113,3 +5113,41 @@ User feedback 2026-05-22:
 **Next:** Ralph kicks #182 след #177-#180 (FE довършвания + e2e). Container rebuild на rail-run-service нужен в края.
 
 ---
+
+## 2026-06-04 — Composition Action History (История на действията за композиции) — план + tasks #190–#205
+
+**Why:**
+Нужен е четим, филтрируем journal на действията върху композиции (виж IDE screenshot „Моята активност"). Анализ на кода показа, че **одит инфраструктурата вече съществува и работи** — не се гради от нулата. Всички composition/carriage/seat мутации **вече публикуват** одит събития в централния `AuditService` чрез `AuditEventBuilder`. Проблемът: всичко минава под един общ `event_type = composition_modified`, без последователен old/new diff, без `reason`, и без изглед „история на конкретна композиция".
+
+**Спецификация / план:**
+- [composition-action-history-spec.md](../composition-action-history-spec.md) — домейн изисквания (NotebookLM / SP_v_3.pdf).
+- [composition-action-history-PLAN.md](../composition-action-history-PLAN.md) — техническият план (current state, DB, фази, frontend).
+
+**Решения (потвърдени с потребителя):**
+1. **Гранулярни event types** (composition_created, carriage_added, seats_blocked, …) — готовите `AuditMessages.RailRun` ключове вече ги има.
+2. **Read път C1** — съществуващият audit API + нови `compositionId`/`carriageId` филтри (нулев нов код в RailRun).
+3. **Права = съществуващото composition-read** (НЕ JOURNAL.ReadOnly, НЕ ново право).
+4. **SeatAuditLog = хибрид** — локалната таблица остава за seat-map детайл; „историята на композиция" чете централния audit. Без миграция сега.
+5. **UI = глобална страница „История на композиции"** (`/compositions/history`) в менюто + бутон „История" в редактора (pre-filter). Филтър по вагон, за да се сменя вагон без навигация навън/навътре.
+6. **Export = отложен** (готовият `AuditLogExportButton` се добавя при нужда).
+
+**Ключови находки от кода:**
+- Маршрутни **сегменти СЪЩЕСТВУВАТ** — но като полета `StartStationUic`/`EndStationUic` на `CompositionCarriage`, задавани в `AddCarriage`/`UpdateCarriage` (с overlap проверка `SegmentOverlapService`). Затова `route_segment_defined` НЕ е отделно събитие — диффът на сегмента влиза в `carriage_added`/`carriage_updated`.
+- **Локомотиви / detach / transfer (handover) / attach — НЯМА handlers** (deferred Phase D; одит се добавя заедно със самите функции).
+- Има втора, паралелна `SeatAuditLog` таблица (LogSeatAction/DeleteSeatAuditLog) — оставя се (хибрид).
+
+**GitNexus (задължителен по време на имплементацията):**
+- Индексирани repo-та: `Transport-OSDM-Src` (backend), `Transport-Admin-App` (frontend). И двата бяха **stale** (OSDM-Src ~284 commits зад, Admin-App ~42) → **task #190 ги refresh-ва преди всичко друго.**
+- Всеки backend/frontend task има RECON стъпка с `gitnexus context/impact/query --repo <name>` ПРЕДИ да пипа symbol, и DONE стъпка с `gitnexus detect-changes` за scope-check.
+
+**Tasks:** #190 (setup/index refresh) · #191–#199 backend (OSDM-Src: гранулярни types, old/new diff, compositionId, reason, read filter) · #200–#203 frontend (Admin-App: api+hook, страница, wiring, i18n) · #204 e2e · #205 docs. Всички `passes=false`, TDD.
+
+**Out of scope (deferred / Phase D):**
+- Локомотив add/remove handlers + одит.
+- Carriage detach/transfer(handover)/attach между влакове + одит.
+- Export на ниво композиция.
+- Миграция/депрекация на `SeatAuditLog`.
+
+**Next:** Ralph стартира #190 (refresh GitNexus index) → backend фаза A (#191–#198) → read API (#199) → frontend (#200–#203) → e2e (#204). Backend контейнери (rail-run-service, audit-service) се ребилдват в края на backend фазата.
+
+---
