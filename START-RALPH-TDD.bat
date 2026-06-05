@@ -5,7 +5,7 @@ echo.
 echo ====================================================
 echo    Ralph Wiggum TDD - Compositions Module
 echo    Test-Driven Development + Visual Feedback
-echo    Model: Claude Opus 4.6
+echo    Model: Claude Opus 4.8
 echo ====================================================
 echo.
 echo Starting with 70 iterations...
