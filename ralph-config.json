@@ -2,7 +2,7 @@
   "prompt_file": "PROMPT.md",
   "claude_args": [
     "--output-format", "text",
-    "--model", "claude-opus-4-6",
+    "--model", "claude-opus-4-8",
     "--dangerously-skip-permissions"
   ],
   "prerequisite_steps": {
