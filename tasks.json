@@ -6291,7 +6291,7 @@
   {
     "id": 201,
     "category": "frontend",
-    "description": "Frontend — global 'Istoriya na kompozicii' page reusing audit components (grid + timeline) with a WAGON filter so you switch wagons by changing the filter. Repo: Transport-Admin-App.",
+    "description": "Frontend — global 'Istoriya na kompozicii' page (ACCORDION list: human header + formatted Преди/След diff, raw JSON behind toggle) with a WAGON filter so you switch wagons by changing the filter. Header sentences + i18n keys are pre-defined in ../composition-history-i18n-templates.md. Repo: Transport-Admin-App.",
     "steps": [
       { "id": "201.1", "phase": "RECON", "action": "gitnexus context AuditLogJsonViewer / TimelineView / AuditFilterBar / DateRangePresets / auditLabels.utils --repo Transport-Admin-App — confirm props for reuse. NOTE presentation is an ACCORDION list (NOT AuditLogGrid table): MUI Accordion rows, human-readable header + expanded formatted Преди/След diff, raw JSON behind a toggle (decision 2026-06-04). gitnexus context CompositionsListPage for layout conventions." },
       { "id": "201.2", "phase": "RED", "action": "Add tests: (a) a summary-builder util (e.g. compositionHistory.utils) that maps each granular event_type + DetailsJson to a human header sentence via i18n params — composition_status_changed -> 'Композиция {train} ({date}) — статус: {old} → {new}'; carriage_updated route change -> 'Вагон №{placard} — маршрут променен: {from} → {to} ⟶ {newFrom} → {newTo}'; carriage_added; carriages_reordered '{n} вагона'; seats_blocked '{n} места — причина: {reason}'. (b) CompositionsHistoryPage.test.tsx: renders accordion rows with those headers; filters by composition/train AND by wagon; expand shows formatted Преди/След (station NAMES, only changed fields marked); 'Покажи суров JSON' toggle reveals AuditLogJsonViewer; Table⇄Timeline toggle; loading/empty/error; reads compositionId from URL (?compositionId=). Mock useCompositionsHistory." },
@@ -6315,7 +6315,7 @@
   {
     "id": 203,
     "category": "frontend",
-    "description": "Frontend — i18n: add compositions.history.* keys to BOTH bg.json and en.json in the same change (per CLAUDE.md). Repo: Transport-Admin-App.",
+    "description": "Frontend — i18n: add compositions.history.* keys to BOTH bg.json and en.json in the same change (per CLAUDE.md). The COMPLETE key set (header sentence templates, diff labels, status labels, filters) is ready-to-paste in ../composition-history-i18n-templates.md §5 (bg) and §6 (en). Repo: Transport-Admin-App.",
     "steps": [
       { "id": "203.1", "action": "Add keys for: page title, filter labels (composition, wagon, event type, operation, level, date, user, search), accordion HEADER SENTENCE TEMPLATES with params for every granular event_type (e.g. compositions.history.event.statusChanged='Композиция {train} ({date}) — статус: {old} → {new}', carriageRouteChanged, carriageAdded, carriagesReordered, seatsBlocked with {reason}, …), diff field labels (Начална гара/Крайна гара/Позиция/Статус, Преди/След), 'Покажи суров JSON' toggle, timeline toggle, empty/error states, the 'Istoriya' button, and the navigation menu label — in src/locales/bg.json AND src/locales/en.json." },
       { "id": "203.2", "action": "Run: npm run test:run + type-check; grep for any hardcoded Cyrillic strings left in the new components and replace with t('...')." }
