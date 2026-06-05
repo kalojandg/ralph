@@ -1,3 +1,23 @@
+## [2026-06-05] - Task #190: Refresh stale GitNexus index for both repos
+
+**Status:** ✅ Complete (setup task — no tddWorkflow)
+
+**What was done:**
+- 190.1: `gitnexus list` — both repos already indexed. Transport-OSDM-Src @4c10638 (5918 files, 65997 symbols, 300 processes); Transport-Admin-App @cc734b4 (1148 files, 14391 symbols).
+- 190.2: Task premise said OSDM-Src ~284 / Admin-App ~42 commits behind, but both indexes already matched current HEAD (verified `git rev-list --count <indexed>..HEAD` = 0 for both; working trees clean except untracked CLAUDE.md/AGENTS.md docs). Ran `gitnexus analyze` on both anyway → both reported "Already up to date" (~1.5s each, no re-index needed).
+- 190.3: `gitnexus list` confirms both at the current HEAD commit (commitsBehind ~0). Impact analysis for Tasks #191-196 will be accurate.
+
+**Files modified:**
+- `ralph/tasks.json` (#190 passes → true)
+- `ralph/activity.md`
+
+**Note:** No code-repo changes — index was already fresh from the 6/4 re-analyze. Subsequent tasks (#191-196) may now rely on `gitnexus context/impact/query`.
+
+**Git commit:**
+- `chore: mark task #190 complete — GitNexus index already current for both repos`
+
+---
+
 ## [2026-05-27 15:10] - Task #189: [BE+FE] Clone-for-period — skip whole day on wagon conflict
 
 **Status:** ✅ Complete
