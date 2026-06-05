@@ -5150,4 +5150,7 @@ User feedback 2026-05-22:
 
 **Next:** Ralph стартира #190 (refresh GitNexus index) → backend фаза A (#191–#198) → read API (#199) → frontend (#200–#203) → e2e (#204). Backend контейнери (rail-run-service, audit-service) се ребилдват в края на backend фазата.
 
+**Addendum (2026-06-04) — заварен integrity риск (документиран, БЕЗ task):**
+`CompositionCarriage.StartStationUic`/`EndStationUic` са `VARCHAR(7)` **без FK**. Гарите не са в RailRun DB — `stop-place` номенклатура от NomenclatureService (НКЖИ), кеш 12ч, point-in-time валидация. Изтриване на гара от НКЖИ НЕ чупи композицията на DB ниво, но: live name → код fallback; бъдеща редакция на сегмента fail-ва валидация; overlap → `WagonSegmentConflictUnknown`. Решението за **write-time name snapshot в DetailsJson (task #194)** митигира историята. Пълно hardening (soft-delete/referential guard/graceful fallback) = отделна бъдеща задача, нерешена тук.
+
 ---
