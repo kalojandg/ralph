@@ -6178,7 +6178,7 @@
       { "id": "191.3", "phase": "GREEN", "action": "Run: dotnet test on the SharedSrc/audit-related test project (or the RailRunService.Application.Tests audit tests) — green. Keep CompositionModified constant for backward-compat but stop using it in handlers (handlers updated in 192-196)." },
       { "id": "191.4", "phase": "DONE", "action": "gitnexus impact CompositionModified --direction upstream --depth 2 --include-tests --repo Transport-OSDM-Src — list every handler/test still referencing it; these are exactly tasks 192-196. Record the list in activity.md." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 192,
@@ -6190,7 +6190,7 @@
       { "id": "192.3", "phase": "GREEN", "action": "Edit the 3 handlers: swap EventTypes.CompositionModified -> granular type; read old status BEFORE mutation for SetCompositionStatus; build DetailsJson per PLAN §3.2 ({ compositionId, trainNumber, old, new }). Run dotnet test until green." },
       { "id": "192.4", "phase": "DONE", "action": "gitnexus detect-changes --repo Transport-OSDM-Src — affected processes should be only these 3 handlers + their tests. docker compose build rail-run-service if smoke-testing." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 193,
@@ -6202,7 +6202,7 @@
       { "id": "193.3", "phase": "GREEN", "action": "Edit handlers: capture old values before mutation; generate one CorrelationId at the start of the clone loop and pass it via AuditEventBuilder for every emitted event. dotnet test green." },
       { "id": "193.4", "phase": "DONE", "action": "gitnexus detect-changes --repo Transport-OSDM-Src — verify only the 3 handlers + tests changed." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 194,
@@ -6214,7 +6214,7 @@
       { "id": "194.3", "phase": "GREEN", "action": "Edit handlers: read old carriage state before mutation; resolve station names via the existing StopPlaceService (AddCarriage already does this — reuse for both start/end on add AND update, including the OLD values); build DetailsJson with compositionId + segment old/new (UIC + name) per PLAN §1.4/§3.2. dotnet test green." },
       { "id": "194.4", "phase": "DONE", "action": "gitnexus detect-changes --repo Transport-OSDM-Src — only AddCarriage/UpdateCarriage + tests affected." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 195,
@@ -6226,7 +6226,7 @@
       { "id": "195.3", "phase": "GREEN", "action": "Edit handlers to populate the diffs. dotnet test green." },
       { "id": "195.4", "phase": "DONE", "action": "gitnexus detect-changes --repo Transport-OSDM-Src — scope check." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 196,
@@ -6238,7 +6238,7 @@
       { "id": "196.3", "phase": "GREEN", "action": "Add Reason to BlockSeatsDto + BlockSeatsCommandValidator (required, max length). Edit the 4 handlers for granular types + compositionId + affectedSeats. Leave SeatAuditLog (LogSeatAction) untouched. dotnet test green." },
       { "id": "196.4", "phase": "DONE", "action": "gitnexus impact BlockSeatsDto --direction upstream --depth 2 --include-tests --repo Transport-OSDM-Src — update any other caller/controller of the DTO (and the Admin-App request shape in task 200). gitnexus detect-changes scope check." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 197,
@@ -6250,7 +6250,7 @@
       { "id": "197.3", "phase": "GREEN", "action": "Thread a reason param through the deactivate path; enforce required when soldTicketCount>0; emit WARN audit. dotnet test green." },
       { "id": "197.4", "phase": "DONE", "action": "gitnexus detect-changes --repo Transport-OSDM-Src — scope check; note in activity.md if this required a DTO change consumed by the frontend." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 198,
@@ -6262,7 +6262,7 @@
       { "id": "198.3", "phase": "GREEN", "action": "Implement the chosen strategy. dotnet test green." },
       { "id": "198.4", "phase": "DONE", "action": "gitnexus detect-changes --repo Transport-OSDM-Src — scope check. Record the chosen strategy in activity.md (task 199 read filter depends on it)." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 199,
@@ -6274,7 +6274,7 @@
       { "id": "199.3", "phase": "GREEN", "action": "Add compositionId/carriageId to the query + handler + repository filter (EntityType=Composition AND EntityId=compositionId OR JSON_VALUE/SearchText match; carriage/seat events matched by carriageId). Expose either a new action or a policy branch requiring composition-read for composition-scoped calls. dotnet test green." },
       { "id": "199.4", "phase": "DONE", "action": "gitnexus detect-changes --repo Transport-OSDM-Src — confirm only AuditService read path + tests changed. Document the final endpoint/params shape in activity.md for the frontend tasks." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 200,
@@ -6286,7 +6286,7 @@
       { "id": "200.3", "phase": "GREEN", "action": "Implement the api fn (reuse audit endpoint with new params) + types + a React Query hook with a query-key factory + onSuccess invalidation conventions. Also extend the BlockSeats request type with reason (from task 196). npm run test:run + type-check green." },
       { "id": "200.4", "phase": "DONE", "action": "npx eslint <changed files> — fix only branch-introduced errors (per repo lint rule)." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 201,
@@ -6298,7 +6298,7 @@
       { "id": "201.3", "phase": "GREEN", "action": "Implement src/app/features/compositions/pages/CompositionsHistoryPage.tsx + the summary-builder util + a formatted DiffView component: filter bar (composition, wagon, event type, operation, level, date presets, user, search); accordion list where header = builder sentence + timestamp + actor; expanded = Преди/След table (segment from DetailsJson station NAMES, not raw UIC; mark only changed fields) + a collapsed 'Покажи суров JSON' (AuditLogJsonViewer); TimelineView toggle. No export button (deferred). npm run test:run + type-check green." },
       { "id": "201.4", "phase": "DONE", "action": "npx eslint <changed files>. Visual smoke per ralph TDD (dev server + screenshot) if applicable." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 202,
@@ -6310,7 +6310,7 @@
       { "id": "202.3", "phase": "GREEN", "action": "Add COMPOSITIONS_HISTORY: '/compositions/history' to ROUTES; register route in router.tsx; add a menu item under Kompozicii in MainLayout; add the 'Istoriya' button in EditorHeader. npm run test:run + type-check green." },
       { "id": "202.4", "phase": "DONE", "action": "npx eslint <changed files>. gitnexus detect-changes --repo Transport-Admin-App — scope check." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 203,
@@ -6320,7 +6320,7 @@
       { "id": "203.1", "action": "Add keys for: page title, filter labels (composition, wagon, event type, operation, level, date, user, search), accordion HEADER SENTENCE TEMPLATES with params for every granular event_type (e.g. compositions.history.event.statusChanged='Композиция {train} ({date}) — статус: {old} → {new}', carriageRouteChanged, carriageAdded, carriagesReordered, seatsBlocked with {reason}, …), diff field labels (Начална гара/Крайна гара/Позиция/Статус, Преди/След), 'Покажи суров JSON' toggle, timeline toggle, empty/error states, the 'Istoriya' button, and the navigation menu label — in src/locales/bg.json AND src/locales/en.json." },
       { "id": "203.2", "action": "Run: npm run test:run + type-check; grep for any hardcoded Cyrillic strings left in the new components and replace with t('...')." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 204,
@@ -6331,7 +6331,7 @@
       { "id": "204.2", "phase": "GREEN", "action": "Run the integration suite green. If a real backend run is used: docker compose build rail-run-service + audit-service && up -d --force-recreate; seed a composition; exercise the flow." },
       { "id": "204.3", "phase": "DONE", "action": "gitnexus detect-changes on both repos to confirm the whole change set maps only to the intended processes; record residual gaps in activity.md." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 205,
@@ -6341,6 +6341,6 @@
       { "id": "205.1", "action": "Append to ralph/activity.md: the 6 decisions (granular event types, C1 read path, composition-read permission, hybrid SeatAuditLog, global history page + editor link, export deferred), segments-captured-in-carriage-events note, and the deferred Phase D (locomotive add/remove, carriage detach/transfer/attach — no handlers yet)." },
       { "id": "205.2", "action": "Cross-link ../composition-action-history-PLAN.md and ../composition-action-history-spec.md. Note the GitNexus repo names (Transport-OSDM-Src, Transport-Admin-App) and that the index was refreshed in task 190." }
     ],
-    "passes": false
+    "passes": true
   }
 ]

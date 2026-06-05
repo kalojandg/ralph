@@ -5177,3 +5177,342 @@ User feedback 2026-05-22:
 `CompositionCarriage.StartStationUic`/`EndStationUic` са `VARCHAR(7)` **без FK**. Гарите не са в RailRun DB — `stop-place` номенклатура от NomenclatureService (НКЖИ), кеш 12ч, point-in-time валидация. Изтриване на гара от НКЖИ НЕ чупи композицията на DB ниво, но: live name → код fallback; бъдеща редакция на сегмента fail-ва валидация; overlap → `WagonSegmentConflictUnknown`. Решението за **write-time name snapshot в DetailsJson (task #194)** митигира историята. Пълно hardening (soft-delete/referential guard/graceful fallback) = отделна бъдеща задача, нерешена тук.
 
 ---
+
+## Task #191 — Phase A granular audit event types (DONE 2026-06-05)
+
+Replaced the single `composition_modified` with 13 granular per-operation event types, reusing existing `AuditMessages.RailRun` keys.
+
+**Production edits:**
+- `SharedSrc/MessageBus/Events/Audit/AuditConstants.cs` — added 13 granular `EventTypes` constants (composition_created/updated/deleted/status_changed/cloned, carriage_added/updated/removed, carriages_reordered, seats_blocked/unblocked/sold/released).
+- `AuditService/AuditService.Application/Constants/EventTypes.cs` — same 13 constants + registered all in `AllTypes` (so ingestion accepts them).
+- `SharedSrc/MessageBus/Events/Audit/AuditMessages.cs` — added missing `RailRun.CompositionClonedKey`/`CompositionCloned` (the only granular type without a pre-existing key; `carriage_removed` maps to existing `CarriageDeleted`).
+- `CompositionModified` kept for backward-compat (removed from handlers in #192–#196).
+
+**Tests:** new `CompositionEventTypesTests.cs` (1:1 event→RailRun-key mapping, 13 distinct); updated counts (RailRun 28→30, AuditService GetAll 49→62) + InlineData/IsValid asserts. MessageBus.Tests 238 pass, AuditService.Application.Tests 69 pass.
+
+**Consumers still on `CompositionModified` (= tasks #192–#196), via grep (gitnexus impact couldn't resolve the field symbol):**
+- Handlers: `SaveCompositionWagons`, `CreateComposition`, `CloneCompositionForPeriod`, `UpdateCarriagE`, `AddCarriage`, `UpdateComposition`, `SetCompositionStatus`, `DeleteComposition`, `DeleteCarriageCommand`, `ReorderCarriages`.
+- Audit tests: `CreateCompositionCommandHandlerAuditTests`, `UpdateCompositionCommandHandlerAuditTests`, `SetCompositionStatusCommandHandlerAuditTests`, `DeleteCompositionCommandHandlerAuditTests`, `AddCarriageCommandHandlerAuditTests`, `UpdateCarriageCommandHandlerAuditTests`, `DeleteCarriageCommandHandlerAuditTests`, `ReorderCarriagesCommandHandlerAuditTests`.
+- Registry/test files intentionally retain the constant: `AuditConstants.cs`, `EventTypes.cs`, `AuditConstantsTests.cs`, `EventTypesTests.cs`.
+
+---
+
+## Task #192 — Phase A granular audit: composition lifecycle handlers (DONE 2026-06-05)
+
+**Status:** ✅ Complete · **TDD:** RED → GREEN → DONE
+
+Swapped the single `composition_modified` event type for granular per-operation types in the three composition lifecycle handlers, per composition-action-history-PLAN §3.2/§3.3.
+
+**Production edits (Transport-OSDM-Src):**
+- `CreateComposition.cs` — `EventTypes.CompositionModified` → `CompositionCreated` (success + failure paths). DetailsJson already carried `{ compositionId, trainNumber }`.
+- `DeleteComposition.cs` — → `CompositionDeleted` (both paths).
+- `SetCompositionStatus.cs` — → `CompositionStatusChanged` (both paths); restructured success DetailsJson from flat `{ compositionId, oldStatus, newStatus }` to PLAN §3.2 nested shape `{ compositionId, trainNumber, old:{status}, new:{status} }` (`@new` C# escape → `"new"` JSON key). `oldStatus` still read BEFORE mutation.
+
+**Tests (RED→GREEN):** updated the 3 `*AuditTests` to assert the granular event types; SetCompositionStatus now asserts `trainNumber` + nested `"old"`/`"new"` + both DRAFT/ACTIVE. Failure-path asserts (Level=ERROR/Status=failed) unchanged. RED showed 4 expected failures; GREEN 12/12; full RailRunService.Application.Tests 281/281, no regressions.
+
+**Scope check:** `git status` = exactly the 3 handlers + 3 audit tests. CompositionModified constant retained for backward-compat (still used by #193–#196 handlers).
+
+**Git commit:** `feat(compositions): Phase A — Composition lifecycle handlers: CreateComposition, DeleteComposition, SetCompositionStatus -> granular event_type + old/new diff + compositionId in DetailsJson. Repo: Transport-OSDM-Src.`
+
+## Task #193 — Phase A granular audit: Update/SaveWagons/CloneForPeriod handlers (DONE 2026-06-05)
+
+**Status:** ✅ Complete · **TDD:** RED → GREEN → DONE
+
+Migrated the remaining three composition handlers off `composition_modified` to granular types, added old/new diffs, and introduced a shared CorrelationId for the clone batch (one user operation → many compositions), per composition-action-history-PLAN §3.2/§3.3/§4.
+
+**Production edits (Transport-OSDM-Src):**
+- `UpdateComposition.cs` — `EventTypes.CompositionModified` → `CompositionUpdated` (success + failure). Captures `oldValues` (trainNumber, startDate, operationDays, allocationRules, tripId) BEFORE mutation; success DetailsJson now nests `{ compositionId, trainNumber, old:{...}, new:{...} }`.
+- `CloneCompositionForPeriod.cs` — replaced the single post-loop aggregate `CompositionModified` event with one `CompositionCloned` event **per created composition** emitted inside the loop; all share one `correlationId = Guid.NewGuid()` via `.WithCorrelation()`; each carries `sourceCompositionId` in DetailsJson. Failure path → `CompositionCloned` + same correlationId + `sourceCompositionId`.
+- `SaveCompositionWagons.cs` — all three `CompositionModified` usages (2 WARN segment-conflict-unknown + final success) → `CompositionUpdated`, each with shared `correlationId`. Snapshots `oldCarriageSet` before mutation; final success DetailsJson adds `old`/`new` carriage-set arrays (new = surviving+updates+added).
+
+**Tests (RED→GREEN):** edited `UpdateCompositionCommandHandlerAuditTests` (event-type + new old/new diff test); created `SaveCompositionWagonsCommandHandlerAuditTests` (2 tests: granular updated event + carriage-set diff & correlationId) and `CloneCompositionForPeriodCommandHandlerAuditTests` (2 tests: 3-day clone → 3 cloned events sharing one correlationId + sourceCompositionId; exception → failed cloned event). RED 6 expected failures; GREEN 53/53 audit; full RailRunService.Application.Tests 286/286, no regressions.
+
+**Scope check:** `gitnexus detect_changes` = 4 files (3 handlers + UpdateComposition test) touched, 0 affected processes, risk low (2 new test files are new/unindexed). `CompositionModified` constant now unused by composition handlers but retained for carriage handlers (#194–#196).
+
+**Git commit:** `feat(compositions): Phase A — UpdateComposition, SaveCompositionWagons, CloneCompositionForPeriod -> granular types + old/new diff; shared CorrelationId for the clone batch (one operation -> many compositions). Repo: Transport-OSDM-Src.`
+
+## Task #194 — Phase A granular audit: AddCarriage / UpdateCarriage handlers (DONE 2026-06-05)
+
+**Status:** ✅ Complete · **TDD:** RED → GREEN → DONE
+
+Migrated the two carriage handlers off `composition_modified` to granular `carriage_added` / `carriage_updated`, with the route segment captured as an old/new diff (UIC + write-time-denormalized station name), per composition-action-history-PLAN §1.4/§3.2/§3.3.
+
+**Production edits (Transport-OSDM-Src):**
+- `AddCarriage.cs` — `EventTypes.CompositionModified` → `CarriageAdded` (success + 2 failure paths). Moved StopPlaceService name resolution (startName/endName) BEFORE the success audit publish so names are denormalized into DetailsJson. Success DetailsJson now `{ carriageId, compositionId, trainNumber, placardNumber, wagonTypeId, new:{ position, startStationUic, startStationName, endStationUic, endStationName } }` (carriage_added has no `old`).
+- `UpdateCarriage.cs` — → `CarriageUpdated` (success + 2 failure paths). Captures `oldPosition`/`oldStartStationUic`/`oldEndStationUic` BEFORE mutation; resolves names for the union of old+new UICs via `GetNamesAsync`; success DetailsJson nests `{ carriageId, compositionId, placardNumber, wagonTypeId, old:{...}, new:{...} }` with both UIC + station name on each side. Segment-only edits surface as a station-field diff.
+
+**Tests (RED→GREEN):** updated `AddCarriageCommandHandlerAuditTests` (event-type → carriage_added; +wagonTypeId; new test for `new` segment with station names) and `UpdateCarriageCommandHandlerAuditTests` (event-type → carriage_updated; +wagonTypeId; new test for old/new segment diff with Plovdiv→Burgas station names). RED 6 expected failures (right reason: still composition_modified, missing new/old/wagonTypeId); GREEN all 62 Carriage tests; full RailRunService.Application.Tests 288/288, no regressions.
+
+**Scope check:** `gitnexus detect-changes` = 4 files (AddCarriage.cs, UpdateCarriagE.cs + their 2 audit tests), 0 affected processes, risk low. Pre-edit `gitnexus impact AddCarriageCommandHandler` = HIGH (9 callers) but all are the handler's own test classes + Controller/Command constructors; handler signature & return behavior unchanged, so contained. `CompositionModified` constant now unused by carriage handlers, retained for #195–#196.
+
+**Git commit:** `feat(compositions): Phase A — Carriage handlers: AddCarriage, UpdateCarriage -> carriage_added/carriage_updated + compositionId + old/new diff INCLUDING route segment fields StartStationUic/EndStationUic (segment change is captured here, NOT a separate event). Repo: Transport-OSDM-Src.`
+
+## Task #195 — Phase A granular audit: DeleteCarriage / ReorderCarriages handlers (DONE 2026-06-05)
+
+**Status:** ✅ Complete · **TDD:** RED → GREEN → DONE
+
+Migrated the last two carriage handlers off `composition_modified` to granular `carriage_removed` / `carriages_reordered`, with the removed-carriage snapshot and the old/new position map added to DetailsJson; the reorder shares one CorrelationId (one operation → many carriage rows updated).
+
+**Production edits (Transport-OSDM-Src):**
+- `ReorderCarriages.cs` — `EventTypes.CompositionModified` → `CarriagesReordered` (success + failure). Captures `old` position map (carriageId→SequenceNumber) BEFORE the mutation loop; builds `new` map from the updated rows; success DetailsJson now `{ compositionId, old:{...}, new:{...} }` (dropped the bare `carriageCount`). Added `correlationId = Guid.NewGuid()` via `.WithCorrelation()` on both success and failure events.
+- `DeleteCarriageCommand.cs` — → `CarriageRemoved` (success + failure). Success DetailsJson now `{ carriageId, compositionId, removed:{ placardNumber, wagonTypeId, position, startStationUic, endStationUic, operationType, isActive } }` — the removed-carriage snapshot taken from the already-loaded entity (no new StopPlaceService dependency; UICs only, no name resolution).
+
+**Tests (RED→GREEN):** updated `ReorderCarriagesCommandHandlerAuditTests` (event-type → carriages_reordered on success + failure; old/new map test asserting positions swap + non-empty CorrelationId; DetailsContainExpectedFields now asserts old/new instead of carriageCount) and `DeleteCarriageCommandHandlerAuditTests` (event-type → carriage_removed on success + failure; new test asserting the `removed` snapshot fields). RED 7 expected failures (right reason: still composition_modified, missing old/new/correlation/removed-snapshot); GREEN 10/10 on the two classes; full RailRunService.Application.Tests 290/290, no regressions.
+
+**Scope check:** `gitnexus detect-changes` = 4 files (2 handlers + 2 audit tests), 0 affected processes, risk low. `composition_modified` / `CompositionModified` now has ZERO references anywhere in RailRunService — the Phase A granular migration (#191–#195) is complete for all composition + carriage handlers; seat handlers remain in #196.
+
+**Git commit:** `feat(compositions): Phase A — DeleteCarriage, ReorderCarriages -> carriage_removed/carriages_reordered + compositionId + old/new positions array. Repo: Transport-OSDM-Src.`
+
+## Task #196 — Phase A+B granular audit: Seat handlers (BlockSeats / UnblockSeats / SellSeats / ReleaseSeats) (DONE 2026-06-05)
+
+**Status:** ✅ Complete · **TDD:** RED → GREEN → DONE
+
+Migrated the four seat-operation handlers off the generic `seat_operation` event onto granular `seats_blocked` / `seats_unblocked` / `seats_sold` / `seats_released` types, and corrected DetailsJson to carry the real `compositionId` (previously mis-set to CarriageId), `carriageId`, `placardNumber`, and an `affectedSeats[]` array (renamed from `seatIds`) for the frontend summary-builder (#201/#203). Phase B `reason`-required on BlockSeats was already enforced on `BlockSeatsDto` (`[Required]`) + `BlockSeatsCommandValidator` (`.NotEmpty()`), so no DTO/validator edit was needed — verified, not re-implemented. SeatAuditLog / LogSeatAction left untouched per the PLAN §5 hybrid decision.
+
+**Production edits (Transport-OSDM-Src):**
+- `BlockSeats.cs` — `EventTypes.SeatOperation` → `SeatsBlocked` (success + failure). MessageArgs/DetailsJson now use real `carriage.CompositionId`; success DetailsJson `{ compositionId, carriageId, placardNumber, affectedSeats, blockType, reason }`.
+- `UnblockSeats.cs` — → `SeatsUnblocked`; success DetailsJson `{ compositionId, carriageId, placardNumber, affectedSeats }` where `affectedSeats = unblockedSeatNumbers.ToList()`.
+- `SellSeats.cs` — → `SeatsSold`; reuses existing local `compositionId`; success DetailsJson `{ compositionId, carriageId, placardNumber, affectedSeats, ticketNumber }`.
+- `ReleaseSeats.cs` — → `SeatsReleased`; success DetailsJson `{ compositionId, carriageId, placardNumber, affectedSeats, reason }`.
+- All four failure-path audit publishes updated to the granular type + `{ failure_reason, compositionId, carriageId, affectedSeats }`.
+
+**Tests (RED→GREEN):** updated the 4 `*CommandHandlerAuditTests` — event-type asserts to the granular constants; `DetailsContainExpectedFields` now JsonDocument-parses DetailsJson and asserts `compositionId==1` (real, not carriageId), `carriageId==10`, `placardNumber=="001"`, `affectedSeats` length 2, plus per-handler `reason`/`blockType`/`ticketNumber`. Mock carriages given `CompositionId=1` + `Composition{ TripId=null }`. RED 8 expected failures (right reason: still `seat_operation`; compositionId 10≠1); GREEN seat audit tests 16/16; full RailRunService.Application.Tests 290/290, no regressions. `dotnet build` clean.
+
+**Scope check:** `gitnexus detect-changes` = 8 files (4 handlers + 4 audit tests), 25 changed symbols, 0 affected processes, risk low. Remaining `SeatOperation`/`seat_operation`/`seatIds` references live only in OUT-of-scope Inventory handlers (`LockSeats.cs`, `ReleaseSeatLocks.cs`) and the AuditConstants/EventTypes registries (constant retained) — correctly untouched.
+
+**Git commit:** `feat(compositions): Phase A+B — Seat handlers: BlockSeats, UnblockSeats, SellSeats, ReleaseSeats -> granular seats_* events + compositionId + affectedSeats[]; add required reason on BlockSeats (Phase B). Repo: Transport-OSDM-Src.`
+
+## Task #197 — Phase B: require + log a reason when deactivating a carriage WITH sold tickets (Level=WARN)
+
+**RECON:** No prior sold-ticket guard existed on the carriage-deactivate path (prerequisite, per 197.1). Sold tickets = `SeatAvailability` rows with `Status == "SOLD"` linked to a carriage via `CompCarriageId` (confirmed in `SellSeats.cs` / `SeatAvailabilityStatuses.Sold`). The carriage-deactivate path is `UpdateCarriageCommand`/`UpdateCarriageCommandHandler` (file `Features/Carriages/Commands/UpdateCarriagE.cs`, capital E), production-reachable via `CarriagesController.UpdateCarriage` (PUT `/api/compositions/{id}/wagons/{carriageId}`). Composition-status path (`SetCompositionStatus`) left untouched: the RED/GREEN acceptance steps (197.2/197.3) target the carriage path only, and composition "inactive" has no INACTIVE constant (Draft/Active/Archived) — kept scope minimal.
+
+**RED:** Added 3 tests to `UpdateCarriageCommandHandlerAuditTests` + 7th mock `IReadOnlyRepository<SeatAvailability,long>` and a `SetupSoldSeats(carriageId,soldCount)` helper: (1) deactivate with sold tickets + no reason → `Result.Fail(Validation, DEACTIVATE_REASON_REQUIRED)`, no `UpdateAsync`; (2) deactivate with sold tickets + reason → success, WARN audit, DetailsJson carries `reason` + `soldTicketCount`; (3) deactivate with no sold tickets + no reason → success. Confirmed RED: 2 expected failures (no guard → `Success=True`; audit Level `INFO`≠`WARN`).
+
+**GREEN (production edits, Transport-OSDM-Src):**
+- `UpdateCarriagE.cs` — added `string? Reason` to `UpdateCarriageCommand`; injected `IReadOnlyRepository<SeatAvailability,long>` (7th ctor dep). When `IsActive == false`, `soldTicketCount = CountAsync(sa => sa.CompCarriageId == carriage.Id && sa.Status == SeatAvailabilityStatuses.Sold)`; if `>0 && Reason` blank → `Fail(Validation, DeactivateReasonRequired, soldTicketCount)`; else flag `deactivatingWithSold`. Success audit now conditionally `WithLevel(Warn)` and DetailsJson includes `reason` + `soldTicketCount` (null when not a sold-deactivation).
+- `RailRunErrorCodes.cs` — new `DeactivateReasonRequired = "DEACTIVATE_REASON_REQUIRED"`.
+- `ErrorMessages.resx` / `.en.resx` — localized message (bg + en), arg {0} = soldTicketCount.
+- `UpdateCarriageDto.cs` — added `[MaxLength(500)] string? Reason` **(DTO consumed by the frontend — note per 197.4; frontend must send `reason` when deactivating a wagon that has sold tickets, else 400 DEACTIVATE_REASON_REQUIRED).**
+- `CarriagesController.cs` — map `Reason = dto.Reason`.
+
+Updated both handler-construction call sites in tests (`UpdateCarriageCommandHandlerAuditTests`, `UpdateCarriageSegmentConflictTests`) to pass the seat-repo mock (empty by default).
+
+**Tests:** full `RailRunService.Application.Tests` 293/293 green; `RailRunService.API` build clean (pre-existing warnings only).
+
+**Scope check:** `gitnexus detect-changes` = 8 files, 19 changed symbols, 0 affected processes, risk low — all within the carriage-deactivate path + its tests.
+
+**Git commit:** `feat(compositions): Phase B — require + log a reason when deactivating a carriage / setting composition status to inactive WITH sold tickets (Level=WARN). Repo: Transport-OSDM-Src.`
+
+---
+
+## Task #198 — Phase A enabler: make compositionId/carriageId discoverable by the read filter (AuditService)
+
+**Strategy chosen:** SearchText enrichment (the "preferred" option from step 198.1), NOT JSON_VALUE filtering.
+
+**Why:** `AuditLogRepository.ApplyFilters` already matches the free-text `searchText` param via `a.SearchText != null && a.SearchText.ToLower().Contains(searchLower)`. By surfacing the ids into `SearchText` at ingestion time, task 199's composition-scoped read can reuse the existing contains-filter with minimal change instead of introducing provider-specific `JSON_VALUE(DetailsJson)` SQL.
+
+**Implementation:** `AuditLoggingService.AcceptAuditEventAsync` now calls `AddDetailsScopeIds(auditLog.DetailsJson, searchParts)` before building `SearchText`. The helper parses `DetailsJson` with `JsonDocument`, extracts top-level `compositionId` and `carriageId` (string or number), and appends them to the search parts. Malformed JSON is caught (`JsonException`) and ignored so it never breaks ingestion.
+
+**Note for task 199:** ids live ONLY at the top level of `DetailsJson` (handlers place them there since Phase A, tasks #191–#197). compositionId/carriageId are now discoverable via the existing SearchText contains-filter — the read filter can match a composition by passing the id as `searchText`, or add explicit compositionId/carriageId params that map onto the same SearchText match.
+
+**Tests:** added `AcceptAuditEventAsync_AddsCompositionIdAndCarriageIdFromDetailsJsonToSearchText` and `AcceptAuditEventAsync_InvalidDetailsJson_DoesNotThrowAndPopulatesSearchText`. `AuditService.Application.Tests` 12/12 green.
+
+**Scope check:** `gitnexus detect-changes` = 2 files, 4 changed symbols, 0 affected processes, risk low — only `AuditLoggingService` + its tests.
+
+**Git commit:** `feat(compositions): Phase A enabler — ensure compositionId/carriageId are discoverable by the read filter. Enrich SearchText OR rely on JSON_VALUE(DetailsJson). Repo: Transport-OSDM-Src (AuditService).`
+
+---
+
+## Task #199 — Phase C1: read API for composition history (compositionId + carriageId), scoped under composition-read permission (AuditService)
+
+**Endpoint (for frontend tasks #200–#202):**
+`GET /api/v1/audit-logs/compositions`
+Query params: `compositionId`, `carriageId`, `sortBy`, `sortDirection`, `page` (default 1), `pageSize` (default 20).
+Returns `PagedResult<AuditLogSummaryDto>` — same DTO as the main `GET /api/v1/audit-logs`.
+**Auth:** `[AuthorizePermissions(ResourceCodes.Composition, AccessLevel.ReadOnly)]` — requires COMPOSITION read, **NOT** JOURNAL.ReadOnly.
+
+**Design decision:** added a NEW controller action (`GetCompositionHistory`) rather than a policy branch on the existing `GetAuditLogs`. Keeps the COMPOSITION-read authorization cleanly separated from the JOURNAL-scoped admin read, and avoids overloading the journal endpoint's 25-param signature.
+
+**Filter logic (reuses task-198 SearchText strategy):** new `compositionId`/`carriageId` params flow `GetAuditLogsQuery` -> handler -> `IAuditLogRepository.GetPagedAsync` -> `ApplyFilters`. Each matches `(EntityType == "composition"/"carriage" && EntityId == id) OR SearchText.Contains(id)`. The SearchText branch picks up seat events (EntityType=seat) and any event whose DetailsJson ids were surfaced into SearchText at ingestion (task #198), so a composition-scoped read returns Composition + its Carriage + Seat events; carriageId narrows to one wagon + its seats.
+
+**Signature change:** `GetPagedAsync` and `ApplyFilters` gained trailing optional `string? compositionId = null, string? carriageId = null` (placed after `includeRedacted`, before `CancellationToken`), so the only production caller (the journal handler) and `GetFilteredAsync` compile unchanged. The separate `IAuditAdminActionRepository.GetPagedAsync` is untouched.
+
+**Files:** `AuditLogController.cs` (+GetCompositionHistory), `GetAuditLogsQuery.cs` (+CompositionId/CarriageId props + handler pass-through), `IAuditLogRepository.cs`, `AuditLogRepository.cs` (ApplyFilters logic). Tests: `AuditLogRepositoryTests` (3 repo filter tests + seed helper), `GetAuditLogsQueryHandlerTests` (handler pass-through + updated Verify/Setup for new signature), `AuditLogControllerTests` (2 endpoint tests), `AuthorizePermissionsAttributeTests` (asserts COMPOSITION/ReadOnly via reflection, not JOURNAL).
+
+**Tests:** AuditService Application 411/411, Infrastructure 339/339, API 161/161 — all green (911 total).
+
+**Scope check:** `gitnexus detect-changes` = 8 files, 33 changed symbols, 0 affected processes, risk low — only the AuditService read path + its tests.
+
+**Git commit:** `feat(compositions): Phase C1 — read API: add compositionId + carriageId query params to the audit read, scoped under the EXISTING composition-read permission (not JOURNAL.ReadOnly). Repo: Transport-OSDM-Src (AuditService).`
+
+---
+
+## Task #200 — Frontend: audit API client + hook (compositionId/carriageId + useCompositionsHistory) (DONE 2026-06-05)
+
+**Status:** ✅ Complete · **TDD:** RED → GREEN → DONE · **Repo:** Transport-Admin-App
+
+**Note:** the implementation for this task was already present in the working tree (uncommitted from a prior iteration that did not commit/mark). This iteration verified, tested, and committed it — no new code was needed.
+
+**Production edits (Transport-Admin-App):**
+- `src/api/audit/audit.types.ts` — added `CompositionsHistoryParams extends PaginationParams` with `compositionId`, `carriageId`, `eventType`, `operation`, `level`, `dateFrom`, `dateTo`, `actorUserId`, `searchText`, `sortBy`, `sortDirection`.
+- `src/api/audit/audit.api.ts` — added `getCompositionsHistory(params)` → `GET API_ENDPOINTS.AUDIT.COMPOSITIONS_HISTORY`, returns `PagedResult<AuditLogSummary>` (matches task #199 endpoint `GET /audit-service/api/v1/audit-logs/compositions`).
+- `src/api/config.ts` — added `AUDIT.COMPOSITIONS_HISTORY = \`${base}/compositions\``.
+- `src/app/features/audit/hooks/useAuditLogs.ts` — added `auditQueryKeys.compositionsHistories()` + `compositionsHistory(params)` query-key factory.
+- `src/app/features/audit/hooks/useCompositionsHistory.ts` (new) — React Query hook reusing `auditQueryKeys.compositionsHistory`, default pagination merge, `staleTime: 0` / `refetchOnMount: 'always'` (same convention as `useAuditLogs`).
+- `src/app/features/audit/index.ts` — export the new hook.
+- `src/app/features/compositions/types/seat.types.ts` — added `BlockSeatsRequest` with required non-empty `reason: string` (from task #196 Phase B).
+- `src/api/compositions/seats.api.ts` — typed `blockSeats` request body as `BlockSeatsRequest`, sends `reason` (trimmed description, falls back to blockType label).
+
+**Tests:** `audit.api.test.ts` (getCompositionsHistory asserts URL + all 13 params), `useAuditLogs.test.ts` (compositionsHistory key factory + useCompositionsHistory returns data). Targeted run: audit.api 19/19, useAuditLogs 16/16, seats.api 30/30 — 65/65 green. `npm run type-check` clean. `npx eslint` on the 10 changed files — clean.
+
+**Commit scope:** excluded `CLAUDE.md` (auto-generated GitNexus doc block, unrelated tooling artifact — left unstaged).
+
+**Git commit:** `feat(compositions): Frontend — audit API client + hook: add compositionId/carriageId params and useCompositionsHistory. Repo: Transport-Admin-App.`
+
+---
+
+## Task #201 — Frontend: global "Istoriya na kompozicii" accordion page (DONE 2026-06-05)
+
+**Status:** ✅ Complete · **TDD:** RED → GREEN → DONE · **Repo:** Transport-Admin-App
+
+**Scope:** the global Composition Action History page — an ACCORDION list (NOT AuditLogGrid) where each row's header is a human sentence built from the granular event_type + DetailsJson, expanded to a formatted Преди/След diff with raw JSON behind a toggle, plus a WAGON filter to switch wagons.
+
+**Note:** the summary-builder util, util test, and the diff component were already present (untracked) from a prior iteration today — this iteration built only the page + page test on top of them and committed the whole set.
+
+**Production (Transport-Admin-App):**
+- `src/app/features/compositions/pages/CompositionsHistoryPage.tsx` (new) — filter bar (composition, wagon, event type, operation, level, DateRangePresets, user, debounced search); accordion list (header = `buildCompositionHistoryHeader(log, statusLabel)` → `t(key, params)`, failed rows wrapped via `COMPOSITION_HISTORY_FAILED_KEY` + error chip; timestamp + actor); expanded = `CompositionHistoryDiff` (station NAMES, only changed fields) + collapsed "Покажи суров JSON" → `AuditLogJsonViewer`; Table⇄Timeline `ToggleButtonGroup` (timeline maps rows → `UserActivityTimelineDto`); loading/empty/error; reads `compositionId` from URL `?compositionId=`; TablePagination. No export button (deferred).
+- Wagon filter options derived from the loaded rows' DetailsJson (carriageId → placard), so you switch wagons by changing the filter; selected carriageId is always retained as an option.
+- `src/app/features/audit/index.ts` — export `AuditLogJsonViewer` (needed by the page through the audit barrel).
+- `src/app/features/compositions/index.ts` — export `CompositionsHistoryPage`.
+- Carried in from the prior untracked iteration: `utils/compositionHistory.utils.ts` (+ `__tests__`), `components/CompositionHistoryDiff.tsx`.
+
+**Tests:** `CompositionsHistoryPage.test.tsx` (9: loading/error/empty, accordion rows + builder header + actor, compositionId-from-URL, debounced searchText, wagon-filter switches carriageId, expand → diff + raw-JSON toggle reveals AuditLogJsonViewer, Table⇄Timeline toggle) and `compositionHistory.utils.test.ts` (7) — 16/16 green. `npm run type-check` clean. `npx eslint` on the 4 changed files — clean (fixed a `no-base-to-string` by narrowing `str` to string|number, and a `react-hooks/set-state-in-effect` by reading compositionId via the `useState` initializer instead of a sync effect).
+
+**Full suite:** `npm run test:run` = 2982 passed / 43 failed (8 files). All failures are PRE-EXISTING and unrelated to this task (i18n key-passthrough mismatches in `wagonGrid/osdmRenderers` AmenityRenderer etc., expecting hardcoded labels like "WC" vs the mock's i18n key). Zero failures reference `CompositionsHistoryPage`, audit, or compositions; my changeset is additive (new page + two barrel re-exports).
+
+**Deferred / residual gaps:**
+- i18n keys (`compositions.history.*`) are emitted by the page but not yet added to bg.json/en.json — that is task #203. With the global useTranslation mock the tests assert on raw keys; real UI strings land in #203.
+- The compositions-history list endpoint returns `PagedResult<AuditLogSummary>` (no `detailsJson` on the summary projection). The page entry type `CompositionHistoryLog extends AuditLogSummary { detailsJson?: string | null }` makes it optional; header/diff degrade gracefully when absent. If the backend list projection omits DetailsJson, the accordion headers fall back and the diff renders nothing — backend list projection may need DetailsJson surfaced.
+- Export button deferred (per decision 2026-06-04).
+- `CompositionHistoryDiff` renders a `<Chip>` inside a `<Typography>` (p>div) → a benign DOM-nesting console warning surfaces in tests; left as-is (component owned by the prior util/diff iteration, out of #201 page scope).
+
+**Git commit:** excluded `CLAUDE.md` (auto-generated GitNexus doc block — left unstaged, same as task #200).
+
+---
+
+## Task #202 — Frontend: wiring (route + sidebar menu + "История" editor button) (DONE 2026-06-05)
+
+**Status:** ✅ Complete · **TDD:** RED → GREEN → DONE · **Repo:** Transport-Admin-App
+
+**Scope:** wire the global Composition Action History page (built in #201) into the app — a route constant + router entry behind AuthGuard, a sidebar menu item under "Композиции", and an "История" button in the composition editor header that opens the page pre-filtered by composition id.
+
+**RED:**
+- `EditorHeader.test.tsx` — added a "History Button" describe (3 tests): renders `composition-history-button` when a composition exists; clicking it calls `useNavigate` with `/compositions/history?compositionId=1`; not rendered when composition is null. The existing test file already mocks `useNavigate` → `mockNavigate`.
+- `src/app/routes/__tests__/router.test.tsx` (new) — structural test: the protected `/` branch (element type === `AuthGuard`) has a child route `compositions/history` whose `element.type === CompositionsHistoryPage`. Confirmed RED: button testid missing + route undefined.
+
+**GREEN (production, Transport-Admin-App):**
+- `src/app/shared/constants/index.ts` — `ROUTES.COMPOSITIONS_HISTORY = '/compositions/history'`.
+- `src/app/routes/router.tsx` — imported `CompositionsHistoryPage` from the compositions barrel; registered `{ path: 'compositions/history', element: <CompositionsHistoryPage /> }` under the AuthGuard+MainLayout protected branch (static path, no shadowing vs `compositions/:id/edit`).
+- `src/app/layout/MainLayout.tsx` — added a 3rd item to `compositionsMenuItems` (`navigation.compositionsMenu.history`, `HistoryEduIcon`, `ROUTES.COMPOSITIONS_HISTORY`). Also tightened the "assembly" item's `selected` predicate to exclude the `/compositions/history` subpath, so the new item doesn't double-highlight with assembly.
+- `src/app/features/compositions/components/EditorHeader.tsx` — `useNavigate` + `ROUTES` import; `handleHistoryClick` → `void navigate('/compositions/history?compositionId=<id>')`; an outlined "История" button (`HistoryEduIcon`, `data-testid="composition-history-button"`, label `compositions.editor.header.history`) rendered before the Clone button when a composition exists.
+
+**i18n note (for task #203):** the new components reference `navigation.compositionsMenu.history` (menu) and `compositions.editor.header.history` (button) — followed the existing key conventions in these files rather than grouping under `compositions.history.*`. #203 must add BOTH keys to bg.json + en.json (in addition to the page keys). Tests use the key-passthrough translation mock, so they pass without the keys present.
+
+**Tests:** EditorHeader 40/40, router 1/1 — all green. `npm run type-check` clean. `npx eslint` on the 6 changed files = 0 errors, 1 PRE-EXISTING warning (`prefer-optional-chain` on the untouched `hasTripLinked` line). Pre-existing suite failures in `CompositionEditorPage.test.tsx` ("Physical wagon identity on drop", Task #175 drag-drop placard logic) confirmed to fail identically on HEAD with my changes stashed — unrelated to this task.
+
+**Scope check:** `gitnexus detect-changes --repo Transport-Admin-App` = 6 files, 7 symbols, 1 affected process (`MainLayout` flow — expected, menu touched), risk medium. Only EditorHeader, MainLayout, router, ROUTES changed. CLAUDE.md is an auto-generated GitNexus artifact (left unstaged, same as #200/#201).
+
+**Git commit:** `feat(compositions): Frontend — wiring: route COMPOSITIONS_HISTORY, sidebar menu item under Kompozicii, and a 'Istoriya' button in the composition editor that opens the page pre-filtered. Repo: Transport-Admin-App.`
+
+---
+
+## [2026-06-05 15:01] - Task #203: Frontend — i18n: add compositions.history.* keys to BOTH bg.json and en.json
+
+**Status:** ✅ Complete
+
+**Scope:** add the full `compositions.history.*` i18n key set to `src/locales/bg.json` AND `src/locales/en.json` (same change, per CLAUDE.md), plus the two wiring keys the #202 components already reference: `compositions.editor.header.history` (editor button) and `navigation.compositionsMenu.history` (sidebar). No component code changed — this task is locale-only.
+
+**Key divergence from the template (important):** the ready-to-paste blocks in `../composition-history-i18n-templates.md` §5/§6 did NOT match the keys the #201 components actually consume. I matched the COMPONENTS (source of truth), not the template:
+- `filters.*` (plural) not `filter.*` — and the components need extra options: `allWagons`, `allEventTypes`, `allOperations`, `allLevels`, `searchPlaceholder`.
+- `states.empty` / `states.error` not top-level `empty` / `error`.
+- `view.table` / `view.timeline` not `toggle.accordion` / `toggle.timeline`.
+- `status.failed` chip label in addition to `status.Draft/Active/Archived`.
+- `field.*`, `diff.before/after/changed`, `event.*` matched the components 1:1.
+
+**Interpolation fix:** the custom i18n store (`src/store/i18n.store.ts`) interpolates `{{param}}` (double-brace), NOT the single-brace `{param}` used in the template. All `event.*` templates were written with `{{train}}`, `{{date}}`, `{{old}}`, `{{new}}`, `{{sourceId}}`, `{{placard}}`, `{{wagonType}}`, `{{from}}`, `{{to}}`, `{{newFrom}}`, `{{newTo}}`, `{{count}}`, `{{reason}}`, `{{summary}}` so the builder params from `compositionHistory.utils.ts` actually interpolate.
+
+**Verification:**
+- JSON valid (both parse); `compositions` top-level parity bg⇄en = true; `history` deep-key parity bg⇄en = true (satisfies `i18n.test.ts` parity assertions).
+- All 46 component-referenced `compositions.history.*` keys resolve in both files; `editor.header.history` + `navigation.compositionsMenu.history` present in both.
+- No hardcoded Cyrillic left in the new history components (CompositionsHistoryPage.tsx, CompositionHistoryDiff.tsx, compositionHistory.utils.ts).
+- `npm run type-check` clean.
+- Targeted tests green: i18n.test.ts + CompositionsHistoryPage.test.tsx + compositionHistory.utils.test.ts = 46/46 passed. (Pre-existing React `<p> cannot contain <div>` console warning from the Chip-in-Typography in CompositionHistoryDiff — not introduced here, not a failure.)
+
+**Files modified:**
+- src/locales/bg.json
+- src/locales/en.json
+
+**Git commit:** `feat(compositions): Frontend — i18n: add compositions.history.* keys to BOTH bg.json and en.json in the same change (per CLAUDE.md). The COMPLETE key set (header sentence templates, diff labels, status labels, filters) is ready-to-paste in ../composition-history-i18n-templates.md §5 (bg) and §6 (en). Repo: Transport-Admin-App.`
+
+---
+
+## [2026-06-05 15:07] - Task #204: Integration/e2e — composition history end-to-end
+
+**Status:** ✅ Complete · **TDD:** RED→GREEN→DONE · **Repo:** Transport-Admin-App
+
+**Scope:** an integration test that drives the real API-layer mutation flow (create composition → add carriage → add 2nd carriage → reorder → block seats) through `compositionsApi`/`wagonsApi`/`seatsApi` (httpClient mocked), then reads the composition-scoped history via `auditApi.getCompositionsHistory` (apiClient mocked) and asserts the task-199 contract.
+
+**New file:** `src/api/compositions/__tests__/compositions-history-integration.test.ts` (sits alongside the existing `*-integration.test.ts` set). 3 tests:
+- full flow → scoped read: asserts the read hits `API_ENDPOINTS.AUDIT.COMPOSITIONS_HISTORY` with the created `compositionId`; the returned summaries carry the GRANULAR event_types produced by the flow (`composition_created`, `carriage_added`, `carriages_reordered`, `seats_blocked`) and NOT the legacy `composition_modified`; composition-level events are all scoped to the created compositionId; the scoped read returns composition + carriage + seat events together (entityType set = {composition, carriage, seat}).
+- carriageId filter: asserts `carriageId` is passed to the endpoint and the narrowed result excludes composition-level events (`composition_created`/`carriages_reordered`), keeping only carriage + seat events for that wagon.
+- monotonic narrowing: a carriageId-filtered read returns strictly fewer items than the composition-scoped read, all scoped to that carriageId.
+
+**Verification:** targeted `npx vitest run <file>` 3/3 green; `npm run type-check` clean; `npx eslint <file>` clean (0 errors). Test-only/backend-style change (no UI source touched) → per the Selective-E2E rule, no Playwright run needed.
+
+**Scope check:** `gitnexus detect-changes --repo Transport-Admin-App` = "No changes detected" (additive untracked test file → 0 production symbols/processes affected — exactly intended). No backend (Transport-OSDM-Src) edits in this task, so no detect-changes there. `CLAUDE.md` is the auto-generated GitNexus doc block — left unstaged, same as tasks #200–#202.
+
+**Residual gaps (carried from #201, unchanged here):** the compositions-history list endpoint returns `PagedResult<AuditLogSummary>` (no `detailsJson` on the summary projection) — granular old/new diff rendering in the accordion depends on the backend list projection surfacing DetailsJson. The integration test asserts the event_type + entity scoping contract (which the summary projection already carries), not the DetailsJson diff payload.
+
+---
+
+## [2026-06-05 15:08] - Task #205: Docs — Composition Action History implementation summary
+
+**Status:** ✅ Complete · **Category:** docs · **Repos touched by the feature:** Transport-OSDM-Src (backend: RailRunService + AuditService) and Transport-Admin-App (frontend).
+
+**What this is:** the wrap-up entry for the Composition Action History initiative (tasks #190–#204). It turns the previously undifferentiated `composition_modified` audit stream into a readable, filterable, granular per-composition history with a dedicated UI. The audit infrastructure already existed (central `AuditService` + `AuditEventBuilder`); this work standardized event types, the old/new diff contract, a `reason` field, the read path, and the frontend.
+
+**Source documents (cross-links):**
+- Plan: [../composition-action-history-PLAN.md](../composition-action-history-PLAN.md) — full implementation plan, current-state analysis, field conventions (§3.2 DetailsJson contract), decisions (§9), staged execution order.
+- Spec: [../composition-action-history-spec.md](../composition-action-history-spec.md) — domain requirements (NotebookLM / SP_v_3.pdf).
+- i18n templates: [../composition-history-i18n-templates.md](../composition-history-i18n-templates.md) — header-sentence + diff/label key set (note: task #203 matched the COMPONENTS over the template where they diverged).
+
+### The 6 decisions (PLAN §9)
+
+1. **Granular event types** — replaced the single `composition_modified` with per-action types (`composition_created/_updated/_deleted/_status_changed/_cloned`, `carriage_added/_updated/_removed`, `carriages_reordered`, `seats_blocked/_unblocked/_sold/_released`), reusing the existing `AuditMessages.RailRun` keys. Each event carries a standardized `DetailsJson` with `compositionId` (always, even on carriage/seat events), `old`/`new` diff, and `reason` where applicable. (Tasks #191–#197.)
+2. **C1 read path** — no new schema; the read reuses the central audit API with new `compositionId`/`carriageId` query params. Endpoint: `GET /api/v1/audit-logs/compositions` → `PagedResult<AuditLogSummaryDto>`. compositionId/carriageId discoverability is enabled by enriching `SearchText` at ingestion (task #198), not provider-specific `JSON_VALUE`. (Tasks #198–#199.)
+3. **Composition-read permission** — the new read path is scoped under the EXISTING composition-read right (`AuthorizePermissions(ResourceCodes.Composition, AccessLevel.ReadOnly)`), NOT `JOURNAL.ReadOnly`. Implemented as a separate `GetCompositionHistory` controller action so journal authorization stays cleanly separated. (Task #199.)
+4. **Hybrid SeatAuditLog** — the legacy local `SeatAuditLog` table stays as a fast seat-map detail source; the composition history reads the central audit instead. No migration now; long-term deprecation. `LogSeatAction` writes left untouched. (Task #196.)
+5. **Global history page + editor link** — a standalone `/compositions/history` page (accordion list with human-readable headers + formatted Преди/След diff + raw JSON behind a toggle), a sidebar menu item under "Композиции", and an "История" button in the composition editor that opens it pre-filtered by `?compositionId=`. A WAGON filter switches wagons by changing the filter (no navigation in/out). NOT under "Моята активност". (Tasks #200–#203.)
+6. **Export deferred** — no export button for now; the ready-made `AuditLogExportButton` can be wired in later if needed.
+
+### Route segments captured inside carriage events (PLAN §1.4)
+
+There is NO separate `route_segment_defined` audit event. A wagon's route segment (`StartStationUic`/`EndStationUic` on `CompositionCarriage`) is set at `AddCarriage` and changed at `UpdateCarriage`, so a segment change surfaces as the old/new diff of `carriage_added`/`carriage_updated`. Per the 2026-06-04 decision, the segment is denormalized at write-time storing BOTH the UIC and the resolved station NAME (`startStationUic/startStationName`, `endStationUic/endStationName`) for an immutable audit; the diff marks only the changed fields. (Task #194.)
+
+### Deferred — Phase D (no handlers exist yet; PLAN §1.5 / §4 Фаза D)
+
+The following operations have NO underlying functionality yet, so their audit is deferred and will be added together with the feature itself, by the same model:
+- **Locomotive add/remove** (`locomotive_added/removed`) — no handler.
+- **Carriage detach / transfer (handover) / attach** between trains at a station (`carriage_detached/transferred/attached`) — no handler. (Matches the note that the local DB has no transfer data and handover scenarios can't be tested.)
+- A dedicated `route_segment_defined` event would also land here if segments ever become a standalone operation.
+
+### GitNexus
+
+- Indexed repo names: **Transport-OSDM-Src** (backend) and **Transport-Admin-App** (frontend).
+- The stale GitNexus index for both repos was refreshed in **task #190** so the impact/detect-changes analysis used throughout #191–#204 was accurate.
+
+**Files modified (this task):** ralph/activity.md (this entry), ralph/tasks.json (task #205 `passes` → true).
+
+**Git commit:** `docs: Docs — append an activity.md entry summarizing the Composition Action History implementation (decisions, scope, GitNexus findings, deferred items).`
+
+**Git commit:** `feat(compositions): Integration/e2e — composition history end-to-end: granular events appear, filter by composition and by wagon, old/new diff visible. Repos: both.`
