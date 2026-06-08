@@ -1,0 +1,15 @@
+﻿Task #197 complete. TDD cycle done: RED (2 failing tests for the right reasons) ΓåÆ GREEN (293/293 pass) ΓåÆ scope check (low risk, 8 files) ΓåÆ committed.
+
+<task-complete>
+  <id>197</id>
+  <title>Phase B ΓÇö require + log a reason when deactivating a carriage WITH sold tickets (Level=WARN)</title>
+  <summary>Threaded a `Reason` through the carriage-deactivate path (UpdateCarriageDto ΓåÆ CarriagesController ΓåÆ UpdateCarriageCommand/Handler). When `IsActive=false` and the carriage has SOLD `SeatAvailability` rows, a blank reason now fails validation (`DEACTIVATE_REASON_REQUIRED`, bg+en localized); with a reason it succeeds and emits a `Level=WARN` audit whose DetailsJson carries `reason` + `soldTicketCount`. Composition-status path left untouched (out of RED/GREEN scope; no INACTIVE constant). Note: `UpdateCarriageDto.Reason` is a frontend-consumed DTO change.</summary>
+  <tests>RailRunService.Application.Tests 293/293 green; RailRunService.API build clean</tests>
+  <commit>5b60e4a14</commit>
+</task-complete>
+
+<status>CONTINUE</status>
+<next-task>198</next-task>
+
+Stopping here per the one-task-per-iteration rule.
+

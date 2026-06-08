@@ -1,0 +1,22 @@
+﻿Committed on `features/bdzn-265-history`. Task #198 is complete.
+
+<task-complete>
+  <id>198</id>
+  <description>Phase A enabler ΓÇö ensure compositionId/carriageId are discoverable by the read filter. Enrich SearchText OR rely on JSON_VALUE(DetailsJson). Repo: Transport-OSDM-Src (AuditService).</description>
+  <strategy>SearchText enrichment (preferred option). AcceptAuditEventAsync now extracts top-level compositionId/carriageId from DetailsJson via JsonDocument and appends them to SearchText, so the existing AuditLogRepository contains-filter makes them discoverable. Malformed JSON is caught and ignored.</strategy>
+  <tdd>
+    <red>Added 2 failing tests; carriageId/compositionId assertion failed for the right reason (ids not yet extracted).</red>
+    <green>AuditService.Application.Tests 12/12 passing.</green>
+    <done>gitnexus detect-changes: 2 files, 4 symbols, 0 affected processes, risk low.</done>
+  </tdd>
+  <files>
+    <file>DotNetServices/AuditService/AuditService.Application/Services/AuditLoggingService.cs</file>
+    <file>DotNetServices/AuditService/AuditService.Application.Tests/AuditLoggingServiceTests.cs</file>
+  </files>
+  <commit>8bca7a07e</commit>
+  <tasks-updated>ralph/tasks.json #198 passes:true; ralph/activity.md strategy entry appended</tasks-updated>
+</task-complete>
+
+<status>CONTINUE</status>
+<next-task>199</next-task>
+

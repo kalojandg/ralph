@@ -1,0 +1,14 @@
+﻿Task #199 is complete. New `GET /api/v1/audit-logs/compositions` endpoint added (compositionId + carriageId params, COMPOSITION/ReadOnly auth, not JOURNAL), backed by SearchText-based filtering reused from task #198. 911 AuditService tests green, GitNexus scope low/clean, committed as `33b0a5a70`, tasks.json marked passing, activity.md documented.
+
+<task-complete>
+  <id>199</id>
+  <description>Phase C1 ΓÇö read API: add compositionId + carriageId query params to the audit read, scoped under the EXISTING composition-read permission (not JOURNAL.ReadOnly). Repo: Transport-OSDM-Src (AuditService).</description>
+  <commit>33b0a5a70</commit>
+  <tests>AuditService Application 411/411, Infrastructure 339/339, API 161/161 ΓÇö all green</tests>
+</task-complete>
+
+<status>CONTINUE</status>
+<next-task>200</next-task>
+
+Stopping here ΓÇö a new agent will pick up task #200 (frontend: audit API client + `useCompositionsHistory` hook in Transport-Admin-App).
+

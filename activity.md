@@ -5516,3 +5516,17 @@ The following operations have NO underlying functionality yet, so their audit is
 **Git commit:** `docs: Docs — append an activity.md entry summarizing the Composition Action History implementation (decisions, scope, GitNexus findings, deferred items).`
 
 **Git commit:** `feat(compositions): Integration/e2e — composition history end-to-end: granular events appear, filter by composition and by wagon, old/new diff visible. Repos: both.`
+
+---
+
+## 2026-06-08 — Composition history: ROOT CAUSE solved (outbox) + details enrichment tasks #206–#211
+
+**THE big problem (solved — do NOT re-investigate):** composition audit events published by rail-run never persisted. Root cause = MassTransit **EF transactional outbox** (`UseBusOutbox`): `Publish` only staged the AuditEvent in-memory and relied on a later `SaveChanges` to flush the OutboxMessage; audit handlers publish AFTER their final SaveChanges, so staged audit events were silently lost. Non-outbox services (UserService) worked → only `user_login` persisted.
+
+**Fix applied (committed):** `SharedSrc/MessageBus/Services/RabbitMQService.cs` (`MassTransitMessageBusService.PublishEventAsync`) — when `@event is AuditEvent`, publish DIRECTLY via injected `IBus` (bypasses the outbox); domain events still use the scoped `IPublishEndpoint` (outbox). Audit is a fire-and-forget side-channel → direct publish, matching the working non-outbox model. Verified: `composition_updated` now lands and renders in 'История на композиции'.
+
+**Also confirmed earlier:** granular composition event types ARE registered in AuditService `EventTypes.AllTypes`; `AcceptAuditEventAsync` rejects unregistered types (so #210 must register new nomenclature types there too). See memory `reference_audit_event_registration`.
+
+**Remaining = details enrichment (tasks #206–#211, precise impl only):** handlers must put the fields the frontend reads into DetailsJson so headers/diffs are complete (trainNumber+startDate for composition events; stations + old/new for carriages; affectedSeats+reason for seats). Contract source of truth = Admin-App `compositionHistory.utils.ts` (header) + `CompositionHistoryDiff.tsx` (diff). `SaveCompositionWagons.cs` already enriched (trainNumber+startDate+counts) — reference pattern. Plus #210 nomenclature audit, #211 NULL-placard edge-case bug.
+
+---

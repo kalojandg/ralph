@@ -6342,5 +6342,75 @@
       { "id": "205.2", "action": "Cross-link ../composition-action-history-PLAN.md and ../composition-action-history-spec.md. Note the GitNexus repo names (Transport-OSDM-Src, Transport-Admin-App) and that the index was refreshed in task 190." }
     ],
     "passes": true
+  },
+  {
+    "id": 206,
+    "category": "backend",
+    "description": "Enrich audit DetailsJson for COMPOSITION-lifecycle handlers so the history header is complete. CONTEXT (already solved, do NOT re-investigate): audit ingestion works (outbox fix in SharedSrc/MessageBus/Services/RabbitMQService.cs — AuditEvent publishes directly via IBus). The header builder reads details.trainNumber + details.startDate (see Admin-App src/app/features/compositions/utils/compositionHistory.utils.ts). Repo: Transport-OSDM-Src.",
+    "steps": [
+      { "id": "206.1", "action": "gitnexus impact CreateCompositionCommandHandler --direction upstream --repo Transport-OSDM-Src (quick blast-radius check, not investigation)." },
+      { "id": "206.2", "action": "In each handler's AuditEventBuilder.WithDetails(new {...}), ADD `trainNumber = composition.TrainNumber` and `startDate = composition.StartDate` (the composition entity is already in scope). Files: Features/Compositions/Commands/CreateComposition.cs, UpdateComposition.cs, DeleteComposition.cs, SetCompositionStatus.cs, CloneCompositionForPeriod.cs. (SaveCompositionWagons.cs ALREADY has them — use it as the reference pattern.)" },
+      { "id": "206.3", "action": "SetCompositionStatus.cs: also ensure WithDetails has `old = new { status = <oldStatus> }` and `new = new { status = <newStatus> }` (read old status BEFORE mutation) — the header template statusChanged reads details.old.status / details.new.status." },
+      { "id": "206.4", "action": "CloneCompositionForPeriod.cs: also add `sourceId = <source composition id>` to each cloned composition_cloned event (header template compositionCloned reads details.sourceId)." },
+      { "id": "206.5", "action": "Update/extend the *AuditTests for these handlers to assert trainNumber + startDate (and old/new status, sourceId) are in DetailsJson. dotnet test RailRunService.Application.Tests green. Then: docker compose build rail-run-service && docker compose up -d --force-recreate rail-run-service." },
+      { "id": "206.6", "action": "Verify: create/update/delete/clone a composition; in Admin-App 'История на композиции' the header reads 'Композиция <train> (<date>) — …' (not 'Композиция ()'). gitnexus detect-changes --repo Transport-OSDM-Src." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 207,
+    "category": "backend",
+    "description": "Enrich audit DetailsJson for CARRIAGE handlers so header + Преди/След diff render. Contract source of truth: Admin-App CompositionHistoryDiff.tsx (FIELDS/FLAT_FIELDS) + compositionHistory.utils.ts (header). Repo: Transport-OSDM-Src.",
+    "steps": [
+      { "id": "207.1", "action": "gitnexus impact AddCarriageCommandHandler / UpdateCarriageCommandHandler --direction upstream --repo Transport-OSDM-Src." },
+      { "id": "207.2", "action": "AddCarriage.cs WithDetails: ensure compositionId, carriageId, placardNumber, wagonTypeName (resolve via the wagon-type lookup already used for the response, or wagonTypeId as fallback), startStationName, endStationName (AddCarriage already resolves station names for the DTO — reuse). Header carriageAdded reads placard/wagonType/from/to." },
+      { "id": "207.3", "action": "UpdateCarriage.cs WithDetails: compositionId, carriageId, placardNumber, and `old = new { startStationUic, startStationName, endStationUic, endStationName, sequenceNumber, status }` + `new = new {…same…}` (read OLD values + resolve OLD station names BEFORE mutation; resolve NEW after). Route-only changes then render 'маршрут променен: A→B ⟶ C→D'." },
+      { "id": "207.4", "action": "DeleteCarriage.cs: details compositionId, carriageId, placardNumber. ReorderCarriages.cs: details compositionId + `new` as a {carriageId: position} map (header carriages_reordered reads Object.keys(details.new).length) or `count`." },
+      { "id": "207.5", "action": "Update the carriage *AuditTests to assert these fields. dotnet test green; docker compose build rail-run-service && up -d --force-recreate. Verify in the UI: carriage_added shows route + wagon type; carriage_updated route change shows Преди/След stations." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 208,
+    "category": "backend",
+    "description": "Enrich audit DetailsJson for SEAT handlers. Header reads count (affectedSeats.length) + placard + reason; diff flat-fields read affectedSeats (seats) + reason. Repo: Transport-OSDM-Src.",
+    "steps": [
+      { "id": "208.1", "action": "gitnexus impact BlockSeatsCommandHandler --direction upstream --repo Transport-OSDM-Src." },
+      { "id": "208.2", "action": "BlockSeats.cs / UnblockSeats.cs / SellSeats.cs / ReleaseSeats.cs WithDetails: ensure compositionId, carriageId, placardNumber, and `affectedSeats = <list of seat numbers>`. BlockSeats additionally: `reason = <the block reason>` (already a required field per the block flow)." },
+      { "id": "208.3", "action": "Update the seat *AuditTests to assert affectedSeats (+ reason for block). dotnet test green; docker compose build rail-run-service && up -d --force-recreate. Verify in UI: 'Блокирани места (N) във вагон №X — причина: …' and the details table lists Места + Причина." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 209,
+    "category": "frontend",
+    "description": "Frontend — verify every composition event_type renders a complete header + details after the backend enrichment (#206–#208); fill any remaining rendering gaps. Repo: Transport-Admin-App. Contract files: src/app/features/compositions/utils/compositionHistory.utils.ts, components/CompositionHistoryDiff.tsx.",
+    "steps": [
+      { "id": "209.1", "action": "gitnexus impact CompositionHistoryDiff --direction upstream --repo Transport-Admin-App." },
+      { "id": "209.2", "action": "Extend CompositionsHistoryPage.test.tsx / compositionHistory.utils.test.ts with one row per granular event_type using realistic DetailsJson (matching the backend shapes from #206–#208) and assert: header sentence is fully interpolated (no empty {train}/{placard}) AND the expanded diff/details table shows the expected rows (Преди/След for status/route, Места+Причина for seats, counts for bulk save). Use the existing summary/flat/diff logic — only add rendering for any field the tests reveal as unhandled." },
+      { "id": "209.3", "action": "If a gap is found, add the missing field to CompositionHistoryDiff FLAT_FIELDS/FIELDS or the header builder + i18n (bg.json AND en.json). npm run test:run + type-check green; npx eslint <changed files>." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 210,
+    "category": "backend",
+    "description": "Nomenclature handlers have NO audit at all — add audit publishing for wagon-type & coach-layout admin changes (system journal coverage). Repo: Transport-OSDM-Src. See ../composition-audit-gaps.md §3.",
+    "steps": [
+      { "id": "210.1", "action": "gitnexus impact UpdateWagonTypeCommandHandler --direction upstream --repo Transport-OSDM-Src. The 8 target handlers (Features/Nomenclatures/Commands): CreateWagonType, UpdateWagonType, DeleteWagonType, CloneWagonType, SetWagonTypeStatus, CreateCoachLayout, UpdateCoachLayout, SaveSeatDefinitions — none currently call PublishAuditEventAsync. Do NOT touch LogSeatAction/DeleteSeatAuditLog or SampleCommand." },
+      { "id": "210.2", "action": "Add event-type constants AND register them in BOTH SharedSrc AuditConstants.EventTypes AND AuditService EventTypes.AllTypes (AuditService/AuditService.Application/Constants/EventTypes.cs — unregistered types are rejected at ingestion): wagon_type_created/updated/deleted/cloned, wagon_type_status_changed, coach_layout_created/updated, seat_definitions_saved. Add AuditMessages keys." },
+      { "id": "210.3", "action": "Add PublishAuditEventAsync (AuditEventBuilder) to the 8 handlers following the composition pattern (category=business, operation, entity=WagonType/CoachLayout, details with id + name + old/new where applicable). Add a handler-audit test per handler. dotnet test green; rebuild both audit-service + nomenclature-service." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 211,
+    "category": "backend",
+    "description": "Edge-case BUG — SaveCompositionWagons can insert NULL into CompositionCarriages.PlacardNumber (NOT NULL) → SqlException 515 when a new wagon arrives without a placard. Repo: Transport-OSDM-Src.",
+    "steps": [
+      { "id": "211.1", "action": "gitnexus impact SaveCompositionWagonsCommandHandler --direction upstream --repo Transport-OSDM-Src. Trace PlacardNumber from SaveCompositionWagonsRequest → CompositionCarriage entity." },
+      { "id": "211.2", "action": "Add a test reproducing the 515: SaveCompositionWagons with a NewCarriages item whose PlacardNumber is null/empty. Then make it required in the SaveCompositionWagons validator (consistent with AddCarriage, which requires placardNumber) so it fails validation with a clear error instead of a 500. dotnet test green; rebuild rail-run-service." }
+    ],
+    "passes": false
   }
 ]
