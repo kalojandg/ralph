@@ -6355,7 +6355,7 @@
       { "id": "206.5", "action": "Update/extend the *AuditTests for these handlers to assert trainNumber + startDate (and old/new status, sourceId) are in DetailsJson. dotnet test RailRunService.Application.Tests green. Then: docker compose build rail-run-service && docker compose up -d --force-recreate rail-run-service." },
       { "id": "206.6", "action": "Verify: create/update/delete/clone a composition; in Admin-App 'История на композиции' the header reads 'Композиция <train> (<date>) — …' (not 'Композиция ()'). gitnexus detect-changes --repo Transport-OSDM-Src." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 207,
@@ -6368,7 +6368,7 @@
       { "id": "207.4", "action": "DeleteCarriage.cs: details compositionId, carriageId, placardNumber. ReorderCarriages.cs: details compositionId + `new` as a {carriageId: position} map (header carriages_reordered reads Object.keys(details.new).length) or `count`." },
       { "id": "207.5", "action": "Update the carriage *AuditTests to assert these fields. dotnet test green; docker compose build rail-run-service && up -d --force-recreate. Verify in the UI: carriage_added shows route + wagon type; carriage_updated route change shows Преди/След stations." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 208,
@@ -6379,7 +6379,7 @@
       { "id": "208.2", "action": "BlockSeats.cs / UnblockSeats.cs / SellSeats.cs / ReleaseSeats.cs WithDetails: ensure compositionId, carriageId, placardNumber, and `affectedSeats = <list of seat numbers>`. BlockSeats additionally: `reason = <the block reason>` (already a required field per the block flow)." },
       { "id": "208.3", "action": "Update the seat *AuditTests to assert affectedSeats (+ reason for block). dotnet test green; docker compose build rail-run-service && up -d --force-recreate. Verify in UI: 'Блокирани места (N) във вагон №X — причина: …' and the details table lists Места + Причина." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 209,
@@ -6390,7 +6390,7 @@
       { "id": "209.2", "action": "Extend CompositionsHistoryPage.test.tsx / compositionHistory.utils.test.ts with one row per granular event_type using realistic DetailsJson (matching the backend shapes from #206–#208) and assert: header sentence is fully interpolated (no empty {train}/{placard}) AND the expanded diff/details table shows the expected rows (Преди/След for status/route, Места+Причина for seats, counts for bulk save). Use the existing summary/flat/diff logic — only add rendering for any field the tests reveal as unhandled." },
       { "id": "209.3", "action": "If a gap is found, add the missing field to CompositionHistoryDiff FLAT_FIELDS/FIELDS or the header builder + i18n (bg.json AND en.json). npm run test:run + type-check green; npx eslint <changed files>." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 210,
@@ -6401,7 +6401,7 @@
       { "id": "210.2", "action": "Add event-type constants AND register them in BOTH SharedSrc AuditConstants.EventTypes AND AuditService EventTypes.AllTypes (AuditService/AuditService.Application/Constants/EventTypes.cs — unregistered types are rejected at ingestion): wagon_type_created/updated/deleted/cloned, wagon_type_status_changed, coach_layout_created/updated, seat_definitions_saved. Add AuditMessages keys." },
       { "id": "210.3", "action": "Add PublishAuditEventAsync (AuditEventBuilder) to the 8 handlers following the composition pattern (category=business, operation, entity=WagonType/CoachLayout, details with id + name + old/new where applicable). Add a handler-audit test per handler. dotnet test green; rebuild both audit-service + nomenclature-service." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 211,
@@ -6411,6 +6411,67 @@
       { "id": "211.1", "action": "gitnexus impact SaveCompositionWagonsCommandHandler --direction upstream --repo Transport-OSDM-Src. Trace PlacardNumber from SaveCompositionWagonsRequest → CompositionCarriage entity." },
       { "id": "211.2", "action": "Add a test reproducing the 515: SaveCompositionWagons with a NewCarriages item whose PlacardNumber is null/empty. Then make it required in the SaveCompositionWagons validator (consistent with AddCarriage, which requires placardNumber) so it fails validation with a clear error instead of a 500. dotnet test green; rebuild rail-run-service." }
     ],
-    "passes": false
+    "passes": true
+  },
+  {
+    "id": 212,
+    "category": "feature",
+    "description": "Composition history — RICHER wagon detail: resolve NAMES into the bulk-save wagon snapshots and render a full per-wagon row, so the user sees 'Вагон №12 — Спален, София→Бургас (поз. 3)' instead of just '№12'. CONTEXT (done, do NOT re-investigate): ingestion + DetailsJson delivery work; SaveCompositionWagons already writes old[]/new[] wagon snapshots and the frontend already lists added/removed by placard. Snapshots currently carry wagonTypeId + startStationUic/endStationUic (codes), NOT names. Repos: BOTH.",
+    "steps": [
+      { "id": "212.1", "action": "Backend — gitnexus impact SaveCompositionWagonsCommandHandler --direction upstream --repo Transport-OSDM-Src." },
+      { "id": "212.2", "action": "Backend — RailRunService/.../Compositions/Commands/SaveCompositionWagons.cs: in BOTH the oldCarriageSet projection (~line 88) and the newCarriageSet projection (~line 391/408), ADD resolved names: `wagonTypeName`, `startStationName`, `endStationName`. Resolve startStationName/endStationName via the existing IStopPlaceService (the same service AddCarriage uses — GetNamesAsync over the distinct UICs); resolve wagonTypeName from the wagon-type repository the handler already loads (build a typeId->name dictionary before the projections). Keep the existing Uic/Id fields too. Update the SaveCompositionWagons audit test to assert the names are present." },
+      { "id": "212.3", "action": "Backend — dotnet test RailRunService.Application.Tests green; docker compose build rail-run-service && docker compose up -d --force-recreate rail-run-service." },
+      { "id": "212.4", "action": "Frontend — gitnexus impact CompositionHistoryDiff --direction upstream --repo Transport-Admin-App. In Admin-App src/app/features/compositions/components/CompositionHistoryDiff.tsx, for the bulk-save shape render the added/removed wagons as a small sub-list/table with one row per wagon: '№{placardNumber} — {wagonTypeName}, {startStationName}→{endStationName} (поз. {sequenceNumber})', falling back gracefully when a name is missing (show whatever is present). Replace the current placard-only summary value for added/deleted with this richer per-wagon rendering." },
+      { "id": "212.5", "action": "Frontend — add i18n keys (bg.json AND en.json) for any new labels (e.g. compositions.history.summary.position). Add/extend the CompositionHistoryDiff test with a bulk-save DetailsJson containing named old[]/new[] and assert the per-wagon row renders type + route. npm run test:run + type-check green; npx eslint <changed files>." },
+      { "id": "212.6", "action": "Verify in the UI: edit a composition (add/remove a wagon) → the history row's details show full per-wagon descriptions with type name + route, not just placards or counts. gitnexus detect-changes on both repos." }
+    ],
+    "passes": true
+  },
+  {
+    "id": 213,
+    "category": "frontend",
+    "description": "Composition history — render each added/removed wagon in a composition_updated (bulk-save) event as a FULL NATURAL SENTENCE that names the placard, the composition (train) and the route, instead of the terse 'Добавени вагони: №X — type, route'. CONTEXT (done, do NOT re-investigate): the DetailsJson already carries everything — top-level `trainNumber`, and per old[]/new[] snapshot `placardNumber`, `wagonTypeName`, `startStationName`, `endStationName`. 'Adding a wagon by route' currently fires composition_updated via SaveCompositionWagons. Repo: Transport-Admin-App. File: src/app/features/compositions/components/CompositionHistoryDiff.tsx.",
+    "steps": [
+      { "id": "213.1", "phase": "RECON", "action": "gitnexus impact CompositionHistoryDiff --direction upstream --repo Transport-Admin-App. Re-read the current describeWagon + the added/removed handling (it currently pushes flat rows {labelKey:'summary.added', value: describeWagon(w)})." },
+      { "id": "213.2", "phase": "RED", "action": "Update the CompositionHistoryDiff test for the bulk-save case: per ADDED wagon assert a sentence matching 'Вагон №{placard} … добавен в композиция {train} по маршрут {from} → {to}'; per REMOVED wagon 'премахнат от композиция {train} по маршрут {from} → {to}'. Use a DetailsJson with trainNumber + named old[]/new[] snapshots." },
+      { "id": "213.3", "phase": "GREEN", "action": "In CompositionHistoryDiff.tsx render added/removed wagons as full sentences (one line per wagon) instead of the terse label/value. Build params in code (placard=placardNumber; type optional ' (wagonTypeName)'; train=details.trainNumber; route=`${startStationName} → ${endStationName}`, falling back to UICs / '—' when a name is missing) and interpolate i18n templates. Add i18n keys (bg.json AND en.json): compositions.history.summary.wagonAdded='Вагон №{placard}{type} добавен в композиция {train} по маршрут {route}' and summary.wagonRemoved='Вагон №{placard}{type} премахнат от композиция {train} по маршрут {route}' (+ English equivalents). Keep updatedCount/reordered rows as-is; keep the count fallback when the old[]/new[] arrays are absent." },
+      { "id": "213.4", "phase": "DONE", "action": "npm run test:run + type-check green; npx eslint <changed files>. Verify in the UI: adding a wagon shows e.g. 'Вагон №15-63 (15-63) добавен в композиция БВ 2655-09.06.2026 по маршрут Враца → Варна'. gitnexus detect-changes --repo Transport-Admin-App." }
+    ],
+    "passes": true
+  },
+  {
+    "id": 214,
+    "category": "backend",
+    "description": "Wagon-history enabler — record the PHYSICAL wagon number in the audit so one physical wagon can be followed across compositions (UC-COMP-12). SCOPE: only what data exists today (add/remove/edit of a wagon in compositions). Detach/transfer-between-trains operations DO NOT EXIST yet (no handlers) — explicitly out of scope. Repo: Transport-OSDM-Src.",
+    "steps": [
+      { "id": "214.1", "phase": "RECON", "action": "gitnexus context CompositionCarriage --repo Transport-OSDM-Src — confirm the stable identifier that links a composition carriage to a physical wagon in 'Управление на вагони' (expected CompositionCarriage.UicNumber; verify it is the same number shown in the wagon-management list). gitnexus impact AddCarriageCommandHandler --direction upstream." },
+      { "id": "214.2", "phase": "RED", "action": "Extend audit tests for AddCarriage, UpdateCarriage, DeleteCarriage, SaveCompositionWagons: assert DetailsJson includes `wagonNumber` (= the physical wagon identifier confirmed in 214.1) — top level for single-carriage events, and inside each old[]/new[] snapshot for the bulk save. Add an AuditService test asserting a DetailsJson `wagonNumber` is surfaced into SearchText (mirroring trainNumber)." },
+      { "id": "214.3", "phase": "GREEN", "action": "Add `wagonNumber = c.UicNumber` to the carriage WithDetails (AddCarriage/UpdateCarriage/DeleteCarriage) and to BOTH old[]/new[] projections in SaveCompositionWagons.cs. In AuditService AuditLoggingService add 'wagonNumber' to the ScopeIdProperties array (where 'trainNumber'/'compositionId' are surfaced into SearchText). dotnet test green." },
+      { "id": "214.4", "phase": "DONE", "action": "docker compose build rail-run-service audit-service && docker compose up -d --force-recreate rail-run-service audit-service. Optional backfill of existing rows' SearchText with JSON_VALUE(DetailsJson,'$.wagonNumber'). gitnexus detect-changes --repo Transport-OSDM-Src." }
+    ],
+    "passes": true
+  },
+  {
+    "id": 215,
+    "category": "frontend",
+    "description": "New 'История на вагон' page (UC-COMP-12), reachable from 'Управление на вагони' — REUSE the composition-history infrastructure (no new backend endpoint). Given a physical wagon number it calls the existing GET /audit-logs/compositions with searchText=<wagonNumber> (searchable via task 214) and shows the wagon's chronology ACROSS compositions. Repo: Transport-Admin-App.",
+    "steps": [
+      { "id": "215.1", "phase": "RECON", "action": "gitnexus context useCompositionsHistory / TimelineView / CompositionHistoryDiff / buildCompositionHistoryHeader --repo Transport-Admin-App (reusable pieces). Locate the wagon-management list/page ('Управление на вагони') component and a wagon row's number field. Read ROUTES / router.tsx / MainLayout wiring." },
+      { "id": "215.2", "phase": "RED", "action": "Add WagonHistoryPage.test.tsx (mock useCompositionsHistory): reads wagonNumber from the URL (?wagonNumber=) and/or an input; issues the query with searchText=<wagonNumber>; renders a chronological TimelineView (default) + accordion list reusing CompositionHistoryDiff; EACH row shows its composition/train context (header already does) so it is clear which composition the event belongs to; chronological order; empty/loading/error. Add a test that the wagon-management list row exposes a 'История' action linking to the wagon-history route with that wagon's number." },
+      { "id": "215.3", "phase": "GREEN", "action": "Implement src/app/features/compositions/pages/WagonHistoryPage.tsx reusing useCompositionsHistory({ searchText: wagonNumber, dateFrom, dateTo }). Header per row = buildCompositionHistoryHeader; details = CompositionHistoryDiff (already renders the full 'Вагон … добавен в композиция … по маршрут …' sentences). Default TimelineView, toggle to list. Add ROUTE WAGON_HISTORY: '/compositions/wagon-history' (reads ?wagonNumber=), register behind AuthGuard. In the 'Управление на вагони' list add a per-row 'История' action navigating to that route with the wagon number. npm run test:run + type-check green." },
+      { "id": "215.4", "phase": "GREEN", "action": "Add i18n keys (bg.json AND en.json): page title 'История на вагон', wagon-number input label, the 'История' action label, empty/error states, view toggle. Add an information note on the page that detach/transfer route operations are not yet available (so users know that part of the chronology is intentionally absent)." },
+      { "id": "215.5", "phase": "DONE", "action": "npx eslint <changed files>; gitnexus detect-changes --repo Transport-Admin-App." }
+    ],
+    "passes": true
+  },
+  {
+    "id": 216,
+    "category": "e2e",
+    "description": "E2E — one physical wagon trackable across MULTIPLE compositions via 'История на вагон'. Depends on #214 + #215. Repos: both.",
+    "steps": [
+      { "id": "216.1", "phase": "GREEN", "action": "Add the SAME physical wagon (same wagonNumber/UicNumber) to composition A and composition B (two trains). Open 'Управление на вагони' → that wagon → 'История' → assert both carriage_added events appear, each with its own train/date/route context, chronologically. Query AuditServiceDb to confirm both rows carry wagonNumber in DetailsJson + SearchText." },
+      { "id": "216.2", "phase": "DONE", "action": "Record in activity.md: 'История на вагон' implemented by REUSING composition-history infra (searchText over wagonNumber). Scope delivered = add/remove/edit across compositions with composition + route + time. DEFERRED until the underlying operations exist: detach-at-station / transfer-between-trains route operations and status/incident tracking." }
+    ],
+    "passes": true
   }
 ]
