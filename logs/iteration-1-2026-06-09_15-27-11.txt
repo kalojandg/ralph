@@ -1,0 +1,42 @@
+﻿Task #219 complete ΓÇö it was the last task with `passes: false`.
+
+```xml
+<task-complete>
+  <task-id>219</task-id>
+  <tests>PASSED</tests>
+  <visual>N/A</visual>
+  <committed>YES</committed>
+</task-complete>
+```
+
+```xml
+<promise>COMPLETE</promise>
+<total-tasks>219</total-tasks>
+<all-passed>true</all-passed>
+```
+
+## Iteration Summary
+
+**Task Worked On:** #219 ΓÇö Timeline (╨Ñ╤Ç╨╛╨╜╨╛╨╗╨╛╨│╨╕╤Å) view fixes: show the user instead of raw IP, and the train number instead of the raw `╨í╤è╤ü╤é╨░╨▓ ╨╛╨▒╨╜╨╛╨▓╨╡╨╜: <compositionId>` message.
+
+**TDD Phase Completed:** RECON ΓåÆ RED ΓåÆ GREEN ΓåÆ DONE
+
+**Tests Status:**
+- Unit/component tests: PASSED (17/17 across the two suites)
+- E2E tests: N/A (frontend-only data mapping; no journey/routing change)
+- Linter: PASSED (clean on all changed files)
+- Type-check: PASSED
+
+**Visual Status:** N/A (no designReference; raw data rendering only)
+
+**What changed:**
+- `audit.types.ts` ΓÇö added optional `actorUsername?`/`actorDisplayName?` to `UserActivityTimelineDto`
+- `TimelineView.tsx` ΓÇö renders the actor (`actorUsername ?? actorDisplayName`) with a person icon instead of the `IP:` line when present; IP kept as fallback
+- `compositionHistory.utils.ts` ΓÇö added exported `parseCompositionTrainNumber(detailsJson)`
+- `CompositionsHistoryPage.tsx` ΓÇö `toTimelineEntry` now passes the actor and sets `messageTitle` to the train number from `detailsJson` (falls back to `messageTitle`)
+- New `TimelineView.test.tsx` + extended `CompositionsHistoryPage.test.tsx`
+
+**Verification:** `gitnexus detect-changes` reported exactly the expected scope (TimelineView flow, medium risk). Task marked `passes: true`, logged in `activity.md`, and committed in Admin-App (`features/bdzn-265-history`).
+
+**Next Action:** All tasks complete ΓÇö no remaining `passes: false`. Stopping per the Ralph one-task-per-iteration rule.
+

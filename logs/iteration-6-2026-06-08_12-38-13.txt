@@ -1,0 +1,28 @@
+﻿Task #211 complete. It was the last task with `"passes": false` in `tasks.json` ΓÇö all tasks now pass.
+
+**Summary**
+- **Bug:** `SaveCompositionWagons` let a `NewCarriages` item with null/empty `PlacardNumber` reach EF and fail with `SqlException 515` (NOT NULL violation) ΓåÆ surfaced as a 500.
+- **Fix:** Added `SaveCompositionWagonsCommandValidator` (`RuleForEach(NewCarriages)` ΓåÆ `PlacardNumber` `NotEmpty` ΓåÆ `FIELD_REQUIRED`). Auto-registered via the existing FluentValidation pipeline, so a missing placard now returns a clean validation error instead of a 500. Consistent with `AddCarriage`.
+- **TDD:** RED (3 placard tests failed against empty validator) ΓåÆ GREEN (rule added) ΓåÆ 322/322 Application.Tests pass, API builds 0 errors.
+- **Deploy:** `docker compose build` + `up -d --force-recreate rail-run-service` succeeded. eslint N/A (C#-only).
+- **Bookkeeping:** `tasks.json` #211 ΓåÆ `passes: true`, `activity.md` logged, committed `4a6991548` on `features/bdzn-265-history`.
+
+Note: a PostToolUse hook reported the GitNexus index is stale (`npx gitnexus analyze` to refresh) ΓÇö optional maintenance, not required for this task.
+
+```xml
+<task-complete>
+  <task-id>211</task-id>
+  <tests>PASSED</tests>
+  <visual>N/A</visual>
+  <committed>YES</committed>
+</task-complete>
+```
+
+```xml
+<promise>COMPLETE</promise>
+<total-tasks>211</total-tasks>
+<all-passed>true</all-passed>
+```
+
+Iteration over ΓÇö stopping here, no next task.
+

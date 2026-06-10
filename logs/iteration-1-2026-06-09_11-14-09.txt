@@ -1,0 +1,37 @@
+﻿All tasks now pass. This was the final task ΓÇö iteration complete.
+
+```xml
+<task-complete>
+  <task-id>213</task-id>
+  <tests>PASSED</tests>
+  <visual>N/A</visual>
+  <committed>YES</committed>
+</task-complete>
+```
+
+```xml
+<promise>COMPLETE</promise>
+<all-passed>true</all-passed>
+```
+
+## Iteration Summary
+
+**Task Worked On:** #213 ΓÇö Composition history: render each added/removed wagon in a `composition_updated` (bulk-save) event as a full natural sentence.
+
+**TDD Phase Completed:** RECON ΓåÆ RED ΓåÆ GREEN ΓåÆ DONE
+
+**Tests Status:**
+- Unit/component: PASSED (3/3 on the spec; full compositions suite 901/901, no regressions)
+- E2E: N/A (presentational/i18n-only change; covered by component test)
+- Linter: PASSED
+- Type-check: PASSED
+
+**What changed:**
+- `CompositionHistoryDiff.tsx` ΓÇö replaced terse `describeWagon` label/value rows with a `wagonSentence(...)` builder; added/removed wagons now render one full-width sentence per wagon (placard + optional type + train + route, with UIC/`ΓÇö` fallbacks). Count/updated/reordered fallbacks kept.
+- `__tests__/CompositionHistoryDiff.test.tsx` ΓÇö RED test rewritten to assert the interpolated sentences (mock now interpolates `{{param}}` like the real store).
+- `bg.json` + `en.json` ΓÇö added `compositions.history.summary.wagonAdded` / `.wagonRemoved`.
+
+**Verification:** committed as `b0010216` (only the 4 task files; a pre-existing `CLAUDE.md` change was left untouched). `tasks.json` #213 ΓåÆ `passes: true`, logged in `activity.md`.
+
+**Next Action:** All tasks complete ΓÇö no remaining `passes: false`. Stopping per the one-task-per-iteration rule.
+

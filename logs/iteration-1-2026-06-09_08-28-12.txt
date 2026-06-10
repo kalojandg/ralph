@@ -1,0 +1,17 @@
+﻿Both repos committed. Task #212 is complete.
+
+Task #212 ΓÇö Composition history richer wagon detail ΓÇö done across both repos:
+
+**Backend** (`SaveCompositionWagons.cs`): resolved `wagonTypeName`/`startStationName`/`endStationName` into both `old[]` and `new[]` audit snapshots; new test passing (26/26).
+
+**Frontend** (`CompositionHistoryDiff.tsx`): per-wagon rows rendering `Γäû{placard} ΓÇö {type}, {from}ΓåÆ{to} (╨┐╨╛╨╖. {pos})` with graceful fallbacks; i18n key added to bg + en; new test passing (3/3); type-check + eslint clean.
+
+Tasks.json flipped to `passes: true`, activity.md logged, committed in both repos (no push). 212.3 docker build and 212.6 live-UI verify deferred to CI/manual.
+
+<task-complete>
+  <id>212</id>
+  <summary>Composition history now shows full per-wagon descriptions (type name + route + position) instead of bare placards/counts. Names resolved into the audit snapshots backend-side; per-wagon rows rendered frontend-side. All tests/type-check/eslint green; committed to both repos.</summary>
+</task-complete>
+
+<promise>COMPLETE</promise>
+

@@ -1,0 +1,16 @@
+﻿Task #214 is complete.
+
+<task-complete>
+**Task #214 ΓÇö Wagon-history enabler (physical wagon number in audit)**
+
+- **RED:** Added 5 failing tests asserting `wagonNumber` in DetailsJson (Add/Update/Delete carriage top-level, SaveCompositionWagons old[]/new[] snapshots) + AuditService SearchText surfacing.
+- **GREEN:** `wagonNumber = c.UicNumber` added to all three single-carriage WithDetails blocks; SaveCompositionWagons gained a `typeInventory` dict + `TypeInventory()` helper so new carriages resolve their physical number from the wagon type's inventory number, and `wagonNumber` was added to all three projections; `"wagonNumber"` added to AuditService `ScopeIdProperties`.
+- **Verify:** RailRunService.Application.Tests 327/327 pass; my AuditService tests pass (one pre-existing, unrelated `EventTypesTests.GetAll_Returns62EventTypes` count failure ΓÇö EventTypes.cs is not in this diff).
+- **DONE:** Both images built and containers recreated; gitnexus detect-changes = low risk, 0 affected processes; committed `ac0892359`; tasks.json #214 ΓåÆ `passes: true`; activity.md logged.
+</task-complete>
+
+Note: gitnexus index reported stale post-commit (a hook ran `git`); next iteration may want `npx gitnexus analyze` before relying on the graph.
+
+<status>CONTINUE</status>
+<next-task>215</next-task>
+

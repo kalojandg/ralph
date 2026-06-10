@@ -6473,5 +6473,65 @@
       { "id": "216.2", "phase": "DONE", "action": "Record in activity.md: 'История на вагон' implemented by REUSING composition-history infra (searchText over wagonNumber). Scope delivered = add/remove/edit across compositions with composition + route + time. DEFERRED until the underlying operations exist: detach-at-station / transfer-between-trains route operations and status/incident tracking." }
     ],
     "passes": true
+  },
+  {
+    "id": 217,
+    "category": "backend",
+    "description": "Make the WAGON TYPE searchable so wagon history (by type/series) returns data. DECISION: track wagons by WagonTypeId/series, NOT UIC — the system's availability+uniqueness is type-level (AvailableWagonTypeDto, GetAvailableWagonTypesForComposition group by WagonTypeId, WagonAlreadyInComposition uses WagonTypeId); UIC would need uniqueness + availability + a DB index = too much rework now. The audit snapshots already carry wagonTypeId + wagonTypeName, but AuditLoggingService.AddDetailsScopeIds only surfaces TOP-LEVEL ids into SearchText, so the per-wagon type inside bulk composition_updated old[]/new[] arrays is not searchable. Repo: Transport-OSDM-Src.",
+    "steps": [
+      { "id": "217.1", "phase": "RECON", "action": "gitnexus context AuditLoggingService --repo Transport-OSDM-Src — re-read AddDetailsScopeIds (iterates ScopeIdProperties over the ROOT object only). Confirm the bulk old[]/new[] snapshots carry wagonTypeId + wagonTypeName (they do, post task 212)." },
+      { "id": "217.2", "phase": "RED", "action": "Add an AuditService test: a DetailsJson whose old[]/new[] array elements carry wagonTypeName + wagonTypeId results in those values appearing in the built SearchText (so the composition-history searchText filter matches a series name like '15-63'). Keep the existing top-level extraction working." },
+      { "id": "217.3", "phase": "GREEN", "action": "Extend AddDetailsScopeIds: when DetailsJson has `old`/`new` ARRAYS, iterate their elements and add each element's `wagonTypeName` and `wagonTypeId` (and `placardNumber`) to searchParts; also add top-level wagonTypeName/wagonTypeId if present. dotnet test green; docker compose build audit-service && up -d --force-recreate audit-service; backfill existing rows' SearchText with the wagonTypeNames found in old[]/new[] (UPDATE … using JSON). gitnexus detect-changes --repo Transport-OSDM-Src." }
+    ],
+    "passes": true
+  },
+  {
+    "id": 218,
+    "category": "frontend",
+    "description": "Wagon history BY TYPE/SERIES — the existing WagonHistoryPage + the 'Управление на вагони' entry (WagonsPage navigates with the wagon-type seriesName) are already type-aligned and CORRECT for this decision. Just make the labels honest and the search work end-to-end (searchText=<seriesName>, now searchable via task 217). Repo: Transport-Admin-App.",
+    "steps": [
+      { "id": "218.1", "phase": "RECON", "action": "gitnexus context WagonHistoryPage --repo Transport-Admin-App. Confirm WagonsPage.tsx:~222 still navigates to wagon-history?wagonNumber=<seriesName>, and the page passes that value as searchText. Read its i18n keys (wagonNumberLabel, title)." },
+      { "id": "218.2", "phase": "RED", "action": "Update the WagonHistoryPage test: the input/label reads as a wagon TYPE/series (not 'UIC'/'физически'); typing a series (e.g. '15-63') issues searchText='15-63'; results render chronologically with each row's composition/train context (TimelineView + CompositionHistoryDiff). Assert the WagonsPage 'История' action links with the seriesName." },
+      { "id": "218.3", "phase": "GREEN", "action": "Relabel the WagonHistoryPage input + title to reflect 'по тип/серия вагон' (e.g. 'Тип/серия вагон'); adjust the deferredNote to say physical-wagon (UIC) tracking is out of scope. Keep the WagonsPage seriesName entry. Update i18n (bg.json AND en.json) accordingly. Optionally add a sidebar menu item under Композиции → WAGON_HISTORY. npm run test:run + type-check green; npx eslint <changed files>." },
+      { "id": "218.4", "phase": "DONE", "action": "E2E (after #217 deployed): in 'Управление на вагони' open a wagon type → 'История' → assert its composition events appear chronologically with train/route context. gitnexus detect-changes on both repos. Record in activity.md: wagon history keys on WagonTypeId/series (matches the system's type-level availability model); UIC-based physical-wagon tracking deferred (would need UIC uniqueness + availability + DB index)." }
+    ],
+    "passes": true
+  },
+  {
+    "id": 219,
+    "category": "frontend",
+    "description": "Timeline (Хронология) view fixes: (1) show the USER (email/display name) who did it instead of the raw IP address; (2) for composition entries show the TRAIN NUMBER instead of the raw 'Състав обновен: <compositionId>' message. All data is already on the audit summary / DetailsJson — frontend only. Repo: Transport-Admin-App.",
+    "steps": [
+      { "id": "219.1", "phase": "RECON", "action": "gitnexus context TimelineView --repo Transport-Admin-App. Note: TimelineView (src/app/features/audit/components/TimelineView.tsx) renders entry.actorIpAddress ('IP: …') and entry.messageTitle; the UserActivityTimelineDto (src/api/audit/audit.types.ts) has NO actorUsername/actorDisplayName. CompositionsHistoryPage.toTimelineEntry maps log→entry and sets messageTitle=log.messageTitle (='Състав обновен: 20004')." },
+      { "id": "219.2", "phase": "RED", "action": "Tests: (a) TimelineView shows the actor (actorUsername or actorDisplayName) and does NOT show the raw 'IP:' line when an actor is present; (b) the composition Хронология shows the train number (e.g. 'БВ 2655-09.06.2026') for a composition_updated entry, not 'Състав обновен: 20004'." },
+      { "id": "219.3", "phase": "GREEN", "action": "(1) Add actorUsername?/actorDisplayName? to UserActivityTimelineDto; in TimelineView render the actor (actorUsername ?? actorDisplayName) — e.g. a small person line — INSTEAD of the IP line when present (keep IP only as fallback when no actor, or drop it entirely per product). (2) In CompositionsHistoryPage.toTimelineEntry pass log.actorUsername/log.actorDisplayName, and set messageTitle to the composition's trainNumber parsed from log.detailsJson (fall back to log.messageTitle when no trainNumber) so the timeline reads 'БВ 2655-09.06.2026' instead of 'Състав обновен: <id>'. npm run test:run + type-check green; npx eslint <changed files>." },
+      { "id": "219.4", "phase": "DONE", "action": "Verify in the UI Хронология: each card shows the user email + train number, no bare IP. gitnexus detect-changes --repo Transport-Admin-App." }
+    ],
+    "passes": true
+  },
+  {
+    "id": 220,
+    "category": "feature",
+    "description": "composition_cloned header shows '(източник #3)' — the raw source composition ID, not its NAME. Show the source's train number instead (more meaningful; the source is the same train, different date). The source composition is loaded by CloneCompositionForPeriod but its trainNumber is NOT in the audit details. Repos: BOTH.",
+    "steps": [
+      { "id": "220.1", "phase": "RECON", "action": "Backend — gitnexus context CloneCompositionForPeriodCommandHandler --repo Transport-OSDM-Src; confirm the source composition (request.SourceId) is loaded and its TrainNumber (+ StartDate) are accessible where the composition_cloned audit event is built." },
+      { "id": "220.2", "phase": "RED", "action": "Backend — extend the clone audit test: the composition_cloned DetailsJson includes `sourceTrainNumber` (and `sourceStartDate`) = the SOURCE composition's train number/date." },
+      { "id": "220.3", "phase": "GREEN", "action": "Backend — in CloneCompositionForPeriod.cs add `sourceTrainNumber = <sourceComposition.TrainNumber>` (and sourceStartDate) to the composition_cloned WithDetails (keep sourceId for back-compat). dotnet test green; docker compose build rail-run-service && up -d --force-recreate rail-run-service." },
+      { "id": "220.4", "phase": "GREEN", "action": "Frontend — in compositionHistory.utils.ts buildBase, the composition_cloned case should pass sourceTrain = str(d.sourceTrainNumber) (fall back to '#'+sourceId when absent). Change the i18n compositionCloned template (bg.json AND en.json) to 'Композиция {{train}} ({{date}}) — клонирана (източник {{sourceTrain}})'. Update the test. npm run test:run + type-check green; npx eslint <changed files>." },
+      { "id": "220.5", "phase": "DONE", "action": "Verify in the UI: a clone reads 'клонирана (източник БВ 2601-…)' not '(източник #3)'. gitnexus detect-changes on both repos." }
+    ],
+    "passes": true
+  },
+  {
+    "id": 221,
+    "category": "frontend",
+    "description": "TripPicker (route search in the 'Създаване на нова композиция' dialog) — show each trip's VALIDITY DATES, sort by date, and hide trips already entirely in the past. CONTEXT: trips with the same train/route currently look IDENTICAL because the dates are not shown; the data is already there (TripSearchResult.activeDates: string[]). Frontend only, no backend. File: src/app/features/compositions/components/TripPicker.tsx (table at lines ~318-341). Repo: Transport-Admin-App.",
+    "steps": [
+      { "id": "221.1", "phase": "RECON", "action": "gitnexus impact TripPicker --direction upstream --repo Transport-Admin-App. Confirm the results table columns (train/route/headsign/stops) map trip fields, and that each trip has activeDates: string[] (validity dates)." },
+      { "id": "221.2", "phase": "RED", "action": "Add/extend TripPicker.test.tsx: given results with differing activeDates, (a) a new 'Валидност' column renders each trip's date range (earliest → latest activeDate, DD.MM.YYYY); (b) trips whose LATEST activeDate is before today are NOT rendered (past trips hidden); (c) the rows are ordered by earliest activeDate ascending." },
+      { "id": "221.3", "phase": "GREEN", "action": "In TripPicker.tsx: before mapping, derive per trip min/max from activeDates; FILTER out trips where max(activeDate) < today; SORT by min(activeDate) asc. Add a 'Валидност' column header + cell rendering 'DD.MM.YYYY – DD.MM.YYYY' (or a single date when min==max, '—' when activeDates empty) using dayjs. Add i18n key compositions.tripPicker.columns.validity (bg.json 'Валидност' AND en.json 'Validity'). Keep existing columns. npm run test:run + type-check green; npx eslint <changed files>." },
+      { "id": "221.4", "phase": "DONE", "action": "Verify in the UI: opening the create-composition dialog and searching a train shows distinct rows with their validity date ranges, sorted by date, with no fully-past trips. gitnexus detect-changes --repo Transport-Admin-App." }
+    ],
+    "passes": false
   }
 ]

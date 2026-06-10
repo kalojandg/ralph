@@ -1,0 +1,18 @@
+﻿Task #209 complete. It was a verification task: all 13 granular composition event types already render a complete, fully-interpolated header and a complete diff/details table via the existing `compositionHistory.utils.ts` builder, `CompositionHistoryDiff.tsx` (FIELDS/FLAT_FIELDS/SUMMARY), and the already-parity bg/en i18n keys. No production or i18n gaps were found, so the work is the added test coverage proving completeness.
+
+- Added template-aware coverage of all 13 event types to `compositionHistory.utils.test.ts` (asserts no empty `{{placeholder}}` in any header).
+- Added expand-and-verify-details tests to `CompositionsHistoryPage.test.tsx` (carriage add, route change ╨ƒ╤Ç╨╡╨┤╨╕/╨í╨╗╨╡╨┤, seats block ╨£╨╡╤ü╤é╨░+╨ƒ╤Ç╨╕╤ç╨╕╨╜╨░, bulk-save counts).
+- 33 tests pass, type-check clean, ESLint clean. Committed `e26f8844` (only the two test files; the unrelated `CLAUDE.md` change was left unstaged).
+
+<task-complete>
+  <task-id>209</task-id>
+  <tests>PASSED</tests>
+  <visual>N/A</visual>
+  <committed>YES</committed>
+</task-complete>
+
+<status>CONTINUE</status>
+<next-task>210</next-task>
+
+Stopping here ΓÇö task #210 (backend: add audit publishing for nomenclature handlers) is the next `passes: false` task and will be handled by a fresh iteration.
+

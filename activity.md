@@ -1,3 +1,66 @@
+## [2026-06-09] - Task #218: Wagon history BY TYPE/SERIES — honest labels + end-to-end search
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+### RECON (218.1)
+- Confirmed `WagonsPage.tsx:222` `handleHistory` still navigates `/compositions/wagon-history?wagonNumber=${encodeURIComponent(wagonType.seriesName)}` — i.e. the value carried is the wagon TYPE/series, not a physical UIC. `WagonHistoryPage` reads `?wagonNumber=` and passes it verbatim as `searchText` (now matchable via task #217's old[]/new[] wagonTypeName surfacing into SearchText).
+- The WagonsPage test already asserts the 'История' action links with the seriesName (`БДЖ 21-40`) — no change needed there.
+
+### RED (218.2)
+- `WagonHistoryPage.test.tsx`: renamed the label assertions from `wagonNumberLabel` → `wagonTypeLabel`; added a test asserting the input is labelled as a type/series (and the old physical/number label key is ABSENT); changed the debounced-search test to type a series `15-63` and assert `searchText='15-63'`. Ran → 3 FAIL (page still used `wagonNumberLabel`). ✅
+
+### GREEN (218.3)
+- `WagonHistoryPage.tsx`: input label key `wagonNumberLabel` → `wagonTypeLabel`. (Kept the `wagonNumber` URL param/state as-is — it already carries the series value; renaming it would be churn with no UI benefit.)
+- i18n (BOTH bg.json + en.json): renamed key `wagonNumberLabel` → `wagonTypeLabel` ("Тип/серия вагон" / "Wagon type/series"); retitled "История на вагон по тип/серия" / "Wagon History by Type/Series"; rewrote `deferredNote` to state history is tracked by type/series and that physical-wagon (UIC) tracking is out of scope; empty-state now "за този тип/серия вагон".
+- Re-ran WagonHistoryPage.test.tsx → 11/11 GREEN.
+
+### DONE (218.4)
+- `npm run type-check`: clean ✅
+- `npx eslint` on changed .tsx files: 0 errors ✅
+- compositions i18n parity test: 30/30 (bg/en keys in sync after the rename) ✅
+- `gitnexus detect-changes --repo Transport-Admin-App`: risk LOW, 0 affected processes (label/i18n-only, additive).
+- E2E DEFERRED: requires #217 deployed + the MSAL global-setup auth that blocks `npm run e2e` in this environment (same limitation prior iterations hit). Behavior is pinned by the updated component tests.
+
+**Scope decision (recorded):** wagon history keys on WagonTypeId/series — matches the system's type-level availability/uniqueness model (AvailableWagonTypeDto, group-by WagonTypeId). UIC-based physical-wagon tracking deferred (would need UIC uniqueness + availability + a DB index).
+
+**Files modified:**
+- Admin-App/src/app/features/compositions/pages/WagonHistoryPage.tsx
+- Admin-App/src/app/features/compositions/pages/WagonHistoryPage.test.tsx
+- Admin-App/src/locales/bg.json
+- Admin-App/src/locales/en.json
+- ralph/tasks.json (task #218 `passes` → true), ralph/activity.md (this entry)
+
+**Git commit:** `feat(compositions): Wagon history BY TYPE/SERIES — the existing WagonHistoryPage + the 'Управление на вагони' entry (WagonsPage navigates with the wagon-type seriesName) are already type-aligned and CORRECT for this decision. Just make the labels honest and the search work end-to-end (searchText=<seriesName>, now searchable via task 217). Repo: Transport-Admin-App.`
+
+---
+
+## [2026-06-09] - Task #217: Make the WAGON TYPE searchable so wagon history (by type/series) returns data
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Repo:** Transport-OSDM-Src (AuditService only).
+
+**Decision context (do NOT re-investigate):** wagon history keys on WagonTypeId/series (matches the system's type-level availability model — AvailableWagonTypeDto, GetAvailableWagonTypesForComposition group by WagonTypeId). UIC-based physical-wagon tracking deferred (would need UIC uniqueness + availability + a DB index). The bulk composition_updated DetailsJson carries per-wagon `wagonTypeId`/`wagonTypeName`/`placardNumber` ONLY inside `old`/`new` arrays (added in #212), but `AddDetailsScopeIds` previously read TOP-LEVEL keys only, so the series was not searchable.
+
+**What was done:**
+- RECON: Re-read `AuditLoggingService.AddDetailsScopeIds` — it iterated `ScopeIdProperties` over the ROOT object only. Confirmed `SaveCompositionWagons.cs` projects `wagonTypeId`+`wagonTypeName`+`placardNumber` into both the `old` and `new` snapshot arrays. `gitnexus impact AcceptAuditEventAsync` → MEDIUM, 7 upstream (all AuditService tests), 0 processes.
+- RED: Added `AcceptAuditEventAsync_AddsWagonTypeFromBulkSaveSnapshotsToSearchText` (a composition_updated DetailsJson with named old[]/new[] snapshots → asserts the per-wagon type names `15-63`/`26-99`, type id `77` and placards surface into SearchText, plus top-level scope ids still surface) and `AcceptAuditEventAsync_AddsTopLevelWagonTypeToSearchText` (single-carriage top-level wagonTypeName). Both FAILED first (missing `15-63`).
+- GREEN: Added `wagonTypeId`+`wagonTypeName` to `ScopeIdProperties` (top-level) and a new `AddSnapshotArrayScopeIds` that, for the `old`/`new` arrays, iterates each object element and adds `wagonTypeName`/`wagonTypeId`/`placardNumber` (`SnapshotScopeIdProperties`) to searchParts. Refactored scalar extraction into `AddScalar`. Malformed-JSON tolerance preserved.
+- Verify: `dotnet test` AuditService.Application.Tests → 414 pass, 1 pre-existing unrelated failure (`EventTypesTests.GetAll_Returns62EventTypes` — hard-coded count 62 vs actual 70; EventTypes.cs NOT in this diff).
+- DONE: `docker compose build audit-service` (Built) → `up -d --force-recreate audit-service` (Started). Idempotent backfill of existing rows' SearchText via OPENJSON over old[]/new[] (`wagonTypeName`/`wagonTypeId`/`placardNumber`, CHARINDEX guard) → 5 rows updated; spot-checked SearchText now contains series `15-63`/`19-40`/`20-44`. `gitnexus detect-changes` → low risk, 0 affected processes.
+
+**Files modified:**
+- `DotNetServices/AuditService/AuditService.Application/Services/AuditLoggingService.cs`
+- `DotNetServices/AuditService/AuditService.Application.Tests/AuditLoggingServiceTests.cs`
+- ralph/tasks.json (task #217 `passes` → true), ralph/activity.md (this entry)
+
+---
+
 ## [2026-06-09] - Task #214: Wagon-history enabler — record the PHYSICAL wagon number in the audit
 
 **Status:** ✅ Complete
@@ -5880,5 +5943,75 @@ E2E coverage for UC-COMP-12. Depends on #214 (audit DetailsJson + SearchText car
 - ralph/tasks.json (task #216 `passes` → true), ralph/activity.md (this entry)
 
 **Git commit:** `feat(compositions): E2E — one physical wagon trackable across MULTIPLE compositions via 'История на вагон'. Depends on #214 + #215. Repos: both.`
+
+---
+
+## [2026-06-09 15:26] - Task #219: Timeline (Хронология) view fixes — show user instead of IP, train number instead of raw compositionId message
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Added src/app/features/audit/components/TimelineView.test.tsx asserting the actor (actorUsername/actorDisplayName) is shown and the raw "IP:" line is hidden when an actor is present (with IP-only fallback).
+- Extended CompositionsHistoryPage.test.tsx: timeline view shows the train number (parsed from detailsJson) instead of "Състав обновен: 20004", and shows the actor instead of the IP.
+- Ran the two suites — 4 new tests FAILED for the right reason (feature missing).
+
+### GREEN Phase
+- audit.types.ts: added optional actorUsername?/actorDisplayName? to UserActivityTimelineDto.
+- TimelineView.tsx: render the actor (actorUsername ?? actorDisplayName) with a PersonOutline icon INSTEAD of the IP line when present; IP kept only as fallback when no actor.
+- compositionHistory.utils.ts: added exported parseCompositionTrainNumber(detailsJson).
+- CompositionsHistoryPage.toTimelineEntry: pass actorUsername/actorDisplayName; set messageTitle to the trainNumber from detailsJson, falling back to log.messageTitle.
+- npm run test:run (both suites) green — 17/17. npm run type-check green. npx eslint on changed files clean.
+
+### DONE Phase
+- gitnexus detect-changes --repo Transport-Admin-App: 6 files / 2 symbols, affected flow = TimelineView → TranslateOrRaw, risk medium — exactly the expected scope (frontend-only timeline rendering). No new i18n keys needed (actor + train number are raw data values).
+
+**Files modified:**
+- src/api/audit/audit.types.ts
+- src/app/features/audit/components/TimelineView.tsx
+- src/app/features/audit/components/TimelineView.test.tsx (new)
+- src/app/features/compositions/utils/compositionHistory.utils.ts
+- src/app/features/compositions/pages/CompositionsHistoryPage.tsx
+- src/app/features/compositions/pages/CompositionsHistoryPage.test.tsx
+
+**Git commit:**
+- `feat(compositions): Timeline (Хронология) view fixes — show the user (email/display name) instead of the raw IP, and the train number instead of the raw 'Състав обновен: <compositionId>' message (frontend only)`
+
+---
+
+## [2026-06-10 09:35] - Task #220: composition_cloned header shows source train number instead of raw source id
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN (BE) → GREEN (FE) → DONE
+
+**What was done:**
+### RECON
+- 220.1: Confirmed CloneCompositionForPeriod loads the source composition (`source = GetByIdWithCarriagesAndBlockedSeatsAsync(request.SourceId)`); `source.TrainNumber` + `source.StartDate` are in scope where the composition_cloned audit event is built.
+
+### RED
+- 220.2: Extended CloneCompositionForPeriodCommandHandlerAuditTests — set source TrainNumber to a distinct "BV2601" and asserted DetailsJson contains `sourceTrainNumber`/`BV2601`/`sourceStartDate`. Ran → FAILS (sourceTrainNumber not found). ✅
+
+### GREEN (backend)
+- 220.3: Added `sourceTrainNumber = source.TrainNumber` and `sourceStartDate = source.StartDate` to the composition_cloned WithDetails (kept sourceId/sourceCompositionId for back-compat). dotnet test → 2/2 PASS. docker compose build rail-run-service + up -d --force-recreate rail-run-service.
+
+### GREEN (frontend)
+- 220.4: compositionHistory.utils.ts buildBase composition_cloned now passes `sourceTrain = str(d.sourceTrainNumber) || '#'+str(d.sourceId)` (fallback for older events). i18n compositionCloned template changed in bg.json AND en.json to '… (източник {{sourceTrain}})' / '… (source {{sourceTrain}})'. Updated the table case + added two dedicated tests (source-train value, raw-id fallback). npm run test:run → 22/22 PASS; type-check clean; eslint clean.
+
+### DONE
+- 220.5: gitnexus detect-changes — Transport-OSDM-Src: 2 files / 5 symbols / 0 affected processes / low risk. Frontend change contained to buildCompositionHistoryHeader + locale templates, fully covered by render unit tests (live clone-flow UI walkthrough not run — requires seed data / manual clone; logic verified at unit level).
+
+**Files modified:**
+- DotNetServices/RailRunService/RailRunService.Application/Features/Compositions/Commands/CloneCompositionForPeriod.cs
+- DotNetServices/RailRunService/RailRunService.Application.Tests/CloneCompositionForPeriodCommandHandlerAuditTests.cs
+- src/app/features/compositions/utils/compositionHistory.utils.ts
+- src/app/features/compositions/utils/__tests__/compositionHistory.utils.test.ts
+- src/locales/bg.json
+- src/locales/en.json
+
+**Git commit:**
+- `feat(compositions): composition_cloned header shows '(източник #3)' — the raw source composition ID, not its NAME. Show the source's train number instead (more meaningful; the source is the same train, different date). The source composition is loaded by CloneCompositionForPeriod but its trainNumber is NOT in the audit details. Repos: BOTH.`
 
 ---
