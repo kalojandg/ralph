@@ -6015,3 +6015,77 @@ E2E coverage for UC-COMP-12. Depends on #214 (audit DetailsJson + SearchText car
 - `feat(compositions): composition_cloned header shows '(източник #3)' — the raw source composition ID, not its NAME. Show the source's train number instead (more meaningful; the source is the same train, different date). The source composition is loaded by CloneCompositionForPeriod but its trainNumber is NOT in the audit details. Repos: BOTH.`
 
 ---
+
+## [2026-06-10 11:00] - Task #221: TripPicker — show trip validity dates, sort by date, hide past trips
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+### RECON
+- Confirmed `TripSearchResult.activeDates: string[]` (src/api/trainSchedules/trainSchedules.types.ts).
+- Existing test file lives at components/__tests__/TripPicker.test.tsx (not next to the component).
+- gitnexus detect-changes scope: 5 files / low risk / 0 affected processes — contained to TripPicker.
+
+### RED
+- Extended TripPicker.test.tsx with a 'Validity dates' describe block: (a) Validity column renders earliest – latest as DD.MM.YYYY (unsorted activeDates), single date when one date; (b) trips whose latest activeDate < today are hidden; (c) rows ordered by earliest activeDate ascending.
+- Added `activeDates` (future dates) to the shared mockTrips so existing rows still render and the headsign '—' stays unambiguous.
+- Ran tests — 4 new FAIL for the right reason (no Validity column / no filter / no sort), 19 existing PASS.
+
+### GREEN
+- TripPicker.tsx: derived `visibleResults` via useMemo — parse activeDates with dayjs, compute start (earliest) / end (latest), FILTER out trips whose end is before today, SORT by start ascending (undated trips last). Added a 'Валидност'/'Validity' column header + cell via `formatValidity` ('DD.MM.YYYY – DD.MM.YYYY', single date when start==end, '—' when no dates). Switched the empty-state guard to visibleResults.
+- i18n: added compositions.tripPicker.columns.validity to BOTH bg.json ('Валидност') and en.json ('Validity').
+- Re-ran tests — 23/23 PASS.
+
+### DONE
+- npm run type-check ✅; npx eslint on the two changed source files ✅ (0 errors, 0 warnings after cleaning up branch-introduced nullability/optional-chain warnings).
+- gitnexus detect-changes --repo Transport-Admin-App ✅ — low risk, scope = TripPicker only.
+
+**Files modified:**
+- src/app/features/compositions/components/TripPicker.tsx
+- src/app/features/compositions/components/__tests__/TripPicker.test.tsx
+- src/locales/bg.json
+- src/locales/en.json
+
+**Git commit:**
+- `feat(compositions): TripPicker (route search in the 'Създаване на нова композиция' dialog) — show each trip's VALIDITY DATES, sort by date, and hide trips already entirely in the past.`
+
+---
+
+## [2026-06-10 14:30] - Task #222: Render audit-log DetailsJson as a HUMAN-READABLE key/value view
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+
+### RECON
+- Read AuditLogDetailPage.tsx (detailsJson rendered via AuditLogJsonViewer at ~line 239, shared by System Journal + My Activity via isMyActivityScope) and AuditLogJsonViewer.tsx.
+- Confirmed test pattern: vi.mock('@/hooks/useTranslation') key-passthrough; t(key) returns the key when a translation is missing — used to detect missing labels and humanize the key.
+
+### RED
+- Created src/app/features/audit/components/AuditLogDetailsView.test.tsx with 7 assertions: labeled fields+values (not a raw blob), '—' for null, yes label for boolean true, array-of-objects renders one labeled block per element, humanized fallback for unknown key, 'Покажи JSON' toggle reveals raw JSON, invalid JSON falls back to AuditLogJsonViewer.
+- Ran test — FAILED (component missing). ✅
+
+### GREEN
+- Created src/app/features/audit/components/AuditLogDetailsView.tsx: parses json; on parse error / non-object falls back to AuditLogJsonViewer. Renders a recursive label/value list — null/''→'—', boolean→common.yes/no, number/string as-is, nested object→indented sub-list, array-of-objects→bordered sub-block per element, array-of-scalars→comma-joined. Label = t('audit.detailFields.'+key) with humanized-key fallback. 'Покажи JSON' toggle shows the raw AuditLogJsonViewer.
+- Wired into AuditLogDetailPage.tsx line ~239 (detailsJson), left metadataJson on AuditLogJsonViewer.
+- Added audit.detailFields i18n block to BOTH bg.json and en.json (trainNumber, startDate, compositionId, addedCount, deletedCount, updatedCount, reordered, old, new, wagonTypeName, wagonTypeId, wagonNumber, sequenceNumber, placardNumber, startStationName, endStationName, startStationUic, endStationUic, isActive, id, showRaw). common.yes/no already existed.
+- Re-ran test — 7/7 PASS. ✅
+
+### DONE
+- npm run test:run (AuditLogDetailsView) ✅; npm run type-check ✅; npx eslint on the 2 new files + page ✅ (fixed branch-introduced no-base-to-string by JSON.stringify fallback; remaining AuditLogDetailPage warnings are pre-existing, not branch-introduced).
+
+**Files modified:**
+- src/app/features/audit/components/AuditLogDetailsView.tsx (new)
+- src/app/features/audit/components/AuditLogDetailsView.test.tsx (new)
+- src/app/features/audit/pages/AuditLogDetailPage.tsx
+- src/locales/bg.json
+- src/locales/en.json
+
+**Git commit:**
+- `feat(compositions): Render audit-log DetailsJson as a human-readable key/value view`
+
+---
