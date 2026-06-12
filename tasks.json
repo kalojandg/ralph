@@ -6556,6 +6556,172 @@
       { "id": "223.3", "phase": "GREEN", "action": "(1) CloneCompositionForPeriod.cs: inject IReadOnlyRepository<WagonType, long> _wagonTypeRepo (constructor + field, mirror SaveCompositionWagons). Before the date loop (or once per source) build a typeId->name dictionary over source.CompositionCarriages.Select(c=>c.WagonTypeId).Distinct() via _wagonTypeRepo.GetByIdAsync. In the success-path .WithDetails, ADD `wagons = cloned.CompositionCarriages.Select(c => new { wagonTypeId = c.WagonTypeId, wagonTypeName = nameLookup(c.WagonTypeId), placardNumber = c.PlacardNumber, wagonNumber = c.UicNumber }).ToList()` (keep all existing fields). (2) AuditService AuditSearchTextBuilder.cs: also call AppendSnapshotArray(root, \"wagons\", searchParts) alongside 'old'/'new' so wagonTypeName/wagonTypeId/placardNumber inside `wagons` are surfaced into SearchText. dotnet test green for BOTH RailRunService.Application.Tests and AuditService.Application.Tests." },
       { "id": "223.4", "phase": "DONE", "action": "docker compose build rail-run-service audit-service && docker compose up -d --force-recreate rail-run-service audit-service. Manual verify: clone a composition that contains wagon series '10' for a few days -> open 'Управление на вагони' -> that type -> 'История' -> the composition_cloned events appear, chronologically, each with its train/date context. (Optional) backfill existing clone rows' SearchText. gitnexus detect-changes --repo Transport-OSDM-Src. NOTE: do NOT name the array 'new' — Admin-App CompositionHistoryDiff is shape-based and would mis-render a clone's wagons as 'added wagons'; the dedicated 'wagons' key avoids that while staying searchable." }
     ],
+    "passes": true
+  },
+  {
+    "id": 224,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[Nomenclature IMPORT 1/12] Shared import infra + reverse header resolution. MIRROR of the export pipeline (Application/Features/Shared/Export). Adds the format-agnostic tabular model the parsers will produce and the command will consume, plus the label->key reverse lookup that makes exported files round-trippable. See nomenclature-import-spec.md §1-2. Repo: Transport-OSDM-Src (NomenclatureService).",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "224.1", "phase": "RECON", "action": "Read NomenclatureService.Application/Features/Shared/Export/{ExportTable,ExportColumnSchema,ExportFilters,ExportResult,ExportFormats}.cs and Services/Export/ExportColumnLabels.cs. Note BaseColumns keys (Code,SortOrder,IsActive,NameBg,NameEn,NameDe,NameFr) and that ExportColumnLabels.Translate is key->label only (Bg + En dictionaries)." },
+      { "id": "224.2", "phase": "RED", "action": "Add tests in NomenclatureService.Application.Tests/Services/Export/ExportColumnLabelsTests.cs (create if missing): ResolveKey('Код')=='Code', ResolveKey('Sort order')=='SortOrder', ResolveKey('Code')=='Code' (raw key passthrough), ResolveKey('Активен')=='IsActive', case-insensitive, ResolveKey('totally-unknown')==null. Add NomenclatureService.Application.Tests/Features/Shared/Import/ImportResultTests.cs asserting ImportResult aggregates Inserted/Updated/Failed counts from its Outcomes list." },
+      { "id": "224.3", "phase": "GREEN", "action": "Create Application/Features/Shared/Import/ with: enum ImportAction { Inserted, Updated, Failed }; record ImportRowOutcome(int RowNumber, string? Code, ImportAction Action, string? Error); record ImportResult(int Total, int Inserted, int Updated, int Failed, IReadOnlyList<ImportRowOutcome> Outcomes) with a static FromOutcomes(IReadOnlyList<ImportRowOutcome>) factory computing the counts; record ImportTable(string EntityType, IReadOnlyList<string> ColumnKeys, IReadOnlyList<IReadOnlyList<string?>> Rows). Reuse ExportFormats (do NOT duplicate). In Services/Export/ExportColumnLabels.cs add `public static string? ResolveKey(string header)` backed by a lazily-built reverse dictionary (StringComparer.OrdinalIgnoreCase) merging Bg + En label->key plus identity key->key; trims input; returns null when unknown." },
+      { "id": "224.4", "phase": "DONE", "action": "cd OSDM-Src/DotNetServices && dotnet build NomenclatureService/NomenclatureService.Application/NomenclatureService.Application.csproj && dotnet test NomenclatureService/NomenclatureService.Application.Tests — green. gitnexus detect-changes --repo Transport-OSDM-Src." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 225,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[Nomenclature IMPORT 2/12] IImportParser interface + CsvImportParser. Symmetric to IExportFormatter. Parses an exported CSV (UTF-8 BOM, RFC-4180, \\r\\n, localized header row) back into an ImportTable. See nomenclature-import-spec.md §1-2. Repo: Transport-OSDM-Src (NomenclatureService).",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "225.1", "phase": "RECON", "action": "Read Services/Export/CsvNomenclatureExporter.cs (BOM, quoting, bool 'true'/'false', null->empty) and Interfaces/IExportFormatter.cs. The parser must be the inverse: header row -> ColumnKeys via ExportColumnLabels.ResolveKey; data rows -> string cells." },
+      { "id": "225.2", "phase": "RED", "action": "Create NomenclatureService.Application.Tests/Services/Import/CsvImportParserTests.cs: round-trip a byte[] produced by CsvNomenclatureExporter for a small ExportTable (Code,SortOrder,IsActive,NameBg...) and assert the parsed ImportTable.ColumnKeys == the original keys and Rows match cell values as strings. Cover: UTF-8 BOM stripped; quoted field containing a comma and escaped \"\"; an unknown header column is dropped from ColumnKeys (and its cells excluded); empty trailing lines ignored." },
+      { "id": "225.3", "phase": "GREEN", "action": "Create Interfaces/IImportParser.cs { string Format { get; } ImportTable Parse(Stream content); }. Create Services/Import/CsvImportParser.cs (Format=ExportFormats.Csv): read UTF-8 (strip BOM), split RFC-4180 (handle quotes/escaped quotes/embedded commas), first non-empty line = headers mapped through ExportColumnLabels.ResolveKey (skip columns that resolve to null, remembering their index so data cells align), remaining lines -> rows of string? (empty cell -> null). EntityType left empty (set by caller)." },
+      { "id": "225.4", "phase": "DONE", "action": "dotnet test NomenclatureService/NomenclatureService.Application.Tests — green. gitnexus detect-changes --repo Transport-OSDM-Src." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 226,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[Nomenclature IMPORT 3/12] ExcelImportParser (ClosedXML). Parses an exported XLSX (single worksheet, bold frozen header row 1, data from row 2) into an ImportTable. See nomenclature-import-spec.md §1-2. Repo: Transport-OSDM-Src (NomenclatureService).",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "226.1", "phase": "RECON", "action": "Read Services/Export/ExcelNomenclatureExporter.cs — ClosedXML XLWorkbook, worksheet named after EntityType, row 1 headers, bool written as the strings 'true'/'false', numerics native. Parser reads cell GetString() for every cell to keep symmetry simple." },
+      { "id": "226.2", "phase": "RED", "action": "Create Services/Import/ExcelImportParserTests.cs: round-trip bytes from ExcelNomenclatureExporter and assert ColumnKeys (via ResolveKey on row-1 labels) and string Rows match; numeric cells (SortOrder) come back as their string form; blank cells -> null; unknown header column dropped." },
+      { "id": "226.3", "phase": "GREEN", "action": "Create Services/Import/ExcelImportParser.cs (Format=ExportFormats.Xlsx) using ClosedXML: open workbook from stream, take Worksheets.First(), header row = row 1 cells up to the last non-empty column mapped through ExportColumnLabels.ResolveKey (track kept column indexes), data rows from row 2..LastRowUsed -> cell.GetString() (trim; '' -> null). Use the same kept-index alignment as the CSV parser." },
+      { "id": "226.4", "phase": "DONE", "action": "dotnet test NomenclatureService/NomenclatureService.Application.Tests — green. gitnexus detect-changes --repo Transport-OSDM-Src." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 227,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[Nomenclature IMPORT 4/12] XmlImportParser. Parses exported XML (root <Nomenclature type=...>, one <Item> per row, child elements named after the column Key) into an ImportTable. See nomenclature-import-spec.md §1-2. Repo: Transport-OSDM-Src (NomenclatureService).",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "227.1", "phase": "RECON", "action": "Read Services/Export/XmlNomenclatureExporter.cs — child element name IS the stable column Key (label is only an attribute), so XML needs NO ResolveKey. EntityType from root @type." },
+      { "id": "227.2", "phase": "RED", "action": "Create Services/Import/XmlImportParserTests.cs: round-trip bytes from XmlNomenclatureExporter; assert ImportTable.EntityType == root @type, ColumnKeys == the element-key order of the first <Item>, Rows match values; empty element -> null; an <Item> missing a column yields null for that key (rows stay aligned to ColumnKeys)." },
+      { "id": "227.3", "phase": "GREEN", "action": "Create Services/Import/XmlImportParser.cs (Format=ExportFormats.Xml) using System.Xml.Linq: load doc, ColumnKeys = child element names of the first <Item> in document order, EntityType = (string)root.Attribute(\"type\"), each <Item> -> row where for every key take the matching child element value (missing/empty -> null)." },
+      { "id": "227.4", "phase": "DONE", "action": "dotnet test NomenclatureService/NomenclatureService.Application.Tests — green. gitnexus detect-changes --repo Transport-OSDM-Src." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 228,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[Nomenclature IMPORT 5/12] Audit plumbing for import. Add the NomenclatureImport event type (+ register in AuditService AllTypes — the AuditService silently DROPS unregistered EventTypes), the Import operation, import audit messages, and INomenclatureAuditPublisher import methods. See nomenclature-import-spec.md §2.5. Repo: Transport-OSDM-Src (NomenclatureService + SharedSrc + AuditService).",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "228.1", "phase": "RECON", "action": "Read SharedSrc/MessageBus/Events/Audit/AuditConstants.cs (EventTypes.NomenclatureExport='nomenclature_export' ~L111, Operations.Export='Export' ~L165), AuditMessages.cs (Nomenclatures.Exported* ~L310-314), AuditService/AuditService.Application/Constants/EventTypes.cs (NomenclatureExport in AllTypes ~L152), and NomenclatureService Services/Audit/{INomenclatureAuditPublisher,NomenclatureAuditPublisher}.cs (PublishExportSucceeded/Failed pattern)." },
+      { "id": "228.2", "phase": "RED", "action": "Tests: (a) SharedSrc/MessageBus.Tests AuditConstantsTests — assert EventTypes.NomenclatureImport=='nomenclature_import' and Operations.Import=='Import'. (b) AuditService.Application.Tests/EventTypesTests — assert NomenclatureImport is present in AllTypes. (c) NomenclatureService.Application.Tests/Services/Audit/NomenclatureAuditPublisherTests — PublishImportSucceededAsync publishes an event with EventType=NomenclatureImport, Operation=Import, Status=Success, details {entityType, total, inserted, updated, failed}; PublishImportFailedAsync publishes Status=Failed with reason; both swallow bus exceptions." },
+      { "id": "228.3", "phase": "GREEN", "action": "(1) AuditConstants.cs: add EventTypes.NomenclatureImport='nomenclature_import' and Operations.Import='Import'. (2) AuditMessages.cs Nomenclatures: add ImportedKey='Nomenclatures.Imported' / Imported='Nomenclature {entityType} imported from {format} ({inserted} inserted, {updated} updated, {failed} failed)' and ImportFailedKey/ImportFailed. (3) AuditService EventTypes.cs: add const NomenclatureImport='nomenclature_import' AND add it to AllTypes. (4) INomenclatureAuditPublisher + NomenclatureAuditPublisher: add PublishImportSucceededAsync(string typeKey,string format,int total,int inserted,int updated,int failed,CancellationToken) and PublishImportFailedAsync(string typeKey,string format,string reason,CancellationToken), mirroring the export methods but using the Import event type/operation/messages." },
+      { "id": "228.4", "phase": "DONE", "action": "dotnet test for MessageBus.Tests, AuditService.Application.Tests, NomenclatureService.Application.Tests — green. gitnexus detect-changes --repo Transport-OSDM-Src." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 229,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[Nomenclature IMPORT 6/12] Generic ImportNomenclatureCommand + Handler — the CORE. Parses the file, then UPSERTS each row by Code via the generic provider (existing -> UpdateAsync, missing -> CreateAsync), never aborting the batch, returning an ImportResult. Reuses INomenclatureSelector/INomenclatureProvider (GetByCodeAsync/CreateAsync/UpdateAsync already handle type-specific fields). See nomenclature-import-spec.md §2.4. Repo: Transport-OSDM-Src (NomenclatureService).",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "229.1", "phase": "RECON", "action": "Read Interfaces/INomenclatureProvider.cs (GetByCodeAsync, CreateAsync(CreateNomenclatureDto), UpdateAsync(UpdateNomenclatureDto)), Interfaces/INomenclatureSelector.cs, DTOs/{CreateNomenclatureDto,UpdateNomenclatureDto}.cs (fields: Code, SortOrder, IsActive, Translations dict, optional CountryCode/TransportModeCode/IsServedStation/ReservationRequired), and Features/NomenclatureFeatures/Commands/CreateNomenclatureCommand.cs for the audit-on-handler pattern. Note NomenclatureDetailDto exposes Id + Code for the existing-lookup." },
+      { "id": "229.2", "phase": "RED", "action": "Create Features/NomenclatureFeatures/Commands/ImportNomenclatureCommandHandlerTests.cs with a fake INomenclatureSelector/INomenclatureProvider + fake IImportParser. Assert: (a) a row whose Code exists -> provider.UpdateAsync called with Id from GetByCodeAsync, outcome Updated; (b) a new Code -> CreateAsync, outcome Inserted; (c) a row whose CreateAsync throws (e.g. missing bg translation / 'already exists') -> outcome Failed with the message, and the OTHER rows still process; (d) ImportResult counts == aggregated outcomes; (e) translations map built from NameBg/En/De/Fr keys, type-specific keys (CountryCode/TransportModeCode/IsServedStation/ReservationRequired) passed through when present; (f) PublishImportSucceededAsync called once with totals." },
+      { "id": "229.3", "phase": "GREEN", "action": "Create Features/NomenclatureFeatures/Commands/ImportNomenclatureCommand.cs: record ImportNomenclatureCommand { required string TypeKey; required string Format; required byte[] Content; } : IRequest<ImportResult>. Handler injects INomenclatureSelector, IEnumerable<IImportParser> (-> dict by Format), INomenclatureAuditPublisher. Handle: resolve parser by Format (throw InvalidOperation if none); parse Content (MemoryStream) -> ImportTable; provider=_selector.For(TypeKey). For each row (1-based RowNumber): read Code (skip+Failed if blank); build dto via a private MapRow(columnKeys,row) helper -> translations dict {bg,en,de,fr} from NameBg/En/De/Fr (omit null/empty), SortOrder int.TryParse (default 0), IsActive bool parse of 'true'/'false' (default true), optional type-specific keys; existing=await provider.GetByCodeAsync(Code); if existing!=null -> UpdateNomenclatureDto{Id=existing.Id,...} + UpdateAsync -> Updated else CreateAsync -> Inserted; wrap each row in try/catch -> Failed(ex.Message). Build ImportResult.FromOutcomes; publish Import audit (Failed publish on a top-level parse/throw). Register the handler (MediatR auto-scan already covers Application assembly — verify)." },
+      { "id": "229.4", "phase": "DONE", "action": "dotnet test NomenclatureService/NomenclatureService.Application.Tests — green. gitnexus impact ImportNomenclatureCommand --direction upstream --repo Transport-OSDM-Src (expect none yet). gitnexus detect-changes --repo Transport-OSDM-Src." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 230,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[Nomenclature IMPORT 7/12] DI registration of the 3 import parsers. Register CsvImportParser/ExcelImportParser/XmlImportParser as IImportParser singletons next to the export formatters. Repo: Transport-OSDM-Src (NomenclatureService).",
+    "tddWorkflow": false,
+    "steps": [
+      { "id": "230.1", "phase": "RECON", "action": "Read Infrastructure/Extensions/ServiceCollectionExtensions.cs ~L152-155 (services.AddSingleton<IExportFormatter, Csv/Excel/XmlNomenclatureExporter>())." },
+      { "id": "230.2", "phase": "GREEN", "action": "Directly below the export formatter registrations add: services.AddSingleton<IImportParser, CsvImportParser>(); services.AddSingleton<IImportParser, ExcelImportParser>(); services.AddSingleton<IImportParser, XmlImportParser>(); add the needed using for Services.Import. Keep the existing 'Export formatters' comment block, add an analogous 'Import parsers' comment." },
+      { "id": "230.3", "phase": "DONE", "action": "dotnet build NomenclatureService — green. gitnexus detect-changes --repo Transport-OSDM-Src." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 231,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[Nomenclature IMPORT 8/12] Reference API endpoint: POST /api/currencies/import on CurrencyController (mirror its export action). Accepts multipart/form-data, dispatches the generic ImportNomenclatureCommand, returns the report. AUTHORIZE WITH ReadWrite (import writes; export uses ReadOnly). See nomenclature-import-spec.md §2.7. Repo: Transport-OSDM-Src (NomenclatureService).",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "231.1", "phase": "RECON", "action": "Read NomenclatureService.API/Controllers/CurrencyController.cs (export action), DTOs/NomenclatureExportRequest.cs, Validation/AllowedExportFormatAttribute.cs, and an existing API.Tests controller test (e.g. CurrencyControllerTests.cs) for the WebApplicationFactory/mediator-mock pattern." },
+      { "id": "231.2", "phase": "RED", "action": "Add to CurrencyControllerTests.cs: POST /api/currencies/import with a multipart form (file + format=csv) sends an ImportNomenclatureCommand{TypeKey='currency',Format='csv',Content=<file bytes>} and returns 200 with the ImportResultDto (Total/Inserted/Updated/Failed/Outcomes); an unsupported format -> 400; a missing file -> 400." },
+      { "id": "231.3", "phase": "GREEN", "action": "Create DTOs/NomenclatureImportRequest.cs { [Required] IFormFile File; string? Format (optional — if blank, infer from File extension; validate against ExportFormats.Supported). } and Application DTO ImportResultDto (or reuse Application ImportResult directly via a thin API mapping). Add to CurrencyController: [HttpPost(\"import\")] [AuthorizePermissions(ResourceCodes.Nomenclatures, AccessLevel.ReadWrite)] [Consumes(\"multipart/form-data\")] Import([FromForm] NomenclatureImportRequest req, CancellationToken ct): resolve format (req.Format ?? ext), 400 if unsupported or file empty, copy file to byte[], send ImportNomenclatureCommand{TypeKey=\"currency\",Format,Content}, return Ok(Result<ImportResultDto>.Ok(mapped)). Keep the controller's existing export action untouched." },
+      { "id": "231.4", "phase": "DONE", "action": "dotnet test NomenclatureService/NomenclatureService.API.Tests — green. gitnexus detect-changes --repo Transport-OSDM-Src." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 232,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[Nomenclature IMPORT 9/12] Roll the import action out to the remaining 29 per-entity controllers (every controller that already has a [HttpPost(\"export\")]). Each new action is an identical copy of CurrencyController.Import except the hard-coded TypeKey. See nomenclature-import-spec.md §4 for the full type-key->segment list. Repo: Transport-OSDM-Src (NomenclatureService).",
+    "tddWorkflow": false,
+    "steps": [
+      { "id": "232.1", "phase": "RECON", "action": "List NomenclatureService.API/Controllers/*Controller.cs that contain [HttpPost(\"export\")]. For each, note its route segment ([Route(\"api/<segment>\")]) and the TypeKey its export query uses (= the type-key from nomenclature-import-spec.md §4, e.g. TicketTypeController -> 'ticket-type', StopPlaceController -> 'stop-place')." },
+      { "id": "232.2", "phase": "GREEN", "action": "In EACH of those controllers add the SAME [HttpPost(\"import\")] [AuthorizePermissions(ResourceCodes.Nomenclatures, AccessLevel.ReadWrite)] [Consumes(\"multipart/form-data\")] action as CurrencyController, changing ONLY the TypeKey literal in the dispatched ImportNomenclatureCommand to that controller's type-key. Do not touch existing export actions. Controllers: TicketType, PassengerGroup, SubscriptionType, Country, Carrier, ServiceBrand, ServiceClass, TransportMode, StopPlace, FareType, FulfillmentType, FulfillmentMediaType, FulfillmentDocumentType, TravelLine, DurationPassType, PrepaidAccountType, RequiredDocumentType, RequiredDocumentTypeRule, TransportCardStatus, TravelZone, CompositionStatus, WagonStatus, LoyaltyCardType, AncillaryType, ReservationType, SalesChannel, GroupType, TransportOperator, ViolationType." },
+      { "id": "232.3", "phase": "RED", "action": "Add a parametrized controller test (e.g. NomenclatureImportEndpointsTests.cs) iterating a representative sample (currency already covered + stop-place which has type-specific columns, ticket-type, country): POST /api/<segment>/import with a csv file sends ImportNomenclatureCommand with the correct TypeKey and returns 200." },
+      { "id": "232.4", "phase": "DONE", "action": "dotnet test NomenclatureService/NomenclatureService.API.Tests — green. gitnexus detect-changes --repo Transport-OSDM-Src." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 233,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[Nomenclature IMPORT 10/12] Frontend API layer for import. Add the IMPORT endpoint (reusing the export segment resolver) and nomenclaturesApi.import() (multipart) + result types. MIRROR of nomenclaturesApi.export. See nomenclature-import-spec.md §3.1-3.2. Repo: Transport-Admin-App.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "233.1", "phase": "RECON", "action": "Read src/api/config.ts (NOMENCLATURES.EXPORT(type) + resolveNomenclatureExportSegment ~L131), src/api/nomenclatures/nomenclatures.api.ts (export() multipart/blob pattern, NomenclatureExportFormat), src/api/nomenclatures/nomenclatures.api.test.ts, src/types/nomenclature.types.ts." },
+      { "id": "233.2", "phase": "RED", "action": "Extend src/api/nomenclatures/nomenclatures.api.test.ts: nomenclaturesApi.import('currency','csv',file) POSTs FormData (fields file + format) to /nomenclature-service/api/currencies/import with Content-Type multipart and returns the parsed NomenclatureImportResult ({ total, inserted, updated, failed, outcomes }); apiClient mocked." },
+      { "id": "233.3", "phase": "GREEN", "action": "In src/api/config.ts add NOMENCLATURES.IMPORT: (type:string)=>`/nomenclature-service/api/${resolveNomenclatureExportSegment(type)}/import`. In nomenclatures.api.ts add types NomenclatureImportOutcome { rowNumber:number; code:string|null; action:'Inserted'|'Updated'|'Failed'; error:string|null } and NomenclatureImportResult { total:number; inserted:number; updated:number; failed:number; outcomes:NomenclatureImportOutcome[] }, and import(type:NomenclatureType, format:NomenclatureExportFormat, file:File): build FormData append('file',file)+append('format',format), apiClient.post(API_ENDPOINTS.NOMENCLATURES.IMPORT(type), form, { headers:{'Content-Type':'multipart/form-data'} }), return response.data.data (unwrap ApiResult). Mirror export's error handling." },
+      { "id": "233.4", "phase": "DONE", "action": "cd Admin-App && npm run test:run && npm run type-check && npx eslint <changed files> — green. gitnexus detect-changes --repo Transport-Admin-App." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 234,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[Nomenclature IMPORT 11/12] NomenclatureImportDialog + wire into NomenclaturesPage. MIRROR of NomenclatureExportDialog: file picker (.csv/.xlsx/.xml, format auto-detected from extension), submit -> nomenclaturesApi.import -> render the upsert report (inserted/updated/failed + per-row errors). Import button gated by ReadWrite. See nomenclature-import-spec.md §3.3-3.4. Repo: Transport-Admin-App.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "234.1", "phase": "RECON", "action": "Read src/app/features/nomenclatures/components/NomenclatureExportDialog.tsx + .test.tsx, components/index.ts, pages/NomenclaturesPage.tsx (export button gated by ResourceCodes.Nomenclatures + AccessLevel.ReadOnly ~L24,L65-75), src/app/shared/components/ui (AppDialog, AppSelectField), and how AccessLevel.ReadWrite is referenced elsewhere." },
+      { "id": "234.2", "phase": "RED", "action": "Create components/NomenclatureImportDialog.test.tsx (mock nomenclaturesApi + useTranslation passthrough + redux/query/router wrappers like the export dialog test): selecting a file named x.csv sets format csv; submit calls nomenclaturesApi.import(type,'csv',file); on success renders counts (inserted/updated/failed) and lists failed rows with their error + dispatches a success snackbar; on api error shows an error alert. Also extend NomenclaturesPage.test.tsx: the Import button is shown only with ReadWrite permission and is disabled until a type is selected." },
+      { "id": "234.3", "phase": "GREEN", "action": "Create components/NomenclatureImportDialog.tsx (props { open, type, onClose }): hidden <input type=file accept='.csv,.xlsx,.xml'>, derive format from extension (csv/xlsx/xml; allow override via the same AppSelectField options as export), submit -> setSubmitting, nomenclaturesApi.import(type,format,file), on success show a result panel (t('nomenclatures.import.successSummary',{inserted,updated,failed}) + a list of failed outcomes rowNumber/code/error), dispatch showSnackbar success, keep dialog open so the user reads the report (close button); handleApiError on failure. Export it from components/index.ts. In NomenclaturesPage.tsx add canImport = hasPermission(ResourceCodes.Nomenclatures, AccessLevel.ReadWrite) and an Import button (FileUpload icon) next to Export opening the dialog; render <NomenclatureImportDialog/> alongside the export dialog. Add i18n keys nomenclatures.import.* (button, dialogTitle, fileLabel, formatLabel, submit, cancel, successSummary, error, results.inserted/updated/failed, row error labels) to BOTH src/locales/bg.json AND src/locales/en.json." },
+      { "id": "234.4", "phase": "DONE", "action": "npm run test:run && npm run type-check && npx eslint <changed files> — green. Manually verify in npm run dev: pick a type, Import a previously exported file, see the report. gitnexus detect-changes --repo Transport-Admin-App." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 235,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[Nomenclature IMPORT 12/12] Playwright e2e — real FE->BE->DB upsert round-trip. 'Ready for merge' on this team means e2e, not unit-only. Repos: Transport-Admin-App (e2e) against a running NomenclatureService.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "235.1", "phase": "RECON", "action": "Read e2e/page-objects/nomenclatures.page.ts, e2e/tests/nomenclatures/nomenclatures-crud.spec.ts, e2e/playwright.config.ts, e2e/helpers/sandbox.helper.ts to reuse auth/seed/cleanup and the export button/dialog selectors (data-testid nomenclature-export-*)." },
+      { "id": "235.2", "phase": "RED/GREEN", "action": "Add data-testid hooks to NomenclatureImportDialog (nomenclature-import-button, -file-input, -format, -submit, -result). Create e2e/tests/nomenclatures/nomenclatures-import.spec.ts: for a writable type (e.g. currency) — (1) export to CSV and capture the file; (2) edit one existing row's name + append one brand-new Code in the CSV; (3) Import the file; (4) assert the result report shows 1 updated + 1 inserted (0 failed); (5) reload the table and assert the edited name changed and the new Code is present (DB round-trip). Add the import page-object methods to nomenclatures.page.ts." },
+      { "id": "235.3", "phase": "DONE", "action": "cd Admin-App && npm run e2e (nomenclatures-import spec) against a running nomenclature-service — green. gitnexus detect-changes --repo Transport-Admin-App. Mark the whole IMPORT feature done only when 224-235 all pass." }
+    ],
     "passes": false
   }
 ]

@@ -1,3 +1,25 @@
+## [2026-06-12] - PLANNING: Nomenclature IMPORT (csv/xlsx/xml) — tasks #224–#235 queued
+
+**Status:** 📋 Planned (queued, NOT yet implemented — all `passes: false`)
+
+**Not a completion entry.** No code in OSDM-Src / Admin-App was changed. This logs the scoping + task authoring only; Ralph will append a per-task DONE entry as it executes each one.
+
+**What was done:**
+- Investigated the existing nomenclature EXPORT pipeline end-to-end (backend `Transport-OSDM-Src/NomenclatureService` + frontend `Transport-Admin-App`) to design a mirror-image IMPORT.
+- Key reuse identified: CRUD is already generic per-type — `INomenclatureSelector.For(type)` → `INomenclatureProvider` exposes `GetByCodeAsync`/`CreateAsync`/`UpdateAsync` (with type-specific DTO fields). So IMPORT is ONE generic `ImportNomenclatureCommand` doing **upsert by Code**, not per-entity.
+- Audit note baked into the tasks: a new `NomenclatureImport` EventType MUST also be registered in `AuditService/Constants/EventTypes.cs` AllTypes or the AuditService silently drops it.
+
+**Decisions (confirmed with user 2026-06-12):**
+- Formats: csv, xlsx, xml — round-trip with export. Dedup: **upsert** (update existing Code, insert missing). Scope: **both** backend + frontend. Append to `tasks.json`.
+
+**Artifacts created:**
+- `nomenclature-import-spec.md` (workspace root) — full design (round-trip contract, backend/frontend plan, audit registration, 30 controller list).
+- `ralph/tasks.json` — appended tasks #224–#235 (`repo` set per task: backend → Transport-OSDM-Src, frontend → Transport-Admin-App; TDD RECON/RED/GREEN/DONE; `passes: false`).
+
+**Task map:** 224 shared infra + reverse header lookup · 225–227 Csv/Excel/Xml parsers · 228 audit plumbing · 229 generic upsert command (core) · 230 DI · 231 reference `POST /api/currencies/import` (ReadWrite) · 232 roll out to 29 controllers · 233 FE api · 234 FE dialog + page button · 235 Playwright e2e round-trip.
+
+---
+
 ## [2026-06-09] - Task #218: Wagon history BY TYPE/SERIES — honest labels + end-to-end search
 
 **Status:** ✅ Complete
@@ -6087,5 +6109,44 @@ E2E coverage for UC-COMP-12. Depends on #214 (audit DetailsJson + SearchText car
 
 **Git commit:**
 - `feat(compositions): Render audit-log DetailsJson as a human-readable key/value view`
+
+---
+
+## [2026-06-11 12:00] - Task #223: Composition CLONE events searchable in wagon-history by type/series
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+
+### RECON
+- CloneCompositionForPeriod.cs: success-path PublishAuditEventAsync.WithDetails carried only composition-level fields (sourceCompositionId, sourceId, sourceTrainNumber, sourceStartDate, compositionId, trainNumber, startDate, date) — NO per-wagon snapshots, so cloned wagons' series never entered SearchText.
+- SaveCompositionWagons.cs: name-resolution pattern = inject IReadOnlyRepository<WagonType, long>, build typeId→SeriesName lookup via GetByIdAsync; emits wagonTypeName in old[]/new[] snapshots.
+- AuditSearchTextBuilder.cs: SnapshotScopeIdProperties {wagonTypeName, wagonTypeId, placardNumber} surfaced via AppendSnapshotArray, called ONLY for 'old' and 'new'.
+
+### RED
+- RailRunService: added PeriodClone_SuccessEvent_IncludesClonedWagonsArrayWithResolvedTypeNames (source w/ one carriage type 42 → SeriesName "10"); asserts CompositionCloned DetailsJson contains `wagons`, wagonTypeName, "10", placard, wagonNumber. (Build-fail RED — constructor needed the WagonType repo.)
+- AuditService: added AcceptAuditEventAsync_AddsWagonTypeFromCloneWagonsArrayToSearchText (DetailsJson with a `wagons` array). Ran — FAILED: "10" not in SearchText. ✅
+
+### GREEN
+- CloneCompositionForPeriod.cs: injected IReadOnlyRepository<WagonType, long> _wagonTypeRepo (mirrors SaveCompositionWagons); built typeId→SeriesName dict once over source.CompositionCarriages distinct WagonTypeId before the date loop; added `wagons = cloned.CompositionCarriages.Select(c => new { wagonTypeId, wagonTypeName=TypeName(...), placardNumber, wagonNumber=c.UicNumber })` to the success-path WithDetails (kept all existing fields; did NOT name it 'new' to avoid the FE shape-based diff mis-rendering a clone as "added wagons").
+- AuditSearchTextBuilder.cs: added AppendSnapshotArray(root, "wagons", searchParts) alongside 'old'/'new'.
+- Updated both clone test fixtures to inject the WagonType repo mock.
+
+### DONE
+- dotnet test: RailRunService.Application.Tests 371/371 ✅; AuditService.Application.Tests 416/416 ✅ (no regressions).
+- gitnexus detect-changes --repo Transport-OSDM-Src: 5 files, 11 symbols, 0 affected processes, risk low.
+- DEFERRED (manual/deploy, not blocking code-complete): `docker compose build rail-run-service audit-service && docker compose up -d --force-recreate rail-run-service audit-service`; optional backfill of existing clone rows' SearchText with JSON_VALUE over the new `wagons` array; manual UI verify (clone a composition with series '10' → Управление на вагони → that type → История shows the composition_cloned events).
+
+**Files modified:**
+- DotNetServices/RailRunService/RailRunService.Application/Features/Compositions/Commands/CloneCompositionForPeriod.cs
+- DotNetServices/AuditService/AuditService.Application/Services/AuditSearchTextBuilder.cs
+- DotNetServices/RailRunService/RailRunService.Application.Tests/CloneCompositionForPeriodCommandHandlerAuditTests.cs
+- DotNetServices/RailRunService/RailRunService.Application.Tests/CloneCompositionForPeriodCommandHandlerTests.cs
+- DotNetServices/AuditService/AuditService.Application.Tests/AuditLoggingServiceTests.cs
+
+**Git commit:**
+- `feat(compositions): Make composition clone events searchable in wagon-history by type/series`
 
 ---
