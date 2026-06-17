@@ -1,0 +1,20 @@
+﻿Task 225 complete. RED ΓåÆ GREEN ΓåÆ DONE: wrote 9 failing round-trip tests, implemented `IImportParser` + a RFC-4180 `CsvImportParser`, all 206 Application tests green, committed `a351da0ec`.
+
+(Note: a hook flagged the GitNexus index as stale ΓÇö that's a non-blocking manual `npx gitnexus analyze` for later, not part of this code-complete task.)
+
+```xml
+<task-complete>
+  <task-id>225</task-id>
+  <tests>PASSED</tests>
+  <visual>N/A</visual>
+  <committed>YES</committed>
+</task-complete>
+```
+
+There are more tasks with `passes: false` (226ΓÇô235), so per the Ralph Wiggum one-task-per-iteration rule, I'm stopping here. The next task is a new iteration with clean context.
+
+```xml
+<status>CONTINUE</status>
+<next-task>226</next-task>
+```
+

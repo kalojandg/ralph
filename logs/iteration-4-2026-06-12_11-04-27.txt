@@ -1,0 +1,25 @@
+﻿Task **#227 ΓÇö `[Nomenclature IMPORT 4/12] XmlImportParser`** complete via TDD (RED ΓåÆ GREEN ΓåÆ DONE).
+
+- **RED:** `XmlImportParserTests.cs` (7 tests) failed to compile ΓÇö type missing (correct reason).
+- **GREEN:** `XmlImportParser.cs` (System.Xml.Linq) ΓÇö EntityType from root `@type`, ColumnKeys from first `<Item>`'s child element order, missing/empty element ΓåÆ null. Targeted 7/7 pass.
+- **DONE:** Full suite 220/220, no regressions. `detect-changes`: no affected flows (additive file).
+- Committed `feat(nomenclature): XmlImportParser (IMPORT 4/12)`, marked `passes: true`, logged in activity.md. (Unrelated untracked tooling files left unstaged.)
+
+```xml
+<task-complete>
+  <task-id>227</task-id>
+  <tests>PASSED</tests>
+  <visual>N/A</visual>
+  <committed>YES</committed>
+</task-complete>
+```
+
+More tasks remain with `passes: false` (next is #228).
+
+```xml
+<status>CONTINUE</status>
+<next-task>228</next-task>
+```
+
+Stopping here per the Ralph one-task-per-iteration rule ΓÇö the next task will run in a fresh agent with clean context.
+

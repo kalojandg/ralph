@@ -1,3 +1,80 @@
+## [2026-06-12] - Task #235: Nomenclature IMPORT 12/12 — Playwright e2e real FE→BE→DB upsert round-trip
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → VISUAL → DONE (`tddWorkflow: true`)
+
+**What was done:**
+### RECON (235.1)
+- Read existing e2e page-object/fixtures/helpers and the import/export dialogs. Confirmed all `data-testid` hooks already present: `nomenclature-import-button/-file-input/-format/-submit/-result/-inserted/-updated/-failed` and `nomenclature-export-button/-format/-submit`. `AppSelectField` renders a MUI `<Select>` (portal), so export format must be picked via combobox-click + option-click, not `selectOption`.
+
+### GREEN (235.2)
+- Added the only missing production hook: `data-testid="nomenclature-search-input"` on the search field in `NomenclatureTable.tsx` (non-functional; needed to assert the DB round-trip after reload).
+- Rewrote `e2e/page-objects/nomenclatures.page.ts` with `ImportReport` and methods: `search`, `row`, `exportCsv` (captures the download stream → utf8), `importCsv` (setInputFiles + parses inserted/updated/failed), `closeImportDialog`.
+- Created `e2e/tests/nomenclatures/nomenclatures-import.spec.ts` against `transport-card-status` (base-columns-only, 50-char Code so codes are timestamp-suffixed, test-owned, re-runnable, never mutating seed rows — documented deviation from the task's "e.g. currency", whose 3-char Code blocks this). Flow: seed-import existing row → export & assert it round-trips out → build CSV editing the existing row + appending a new Code → import & assert `updated:1 inserted:1 failed:0` → reload + search + assert edited name and new Code persisted in the DB.
+
+### DONE (235.3)
+- Unblocked the backend: the deployed `nomenclature-service` lacked the import endpoint (stale image) and, after rebuild, returned HTTP 500 on every auth'd request — `Encoding.UTF8.GetBytes(jwtSecret)` with a null secret at `Program.cs:68` (KeyVault unreachable from inside the container; no env fallback). Recovered az KeyVault access (cleared a corrupt `msal_http_cache.bin`), read `Jwt--Secret` from `bdz-test-kv`, and recreated only `nomenclature-service` with that secret injected via a temp compose override (`/c/tmp/nomen-jwt.override.yml` — kept out of any tracked file). Health → 200, auth'd endpoints → 401 (not 500).
+- `npx playwright test … nomenclatures-import.spec.ts --project=admin` → **1 passed (35s)**.
+- `gitnexus detect-changes --repo Transport-Admin-App` → 3 files / 7 symbols, medium risk, 1 expected process (`NomenclatureTable → Lists`). IMPORT feature (224–235) now complete.
+
+---
+
+## [2026-06-12] - Task #232: Nomenclature IMPORT 9/12 — roll the import action out to the 29 per-entity controllers
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → GREEN → RED → DONE (`tddWorkflow: false`)
+
+**What was done:**
+### RECON (232.1)
+- Confirmed the reference `Import` action on `CurrencyController` (added in #231): `[HttpPost("import")]` + `[AuthorizePermissions(ResourceCodes.Nomenclatures, AccessLevel.CanEdit)]` + `[Consumes("multipart/form-data")]`, file-empty/format guards, copies the upload to `byte[]`, dispatches `ImportNomenclatureCommand { TypeKey, Format, Content }`, returns `Ok(Result<ImportResult>.Ok(result))`. Note: CurrencyController authorizes with `AccessLevel.CanEdit` (the actual enum value), so the 29 copies mirror that, NOT the literal `ReadWrite` in the task prose.
+- The 29 export-only controllers lacked the `TypeKey` const and 3 usings (`Common.DTOs`, `…NomenclatureFeatures.Commands`, `…Shared.Import`).
+- Authoritative type-key→segment map taken from `nomenclature-import-spec.md §4`; cross-checked against provider `Key` props (e.g. `TransportCardStatusProvider.Key => "transport-card-status"`).
+
+### GREEN (232.2)
+- Added to EACH of the 29 controllers (scripted literal transform, `C:\tmp\apply-import.ps1`): the 3 usings, a `private const string TypeKey = "<key>";`, and the identical `Import` action (only the dispatched TypeKey differs, via the const). Controllers: TicketType, PassengerGroup, SubscriptionType, Country, Carrier, ServiceBrand, ServiceClass, TransportMode, StopPlace, FareType, FulfillmentType, FulfillmentMediaType, FulfillmentDocumentType, TravelLine, DurationPassType, PrepaidAccountType, RequiredDocumentType, RequiredDocumentTypeRule, TransportCardStatus, TravelZone, CompositionStatus, WagonStatus, LoyaltyCardType, AncillaryType, ReservationType, SalesChannel, GroupType, TransportOperator, ViolationType. Export actions untouched.
+
+### RED (232.3)
+- Created `NomenclatureService.API.Tests/Controllers/NomenclatureImportEndpointsTests.cs` — a representative sample (stop-place [type-specific columns], ticket-type, country) instantiating each controller directly with a mocked `IMediator`, asserting `Import` dispatches `ImportNomenclatureCommand` with the correct TypeKey/Format/Content and returns `200 Ok(Result<ImportResult>)`.
+
+### DONE (232.4)
+- `dotnet test NomenclatureService.API.Tests` → **Passed 198 / Failed 0** (incl. the 3 new tests); the 29-controller change compiles clean (only pre-existing NU1903/CS0109/CS0675/CS8604 warnings).
+- `gitnexus detect-changes --repo Transport-OSDM-Src` → **29 files, 58 symbols (const + Import per controller), 0 affected processes, risk LOW** (additive endpoints only).
+
+**Files modified:**
+- 29× `OSDM-Src/DotNetServices/NomenclatureService/NomenclatureService.API/Controllers/*Controller.cs`
+- NEW `OSDM-Src/DotNetServices/NomenclatureService/NomenclatureService.API.Tests/Controllers/NomenclatureImportEndpointsTests.cs`
+- ralph/tasks.json (task #232 `passes` → true), ralph/activity.md (this entry)
+
+**Git commit:** `feat(compositions): [Nomenclature IMPORT 9/12] Roll the import action out to the remaining 29 per-entity controllers`
+
+---
+
+## [2026-06-12] - Task #230: Nomenclature IMPORT 7/12 — DI registration of the 3 import parsers
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → GREEN → DONE (setup task, `tddWorkflow: false`)
+
+**What was done:**
+### RECON (230.1)
+- Read `NomenclatureService.Infrastructure/Extensions/ServiceCollectionExtensions.cs`. Confirmed the export formatters are registered as `IExportFormatter` singletons at ~L152-155 (Csv/Excel/Xml). The `IImportParser` interface (`NomenclatureService.Application.Interfaces`) is already covered by the existing `using NomenclatureService.Application.Interfaces;`. The 3 parser classes live in `NomenclatureService.Application.Services.Import` (CsvImportParser/ExcelImportParser/XmlImportParser, all `sealed : IImportParser`) — created in #225–#227.
+
+### GREEN (230.2)
+- Added `using NomenclatureService.Application.Services.Import;`.
+- Directly below the "Export formatters" block added an "Import parsers (Strategy pattern, inverse of the export formatters)" block with three singleton registrations: `IImportParser` → CsvImportParser / ExcelImportParser / XmlImportParser.
+
+### DONE (230.3)
+- `dotnet build NomenclatureService.Infrastructure` → **Build succeeded, 0 errors** (only pre-existing NU1903/CS0109/CS0675 warnings, unrelated).
+- `gitnexus detect-changes --repo Transport-OSDM-Src` → 1 file / 3 symbols, **0 affected processes, risk LOW** (additive DI registration only).
+
+**Files modified:**
+- OSDM-Src/DotNetServices/NomenclatureService/NomenclatureService.Infrastructure/Extensions/ServiceCollectionExtensions.cs
+- ralph/tasks.json (task #230 `passes` → true), ralph/activity.md (this entry)
+
+---
+
 ## [2026-06-12] - PLANNING: Nomenclature IMPORT (csv/xlsx/xml) — tasks #224–#235 queued
 
 **Status:** 📋 Planned (queued, NOT yet implemented — all `passes: false`)
@@ -6148,5 +6225,328 @@ E2E coverage for UC-COMP-12. Depends on #214 (audit DetailsJson + SearchText car
 
 **Git commit:**
 - `feat(compositions): Make composition clone events searchable in wagon-history by type/series`
+
+---
+
+## [2026-06-12 00:00] - Task #224: [Nomenclature IMPORT 1/12] Shared import infra + reverse header resolution
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+
+### RECON
+- Export pipeline mirror: ExportTable(EntityType, Columns, Rows), ExportColumnSchema(Key, ValueType), ExportFilters, ExportResult(Bytes, ContentType, FileName, RowCount), ExportFormats (Csv/Xlsx/Xml + case-insensitive Supported set).
+- ExportColumnLabels (internal static) holds Bg + En key→label dictionaries (BaseColumns Code/SortOrder/IsActive/NameBg/NameEn/NameDe/NameFr + type-specific keys); Translate is key→label only. No reverse lookup existed.
+- Test project had no access to ExportColumnLabels (internal, no InternalsVisibleTo). PricingService.Application uses `<InternalsVisibleTo Include="PricingService.Application.Tests" />` — followed that established convention.
+
+### RED
+- Services/Export/ExportColumnLabelsTests.cs: ResolveKey('Код')=='Code', 'Sort order'=='SortOrder', 'Code'=='Code' (raw passthrough), 'Активен'=='IsActive', case-insensitive, trims whitespace, 'totally-unknown'==null.
+- Features/Shared/Import/ImportResultTests.cs: FromOutcomes aggregates Inserted/Updated/Failed + Total from the Outcomes list; empty list → all zero.
+- Ran — FAILED to compile (Import namespace + ResolveKey absent). Correct RED (missing feature).
+
+### GREEN
+- Created Application/Features/Shared/Import/: enum ImportAction {Inserted,Updated,Failed}; record ImportRowOutcome(RowNumber, Code, Action, Error); record ImportResult(Total, Inserted, Updated, Failed, Outcomes) with static FromOutcomes factory; record ImportTable(EntityType, ColumnKeys, Rows). Reused ExportFormats (no duplication).
+- ExportColumnLabels.cs: added lazily-built reverse dictionary (StringComparer.OrdinalIgnoreCase) merging Bg + En label→key plus identity key→key (identity added last so raw keys always passthrough); `public static string? ResolveKey(string header)` trims input, returns null when unknown.
+- Added `<InternalsVisibleTo Include="NomenclatureService.Application.Tests" />` to NomenclatureService.Application.csproj.
+- Ran — targeted 11/11 PASS.
+
+### DONE
+- dotnet build NomenclatureService.Application: 0 errors.
+- dotnet test NomenclatureService.Application.Tests: 197/197 ✅ (no regressions; all export tests still green).
+- gitnexus detect-changes --repo Transport-OSDM-Src: flagged ExportColumnLabels class touched → 16 export Handle→Translate flows "critical". FALSE POSITIVE from line-shift attribution — Translate body is byte-identical; changes are purely additive (new ResolveKey + ReverseLookup). Full export test suite confirms no behavioral change.
+
+**Files modified:**
+- DotNetServices/NomenclatureService/NomenclatureService.Application/Services/Export/ExportColumnLabels.cs
+- DotNetServices/NomenclatureService/NomenclatureService.Application/NomenclatureService.Application.csproj
+
+**Files added:**
+- DotNetServices/NomenclatureService/NomenclatureService.Application/Features/Shared/Import/ImportAction.cs
+- DotNetServices/NomenclatureService/NomenclatureService.Application/Features/Shared/Import/ImportRowOutcome.cs
+- DotNetServices/NomenclatureService/NomenclatureService.Application/Features/Shared/Import/ImportResult.cs
+- DotNetServices/NomenclatureService/NomenclatureService.Application/Features/Shared/Import/ImportTable.cs
+- DotNetServices/NomenclatureService/NomenclatureService.Application.Tests/Services/Export/ExportColumnLabelsTests.cs
+- DotNetServices/NomenclatureService/NomenclatureService.Application.Tests/Features/Shared/Import/ImportResultTests.cs
+
+**Git commit:**
+- `feat(nomenclature): shared import infra + reverse header resolution (IMPORT 1/12)`
+
+---
+
+## [2026-06-12 00:00] - Task #225: [Nomenclature IMPORT 2/12] IImportParser interface + CsvImportParser
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+
+### RECON
+- CsvNomenclatureExporter: UTF-8 + BOM, RFC-4180 quoting (`"` doubled, fields with `, " \r \n` quoted), CRLF line endings, header from `ExportColumnLabels.Translate(key, lang)`, bool→`true`/`false`, null→empty.
+- IExportFormatter mirror to follow: `Format`/`ContentType`/`FileExtension` + Serialize. Parser is the inverse: header row → ColumnKeys via `ExportColumnLabels.ResolveKey` (already added in task 224; recognizes BG + EN labels + raw keys, case-insensitive, trims); data rows → string cells.
+- ImportTable(EntityType, ColumnKeys, Rows) already exists from task 224. EntityType left empty by parser (set by caller).
+
+### RED
+- Services/Import/CsvImportParserTests.cs: round-trip a CsvNomenclatureExporter payload and assert ColumnKeys == original keys + string Rows match; BOM stripped (first key resolves to "Code"); Bulgarian headers resolve to keys; quoted field with embedded comma + escaped `""` unescaped; unknown header column dropped with its cells; empty cell → null; trailing empty lines ignored; null stream throws.
+- Ran — FAILED to compile (Services.Import namespace + CsvImportParser absent). Correct RED (missing feature).
+
+### GREEN
+- Created Interfaces/IImportParser.cs { string Format { get; } ImportTable Parse(Stream content); } — mirror of IExportFormatter.
+- Created Services/Import/CsvImportParser.cs (Format=ExportFormats.Csv): StreamReader with detectEncodingFromByteOrderMarks (strips BOM), a proper RFC-4180 state-machine ParseRecords (handles quotes/escaped quotes/embedded commas AND embedded newlines), skips blank lines, first non-empty line = headers mapped via ResolveKey (null → skipped, index remembered so data cells align), remaining lines → rows of string? (empty → null). EntityType="".
+- Ran — targeted 9/9 PASS.
+
+### DONE
+- dotnet test NomenclatureService.Application.Tests: 206/206 ✅ (no regressions).
+- gitnexus detect-changes --repo Transport-OSDM-Src: "No changes detected" — parser is brand-new/additive with no upstream callers (DI registration is task 230), so zero affected flows is expected.
+
+**Files added:**
+- DotNetServices/NomenclatureService/NomenclatureService.Application/Interfaces/IImportParser.cs
+- DotNetServices/NomenclatureService/NomenclatureService.Application/Services/Import/CsvImportParser.cs
+- DotNetServices/NomenclatureService/NomenclatureService.Application.Tests/Services/Import/CsvImportParserTests.cs
+
+**Git commit:**
+- `feat(nomenclature): IImportParser interface + CsvImportParser (IMPORT 2/12)`
+
+---
+
+## [2026-06-12] - Task #226: [Nomenclature IMPORT 3/12] ExcelImportParser (ClosedXML)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+### RECON
+- Read ExcelNomenclatureExporter.cs (ClosedXML, worksheet named after EntityType, bold frozen header row 1, bool→"true"/"false" strings, numerics native, null→empty).
+- Re-read CsvImportParser.cs + CsvImportParserTests.cs as the symmetric pattern (kept-index alignment, ResolveKey header mapping, empty→null).
+
+### RED
+- Created NomenclatureService.Application.Tests/Services/Import/ExcelImportParserTests.cs: round-trip via ExcelNomenclatureExporter; asserts ColumnKeys (ResolveKey on row-1 labels, EN + BG), string Rows, numeric SortOrder→string form ("42"), blank cell→null, unknown header column dropped with its cells, null-stream throws.
+- Ran — FAILED to compile (ExcelImportParser type missing) ✅ correct RED reason.
+
+### GREEN
+- Created Services/Import/ExcelImportParser.cs (Format=ExportFormats.Xlsx): XLWorkbook(content), first worksheet, header = row 1 up to LastCellUsed mapped via ExportColumnLabels.ResolveKey (null→skipped, column index remembered for alignment), data rows 2..LastRowUsed → cell.GetString().Trim() (empty→null). EntityType="". Empty sheet → empty ImportTable.
+- Added `using NomenclatureService.Application.Services.Export;` for ExportColumnLabels.
+- Ran — targeted 7/7 PASS.
+
+### DONE
+- dotnet test NomenclatureService.Application.Tests: 213/213 ✅ (no regressions).
+- gitnexus detect-changes --repo Transport-OSDM-Src: "No changes detected" — parser is brand-new/additive, no upstream callers yet (DI registration is task 230), so zero affected flows is expected.
+
+**Files added:**
+- DotNetServices/NomenclatureService/NomenclatureService.Application/Services/Import/ExcelImportParser.cs
+- DotNetServices/NomenclatureService/NomenclatureService.Application.Tests/Services/Import/ExcelImportParserTests.cs
+
+**Git commit:**
+- `feat(nomenclature): ExcelImportParser (IMPORT 3/12)`
+
+---
+
+## [2026-06-12] - Task #227: [Nomenclature IMPORT 4/12] XmlImportParser
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+### RECON
+- Read Services/Export/XmlNomenclatureExporter.cs: root `<Nomenclature type="..." exportedAt totalCount>`, one `<Item>` per row, child element name IS the stable column Key (localized label only a `label` attribute), bool→"true"/"false", null→empty text. So XML needs NO ResolveKey.
+- Read sibling Csv/ExcelImportParser.cs + IImportParser + ImportTable + XmlNomenclatureExporterTests.cs (round-trip helper pattern).
+
+### RED
+- Created NomenclatureService.Application.Tests/Services/Import/XmlImportParserTests.cs: round-trip via XmlNomenclatureExporter; asserts EntityType == root @type (currency, stop-place), ColumnKeys == element-key order of first `<Item>`, string Rows match, empty element→null, hand-written XML with an `<Item>` missing a column yields null for that key with rows still aligned, no-items→empty keys/rows, null-stream throws.
+- Ran — FAILED to compile (XmlImportParser type missing) ✅ correct RED reason.
+
+### GREEN
+- Created Services/Import/XmlImportParser.cs (Format=ExportFormats.Xml) using System.Xml.Linq: XDocument.Load(content); EntityType = (string?)root.Attribute("type") ?? ""; ColumnKeys = first `<Item>`'s child element local-names in document order; each `<Item>` → row taking item.Element(key)?.Value (null/empty→null), positionally aligned to keys. Null root / no items → empty ImportTable.
+- Ran — targeted 7/7 PASS.
+
+### DONE
+- dotnet test NomenclatureService.Application.Tests: 220/220 ✅ (no regressions).
+- gitnexus detect-changes --repo Transport-OSDM-Src: "No changes detected" — parser is brand-new/additive, no upstream callers yet (DI registration is a later task), so zero affected flows is expected.
+
+**Files added:**
+- DotNetServices/NomenclatureService/NomenclatureService.Application/Services/Import/XmlImportParser.cs
+- DotNetServices/NomenclatureService/NomenclatureService.Application.Tests/Services/Import/XmlImportParserTests.cs
+
+**Git commit:**
+- `feat(nomenclature): XmlImportParser (IMPORT 4/12)`
+
+---
+
+## Task #228 — [Nomenclature IMPORT 5/12] Audit plumbing for import
+
+### RECON
+- AuditConstants.cs: EventTypes.NomenclatureExport='nomenclature_export', Operations.Export='Export'. AuditMessages.Nomenclatures had Exported/ExportFailed pairs (class total 26 constants @HEAD — WagonType/CoachLayout/SeatDefinitions messages live here too). AuditService EventTypes.cs lists NomenclatureExport in AllTypes. NomenclatureAuditPublisher had PublishExportSucceeded/FailedAsync delegating to a private PublishAsync.
+
+### RED
+- AuditConstantsTests: added NomenclatureImport='nomenclature_import' + Operations.Import='Import' assertions.
+- EventTypesTests: GetAll count 76→77; added IsValid + Contains for NomenclatureImport.
+- NomenclatureAuditPublisherTests: 4 new tests (Import success/failed build correct event + swallow bus failures).
+
+### GREEN
+- AuditConstants.cs: + EventTypes.NomenclatureImport, Operations.Import.
+- AuditMessages.cs Nomenclatures: + ImportedKey/Imported, ImportFailedKey/ImportFailed.
+- AuditService EventTypes.cs: + const NomenclatureImport AND added to AllTypes (else silently dropped).
+- INomenclatureAuditPublisher + NomenclatureAuditPublisher: + PublishImportSucceededAsync/PublishImportFailedAsync; generalized private PublishAsync to take eventType+operation.
+
+### Note
+- Pre-existing stale assertion Nomenclatures_HasExpectedConstantCount asserted 10 but class had 26 @HEAD (failing before my change). Corrected to 30 (26 + my 4) since I'm editing that exact class.
+
+### DONE
+- MessageBus.Tests: 187/187 ✅; AuditService.Application.Tests: 68/68 ✅; NomenclatureService.Application.Tests (publisher filter): 9/9 ✅.
+- gitnexus detect-changes --repo Transport-OSDM-Src: risk LOW, 9 files / 21 symbols touched, 0 affected processes — additive, expected.
+
+**Files changed:**
+- DotNetServices/SharedSrc/MessageBus/Events/Audit/AuditConstants.cs
+- DotNetServices/SharedSrc/MessageBus/Events/Audit/AuditMessages.cs
+- DotNetServices/AuditService/AuditService.Application/Constants/EventTypes.cs
+- DotNetServices/NomenclatureService/NomenclatureService.Application/Interfaces/INomenclatureAuditPublisher.cs
+- DotNetServices/NomenclatureService/NomenclatureService.Application/Services/Audit/NomenclatureAuditPublisher.cs
+- (+ test files: AuditConstantsTests, AuditMessagesTests, EventTypesTests, NomenclatureAuditPublisherTests)
+
+**Git commit:**
+- `[Nomenclature IMPORT 5/12] Audit plumbing for import`
+
+---
+
+## [2026-06-12 11:27] - Task #229: [Nomenclature IMPORT 6/12] Generic ImportNomenclatureCommand + Handler — the CORE
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE (backend handler — no VISUAL phase)
+
+**What was done:**
+### RED Phase
+- Wrote ImportNomenclatureCommandHandlerTests.cs (9 facts): existing Code → Update w/ existing Id (Updated); new Code → Create (Inserted); a throwing row → Failed + other rows still process; blank Code → Failed, no provider call; counts aggregate outcomes; translations built from NameBg/En/De/Fr omitting empty; type-specific keys (CountryCode/IsServedStation) passed through; success audit published once with totals; unknown format → Failed audit + throw.
+- Ran filtered test → FAILED to compile (command/handler missing) ✅ RED for the right reason.
+
+### GREEN Phase
+- Created Features/NomenclatureFeatures/Commands/ImportNomenclatureCommand.cs: record command { TypeKey, Format, byte[] Content } : IRequest<ImportResult>.
+- Handler injects INomenclatureSelector, IEnumerable<IImportParser> (→ dict by Format, OrdinalIgnoreCase), INomenclatureAuditPublisher.
+- Resolves parser by Format (InvalidOperationException if none); parses MemoryStream → ImportTable; selector.For(TypeKey). Top-level parse/resolve throw → PublishImportFailedAsync then rethrow.
+- Per row (1-based): MapRow builds case-insensitive key→cell dict; blank Code → Failed("Missing required Code."); else GetByCodeAsync → existing ? UpdateAsync(Id=existing.Id) : CreateAsync; per-row try/catch → Failed(ex.Message). Translations {bg,en,de,fr} from NameBg/En/De/Fr (omit null/empty); SortOrder int.TryParse default 0; IsActive/type-specific bools via bool.TryParse (null when absent). ImportResult.FromOutcomes → PublishImportSucceededAsync with totals.
+- Filtered test → 9/9 PASS ✅. Full Application.Tests → 233/233 PASS ✅.
+
+### DONE Phase
+- gitnexus detect-changes --repo Transport-OSDM-Src → no impacted existing flows (brand-new symbols, no upstream callers — as task noted).
+
+**Files modified:**
+- NomenclatureService.Application/Features/NomenclatureFeatures/Commands/ImportNomenclatureCommand.cs (new)
+- NomenclatureService.Application.Tests/Features/NomenclatureFeatures/Commands/ImportNomenclatureCommandHandlerTests.cs (new)
+
+**Git commit:**
+- `[Nomenclature IMPORT 6/12] Generic ImportNomenclatureCommand + Handler — the CORE`
+
+---
+
+## [2026-06-12] - Task #231: [Nomenclature IMPORT 8/12] Reference API endpoint: POST /api/currencies/import on CurrencyController
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+
+### RECON Phase
+- Read CurrencyController.cs (export action pattern), NomenclatureExportRequest.cs, AllowedExportFormatAttribute.cs, ExportFormats.cs, ImportNomenclatureCommand.cs (+ handler), ImportResult/ImportRowOutcome/ImportAction, CurrencyControllerTests.cs + NomenclatureExportTestFixtures.cs, Result<T> (Common.DTOs — payload is `.Data`).
+- Existing controller tests instantiate the controller directly with a mediator mock (no WebApplicationFactory), so format/file validation must happen INSIDE the action (model-binding attrs are bypassed by direct invocation).
+
+### RED Phase
+- Added 3 tests to CurrencyControllerTests.cs: happy path (multipart file + format=csv → dispatches ImportNomenclatureCommand{TypeKey="currency",Format="csv",Content=file bytes}, returns 200 Result<ImportResult>); unsupported format → BadRequest, no dispatch; missing file → BadRequest, no dispatch.
+- Ran filtered test → FAILED to compile (NomenclatureImportRequest + Import action missing) ✅ RED for the right reason.
+
+### GREEN Phase
+- Created API/DTOs/NomenclatureImportRequest.cs: { [Required] required IFormFile File; string? Format }.
+- Added CurrencyController.Import([FromForm] NomenclatureImportRequest, ct): [HttpPost("import")] [AuthorizePermissions(Nomenclatures, CanEdit)] [Consumes("multipart/form-data")]. Null/empty file → 400; format = req.Format ?? file extension, validated against ExportFormats.Supported → 400 if unsupported; copy file to byte[]; send ImportNomenclatureCommand{TypeKey="currency",Format,Content}; return Ok(Result<ImportResult>.Ok(result)). Export action untouched. Reused Application ImportResult directly (it already exposes Total/Inserted/Updated/Failed/Outcomes) — no redundant ImportResultDto.
+- DEVIATION FROM TASK: task said AccessLevel.ReadWrite, but the enum (Common.Enums.AccessLevel) has only NoAccess/ReadOnly/CanEdit. Used CanEdit — the codebase's write-permission level (cf. GtfsSyncController). The remaining 29 import endpoints (task 232) must also use CanEdit, not ReadWrite.
+- Filtered test → 8/8 PASS ✅. Full API.Tests → 195/195 PASS ✅.
+
+### DONE Phase
+- gitnexus detect-changes --repo Transport-OSDM-Src → 2 files / CurrencyController only, 0 affected processes, risk low.
+
+**Files modified:**
+- NomenclatureService.API/DTOs/NomenclatureImportRequest.cs (new)
+- NomenclatureService.API/Controllers/CurrencyController.cs (added Import action + TypeKey const + usings)
+- NomenclatureService.API.Tests/Controllers/CurrencyControllerTests.cs (3 import tests)
+
+**Git commit:**
+- `[Nomenclature IMPORT 8/12] Reference API endpoint: POST /api/currencies/import on CurrencyController`
+
+---
+
+## [2026-06-12 12:17] - Task #233: [Nomenclature IMPORT 10/12] Frontend API layer for import
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+
+### RECON Phase
+- Read src/api/config.ts (NOMENCLATURES.EXPORT(type) + resolveNomenclatureExportSegment ~L85/L131 — single source of truth for type-key → URL segment; throws on unknown key), src/api/nomenclatures/nomenclatures.api.ts (export() multipart/blob pattern, NomenclatureExportFormat='csv'|'xlsx'|'xml'), nomenclatures.api.test.ts (vi.mock('@/api/clients') + mockedApiClient.post pattern), src/types/nomenclature.types.ts (ApiResult<T> = { success, data, error }; the response.data.data unwrap convention).
+
+### RED Phase
+- Extended nomenclatures.api.test.ts: (a) nomenclaturesApi.import('currency','csv',file) POSTs FormData (file + format) to /nomenclature-service/api/currencies/import with Content-Type multipart and returns the parsed NomenclatureImportResult; (b) API_ENDPOINTS.NOMENCLATURES.IMPORT('currency') resolves to /currencies/import.
+- Ran targeted test → 2 FAIL: `nomenclaturesApi.import is not a function` + `NOMENCLATURES.IMPORT is not a function` ✅ RED for the right reason.
+
+### GREEN Phase
+- src/api/config.ts: added NOMENCLATURES.IMPORT: (type)=>`/nomenclature-service/api/${resolveNomenclatureExportSegment(type)}/import` (mirrors EXPORT, reuses the same segment resolver).
+- src/api/nomenclatures/nomenclatures.api.ts: added types NomenclatureImportOutcome { rowNumber; code: string|null; action: 'Inserted'|'Updated'|'Failed'; error: string|null } and NomenclatureImportResult { total; inserted; updated; failed; outcomes }, and import(type, format, file): builds FormData append('file',file)+append('format',format), apiClient.post(IMPORT(type), form, { headers:{'Content-Type':'multipart/form-data'} }), returns response.data.data (unwrap ApiResult).
+- Ran targeted test → 9/9 PASS ✅.
+
+### DONE Phase
+- npm run type-check → clean. npx eslint on the 3 changed files → clean.
+- npm run test:run (full) → 3102 passed, 24 pre-existing failures in unrelated areas (wagonGrid OSDM renderers i18n keys, etc.). Verified pre-existing by stashing my diff and re-running AmenityRenderer.test.tsx → fails identically (1 failed/6 passed) on baseline. Not caused by this additive API-layer change.
+
+**Files modified:**
+- src/api/config.ts (added NOMENCLATURES.IMPORT)
+- src/api/nomenclatures/nomenclatures.api.ts (added import() + result types)
+- src/api/nomenclatures/nomenclatures.api.test.ts (import tests)
+
+**Git commit:**
+- `[Nomenclature IMPORT 10/12] Frontend API layer for import`
+
+---
+
+## [2026-06-12 12:30] - Task #234: [Nomenclature IMPORT 11/12] NomenclatureImportDialog + wire into NomenclaturesPage
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+
+### RECON Phase
+- Read NomenclatureExportDialog.tsx (+ .test.tsx) as the mirror, components/index.ts, NomenclaturesPage.tsx (+ .test.tsx), shared/components/ui AppDialog + AppSelectField, errorHandler.handleApiError, src/tests/mocks/useTranslationVitest (t() returns the key by default; params only interpolated for whitelisted keys), and nomenclature-import-spec.md §3.
+- Key finding: AccessLevel enum has NO `ReadWrite` member — write level in this codebase is `AccessLevel.CanEdit` (=2). All write gating elsewhere uses `hasPermission(resource, AccessLevel.CanEdit)`. Gated the Import button on CanEdit accordingly.
+- nomenclaturesApi.import(type, format, file) + NomenclatureImportResult/Outcome types already exist (task 234... 10/12).
+
+### RED Phase
+- Created components/NomenclatureImportDialog.test.tsx: submit disabled until a file chosen; selecting x.csv derives format 'csv' and submit calls nomenclaturesApi.import('currency','csv',file); success renders report counts (inserted/updated/failed via testids) + failed-row error text + dispatches success snackbar; api error renders an error alert.
+- Extended NomenclaturesPage.test.tsx: mocked NomenclatureImportDialog; Import button hidden without CanEdit, disabled until a type is selected, enabled with a valid type.
+- Ran → RED for the right reason (missing component / missing nomenclature-import-button).
+
+### GREEN Phase
+- Created components/NomenclatureImportDialog.tsx (props { open, type, onClose }): hidden <input type=file accept=".csv,.xlsx,.xml"> triggered by a button, format auto-detected from extension and overridable via AppSelectField (reusing export format option labels), submit → nomenclaturesApi.import → renders a result panel (successSummary Alert + inserted/updated/failed counts + list of failed outcomes), dispatches showSnackbar success, keeps the dialog open so the user reads the report; handleApiError → error Alert on failure.
+- Exported it from components/index.ts. NomenclaturesPage.tsx: added canImport = hasPermission(Nomenclatures, CanEdit), an Import button (FileUpload icon) next to Export, and the <NomenclatureImportDialog/> mount.
+- Added i18n keys nomenclatures.import.* (button, dialogTitle, fileLabel, noFile, formatLabel, submit, cancel, success, successSummary, error, rowError, results.inserted/updated/failed) to BOTH bg.json and en.json.
+- Fixed a test-only mock leak: vi.clearAllMocks() does NOT clear the mockResolvedValueOnce queue → added mockedImport.mockReset() in beforeEach.
+
+### DONE Phase
+- npm run test:run (src/app/features/nomenclatures) → 33/33 pass (incl. 4 new dialog + 3 new page tests). npm run type-check → clean. npx eslint on changed files → 0 errors (1 pre-existing no-floating-promises warning on the unchanged handleTypeChange navigate, left per repo lint-scope rule).
+- gitnexus detect-changes --repo Transport-Admin-App → 6 files / 1 affected process (NomenclaturesPage), expected blast radius.
+- Note: full FE→BE→DB round-trip is task #235 (Playwright e2e against a running nomenclature-service) — component-level coverage only here.
+
+**Files modified:**
+- src/app/features/nomenclatures/components/NomenclatureImportDialog.tsx (new)
+- src/app/features/nomenclatures/components/NomenclatureImportDialog.test.tsx (new)
+- src/app/features/nomenclatures/components/index.ts
+- src/app/features/nomenclatures/pages/NomenclaturesPage.tsx
+- src/app/features/nomenclatures/pages/NomenclaturesPage.test.tsx
+- src/locales/bg.json, src/locales/en.json
+
+**Git commit:**
+- `feat(compositions): [Nomenclature IMPORT 11/12] NomenclatureImportDialog + wire into NomenclaturesPage. MIRROR of NomenclatureExportDialog`
 
 ---

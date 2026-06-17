@@ -6570,7 +6570,7 @@
       { "id": "224.3", "phase": "GREEN", "action": "Create Application/Features/Shared/Import/ with: enum ImportAction { Inserted, Updated, Failed }; record ImportRowOutcome(int RowNumber, string? Code, ImportAction Action, string? Error); record ImportResult(int Total, int Inserted, int Updated, int Failed, IReadOnlyList<ImportRowOutcome> Outcomes) with a static FromOutcomes(IReadOnlyList<ImportRowOutcome>) factory computing the counts; record ImportTable(string EntityType, IReadOnlyList<string> ColumnKeys, IReadOnlyList<IReadOnlyList<string?>> Rows). Reuse ExportFormats (do NOT duplicate). In Services/Export/ExportColumnLabels.cs add `public static string? ResolveKey(string header)` backed by a lazily-built reverse dictionary (StringComparer.OrdinalIgnoreCase) merging Bg + En label->key plus identity key->key; trims input; returns null when unknown." },
       { "id": "224.4", "phase": "DONE", "action": "cd OSDM-Src/DotNetServices && dotnet build NomenclatureService/NomenclatureService.Application/NomenclatureService.Application.csproj && dotnet test NomenclatureService/NomenclatureService.Application.Tests — green. gitnexus detect-changes --repo Transport-OSDM-Src." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 225,
@@ -6584,7 +6584,7 @@
       { "id": "225.3", "phase": "GREEN", "action": "Create Interfaces/IImportParser.cs { string Format { get; } ImportTable Parse(Stream content); }. Create Services/Import/CsvImportParser.cs (Format=ExportFormats.Csv): read UTF-8 (strip BOM), split RFC-4180 (handle quotes/escaped quotes/embedded commas), first non-empty line = headers mapped through ExportColumnLabels.ResolveKey (skip columns that resolve to null, remembering their index so data cells align), remaining lines -> rows of string? (empty cell -> null). EntityType left empty (set by caller)." },
       { "id": "225.4", "phase": "DONE", "action": "dotnet test NomenclatureService/NomenclatureService.Application.Tests — green. gitnexus detect-changes --repo Transport-OSDM-Src." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 226,
@@ -6598,7 +6598,7 @@
       { "id": "226.3", "phase": "GREEN", "action": "Create Services/Import/ExcelImportParser.cs (Format=ExportFormats.Xlsx) using ClosedXML: open workbook from stream, take Worksheets.First(), header row = row 1 cells up to the last non-empty column mapped through ExportColumnLabels.ResolveKey (track kept column indexes), data rows from row 2..LastRowUsed -> cell.GetString() (trim; '' -> null). Use the same kept-index alignment as the CSV parser." },
       { "id": "226.4", "phase": "DONE", "action": "dotnet test NomenclatureService/NomenclatureService.Application.Tests — green. gitnexus detect-changes --repo Transport-OSDM-Src." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 227,
@@ -6612,7 +6612,7 @@
       { "id": "227.3", "phase": "GREEN", "action": "Create Services/Import/XmlImportParser.cs (Format=ExportFormats.Xml) using System.Xml.Linq: load doc, ColumnKeys = child element names of the first <Item> in document order, EntityType = (string)root.Attribute(\"type\"), each <Item> -> row where for every key take the matching child element value (missing/empty -> null)." },
       { "id": "227.4", "phase": "DONE", "action": "dotnet test NomenclatureService/NomenclatureService.Application.Tests — green. gitnexus detect-changes --repo Transport-OSDM-Src." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 228,
@@ -6626,7 +6626,7 @@
       { "id": "228.3", "phase": "GREEN", "action": "(1) AuditConstants.cs: add EventTypes.NomenclatureImport='nomenclature_import' and Operations.Import='Import'. (2) AuditMessages.cs Nomenclatures: add ImportedKey='Nomenclatures.Imported' / Imported='Nomenclature {entityType} imported from {format} ({inserted} inserted, {updated} updated, {failed} failed)' and ImportFailedKey/ImportFailed. (3) AuditService EventTypes.cs: add const NomenclatureImport='nomenclature_import' AND add it to AllTypes. (4) INomenclatureAuditPublisher + NomenclatureAuditPublisher: add PublishImportSucceededAsync(string typeKey,string format,int total,int inserted,int updated,int failed,CancellationToken) and PublishImportFailedAsync(string typeKey,string format,string reason,CancellationToken), mirroring the export methods but using the Import event type/operation/messages." },
       { "id": "228.4", "phase": "DONE", "action": "dotnet test for MessageBus.Tests, AuditService.Application.Tests, NomenclatureService.Application.Tests — green. gitnexus detect-changes --repo Transport-OSDM-Src." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 229,
@@ -6640,7 +6640,7 @@
       { "id": "229.3", "phase": "GREEN", "action": "Create Features/NomenclatureFeatures/Commands/ImportNomenclatureCommand.cs: record ImportNomenclatureCommand { required string TypeKey; required string Format; required byte[] Content; } : IRequest<ImportResult>. Handler injects INomenclatureSelector, IEnumerable<IImportParser> (-> dict by Format), INomenclatureAuditPublisher. Handle: resolve parser by Format (throw InvalidOperation if none); parse Content (MemoryStream) -> ImportTable; provider=_selector.For(TypeKey). For each row (1-based RowNumber): read Code (skip+Failed if blank); build dto via a private MapRow(columnKeys,row) helper -> translations dict {bg,en,de,fr} from NameBg/En/De/Fr (omit null/empty), SortOrder int.TryParse (default 0), IsActive bool parse of 'true'/'false' (default true), optional type-specific keys; existing=await provider.GetByCodeAsync(Code); if existing!=null -> UpdateNomenclatureDto{Id=existing.Id,...} + UpdateAsync -> Updated else CreateAsync -> Inserted; wrap each row in try/catch -> Failed(ex.Message). Build ImportResult.FromOutcomes; publish Import audit (Failed publish on a top-level parse/throw). Register the handler (MediatR auto-scan already covers Application assembly — verify)." },
       { "id": "229.4", "phase": "DONE", "action": "dotnet test NomenclatureService/NomenclatureService.Application.Tests — green. gitnexus impact ImportNomenclatureCommand --direction upstream --repo Transport-OSDM-Src (expect none yet). gitnexus detect-changes --repo Transport-OSDM-Src." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 230,
@@ -6653,7 +6653,7 @@
       { "id": "230.2", "phase": "GREEN", "action": "Directly below the export formatter registrations add: services.AddSingleton<IImportParser, CsvImportParser>(); services.AddSingleton<IImportParser, ExcelImportParser>(); services.AddSingleton<IImportParser, XmlImportParser>(); add the needed using for Services.Import. Keep the existing 'Export formatters' comment block, add an analogous 'Import parsers' comment." },
       { "id": "230.3", "phase": "DONE", "action": "dotnet build NomenclatureService — green. gitnexus detect-changes --repo Transport-OSDM-Src." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 231,
@@ -6667,7 +6667,7 @@
       { "id": "231.3", "phase": "GREEN", "action": "Create DTOs/NomenclatureImportRequest.cs { [Required] IFormFile File; string? Format (optional — if blank, infer from File extension; validate against ExportFormats.Supported). } and Application DTO ImportResultDto (or reuse Application ImportResult directly via a thin API mapping). Add to CurrencyController: [HttpPost(\"import\")] [AuthorizePermissions(ResourceCodes.Nomenclatures, AccessLevel.ReadWrite)] [Consumes(\"multipart/form-data\")] Import([FromForm] NomenclatureImportRequest req, CancellationToken ct): resolve format (req.Format ?? ext), 400 if unsupported or file empty, copy file to byte[], send ImportNomenclatureCommand{TypeKey=\"currency\",Format,Content}, return Ok(Result<ImportResultDto>.Ok(mapped)). Keep the controller's existing export action untouched." },
       { "id": "231.4", "phase": "DONE", "action": "dotnet test NomenclatureService/NomenclatureService.API.Tests — green. gitnexus detect-changes --repo Transport-OSDM-Src." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 232,
@@ -6681,7 +6681,7 @@
       { "id": "232.3", "phase": "RED", "action": "Add a parametrized controller test (e.g. NomenclatureImportEndpointsTests.cs) iterating a representative sample (currency already covered + stop-place which has type-specific columns, ticket-type, country): POST /api/<segment>/import with a csv file sends ImportNomenclatureCommand with the correct TypeKey and returns 200." },
       { "id": "232.4", "phase": "DONE", "action": "dotnet test NomenclatureService/NomenclatureService.API.Tests — green. gitnexus detect-changes --repo Transport-OSDM-Src." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 233,
@@ -6695,7 +6695,7 @@
       { "id": "233.3", "phase": "GREEN", "action": "In src/api/config.ts add NOMENCLATURES.IMPORT: (type:string)=>`/nomenclature-service/api/${resolveNomenclatureExportSegment(type)}/import`. In nomenclatures.api.ts add types NomenclatureImportOutcome { rowNumber:number; code:string|null; action:'Inserted'|'Updated'|'Failed'; error:string|null } and NomenclatureImportResult { total:number; inserted:number; updated:number; failed:number; outcomes:NomenclatureImportOutcome[] }, and import(type:NomenclatureType, format:NomenclatureExportFormat, file:File): build FormData append('file',file)+append('format',format), apiClient.post(API_ENDPOINTS.NOMENCLATURES.IMPORT(type), form, { headers:{'Content-Type':'multipart/form-data'} }), return response.data.data (unwrap ApiResult). Mirror export's error handling." },
       { "id": "233.4", "phase": "DONE", "action": "cd Admin-App && npm run test:run && npm run type-check && npx eslint <changed files> — green. gitnexus detect-changes --repo Transport-Admin-App." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 234,
@@ -6709,7 +6709,7 @@
       { "id": "234.3", "phase": "GREEN", "action": "Create components/NomenclatureImportDialog.tsx (props { open, type, onClose }): hidden <input type=file accept='.csv,.xlsx,.xml'>, derive format from extension (csv/xlsx/xml; allow override via the same AppSelectField options as export), submit -> setSubmitting, nomenclaturesApi.import(type,format,file), on success show a result panel (t('nomenclatures.import.successSummary',{inserted,updated,failed}) + a list of failed outcomes rowNumber/code/error), dispatch showSnackbar success, keep dialog open so the user reads the report (close button); handleApiError on failure. Export it from components/index.ts. In NomenclaturesPage.tsx add canImport = hasPermission(ResourceCodes.Nomenclatures, AccessLevel.ReadWrite) and an Import button (FileUpload icon) next to Export opening the dialog; render <NomenclatureImportDialog/> alongside the export dialog. Add i18n keys nomenclatures.import.* (button, dialogTitle, fileLabel, formatLabel, submit, cancel, successSummary, error, results.inserted/updated/failed, row error labels) to BOTH src/locales/bg.json AND src/locales/en.json." },
       { "id": "234.4", "phase": "DONE", "action": "npm run test:run && npm run type-check && npx eslint <changed files> — green. Manually verify in npm run dev: pick a type, Import a previously exported file, see the report. gitnexus detect-changes --repo Transport-Admin-App." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 235,
@@ -6721,6 +6721,172 @@
       { "id": "235.1", "phase": "RECON", "action": "Read e2e/page-objects/nomenclatures.page.ts, e2e/tests/nomenclatures/nomenclatures-crud.spec.ts, e2e/playwright.config.ts, e2e/helpers/sandbox.helper.ts to reuse auth/seed/cleanup and the export button/dialog selectors (data-testid nomenclature-export-*)." },
       { "id": "235.2", "phase": "RED/GREEN", "action": "Add data-testid hooks to NomenclatureImportDialog (nomenclature-import-button, -file-input, -format, -submit, -result). Create e2e/tests/nomenclatures/nomenclatures-import.spec.ts: for a writable type (e.g. currency) — (1) export to CSV and capture the file; (2) edit one existing row's name + append one brand-new Code in the CSV; (3) Import the file; (4) assert the result report shows 1 updated + 1 inserted (0 failed); (5) reload the table and assert the edited name changed and the new Code is present (DB round-trip). Add the import page-object methods to nomenclatures.page.ts." },
       { "id": "235.3", "phase": "DONE", "action": "cd Admin-App && npm run e2e (nomenclatures-import spec) against a running nomenclature-service — green. gitnexus detect-changes --repo Transport-Admin-App. Mark the whole IMPORT feature done only when 224-235 all pass." }
+    ],
+    "passes": true
+  },
+  {
+    "id": 236,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[RBAC 1/12][BE] CompositionsController — add [AuthorizePermissions(ResourceCodes.Composition, AccessLevel.CanEdit)] to WRITE actions only; GET reads stay PUBLIC (used by sales/booking). See C:/Users/kaloyan.georgiev/Projects/ralph/rbac-spec.md §B1.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "236.1", "phase": "RECON", "action": "Read rbac-spec.md §Инвариант + §B1. Open RailRunService.API/Controllers/CompositionsController.cs and PricingService.API/Controllers/AdminTariffVersionController.cs (the reference pattern: GET->ReadOnly, writes->CanEdit). Confirm the exact enum member is AccessLevel.CanEdit (NOT ReadWrite) in SharedSrc/Common/Enums/AccessLevel.cs and that ResourceCodes.Composition == \"COMPOSITION\" in SharedSrc/Common/Constants/ResourceCodes.cs. Confirm RailRunService.API/Program.cs calls AddCustomAuthorization() (compare to PricingService.API/Program.cs); if it does NOT, add it in this task." },
+      { "id": "236.2", "phase": "RED", "action": "Add a reflection-based test in RailRunService.API.Tests (e.g. CompositionAuthorizationTests.cs): assert CreateComposition, UpdateComposition, DeleteComposition, CloneCompositionForPeriod, SaveCompositionWagons, SetCompositionStatus each carry [AuthorizePermissions] with ResourceCodes.Composition + AccessLevel.CanEdit; and assert GetCompositions + GetCompositionById have NO AuthorizePermissions attribute (stay public). Run -> FAILS." },
+      { "id": "236.3", "phase": "GREEN", "action": "Add the using statements (copy exact namespaces from AdminTariffVersionController.cs: Common.Authorization, Common.Constants, Common.Enums). Put [AuthorizePermissions(ResourceCodes.Composition, AccessLevel.CanEdit)] above each of the 6 write actions. Do NOT touch the two GET actions. Run test -> PASSES." },
+      { "id": "236.4", "phase": "DONE", "action": "cd OSDM-Src/DotNetServices/RailRunService && dotnet build && dotnet test RailRunService.API.Tests — green. gitnexus detect-changes --repo Transport-OSDM-Src. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 237,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[RBAC 2/12][BE] CarriagesController + CoachLayoutsController — CanEdit on write actions, GET reads stay public. See rbac-spec.md §B2-B3.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "237.1", "phase": "RECON", "action": "Read rbac-spec.md §B2-B3. Open RailRunService.API/Controllers/CarriagesController.cs and CoachLayoutsController.cs. Identify writes: AddCarriage(POST), UpdateCarriage(PUT); CreateCoachLayout(POST), UpdateCoachLayout(PUT), SaveSeatDefinitions(POST). Reads to leave public: GetCarriages, GetBySeriesName, GetById." },
+      { "id": "237.2", "phase": "RED", "action": "Extend the auth reflection test (carriages + coach-layouts): the 5 write actions carry [AuthorizePermissions(ResourceCodes.Composition, AccessLevel.CanEdit)]; the GET actions have none. Run -> FAILS." },
+      { "id": "237.3", "phase": "GREEN", "action": "Add usings + [AuthorizePermissions(ResourceCodes.Composition, AccessLevel.CanEdit)] above the 5 write actions in the two controllers. Leave GETs untouched. Run -> PASSES." },
+      { "id": "237.4", "phase": "DONE", "action": "dotnet build && dotnet test RailRunService.API.Tests — green. gitnexus detect-changes --repo Transport-OSDM-Src. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 238,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[RBAC 3/12][BE] NomenclatureController — ReadOnly on admin reads, CanEdit on Create/Update/Delete; keep the public GETs (Get/GetAll/GetMultiple/GetGroupTypes) unguarded. See rbac-spec.md §B4.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "238.1", "phase": "RECON", "action": "Read rbac-spec.md §B4. Open NomenclatureService.API/Controllers/NomenclatureController.cs. Map actions: PUBLIC (no guard) = GetGroupTypes(~52), Get(~61), GetMultiple(~111), GetAll(~143); ReadOnly = GetAllForAdmin(~74), GetById(~168); CanEdit = Create(~205), Update(~282), Delete(~373). Confirm NomenclatureService.API/Program.cs calls AddCustomAuthorization() (export controllers already use AuthorizePermissions, so it should be present — confirm)." },
+      { "id": "238.2", "phase": "RED", "action": "Add reflection test in NomenclatureService.API.Tests (NomenclatureControllerAuthorizationTests.cs): Create/Update/Delete carry CanEdit; GetAllForAdmin/GetById carry ReadOnly; Get/GetAll/GetMultiple/GetGroupTypes carry NO AuthorizePermissions (must stay public — other modules depend on them). Run -> FAILS." },
+      { "id": "238.3", "phase": "GREEN", "action": "Add usings + attributes: [AuthorizePermissions(ResourceCodes.Nomenclatures, AccessLevel.ReadOnly)] on GetAllForAdmin + GetById; [AuthorizePermissions(ResourceCodes.Nomenclatures, AccessLevel.CanEdit)] on Create + Update + Delete. Leave the 4 public GETs with no attribute. Run -> PASSES." },
+      { "id": "238.4", "phase": "DONE", "action": "cd OSDM-Src/DotNetServices/NomenclatureService && dotnet build && dotnet test NomenclatureService.API.Tests — green. gitnexus detect-changes --repo Transport-OSDM-Src. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 239,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[RBAC 4/12][FE] Permission hooks useNomenclaturePermissions + useCompositionPermissions (canRead/canEdit/level). Mirror of useTariffingPermissions. See rbac-spec.md §F1.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "239.1", "phase": "RECON", "action": "Read rbac-spec.md §F1. Read src/app/features/tariffing/hooks/useTariffingPermissions.ts (exact pattern) + its test if present, src/app/shared/hooks/usePermissions.ts, src/api/permissions/permissions.types.ts (ResourceCodes), src/api/roles/roles.types.ts (AccessLevel)." },
+      { "id": "239.2", "phase": "RED", "action": "Create useNomenclaturePermissions.test.ts and useCompositionPermissions.test.ts next to the hooks (mock usePermissions/getPermissionLevel): level 0 -> {canRead:false,canEdit:false}; level 1 -> {canRead:true,canEdit:false}; level 2 -> {canRead:true,canEdit:true}. Run -> FAILS." },
+      { "id": "239.3", "phase": "GREEN", "action": "Create src/app/features/nomenclatures/hooks/useNomenclaturePermissions.ts and src/app/features/compositions/hooks/useCompositionPermissions.ts exactly as in rbac-spec.md §F1 (Composition hook uses ResourceCodes.Composition). Export from the feature index.ts if hooks are exported there. Run -> PASSES." },
+      { "id": "239.4", "phase": "DONE", "action": "cd Admin-App && npm run test:run -- <the two test files> && npm run type-check && npx eslint <changed files> — green. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 240,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[RBAC 5/12][FE] MainLayout — gate Nomenclatures menu item and Compositions menu section by ResourceCodes.Nomenclatures / ResourceCodes.Composition at ReadOnly. See rbac-spec.md §F2.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "240.1", "phase": "RECON", "action": "Read rbac-spec.md §F2. Read src/app/layout/MainLayout.tsx: existing canSee* block (~110-116), bottomMenuItems (~210-212) + its render (~444-454), Compositions title ListItem + Collapse (~455-492), and the IASUTD pattern {showIasutdNavSection && (...)} (~553-586) as the model. Check how MainLayout is tested (if a test exists)." },
+      { "id": "240.2", "phase": "RED", "action": "Add/extend a MainLayout component test (mock usePermissions.hasPermission): with NO composition/nomenclature permission, the 'Номенклатури' menu item and the Compositions menu title are NOT rendered; with ReadOnly on both, they ARE rendered. Run -> FAILS." },
+      { "id": "240.3", "phase": "GREEN", "action": "Add const canSeeNomenclatures = hasPermission(ResourceCodes.Nomenclatures, AccessLevel.ReadOnly); const canSeeCompositions = hasPermission(ResourceCodes.Composition, AccessLevel.ReadOnly);. Make bottomMenuItems conditional (= canSeeNomenclatures ? [...] : []). Wrap the Compositions title ListItem + Collapse block in {canSeeCompositions && ( ... )}. Run -> PASSES." },
+      { "id": "240.4", "phase": "DONE", "action": "npm run test:run -- src/app/layout && npm run type-check && npx eslint <changed files> — green. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 241,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[RBAC 6/12][FE] router.tsx — wrap Nomenclatures route (ReadOnly) and Compositions/Wagons routes (ReadOnly for views, CanEdit for new/edit) in PermissionGuard. See rbac-spec.md §F3.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "241.1", "phase": "RECON", "action": "Read rbac-spec.md §F3. Read src/app/routes/router.tsx: imports of PermissionGuard/ResourceCodes/AccessLevel (~8-10), nomenclatures route (~193-195 with the TODO), compositions+wagons routes (~241-272), and the group-trips routes in the same file as the wrapping pattern (PermissionGuard ... redirectTo='/')." },
+      { "id": "241.2", "phase": "RED", "action": "Add a router/route test (or extend existing): a ReadOnly-composition user can render /compositions but is redirected from /compositions/new; a user without nomenclature permission is redirected from /nomenclatures. Use the levels table in §F3. Run -> FAILS." },
+      { "id": "241.3", "phase": "GREEN", "action": "Remove the TODO comment and wrap NomenclaturesPage in <PermissionGuard resourceCode={ResourceCodes.Nomenclatures} requiredLevel={AccessLevel.ReadOnly} redirectTo='/'>. Wrap each compositions/wagons route element per the §F3 table: compositions, compositions/history, compositions/wagon-history -> ReadOnly; compositions/new -> CanEdit; compositions/:id/edit -> ReadOnly; wagons -> ReadOnly; wagons/new + wagons/:id/edit -> CanEdit. Run -> PASSES." },
+      { "id": "241.4", "phase": "DONE", "action": "npm run test:run -- src/app/routes && npm run type-check && npx eslint <changed files> — green. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 242,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[RBAC 7/12][FE] Nomenclatures action gating — hide Add/Edit/Delete in NomenclatureTable unless canEdit (NOMENCLATURES CanEdit). See rbac-spec.md §F4.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "242.1", "phase": "RECON", "action": "Read rbac-spec.md §F4. Read src/app/features/nomenclatures/components/NomenclatureTable.tsx: Add button (~174-180), row Edit (~266-272), row Delete (~275-283). Reference gating style: NomenclaturesPage.tsx:65 ({canExport && <Button/>}). Read NomenclatureTable.test.tsx if present." },
+      { "id": "242.2", "phase": "RED", "action": "Extend NomenclatureTable.test.tsx (mock useNomenclaturePermissions): canEdit=false -> Add/Edit/Delete controls absent (or disabled); canEdit=true -> present. Run -> FAILS." },
+      { "id": "242.3", "phase": "GREEN", "action": "Call const { canEdit } = useNomenclaturePermissions() in NomenclatureTable and wrap Add, row Edit, row Delete in {canEdit && ...} (keep existing disabled={!item.isActive} on Delete combined). Run -> PASSES." },
+      { "id": "242.4", "phase": "DONE", "action": "npm run test:run -- src/app/features/nomenclatures && npm run type-check && npx eslint <changed files> — green. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 243,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[RBAC 8/12][FE] Compositions action gating part A — CompositionsListPage, CompositionList (Edit/Clone/Delete), CreateCompositionModal, EditorHeader (Save/Clone/Status/Name/LinkTrip) gated by COMPOSITION CanEdit. See rbac-spec.md §F5.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "243.1", "phase": "RECON", "action": "Read rbac-spec.md §F5 (rows: CompositionsListPage, CompositionList, CreateCompositionModal, EditorHeader). Read those files + their tests. Note how BaseTariffCrudPage passes canEdit down as a prop to presentational tables — prefer prop-drilling canEdit from page level over calling the hook in every leaf." },
+      { "id": "243.2", "phase": "RED", "action": "Extend tests for CompositionsListPage/CompositionList/EditorHeader (mock useCompositionPermissions or pass canEdit prop): canEdit=false hides Create, row Edit/Clone/Delete, and EditorHeader Save/Clone/Status/Name-edit/LinkTrip; canEdit=true shows them. Run -> FAILS." },
+      { "id": "243.3", "phase": "GREEN", "action": "In CompositionsListPage call useCompositionPermissions(); gate the Create button; pass canEdit to CompositionList (gate row Edit ~152, Clone ~160, Delete ~167) and to CreateCompositionModal (block submit). In CompositionEditorPage compute canEdit and pass to EditorHeader; gate Save(~335), Clone(~325), Status dropdown(~226), Name edit(~195), Link Trip(~296). Run -> PASSES." },
+      { "id": "243.4", "phase": "DONE", "action": "npm run test:run -- src/app/features/compositions && npm run type-check && npx eslint <changed files> — green. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 244,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[RBAC 9/12][FE] Compositions action gating part B — editor canvas: WagonPalette, WagonPropertiesPanel (Save/Delete), SeatActionsToolbar (Block/Unblock), BlockSeatDialog, SubRoutesPanel, Add Sub-Route gated by COMPOSITION CanEdit. See rbac-spec.md §F5.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "244.1", "phase": "RECON", "action": "Read rbac-spec.md §F5 (rows: CompositionEditorPage Add Sub-Route, WagonPalette, WagonPropertiesPanel, SeatActionsToolbar, BlockSeatDialog, SubRoutesPanel). Read those files + tests. Decide the canEdit prop threading from CompositionEditorPage." },
+      { "id": "244.2", "phase": "RED", "action": "Extend tests (WagonPropertiesPanel, SeatActionsToolbar, SubRoutesPanel, editor page): canEdit=false hides/disables Add Sub-Route, wagon drag-add, wagon Save(~114)/Delete(~124), seat Block(~110)/Unblock(~122) and the block dialog trigger; canEdit=true enables them. Run -> FAILS." },
+      { "id": "244.3", "phase": "GREEN", "action": "Thread canEdit from CompositionEditorPage into WagonPalette (disable drag source), WagonPropertiesPanel (gate Save/Delete), SeatActionsToolbar (gate Block/Unblock — note backend seat endpoints stay open, this is FE-only), BlockSeatDialog (gate submit), SubRoutesPanel (gate sub-route edit), and the Add Sub-Route control. Run -> PASSES." },
+      { "id": "244.4", "phase": "DONE", "action": "npm run test:run -- src/app/features/compositions && npm run type-check && npx eslint <changed files> — green. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 245,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[RBAC 10/12][FE] Wagons feature action gating — hide Create/Edit/Delete in the wagons list/detail unless COMPOSITION CanEdit. See rbac-spec.md §F6.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "245.1", "phase": "RECON", "action": "Read rbac-spec.md §F6. Read src/app/features/wagons pages/components to locate the Create/Edit/Delete controls and existing tests." },
+      { "id": "245.2", "phase": "RED", "action": "Extend the wagons list/detail tests (mock useCompositionPermissions): canEdit=false hides Create/Edit/Delete; canEdit=true shows them. Run -> FAILS." },
+      { "id": "245.3", "phase": "GREEN", "action": "Call useCompositionPermissions() (or receive canEdit prop) and gate the Create/Edit/Delete controls in the wagons feature. Run -> PASSES." },
+      { "id": "245.4", "phase": "DONE", "action": "npm run test:run -- src/app/features/wagons && npm run type-check && npx eslint <changed files> — green. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 246,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[RBAC 11/12][FE] i18n + a11y sweep — ensure any new permission strings exist in BOTH bg.json and en.json and add data-testid hooks needed for e2e on the gated controls. See rbac-spec.md §F7.",
+    "tddWorkflow": false,
+    "steps": [
+      { "id": "246.1", "action": "If tasks 240-245 introduced any new UI text (e.g. an access hint), add the keys to BOTH src/locales/bg.json AND src/locales/en.json (CLAUDE.md i18n rule). If none were added, confirm permissions.accessDenied already exists (used by PermissionGuard) and skip." },
+      { "id": "246.2", "action": "Add stable data-testid attributes to the controls the e2e task (247) will assert: nomenclature Add/Edit/Delete, composition Create/Save/Delete, and the Номенклатури/Композиции menu items. Keep names consistent with existing testid conventions (e.g. nomenclature-export-button)." },
+      { "id": "246.3", "action": "npm run test:run && npm run type-check && npx eslint <changed files> — green. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 247,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[RBAC 12/12][E2E] Playwright — real FE->BE->DB role-based access for Nomenclatures & Compositions: no-permission hides menus; ReadOnly shows menus but no edit controls + redirects from /new; CanEdit performs create/edit/delete. See rbac-spec.md §F7. Mark RBAC feature done only when 236-247 all pass.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "247.1", "phase": "RECON", "action": "Read rbac-spec.md §F7. Read e2e/playwright.config.ts, an existing spec (e.g. e2e/tests/nomenclatures/*.spec.ts) and helpers/page-objects for auth/seed/cleanup. Identify how to seed roles/permissions (UserService) — see reference_userservice_rbac for granting role permissions; create 3 test roles: none / ReadOnly / CanEdit on NOMENCLATURES + COMPOSITION." },
+      { "id": "247.2", "phase": "RED/GREEN", "action": "Create e2e/tests/access-control/rbac-nomenclatures-compositions.spec.ts: (1) no-permission role -> Номенклатури & Композиции menu items absent; (2) ReadOnly role -> menus visible, NomenclatureTable Add/Edit/Delete absent, CompositionsList Create/Delete absent, navigating to /compositions/new redirects to /; (3) CanEdit role -> create a nomenclature row and a composition, edit and delete them, asserting persistence after reload (DB round-trip). Add page-object methods as needed." },
+      { "id": "247.3", "phase": "DONE", "action": "cd Admin-App && npm run e2e -- e2e/tests/access-control against running nomenclature-service + railrun-service — green. gitnexus detect-changes. Confirm 236-246 all pass, then this completes the RBAC feature. Commit." }
     ],
     "passes": false
   }

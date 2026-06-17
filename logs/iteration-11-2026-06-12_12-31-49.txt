@@ -1,0 +1,22 @@
+﻿Task #234 done this iteration: built `NomenclatureImportDialog` (file picker, extension-derived format, upsert-report rendering, success snackbar, error alert), wired the `CanEdit`-gated Import button + dialog into `NomenclaturesPage`, and added `nomenclatures.import.*` i18n keys to bg/en. Tests 33/33 green, type-check clean, lint clean (only a pre-existing warning left untouched), commit `a2129ff4`.
+
+Notable decision: the spec/task said `AccessLevel.ReadWrite`, but that member doesn't exist in this codebase ΓÇö the write level is `AccessLevel.CanEdit`, so I gated on that (matching all other write gating in the repo).
+
+```xml
+<task-complete>
+  <task-id>234</task-id>
+  <tests>PASSED</tests>
+  <visual>N/A</visual>
+  <committed>YES</committed>
+</task-complete>
+```
+
+One task remains with `passes: false` (the next iteration's job).
+
+```xml
+<status>CONTINUE</status>
+<next-task>235</next-task>
+```
+
+Stopping here ΓÇö task #235 (Playwright e2e round-trip) is a new iteration with clean context.
+
