@@ -1,0 +1,24 @@
+﻿Task #250 complete. Per the Ralph one-task-per-iteration rule, I'm stopping here.
+
+## Iteration Summary
+
+**Task Worked On:** #250 ΓÇö `[NOM-IMPORT-RT 3/8][BE] Rewrite ImportNomenclatureCommandHandler to map EVERY canonical key into the fat DTO with typed parsing`
+
+**TDD Phase Completed:** RECON ΓåÆ RED ΓåÆ GREEN ΓåÆ DONE
+
+**What changed:** The import handler previously read only 4 type-specific keys, dropping all others, and read key `TransportModeCode` while export emits `TransportMode` (the root cause of ServiceBrand insert failures). I replaced the fixed keys with a complete canonical-keyΓåÆDTO-field mapping for all ~28 type-specific keys, mapped `TransportMode`ΓåÆ`TransportModeCode`, and added typed helpers (`Int`/`Decimal` invariant-culture, `Str` emptyΓåÆnull, `Bool` now accepts `1`/`0`).
+
+**Tests:** Unit (xUnit) ΓÇö 255 passed, 0 failed (20 handler tests incl. 8 new). No regressions. (No E2E/eslint ΓÇö backend C#, build verified via test.)
+
+<task-complete>
+  <task-id>250</task-id>
+  <tests>PASSED</tests>
+  <visual>N/A</visual>
+  <committed>YES</committed>
+</task-complete>
+
+<status>CONTINUE</status>
+<next-task>251</next-task>
+
+Next task #251 (wire scalar-only providers to read their type-specific DTO fields) will be picked up by a fresh agent in the next iteration.
+

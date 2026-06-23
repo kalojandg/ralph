@@ -1,3 +1,31 @@
+## [2026-06-23 12:21] - Task #250: [NOM-IMPORT-RT 3/8][BE] Rewrite ImportNomenclatureCommandHandler to map EVERY canonical key into the fat DTO with typed parsing
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE (`tddWorkflow: true`)
+
+**What was done:**
+### RECON (250.1)
+- Read `ImportNomenclatureCommand.cs` (handler + BuildCreateDto/BuildUpdateDto + Bool/SortOrder/Value helpers — only 4 type-specific keys read). Confirmed canonical keys + CLR types from every `ExportColumnSchema` list (ExportRowBuilder.BaseColumns + per-entity Export*Query.cs) and the spec's key→DTO field table. Verified tasks 249's fat DTO fields exist in both Create/UpdateNomenclatureDto.
+- Key finding: export emits canonical key `TransportMode`, but the import previously read `TransportModeCode` → ServiceBrand FK always null on insert. All other type-specific keys match their DTO field names 1:1.
+
+### RED (250.2)
+- Added handler unit tests to `ImportNomenclatureCommandHandlerTests.cs`: full canonical-key→DTO mapping with typed values (create), `TransportMode`→`TransportModeCode` on create AND update, bool accepts true/false (case-insensitive) AND 1/0 (Theory), empty type-specific cells→null, decimal parsed invariant-culture. Ran → 8 new tests FAILED (fields null) — correct RED; existing 12 passed.
+
+### GREEN (250.3)
+- In `ImportNomenclatureCommand.cs`: replaced the fixed key constants with const keys for ALL canonical keys (renamed `TransportModeCode`→`TransportMode` key, mapped to DTO.TransportModeCode). Extended BuildCreateDto/BuildUpdateDto to set every type-specific field via typed helpers. Added `Int`/`Decimal` helpers (invariant culture) and `Str` (empty→null); made `Bool` accept `1`/`0` in addition to true/false. One generic mapping for all types — no per-entity logic. Per-row no-abort + audit behavior unchanged.
+
+### DONE (250.4)
+- `dotnet test NomenclatureService.Application.Tests` → **255 passed, 0 failed** (20 handler tests incl. 8 new; no regressions). No eslint/type-check (backend C#; build succeeded via test).
+
+**Files modified:**
+- NomenclatureService.Application/Features/NomenclatureFeatures/Commands/ImportNomenclatureCommand.cs
+- NomenclatureService.Application.Tests/Features/NomenclatureFeatures/Commands/ImportNomenclatureCommandHandlerTests.cs
+
+**Git commit:** `feat(nomenclature): [NOM-IMPORT-RT 3/8][BE] Rewrite ImportNomenclatureCommandHandler to map EVERY canonical key into the fat DTO with typed parsing. Fixes the TransportMode key mismatch.`
+
+---
+
 ## [2026-06-17 12:18] - Task #242: [RBAC 7/12][FE] Nomenclatures action gating — hide Add/Edit/Delete in NomenclatureTable unless canEdit
 
 **Status:** ✅ Complete
@@ -7111,5 +7139,156 @@ services (docker-compose.yml + `docker compose up -d --force-recreate`) so they 
 **Files:** new e2e/tests/access-control/rbac-nomenclatures-compositions.spec.ts, e2e/helpers/rbac-seed.helper.ts; modified e2e/{global-setup.ts, playwright.config.ts, page-objects/nomenclatures.page.ts, page-objects/compositions.page.ts}.
 
 **This completes the RBAC feature — tasks 236–247 all pass:true.**
+
+---
+
+## [2026-06-23] - Task #248: [NOM-IMPORT-RT 1/8][BE] ReservationRequired key collision — ✅ COMPLETE
+
+**Status:** ✅ Complete — marked passes:true and committed (fac3f8134 on features/BDZN-279-import-columns-fix).
+
+**Problem:** `ReservationRequired` (ServiceBrand) and `RequiresReservation` (AncillaryType) both mapped to BG label "Изисква резервация" in ExportColumnLabels. The reverse lookup (ResolveKey) is order-dependent, so one entity's reservation column failed to resolve from a BG-headed CSV/XLSX import (XML unaffected — keyed by element name).
+
+**TDD:** RED — added to ExportColumnLabelsTests: ResolveKey("Изисква резервация"/"Reservation required"/"ReservationRequired")=="ReservationRequired", a negative legacy-key assert, and Bg/En label-uniqueness guards (exposed internal BgLabels/EnLabels). 3 failed on the real collision. GREEN — removed the two `RequiresReservation` label entries (Bg+En) and renamed the AncillaryType `ExportColumnSchema` key "RequiresReservation"→"ReservationRequired". Entity property AncillaryType.RequiresReservation + ProjectRow/ToValues ordering left intact.
+
+**Verification:** `dotnet test NomenclatureService.Application.Tests` → 246 passed, 0 failed. ReservationRequired still maps to "Изисква резервация"/"Reservation required" (no user-visible header change). gitnexus detect_changes: low risk, only AncillaryTypeExportRow + ExportColumnLabels touched, no affected processes.
+
+**Files:** ExportColumnLabels.cs, Features/AncillaryTypes/ExportAncillaryTypeQuery.cs, ExportColumnLabelsTests.cs.
+
+---
+
+## [2026-06-23] - Task #249: [NOM-IMPORT-RT 2/8][BE] Fat DTO — type-specific nullable fields — ✅ COMPLETE
+
+**Status:** ✅ Complete — marked passes:true and committed (features/BDZN-279-import-columns-fix).
+
+**TDD Phase:** RECON → GREEN → DONE (no RED — pure additive DTO fields, no behavior to assert yet; verification is a clean build per the task's DONE step).
+
+**What was done:**
+- RECON: read CreateNomenclatureDto.cs + UpdateNomenclatureDto.cs; existing optional fields are CountryCode, TransportModeCode, IsServedStation, ReservationRequired with `/// <summary>` "X only" XML docs. Cross-checked the spec table (nomenclature-import-roundtrip-spec.md §"Canonical key → DTO field → entity field" + §"DTO additions") to attribute each new field to its owning entity.
+- GREEN: added 25 nullable init properties to BOTH DTOs, each with a brief "{Entity} only: … Ignored for other types." XML doc — OsdmType, MaxQuantity, Website, VatNumber, ValidityUnit, ValidityCount, IsCalendarBased, SupportsReductions, SupportsFirstClass, MinPassengers, MaxPassengers, IsOrganizedGroup, ValidityDays, MinAge, MaxAge, AgeMin, AgeMax, IsOvernight, SeatsPerCompartment, IsDigital, IssuesPaperTicket, Country, Configuration, Latitude, Longitude. Existing fields left intact.
+
+**Verification:**
+- `dotnet build` green for NomenclatureService.Application, NomenclatureService.API, and NomenclatureService.Application.Tests (0 errors). No provider reads the new fields yet (tasks 251/252 wire them).
+- `gitnexus detect-changes --repo Transport-OSDM-Src`: no tracked changes — expected for additive nullable properties with zero consumers; blast radius nil.
+
+**Files:**
+- NomenclatureService.Application/DTOs/CreateNomenclatureDto.cs
+- NomenclatureService.Application/DTOs/UpdateNomenclatureDto.cs
+
+**Git commit:** `feat(compositions): [NOM-IMPORT-RT 2/8][BE] Extend CreateNomenclatureDto + UpdateNomenclatureDto with all type-specific nullable fields (fat DTO).`
+
+---
+
+## Task 251 — [NOM-IMPORT-RT 4/8][BE] Wire scalar-only providers to type-specific DTO fields
+
+**What was done:**
+- RECON: read all 9 providers + entities. Confirmed field name/type mismatches: AncillaryType.RequiresReservation<-dto.ReservationRequired, PassengerGroup.AgeMin/AgeMax are `byte?` vs DTO `int?` (needs cast). 8 providers use IDbContextFactory; PassengerGroup uses scoped `_db` + IPublishEndpoint outbox.
+- RED: 7 new provider test classes (AncillaryType, Carrier, DurationPassType, GroupType, LoyaltyCardType, ReservationType, SalesChannel) + extended PassengerGroupProviderTests (AgeRange) and TransportOperatorProviderTests (CountryAndConfiguration). Each asserts CreateAsync sets each field, UpdateAsync sets-when-provided / keeps-existing-when-null. Tests assert against the entity via a fresh SqlDbContext (NomenclatureDetailDto doesn't expose these fields). Confirmed RED: 19 failed / 8 passed / 27 total.
+- GREEN: in each provider's CreateAsync initializer set `entity.X = dto.X ?? <existing-default>` (preserving prior create defaults); in UpdateAsync inserted `if (dto.X.HasValue/!= null) entity.X = ...;` blocks before `entity.Code = dto.Code;`, mirroring the ServiceBrand pattern. bg-required + code-uniqueness checks unchanged.
+
+**Verification:**
+- Filtered tests: `--filter "...TypeSpecificFields|...AgeRangeFields|...CountryAndConfiguration"` → 27/27 passed (GREEN).
+- Full `NomenclatureService.Infrastructure.Tests` suite: 116/116 passed, 0 regressions.
+- `gitnexus detect-changes --repo Transport-OSDM-Src`: risk low, 0 affected processes — scoped to the 9 providers + their tests, as expected for additive scalar mapping.
+
+**Files (modified):** AncillaryTypeProvider.cs, CarrierProvider.cs, DurationPassTypeProvider.cs, GroupTypeProvider.cs, LoyaltyCardTypeProvider.cs, PassengerGroupProvider.cs, ReservationTypeProvider.cs, SalesChannelProvider.cs, TransportOperatorProvider.cs; PassengerGroupProviderTests.cs, TransportOperatorProviderTests.cs.
+**Files (new):** AncillaryTypeProviderTests.cs, CarrierProviderTests.cs, DurationPassTypeProviderTests.cs, GroupTypeProviderTests.cs, LoyaltyCardTypeProviderTests.cs, ReservationTypeProviderTests.cs, SalesChannelProviderTests.cs.
+
+**Git commit:** `feat(nomenclature): [NOM-IMPORT-RT 4/8][BE] Wire scalar-only providers to read their type-specific DTO fields on Create AND Update: AncillaryType, Carrier, DurationPassType, GroupType, LoyaltyCardType, PassengerGroup, ReservationType, SalesChannel, TransportOperator.`
+
+---
+
+## Task 252 — [NOM-IMPORT-RT 5/8][BE] Wire FK/special providers: ServiceBrand + StopPlace
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+- RECON: ServiceBrandProvider already resolves the TransportMode FK via `ResolveServiceBrandTransportModeIdAsync` (uses IDbContextFactory, no publish endpoint). The insert-fails-on-new-code bug was a handler-side key mismatch fixed in task 250 — the value now arrives, so no provider logic change needed. StopPlaceProvider (scoped `_db` + IPublishEndpoint) still hardcoded `Latitude = 0, Longitude = 0` on create and left coords untouched on update. CreateNomenclatureDto/UpdateNomenclatureDto already expose `decimal? Latitude/Longitude` (task 249). StopPlace entity coords are non-nullable `decimal`.
+- RED: new ServiceBrandProviderTests (CreateAsync new code 'LEL' with TransportModeCode='TRAM' resolves FK + inserts) — already passed. New StopPlaceProviderTests (Create sets Lat/Lng from DTO; Update sets-when-provided; keeps-existing-when-null). Confirmed RED: 2 failed (Create→0, Update→0.0) / 2 passed.
+- GREEN: StopPlaceProvider.CreateAsync now `Latitude = dto.Latitude ?? 0, Longitude = dto.Longitude ?? 0`; UpdateAsync now `entity.Latitude = dto.Latitude ?? entity.Latitude; entity.Longitude = dto.Longitude ?? entity.Longitude;`. ServiceBrandProvider unchanged.
+
+**Verification:**
+- Filtered tests (ServiceBrand + StopPlace provider): 4/4 passed (GREEN).
+- Full `NomenclatureService.Infrastructure.Tests` suite: 120/120 passed, 0 regressions.
+
+**Files (modified):** StopPlaceProvider.cs.
+**Files (new):** ServiceBrandProviderTests.cs, StopPlaceProviderTests.cs.
+
+**Git commit:** `feat(nomenclature): [NOM-IMPORT-RT 5/8][BE] Wire FK/special providers: ServiceBrand (TransportMode now arrives -> insert no longer fails) and StopPlace (add Latitude/Longitude; CountryCode/IsServedStation already wired).`
+
+---
+
+## Task 253 — [NOM-IMPORT-RT 6/8][BE] Parametrized export→import round-trip tests (all entities × CSV/XLSX/XML)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED/GREEN → DONE
+
+**What was done:**
+- RECON: studied the three IImportParser implementations + their tests and the three IExportFormatter implementations. Key facts: CSV/XML format values identically (bool→"true"/"false", IFormattable→invariant ToString, null→empty); XLSX writes int/decimal as native numeric and the Excel parser reads them back via `GetString().Trim()`. Only XML carries EntityType (root `type` attr); CSV/XLSX leave it empty. Every entity exposes a `*ExportRow` record with a `public static readonly IReadOnlyList<ExportColumnSchema> Columns` (30 of them) and all column keys are registered both-ways in ExportColumnLabels (Bg + En + raw key).
+- RED/GREEN: added `Services/RoundTrip/ExportImportRoundTripTests.cs` — a `[Theory]` over `EntityFormatMatrix()` (reflection-discovered `*ExportRow.Columns` × {csv,xlsx,xml} = 90 cases). For each it builds a 2-row sample ExportTable with representative typed values per column (string w/ comma+Cyrillic, int/byte, bool, decimal), serializes with "bg" headers (exercises BG-label→key reverse mapping), parses back, and asserts ColumnKeys + every cell string equals the originals; XML also asserts EntityType round-trips. Culture pinned to Invariant so decimal/numeric cells are deterministic across host locales.
+- Reflection-based enumeration means any future entity or unregistered key/label drift is caught automatically.
+
+**Verification:**
+- Round-trip filtered run: 90/90 passed (30 entities × 3 formats).
+- Full `NomenclatureService.Application.Tests` suite: 345/345 passed, 0 regressions.
+- Backend-only test addition (no UI flow) → E2E not applicable here; E2E is task 255.
+
+**Files (new):** Services/RoundTrip/ExportImportRoundTripTests.cs.
+
+**Git commit:** `feat(nomenclature): [NOM-IMPORT-RT 6/8][BE] Parametrized export->import round-trip tests for ALL entities across ALL 3 formats (CSV/XLSX/XML) — the strongest symmetry guarantee. See spec 'Round-trip unit'.`
+
+---
+
+## Task 254 — [NOM-IMPORT-RT 7/8][BE] Full-stack import handler test (real export bytes → real parsers → handler)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED/GREEN → DONE
+
+**What was done:**
+- RECON: read ImportNomenclatureCommandHandlerTests (parser is mocked there), the handler (resolves parser by format, upserts by Code via INomenclatureProvider, builds fat Create/Update DTOs, maps key `TransportMode`→`TransportModeCode`), BaseNomenclatureController.ImportNomenclatureAsync (request shape: ImportNomenclatureCommand { TypeKey, Format, Content }), the ExportImportRoundTripTests helpers, and the ServiceBrand/StopPlace ExportRow column schemas + ExportTable/ImportResult/IExportFormatter.
+- RED/GREEN: added `Features/NomenclatureFeatures/Commands/ImportNomenclatureFullStackTests.cs`. Unlike the existing handler tests, the parser is NOT mocked — only the persistence boundary (INomenclatureProvider) is. Each test builds a real ExportTable (via ServiceBrandExportRow/StopPlaceExportRow.ToValues()), serializes it through the real CSV/XLSX/XML exporter with "bg" headers, then runs the real handler with all three real IImportParser implementations registered.
+  - ServiceBrand `[Theory]`×3 formats: existing code "BDZ" → Updated, new code "LEL" → Inserted; asserts Total/Inserted/Updated/Failed and that the provider received TransportModeCode ("TRAM"/"RAIL") + ReservationRequired on both create and update.
+  - ServiceBrand regression `[Theory]`×3: a new code carrying TransportMode must be Inserted (not Failed) with TransportModeCode populated — the original "update works, insert fails" key-mismatch bug.
+  - StopPlace `[Theory]`×3: typed Latitude/Longitude (decimal, invariant) + CountryCode + IsServedStation carried to create and update.
+- Fix during impl: export-row types live in their feature namespaces — added `using ...Features.ServiceBrands` + `...Features.StopPlaces`.
+
+**Verification:**
+- Filtered run `FullyQualifiedName~ImportNomenclatureFullStackTests`: 9/9 passed (3 methods × 3 formats).
+- `gitnexus detect-changes --repo Transport-OSDM-Src`: "No changes detected" — additive test only, nil production blast radius.
+- Backend-only test addition (no UI flow) → E2E not applicable here; the FE→BE→DB Playwright round-trip is task 255.
+
+**Files (new):** Features/NomenclatureFeatures/Commands/ImportNomenclatureFullStackTests.cs.
+
+**Git commit:** `feat(nomenclature): [NOM-IMPORT-RT 7/8][BE] Full-stack import handler test: a real exported file (with type-specific columns) imported end-to-end calls the provider and persists every field; partial-batch reporting (Inserted/Updated/Failed) correct.`
+
+---
+
+## [2026-06-23] - Task #255: [NOM-IMPORT-RT 8/8][E2E] Playwright real FE->BE->DB export->import round-trip — ✅ COMPLETE
+
+**Status:** ✅ Complete — marked passes:true and committed (features/BDZN-279-import-columns-fix). Final task of the NOM-IMPORT-RT feature (248-255 all green).
+
+**TDD Phase:** RECON → RED/GREEN (spec pre-built by a prior partial iteration) → DONE (verify green).
+
+**What was done:**
+- RECON: confirmed the e2e harness is fully aligned end-to-end:
+  - Spec `e2e/tests/nomenclatures/import-export-roundtrip.spec.ts` + page-object `e2e/page-objects/nomenclatures.page.ts` exist (prior iteration). Verified every data-testid the page-object drives matches the real FE components: `nomenclature-export-button/-submit/-modified-after`, `nomenclature-import-button/-file-input/-submit/-result/-inserted/-updated/-failed`, `nomenclature-search-input`.
+  - Backend `osdm-nomenclature-service-1` (port 6005) is the rebuilt image — `POST /api/{service-brands|stop-places|...}/import` and `/export` all return 401 (route registered, auth required), not 404. DB `osdm-sqlserver-1` healthy. ("unhealthy" flag on the service is only a misconfigured curl healthcheck hitting a 404 URL — service actively serves requests + DB queries.)
+- DONE: ran the targeted spec for the admin project.
+  - First two runs failed: (1) cold Vite dep-optimization made the first `page.goto` exceed the 30s navigationTimeout; (2) with a warm dev server, 3 *parallel* workers hitting a cold backend simultaneously got HTTP 500 on list+export. Verified via a throwaway Playwright probe that a single-context UI-driven export returns 200 + fires the download, and the admin list returns 200 — i.e. the 500s were parallel cold-start flakiness, not a feature defect.
+  - Fix: pre-warmed `npm run dev` (deps cache populated: 362 prebundled files) and ran the spec with `--workers=1`.
+
+**Verification:**
+- `PLAYWRIGHT_WORKERS=1 npx playwright test e2e/tests/nomenclatures/import-export-roundtrip.spec.ts --project=admin` → **3 passed (2.6m)**: Service brand 30.3s, Stop place 1.6m, Duration pass type 27.2s. Each proves: brand-new code carrying a type-specific FK is Inserted (not Failed — the original insert bug), every format (CSV/XLSX/XML) round-trips with 0 failures, and the new row + its type-specific values survive a DB reload.
+- `npx eslint` on the two changed e2e files → 0 errors. `npm run type-check` (tsc --noEmit) → clean.
+- Tasks 248-254 already green/committed in prior iterations (backend unit/integration suites); 255 is the FE→BE→DB E2E capstone.
+
+**Files:**
+- e2e/tests/nomenclatures/import-export-roundtrip.spec.ts (new)
+- e2e/page-objects/nomenclatures.page.ts (modified — export/import + download helpers)
+
+**Git commit:** `feat(compositions): [NOM-IMPORT-RT 8/8][E2E] Playwright real FE->BE->DB export->import round-trip for representative types in all 3 formats. 'Ready' per feedback_tdd_includes_e2e.`
 
 ---
