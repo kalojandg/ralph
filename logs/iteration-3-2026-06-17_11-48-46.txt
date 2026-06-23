@@ -1,0 +1,18 @@
+﻿Task #238 complete. Per the Ralph one-task-per-iteration rule, I stop here.
+
+```xml
+<task-complete>
+  <task-id>238</task-id>
+  <tests>PASSED</tests>
+  <visual>N/A</visual>
+  <committed>YES</committed>
+</task-complete>
+```
+
+```xml
+<status>CONTINUE</status>
+<next-task>239</next-task>
+```
+
+**Summary:** Guarded `NomenclatureController` per rbac-spec ┬ºB4 ΓÇö `ReadOnly` on `GetAllForAdmin`/`GetById`, `CanEdit` on `Create`/`Update`/`Delete`, public GETs (`Get`/`GetAll`/`GetMultiple`/`GetGroupTypes`) left open. Added a reflection-based `NomenclatureControllerAuthorizationTests` (RED ΓåÆ 5 fail, GREEN ΓåÆ 9/9 pass), full suite green (201/201), detect-changes scoped as expected, committed. tasks.json #238 marked `passes: true` and activity.md logged. Next iteration: task #239 (FE permission hooks).
+

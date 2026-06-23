@@ -1,3 +1,31 @@
+## [2026-06-17 12:18] - Task #242: [RBAC 7/12][FE] Nomenclatures action gating — hide Add/Edit/Delete in NomenclatureTable unless canEdit
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE (`tddWorkflow: true`)
+
+**What was done:**
+### RECON (242.1)
+- Read rbac-spec.md §F4 and §F1 (`useNomenclaturePermissions` shape: `{ canRead, canEdit, level }`). Read `NomenclatureTable.tsx` (Add button ~174-180, row Edit ~265-273, row Delete ~274-283). No existing `NomenclatureTable.test.tsx`. Gating reference: `NomenclaturesPage.tsx` Export button `{canExport && ...}`; component-test mock style from `NomenclaturesPage.test.tsx`.
+
+### RED (242.2)
+- Created `NomenclatureTable.test.tsx` mocking `../hooks` (`useNomenclatures` + `useNomenclaturePermissions`), `@/hooks/useTranslation`, and the edit/delete dialog stubs. Asserted MUI `AddIcon`/`EditIcon`/`DeleteIcon` testids absent when `canEdit=false`, present when `canEdit=true`. Ran → canEdit=false case FAILED (controls still rendered) — correct RED.
+
+### GREEN (242.3)
+- In `NomenclatureTable.tsx`: imported `useNomenclaturePermissions` from `../hooks`, called `const { canEdit } = useNomenclaturePermissions();`, wrapped the Add `<Button>` in `{canEdit && (...)}`, and wrapped the row Edit+Delete tooltips/IconButtons in `{canEdit && (<>...</>)}` (kept Delete's `disabled={!item.isActive}`). Ran → both tests PASS.
+
+### DONE (242.4)
+- `npm run test:run -- src/app/features/nomenclatures` → 31 passed (7 files). `npm run type-check` → clean. `npx eslint` on the two changed files → 0 errors (1 pre-existing `no-unnecessary-condition` warning on the unrelated `isLoading && !data` loading-state line, left as-is per lint policy).
+
+**Files modified:**
+- `Admin-App/src/app/features/nomenclatures/components/NomenclatureTable.tsx`
+- `Admin-App/src/app/features/nomenclatures/components/NomenclatureTable.test.tsx` (new)
+
+**Git commit:**
+- `feat(compositions): [RBAC 7/12][FE] Nomenclatures action gating — hide Add/Edit/Delete in NomenclatureTable unless canEdit (NOMENCLATURES CanEdit). See rbac-spec.md §F4.`
+
+---
+
 ## [2026-06-12] - Task #235: Nomenclature IMPORT 12/12 — Playwright e2e real FE→BE→DB upsert round-trip
 
 **Status:** ✅ Complete
@@ -6548,5 +6576,540 @@ E2E coverage for UC-COMP-12. Depends on #214 (audit DetailsJson + SearchText car
 
 **Git commit:**
 - `feat(compositions): [Nomenclature IMPORT 11/12] NomenclatureImportDialog + wire into NomenclaturesPage. MIRROR of NomenclatureExportDialog`
+
+---
+
+## [2026-06-17 11:34] - Task #236: [RBAC 1/12][BE] CompositionsController — CanEdit on write actions, GET reads stay public
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+### RECON Phase
+- Read rbac-spec.md §Инвариант + §B1. Reference pattern: PricingService AdminTariffVersionController + AdminTariffControllersAuthorizationTests.cs (reflection test on AuthorizePermissionsAttribute.Policy == "Permission_{resource}:{level}").
+- Confirmed AccessLevel.CanEdit (=2) and ResourceCodes.Composition == "COMPOSITION".
+- Found RailRunService.API/Program.cs called only AddAuthorization(), NOT AddCustomAuthorization() — so [AuthorizePermissions] would not have been enforced. Added it (per spec §B1 note).
+
+### RED Phase
+- Added CompositionAuthorizationTests.cs (xUnit Theory reflection test): the 6 write actions must carry [AuthorizePermissions] with policy Permission_COMPOSITION:CanEdit; GetCompositions + GetCompositionById must carry NO attribute.
+- Had to add a ProjectReference to SharedSrc/Common.Authorization in RailRunService.API.csproj (the attribute lived in an unreferenced assembly).
+- Ran → RED: 6 write actions failed "missing [AuthorizePermissions]", 2 GETs passed (already public).
+
+### GREEN Phase
+- Added usings (Common.Authorization, Common.Constants, Common.Enums) + [AuthorizePermissions(ResourceCodes.Composition, AccessLevel.CanEdit)] above CreateComposition, UpdateComposition, DeleteComposition, CloneCompositionForPeriod, SaveCompositionWagons, SetCompositionStatus. Left both GETs untouched.
+- Replaced AddAuthorization() with AddCustomAuthorization() in Program.cs (+ using Common.Authorization).
+- Ran → GREEN: 8/8 pass.
+
+### DONE Phase
+- dotnet test RailRunService.API.Tests → 62/62 pass (full suite).
+- gitnexus detect-changes --repo Transport-OSDM-Src → 3 files / 9 symbols / 0 affected processes / risk low (the 6 guarded write actions, as expected).
+- Note: real role-based FE→BE→DB enforcement is verified later by the e2e task #247.
+
+**Files modified:**
+- RailRunService.API/Controllers/CompositionsController.cs
+- RailRunService.API/Program.cs
+- RailRunService.API/RailRunService.API.csproj (added Common.Authorization project ref)
+- RailRunService.API.Tests/Controllers/CompositionAuthorizationTests.cs (new)
+
+**Git commit:**
+- `feat(compositions): [RBAC 1/12][BE] CompositionsController — add [AuthorizePermissions(ResourceCodes.Composition, AccessLevel.CanEdit)] to WRITE actions only; GET reads stay PUBLIC`
+
+---
+
+## [2026-06-17] - Task #237: [RBAC 2/12][BE] CarriagesController + CoachLayoutsController — CanEdit on write actions, GET reads stay public
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**What was done:**
+### RED Phase
+- Created RailRunService.API.Tests/Controllers/CarriageAuthorizationTests.cs and CoachLayoutAuthorizationTests.cs (reflection tests mirroring CompositionAuthorizationTests).
+- Ran filtered tests — 5 write-action asserts FAILED ("missing [AuthorizePermissions]"), 3 read asserts passed ✅ (failing for the right reason).
+
+### GREEN Phase
+- CarriagesController: added usings (Common.Authorization/Constants/Enums) + [AuthorizePermissions(ResourceCodes.Composition, AccessLevel.CanEdit)] on AddCarriage (POST), UpdateCarriage (PUT). GetCarriages left public. (DeleteCarriage/ReorderCarriages left as-is per spec §B2 — spec only lists Add+Update.)
+- CoachLayoutsController: same usings + attribute on CreateCoachLayout (POST), UpdateCoachLayout (PUT), SaveSeatDefinitions (POST). GetBySeriesName/GetById left public.
+- Ran full RailRunService.API.Tests — 70 passed, 0 failed ✅.
+
+### DONE Phase
+- dotnet test green (70/70). AddCustomAuthorization() already present in Program.cs:83.
+- gitnexus detect-changes (Transport-OSDM-Src): risk low, only the 5 write methods touched, 0 affected processes.
+
+**Files modified:**
+- DotNetServices/RailRunService/RailRunService.API/Controllers/CarriagesController.cs
+- DotNetServices/RailRunService/RailRunService.API/Controllers/CoachLayoutsController.cs
+- DotNetServices/RailRunService/RailRunService.API.Tests/Controllers/CarriageAuthorizationTests.cs (new)
+- DotNetServices/RailRunService/RailRunService.API.Tests/Controllers/CoachLayoutAuthorizationTests.cs (new)
+
+**Git commit:**
+- `feat(compositions): [RBAC 2/12][BE] CarriagesController + CoachLayoutsController — CanEdit on write actions, GET reads stay public. See rbac-spec.md §B2-B3.`
+
+---
+
+## [2026-06-17] - Task #238: [RBAC 3/12][BE] NomenclatureController — ReadOnly on admin reads, CanEdit on writes, public GETs unguarded
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+### RECON Phase
+- Read rbac-spec.md §B4. Mapped actions in NomenclatureService.API/Controllers/NomenclatureController.cs.
+- Confirmed AddCustomAuthorization() present in Program.cs:81.
+- Policy format (Common.Authorization.AuthorizePermissionsAttribute): `Permission_{ResourceCode}:{AccessLevel}`. ResourceCodes.Nomenclatures = "NOMENCLATURES" exists.
+- Mirrored existing reflection test pattern from RailRunService CarriageAuthorizationTests.cs.
+
+### RED Phase
+- Added NomenclatureControllerAuthorizationTests.cs: Create/Update/Delete -> CanEdit; GetAllForAdmin/GetById -> ReadOnly; Get/GetAll/GetMultiple/GetGroupTypes -> no attribute.
+- Ran -> 5 FAIL (guarded actions missing attribute), 4 PASS (public reads) ✅ correct reason.
+
+### GREEN Phase
+- Added `using Common.Authorization;` + attributes: [AuthorizePermissions(ResourceCodes.Nomenclatures, AccessLevel.ReadOnly)] on GetAllForAdmin + GetById; CanEdit on Create + Update + Delete. Public GETs untouched.
+- Auth test -> 9/9 PASS ✅.
+
+### DONE Phase
+- Full NomenclatureService.API.Tests suite -> 201/201 PASS, 0 failed.
+- gitnexus detect-changes (Transport-OSDM-Src): 1 file, 5 guarded actions + controller class, risk medium, only expected scope.
+
+**Files modified:**
+- DotNetServices/NomenclatureService/NomenclatureService.API/Controllers/NomenclatureController.cs
+- DotNetServices/NomenclatureService/NomenclatureService.API.Tests/Controllers/NomenclatureControllerAuthorizationTests.cs (new)
+
+**Git commit:**
+- `feat(compositions): [RBAC 3/12][BE] NomenclatureController — ReadOnly on admin reads, CanEdit on Create/Update/Delete; keep the public GETs (Get/GetAll/GetMultiple/GetGroupTypes) unguarded. See rbac-spec.md §B4.`
+
+---
+
+## [2026-06-17 11:54] - Task #239: [RBAC 4/12][FE] Permission hooks useNomenclaturePermissions + useCompositionPermissions
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE (no designReference → no VISUAL)
+
+### RECON Phase
+- Read rbac-spec.md §F1, useTariffingPermissions.ts + useTariffingPermissions.test.ts (exact template), usePermissions.ts, roles.types.ts (AccessLevel enum), permissions.types.ts (ResourceCodes.Nomenclatures='NOMENCLATURES', Composition='COMPOSITION').
+
+### RED Phase
+- Added useNomenclaturePermissions.test.ts + useCompositionPermissions.test.ts (mirror of tariffing test; mock usePermissions.getPermissionLevel): level 0 -> {canRead:false,canEdit:false}; 1 -> {canRead:true,canEdit:false}; 2 -> {canRead:true,canEdit:true}; assert getPermissionLevel called with correct ResourceCode.
+- Ran -> 2 FAIL (Failed to resolve import — hooks don't exist) ✅ correct reason.
+
+### GREEN Phase
+- Created useNomenclaturePermissions.ts (ResourceCodes.Nomenclatures) + useCompositionPermissions.ts (ResourceCodes.Composition), mirror of useTariffingPermissions.
+- Exported useNomenclaturePermissions from nomenclatures/hooks/index.ts; useCompositionPermissions from compositions/index.ts.
+- Ran -> 6/6 PASS ✅.
+
+### DONE Phase
+- npm run test:run (two test files) -> 6/6 PASS.
+- npm run type-check -> clean.
+- npx eslint <changed files> -> clean.
+
+**Files modified:**
+- Admin-App/src/app/features/nomenclatures/hooks/useNomenclaturePermissions.ts (new)
+- Admin-App/src/app/features/nomenclatures/hooks/useNomenclaturePermissions.test.ts (new)
+- Admin-App/src/app/features/nomenclatures/hooks/index.ts
+- Admin-App/src/app/features/compositions/hooks/useCompositionPermissions.ts (new)
+- Admin-App/src/app/features/compositions/hooks/useCompositionPermissions.test.ts (new)
+- Admin-App/src/app/features/compositions/index.ts
+
+**Git commit:**
+- `feat(compositions): [RBAC 4/12][FE] Permission hooks useNomenclaturePermissions + useCompositionPermissions (canRead/canEdit/level). Mirror of useTariffingPermissions. See rbac-spec.md §F1.`
+
+---
+
+## [2026-06-17 12:01] - Task #240: [RBAC 5/12][FE] MainLayout — gate Nomenclatures menu item and Compositions menu section
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+### RECON Phase
+- Read rbac-spec.md §F2. Mapped MainLayout.tsx: canSee* block (~110-116), bottomMenuItems def (~210-212) + render (~444-454), Compositions title ListItem + Collapse (~455-492), IASUTD `{showIasutdNavSection && (...)}` model (~553-586). Confirmed ResourceCodes.Nomenclatures='NOMENCLATURES' / Composition='COMPOSITION' exist; ResourceCodes/AccessLevel/hasPermission already imported.
+
+### RED Phase
+- Created src/app/layout/MainLayout.test.tsx (vi.hoisted hasPermission mock; mocked useTranslation/auth.store/sandbox stores+hooks/layout components/Tariffing+Messaging nav sections; real Redux Provider + MemoryRouter): no permission -> Nomenclatures item + Compositions title NOT rendered; ReadOnly on both -> rendered.
+- Ran -> 1 FAIL (Nomenclatures item rendered without permission) ✅ correct reason; 2nd test already passed.
+
+### GREEN Phase
+- Added const canSeeNomenclatures = hasPermission(ResourceCodes.Nomenclatures, AccessLevel.ReadOnly); const canSeeCompositions = hasPermission(ResourceCodes.Composition, AccessLevel.ReadOnly);
+- Made bottomMenuItems conditional (canSeeNomenclatures ? [...] : []).
+- Wrapped Compositions title ListItem + Collapse block in {canSeeCompositions && (...)}.
+- Ran -> 2/2 PASS ✅.
+
+### DONE Phase
+- npm run test:run -- src/app/layout/MainLayout.test.tsx -> 2/2 PASS.
+- npm run type-check -> clean.
+- npx eslint <changed files> -> clean.
+
+**Files modified:**
+- Admin-App/src/app/layout/MainLayout.tsx
+- Admin-App/src/app/layout/MainLayout.test.tsx (new)
+
+**Git commit:**
+- `feat(compositions): [RBAC 5/12][FE] MainLayout — gate Nomenclatures menu item and Compositions menu section by ResourceCodes.Nomenclatures / ResourceCodes.Composition at ReadOnly. See rbac-spec.md §F2.`
+
+---
+
+## [2026-06-17 12:10] - Task #241: [RBAC 6/12][FE] router.tsx — wrap Nomenclatures + Compositions/Wagons routes in PermissionGuard
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+### RECON Phase
+- Read rbac-spec.md §F3 (level table). Read router.tsx: PermissionGuard/ResourceCodes/AccessLevel already imported (lines 8-10); nomenclatures route had a TODO (~193); compositions+wagons routes were unguarded (~239-272). Studied group-trips wrapping pattern + existing __tests__/router.test.tsx (#202 structural) + tariffingRoutes.test.tsx (mocked-usePermissions pattern). Confirmed ResourceCodes.Nomenclatures='NOMENCLATURES', Composition='COMPOSITION'; AccessLevel.ReadOnly=1, CanEdit=2.
+
+### RED Phase
+- Created src/app/routes/__tests__/router.permissions.test.tsx (separate file so its module mocks don't clash with router.test.tsx which imports real pages). Mocks usePermissions/useTranslation + stubs compositions/nomenclatures/wagons pages. Renders each route element in MemoryRouter+Routes; PermissionGuard redirect (Navigate to "/") surfaces a "home" testid.
+- Cases: no-NOMENCLATURES → /nomenclatures redirects; NOMENCLATURES ReadOnly → renders; COMPOSITION ReadOnly → /compositions & /compositions/:id/edit & /wagons render, /compositions/new & /wagons/new redirect.
+- Ran → 3 FAIL (the redirect cases — routes unguarded) ✅ correct reason.
+
+### GREEN Phase
+- Wrapped per §F3: nomenclatures/:type? → Nomenclatures ReadOnly (removed TODO); compositions, /history, /wagon-history, /:id/edit → Composition ReadOnly; compositions/new → Composition CanEdit; wagons → ReadOnly; wagons/new, wagons/:id/edit → CanEdit. All redirectTo="/".
+- Ran → 7/7 PASS ✅.
+
+### DONE Phase
+- Updated router.test.tsx (#202): history route element is now PermissionGuard wrapping CompositionsHistoryPage — assert both.
+- Fixed flakiness in new test: switched `await import('../router')` (heavy, blew the 15s test timeout under parallel load → no cleanup → duplicate-element errors) to a static top-level import + explicit afterEach(cleanup).
+- npm run test:run -- src/app/routes → 11/11 PASS. npm run type-check → clean. npx eslint <changed files> → clean.
+
+**Files modified:**
+- Admin-App/src/app/routes/router.tsx
+- Admin-App/src/app/routes/__tests__/router.permissions.test.tsx (new)
+- Admin-App/src/app/routes/__tests__/router.test.tsx
+
+**Git commit:**
+- `feat(compositions): [RBAC 6/12][FE] router.tsx — wrap Nomenclatures route (ReadOnly) and Compositions/Wagons routes (ReadOnly for views, CanEdit for new/edit) in PermissionGuard. See rbac-spec.md §F3.`
+
+---
+
+## Task #243 — [RBAC 8/12][FE] Compositions action gating part A
+
+### RECON Phase
+- rbac-spec.md §F5: page calls useCompositionPermissions(); presentational leaves receive `canEdit` as prop (BaseTariffCrudPage pattern). Composition reads stay PUBLIC; gate writes FE-only.
+
+### RED → GREEN Phase
+- Added `canEdit?: boolean` (default true) prop drilling to CompositionList (Edit/Clone/Delete), CreateCompositionModal (blocks submit), EditorHeader (Save/Clone/Status/Name-edit/LinkTrip).
+- CompositionsListPage + CompositionEditorPage now call `useCompositionPermissions()` and drill `canEdit`; Create button + empty-state button gated.
+- Extended tests: CompositionList, EditorHeader, CreateCompositionModal gating describes.
+
+### DONE Phase
+- Mocked `useCompositionPermissions` → `{canEdit:true}` in CompositionEditorPage.test.tsx and cloneComposition.integration.test.tsx (both render pages consuming the real hook; default canEdit=false in test env hid controls → regressions fixed).
+- npm run test:run -- src/app/features/compositions → 919 pass, 11 fail (pre-existing TripPicker failures, confirmed identical on pristine baseline via git stash). type-check clean. eslint <changed files> → 0 errors.
+
+**Files modified:**
+- Admin-App/src/app/features/compositions/components/CompositionList.tsx
+- Admin-App/src/app/features/compositions/components/CreateCompositionModal.tsx
+- Admin-App/src/app/features/compositions/components/EditorHeader.tsx
+- Admin-App/src/app/features/compositions/pages/CompositionsListPage.tsx
+- Admin-App/src/app/features/compositions/pages/CompositionEditorPage.tsx
+- Admin-App/src/app/features/compositions/components/__tests__/CompositionList.test.tsx
+- Admin-App/src/app/features/compositions/components/__tests__/CreateCompositionModal.test.tsx
+- Admin-App/src/app/features/compositions/components/__tests__/EditorHeader.test.tsx
+- Admin-App/src/app/features/compositions/components/__tests__/cloneComposition.integration.test.tsx
+- Admin-App/src/app/features/compositions/pages/__tests__/CompositionEditorPage.test.tsx
+
+**Git commit:**
+- `feat(compositions): [RBAC 8/12][FE] Compositions action gating part A — CompositionsListPage, CompositionList (Edit/Clone/Delete), CreateCompositionModal, EditorHeader (Save/Clone/Status/Name/LinkTrip) gated by COMPOSITION CanEdit. See rbac-spec.md §F5.`
+
+---
+## Task #244 — [RBAC 9/12][FE] Compositions action gating part B (editor canvas)
+
+### RECON Phase
+- rbac-spec.md §F5: canvas leaves (WagonPalette, WagonPropertiesPanel, SeatActionsToolbar, BlockSeatDialog, SubRoutesPanel) and the Add Sub-Route control receive `canEdit` prop-drilled from CompositionEditorPage's `useCompositionPermissions()`. FE-only gating; backend seat endpoints stay open.
+- SeatActionsToolbar + BlockSeatDialog get canEdit indirectly via SeatManagementPanel (not the page directly).
+
+### RED → GREEN Phase
+- Added `canEdit?: boolean` (default true) to: seat.types.ts (SeatActionsToolbarProps, BlockSeatDialogProps, SeatManagementPanelProps), WagonPaletteProps, WagonPropertiesPanelProps, SubRoutesPanelProps.
+- WagonPalette: `isCardDisabled` returns true when `!canEdit` → all cards non-draggable/aria-disabled (no drag-add).
+- WagonPropertiesPanel: Save + Delete hidden when `!canEdit` (Cancel stays; Box placeholder keeps footer layout).
+- SeatActionsToolbar: Row 2 Block/Unblock buttons hidden when `!canEdit`.
+- BlockSeatDialog: `isBlockDisabled` includes `!canEdit` → submit stays disabled.
+- SubRoutesPanel: `handleWagonClick` early-returns when `!canEdit` → editor popover never opens; bar cursor/hover gated.
+- SeatManagementPanel drills canEdit into SeatActionsToolbar + BlockSeatDialog.
+- CompositionEditorPage drills canEdit into WagonPalette, WagonPropertiesPanel, SeatManagementPanel; Add Sub-Route control gated `{canEdit && ...}`.
+- Extended tests with "Permission gating (RBAC)" describes on all 5 canvas component tests (default shows/enables; canEdit=false hides/disables). Fixed SeatActionsToolbar test helpers to use queryAllByRole (getAllByRole threw when no buttons rendered).
+
+### DONE Phase
+- npm run test:run -- src/app/features/compositions/components/__tests__/{WagonPalette,WagonPropertiesPanel,SeatActionsToolbar,BlockSeatDialog,SubRoutesPanel}.test.tsx → 138 pass, 0 fail. type-check clean. eslint <changed files> → 0 errors.
+
+**Files modified:**
+- Admin-App/src/app/features/compositions/types/seat.types.ts
+- Admin-App/src/app/features/compositions/components/SeatActionsToolbar.tsx
+- Admin-App/src/app/features/compositions/components/BlockSeatDialog.tsx
+- Admin-App/src/app/features/compositions/components/SeatManagementPanel.tsx
+- Admin-App/src/app/features/compositions/components/WagonPalette.tsx
+- Admin-App/src/app/features/compositions/components/WagonPropertiesPanel.tsx
+- Admin-App/src/app/features/compositions/components/SubRoutesPanel.tsx
+- Admin-App/src/app/features/compositions/pages/CompositionEditorPage.tsx
+- Admin-App/src/app/features/compositions/components/__tests__/SeatActionsToolbar.test.tsx
+- Admin-App/src/app/features/compositions/components/__tests__/WagonPropertiesPanel.test.tsx
+- Admin-App/src/app/features/compositions/components/__tests__/BlockSeatDialog.test.tsx
+- Admin-App/src/app/features/compositions/components/__tests__/SubRoutesPanel.test.tsx
+- Admin-App/src/app/features/compositions/components/__tests__/WagonPalette.test.tsx
+
+**Git commit:**
+- `feat(compositions): [RBAC 9/12][FE] Compositions action gating part B — editor canvas: WagonPalette, WagonPropertiesPanel (Save/Delete), SeatActionsToolbar (Block/Unblock), BlockSeatDialog, SubRoutesPanel, Add Sub-Route gated by COMPOSITION CanEdit. See rbac-spec.md §F5.`
+
+---
+
+## Task #245 — [RBAC 10/12][FE] Wagons feature action gating (2026-06-17)
+
+**Status:** DONE (passes: true)
+
+Gated Create/Edit/Delete in the wagons list per rbac-spec.md §F6 behind COMPOSITION CanEdit. The wagon detail/edit page is already route-guarded (CanEdit) from task #241, so only the list page needs in-page gating; Preview/Clone/History stay visible.
+
+**TDD:**
+- RED: added 4 tests to WagonList.test.tsx (hide Edit/Delete when canEdit=false; show when true; Preview always visible) + 3 tests to WagonsPage.test.tsx (mock useCompositionPermissions: hide/show Create + row Edit/Delete). Failed as expected.
+- GREEN: WagonsPage calls useCompositionPermissions() and gates the Create button + passes canEdit to WagonList; WagonList gates row Edit and DRAFT Delete behind canEdit (default true).
+- VERIFY: 36/36 targeted tests pass; type-check clean; eslint clean (3 pre-existing warnings left). The 9 full-suite wagons failures (CloneWagonTypeDialog, WagonCreationPage, WagonCreationPage.metadata) are pre-existing — confirmed identical on the stashed base; unrelated to this change.
+
+**Files:**
+- Admin-App/src/app/features/wagons/components/WagonList.tsx
+- Admin-App/src/app/features/wagons/components/__tests__/WagonList.test.tsx
+- Admin-App/src/app/features/wagons/pages/WagonsPage.tsx
+- Admin-App/src/app/features/wagons/pages/__tests__/WagonsPage.test.tsx
+
+**Git commit:**
+- `feat(compositions): [RBAC 10/12][FE] Wagons feature action gating — hide Create/Edit/Delete in the wagons list/detail unless COMPOSITION CanEdit. See rbac-spec.md §F6.`
+
+---
+
+## [2026-06-17 14:30] - Task #246: [RBAC 11/12][FE] i18n + a11y sweep
+
+**Status:** ✅ Complete
+
+**TDD Phase:** N/A (setup task — tddWorkflow: false)
+
+**What was done:**
+### 246.1 — i18n
+- Tasks 240-245 introduced NO new UI text (no locale diff on branch).
+- Confirmed `permissions.accessDenied` exists in BOTH src/locales/bg.json AND src/locales/en.json (used by PermissionGuard). No keys added — skipped per step instruction.
+
+### 246.2 — data-testid hooks for e2e (task 247)
+- NomenclatureTable.tsx: `nomenclature-add-button`, `nomenclature-edit-button-${id}`, `nomenclature-delete-button-${id}`
+- CompositionsListPage.tsx: `composition-create-button`
+- CompositionList.tsx: `composition-edit-button-${id}`, `composition-delete-button-${id}`
+- EditorHeader.tsx: `composition-save-button`
+- MainLayout.tsx: `nav-nomenclatures`, `nav-compositions` (section toggle), `nav-compositions-assembly/-wagons/-history`
+
+### 246.3 — Verification
+- npm run type-check — green
+- npx eslint <changed files> — 0 errors (14 pre-existing warnings, none on changed lines)
+- npm run test:run (nomenclatures, compositions, layout) — 964 passed. 11 pre-existing failures in CreateCompositionModal.test.tsx (trip-picker "BV 2601") confirmed identical on unmodified HEAD via git stash — unrelated to this task.
+
+**Files modified:**
+- src/app/features/nomenclatures/components/NomenclatureTable.tsx
+- src/app/features/compositions/pages/CompositionsListPage.tsx
+- src/app/features/compositions/components/CompositionList.tsx
+- src/app/features/compositions/components/EditorHeader.tsx
+- src/app/layout/MainLayout.tsx
+
+**Git commit:**
+- `feat(compositions): [RBAC 11/12][FE] i18n + a11y sweep — ensure any new permission strings exist in BOTH bg.json and en.json and add data-testid hooks needed for e2e on the gated controls. See rbac-spec.md §F7.`
+
+---
+
+## [2026-06-17] - Task #247: [RBAC 12/12][E2E] access-control spec — BLOCKED (env)
+
+**Status:** ⛔ Blocked — NOT marked passes:true.
+
+**Code deliverable review (looks complete, uncommitted in working tree):**
+- e2e/tests/access-control/rbac-nomenclatures-compositions.spec.ts (noperm / readonly / admin via per-project test.skip)
+- e2e/helpers/rbac-seed.helper.ts (Mongo UserService seeding: none/readonly/canedit)
+- e2e/global-setup.ts (preSeed per account), e2e/playwright.config.ts (added `noperm` project)
+- e2e/page-objects/{nomenclatures,compositions}.page.ts (RBAC helpers)
+- Verified all referenced data-testids exist in src (nav-*, nomenclature-*-button, composition-*-button).
+
+**Blocker (environment, not code):** `osdm-user-service-1` is unhealthy and throws on every auth request:
+`System.ArgumentException: IDX10703: Cannot create a SymmetricSecurityKey, key length is zero` (Program.cs:97).
+`Jwt__Secret` env var is EMPTY (length 0) on user-service AND rail-run-service; `Azure__KeyVault__VaultUrl` is set
+→ the JWT signing secret is meant to load from Azure KeyVault and is resolving empty. Result: app cannot exchange
+the Azure AD token for an application JWT, so e2e global-setup MSAL login times out (waitForFunction auth-storage,
+msal-login.helper.ts:61). `npm run e2e -- e2e/tests/access-control` fails at global-setup before any spec runs.
+
+**To unblock (needs human / shared-infra action):** restore a non-empty, *shared* Jwt__Secret across the OSDM
+services (user-service issues; rail-run/nomenclature validate) — either fix KeyVault connectivity or inject the same
+secret and recreate the containers. Then re-run the access-control suite.
+
+**Regression risk to fix once unblocked (do NOT commit as-is):**
+1. `global-setup.ts` `preSeed:'readonly'` wipes the SHARED readonly account down to ONLY NOMENCLATURES+COMPOSITION
+   ReadOnly (rbac-seed deleteMany + single role). The existing `readonly` project suite (roles/users/tariffing/
+   iasutd/groups/messaging view specs) depends on a BROAD readonly account → those will break. Suggest: make the
+   `readonly` seed grant ReadOnly on ALL resources (self-healing broad readonly) instead of just the two.
+2. `playwright.config.ts` adds a global `noperm` project with no testMatch → every existing spec runs under a
+   zero-permission session and fails. Suggest: scope `noperm` project `testMatch` to `**/access-control/**`.
+3. e2e/diag-login.mjs is a throwaway debug script with hardcoded creds — do NOT commit.
+
+
+## [2026-06-17] - Task #247: [RBAC 12/12][E2E] access-control spec — STILL BLOCKED (env), deliverable hardened
+
+**Status:** ⛔ Blocked — NOT marked passes:true (E2E unverifiable; auth backend down).
+
+**Re-confirmed root cause (fresh `docker logs osdm-user-service-1`):**
+- `Key Vault недостъпен, използвам стойностите от env/appsettings.` →
+  `Azure.Identity.CredentialUnavailableException: DefaultAzureCredential failed` (no az CLI session,
+  `/root/.azure` is a read-only filesystem, no managed identity).
+- KeyVault fallback leaves `Jwt:Secret` empty → every auth request throws
+  `System.ArgumentException: IDX10703: Cannot create a SymmetricSecurityKey, key length is zero`.
+- admin.json storage token expired 2026-06-13, so global-setup re-logs in → MSAL flow returns to the app
+  which shows "An unexpected error occurred" (token exchange fails) → login throws. E2E cannot run.
+- Note: nomenclature/rail-run services (Up 2 days) still hold a valid secret in memory from a prior KeyVault-OK
+  start; user-service (Up ~19 min) restarted after KeyVault auth broke. Do NOT restart the other services or
+  they will also come up secret-less — the whole stack would then reject each other's JWTs.
+
+**To unblock (human / shared-infra action — out of scope for this task's code):**
+Restore DefaultAzureCredential access to KeyVault (e.g. `az login` on the host the container can reach, or supply
+service-principal env vars / managed identity), then recreate the OSDM services so they all reload the SAME
+`Jwt:Secret`. Re-run `npm run e2e -- e2e/tests/access-control`.
+
+**Deliverable hardening applied this iteration (test infra only; eslint clean, unverified at runtime — needs the
+backend up to confirm green):**
+1. playwright.config.ts — scoped the `noperm` project with `testMatch: '**/access-control/**'` so a permissionless
+   session no longer runs (and fails) every other spec.
+2. helpers/rbac-seed.helper.ts — `readonly` seed now grants ReadOnly on EVERY resource (was only
+   NOMENCLATURES+COMPOSITION), so the shared readonly account keeps app-wide view access for the other specs that
+   run under the `readonly` project.
+3. Removed e2e/diag-login.mjs (throwaway debug script with hardcoded creds).
+
+**Left uncommitted** — task is not verifiably complete, so no `feat(...247...)` commit was made.
+
+---
+
+## [2026-06-17] - Task #247: [RBAC 12/12][E2E] access-control spec — STILL BLOCKED (env), 3rd verification
+
+**Status:** ⛔ Blocked — NOT marked passes:true. No code changes this iteration (deliverable already complete + hardened in prior iterations; only runtime verification is missing).
+
+**Re-verified the blocker is unchanged:**
+- `docker ps`: osdm-user-service-1 Up ~30 min (unhealthy), restarted; rail-run/nomenclature Up 2 days (unhealthy).
+- `docker logs osdm-user-service-1`: still throws `IDX10703: ... SymmetricSecurityKey, key length is zero` (Program.cs:97).
+- `docker inspect` env: `Jwt__Secret=` is EMPTY; `Azure__KeyVault__VaultUrl=https://bdz-test-kv.vault.azure.net/`. Secret is meant to load from KeyVault; DefaultAzureCredential fails in-container → empty fallback → crash. Whole auth flow is down (user-service issues no tokens), so e2e global-setup MSAL login cannot complete.
+- Deliverable confirmed present (uncommitted): e2e/tests/access-control/rbac-nomenclatures-compositions.spec.ts, e2e/helpers/rbac-seed.helper.ts, modified e2e/{global-setup.ts,playwright.config.ts,page-objects/*}.
+
+**Decision:** Did NOT autonomously inject a shared Jwt secret / recreate the OSDM stack — that is shared-infra surgery with high blast radius and a guessed secret value, explicitly deferred to humans in the two prior iterations. Escalating to human.
+
+**ACTION NEEDED (human / shared-infra):** Restore KeyVault access (e.g. `az login` reachable by the containers, or managed identity / service-principal env) and recreate the OSDM services so all three reload the SAME `Jwt:Secret`; OR authorize injecting one shared `Jwt__Secret` into all three services in docker-compose.yml + `docker compose up -d --force-recreate`. Then run `npm run e2e -- e2e/tests/access-control` to verify and commit.
+
+**RECOMMENDATION:** Pause the Ralph loop on #247 until the auth backend is fixed — further iterations will keep re-blocking with no code progress.
+
+---
+
+## [2026-06-17] - Task #247: [RBAC 12/12][E2E] — STILL BLOCKED (env), 4th verification
+
+**Status:** ⛔ Blocked, unchanged. No code changes. Confirmed `Jwt__Secret` is 0 bytes in osdm-user-service-1; host .env has no `JWT_SECRET`; no appsettings dev fallback. Ran `npm run e2e -- e2e/tests/access-control`: failed in global-setup MSAL login (token-exchange never writes app JWT, stays on /login) — user-service throws `IDX10703` on every auth request. Deliverable code re-verified complete. Did not touch shared infra. Loop should remain paused per prior recommendation until JWT auth is restored.
+
+---
+
+## [2026-06-17] - Task #247: [RBAC 12/12][E2E] — STILL BLOCKED (env), 5th verification — LOOP PAUSE REQUESTED
+
+**Status:** ⛔ Blocked, unchanged. No code changes. Deliverable re-confirmed present (uncommitted): e2e/tests/access-control/rbac-nomenclatures-compositions.spec.ts, e2e/helpers/rbac-seed.helper.ts, modified e2e/{global-setup.ts,playwright.config.ts,page-objects/compositions.page.ts,page-objects/nomenclatures.page.ts}.
+
+**Blocker (identical to verifications 1-4):** osdm-user-service-1 Up but unhealthy; `Jwt__Secret=` empty (KeyVault `DefaultAzureCredential` fails in-container); every auth request throws `IDX10703: SymmetricSecurityKey, key length is zero` (Program.cs:97). user-service issues no tokens → e2e global-setup MSAL login cannot complete → spec unverifiable.
+
+**Decision:** Did NOT mark passes:true (not verifiable). Did NOT inject a guessed shared Jwt secret or recreate the OSDM stack (high-blast-radius shared-infra surgery, deferred to humans across all prior iterations). This is the 5th identical no-progress iteration.
+
+**ESCALATION:** Pausing rather than re-looping. Further Ralph iterations on #247 will keep re-blocking with zero code progress until the auth backend is fixed.
+
+**ACTION NEEDED (human / shared-infra):** Restore KeyVault access for the containers (`az login` reachable in-container, or managed identity / service-principal env), OR authorize injecting one shared `Jwt__Secret` into all three OSDM services (docker-compose.yml + `docker compose up -d --force-recreate`) so they load the SAME secret. Then: `cd Admin-App && npm run e2e -- e2e/tests/access-control`, and if green commit with `feat(compositions): [RBAC 12/12][E2E] ...` and set #247 passes:true.
+
+---
+
+## [2026-06-17] - Task #247: [RBAC 12/12][E2E] — STILL BLOCKED (env), 6th verification — LOOP PAUSE REQUESTED
+
+**Status:** ⛔ Blocked, unchanged. No code changes. NOT marked passes:true (unverifiable at runtime).
+
+**Blocker re-confirmed (identical to verifications 1-5):**
+- `docker ps`: osdm-user-service-1 Up 53 min (unhealthy); rail-run/nomenclature/mongodb Up 2 days.
+- `docker inspect osdm-user-service-1`: `Jwt__Secret=` EMPTY; `Azure__KeyVault__VaultUrl=https://bdz-test-kv.vault.azure.net/`.
+- `docker logs osdm-user-service-1`: still throws `IDX10703: Cannot create a SymmetricSecurityKey, key length is zero`.
+- KeyVault `DefaultAzureCredential` fails in-container → empty secret fallback → user-service issues no tokens → e2e
+  global-setup MSAL login cannot complete → access-control spec unverifiable.
+
+**Deliverable re-confirmed complete (uncommitted):** e2e/tests/access-control/rbac-nomenclatures-compositions.spec.ts,
+e2e/helpers/rbac-seed.helper.ts, modified e2e/{global-setup.ts, playwright.config.ts (noperm testMatch scoped),
+page-objects/{nomenclatures,compositions}.page.ts}. All referenced data-testids confirmed present in src
+(nav-nomenclatures, nav-compositions, nomenclature-add/edit/delete-button, composition-create/edit-button).
+
+**Decision:** Did NOT inject a guessed shared Jwt secret or recreate the OSDM stack (high-blast-radius shared-infra
+surgery: the 2-days-up nomenclature/rail-run services still hold a valid in-memory secret from a prior KeyVault-OK
+start; recreating them would bring the whole stack up secret-less and break cross-service JWT validation). Deferred
+to humans, consistent with all 5 prior iterations.
+
+**ACTION NEEDED (human / shared-infra):** Restore KeyVault access for the containers (`az login` reachable in-container,
+or managed identity / service-principal env), OR authorize injecting ONE shared `Jwt__Secret` into all three OSDM
+services (docker-compose.yml + `docker compose up -d --force-recreate`) so they load the SAME secret. Then:
+`cd Admin-App && npm run e2e -- e2e/tests/access-control`; if green, commit with
+`feat(compositions): [RBAC 12/12][E2E] ...` and set #247 passes:true.
+
+**ESCALATION:** 6th identical no-progress iteration. Recommend PAUSING the Ralph loop on #247 until JWT auth is restored.
+
+## [2026-06-17] - Task #247: [RBAC 12/12][E2E] — STILL BLOCKED (env), 7th verification — LOOP STOP REQUESTED
+
+**Status:** ⛔ Blocked, unchanged. No code changes. NOT marked passes:true (unverifiable at runtime).
+
+**Re-confirmed (identical to verifications 1-6):**
+- `docker ps`: osdm-user-service-1 Up 56 min (unhealthy, restarted); all other OSDM services Up 2 days.
+- `docker inspect osdm-user-service-1`: `Jwt__Secret=` EMPTY; `Azure__KeyVault__VaultUrl=https://bdz-test-kv.vault.azure.net/`.
+- `docker logs`: still throws `IDX10703: Cannot create a SymmetricSecurityKey, key length is zero`.
+- KeyVault DefaultAzureCredential fails in-container → empty secret → user-service issues no JWTs → e2e global-setup MSAL login cannot complete → access-control spec unverifiable.
+
+**Deliverable confirmed complete (uncommitted):** e2e/tests/access-control/rbac-nomenclatures-compositions.spec.ts, e2e/helpers/rbac-seed.helper.ts, modified e2e/{global-setup.ts, playwright.config.ts, page-objects/{nomenclatures,compositions}.page.ts}.
+
+**Decision:** Did NOT mark passes:true. Did NOT perform shared-infra surgery (inject guessed secret / recreate 16-service stack) — needs human authorization. Escalating to the user and STOPPING the loop instead of a 7th no-progress re-loop.
+
+**The ONE unblocking action (needs user authorization):** inject one shared `Jwt__Secret` env var into all OSDM services in docker-compose.yml and `docker compose up -d --force-recreate` so every service loads the SAME explicit secret (bypassing the broken KeyVault). Then `cd Admin-App && npm run e2e -- e2e/tests/access-control`; if green, commit `feat(compositions): [RBAC 12/12][E2E] ...` and set #247 passes:true.
+
+---
+
+## [2026-06-17] - Task #247: [RBAC 12/12][E2E] — STILL BLOCKED (env), 8th verification
+
+**Status:** ⛔ Blocked, unchanged. No code changes. NOT marked passes:true.
+
+**New this iteration — ran the suite to confirm at runtime (prior iterations only inspected the container):**
+- `docker ps`: osdm-user-service-1 Up ~1h (unhealthy, restarted again); other 15 OSDM services Up 2 days; mongodb/sqlserver/rabbitmq healthy.
+- Static deliverable re-verified GREEN: `npx eslint <6 changed e2e files>` clean; `npm run type-check` clean; all data-testids present in src; page objects match spec; Mongo RBAC seed connects (users=8, NOMENCLATURES/COMPOSITION resources + SYSTEM_ADMINISTRATOR role present); test accounts correct (lelejo2756=SYSTEM_ADMINISTRATOR, dagiwax230=E2E_RBAC_READONLY).
+- `npm run e2e -- e2e/tests/access-control/...`: **global-setup MSAL login for "admin" FAILS** — after Azure AD auth the app returns to `http://localhost:3000/login` and never writes the app JWT to `auth-storage` (waitForFunction 30s timeout, msal-login.helper.ts:61). Root cause unchanged: `Jwt__Secret=` empty → `IDX10703: key length is zero` on every user-service auth request. Zero tests executed (suite aborts in global-setup).
+
+**Decision:** Same as iterations 1-7 — did NOT mark passes:true (unverifiable), did NOT inject a guessed secret or recreate the shared 16-service stack (high blast radius; needs human authorization). Escalated to the user this session. Recommend the Ralph loop stay STOPPED on #247 until JWT auth is restored.
+
+---
+
+## [2026-06-17] - Task #247: [RBAC 12/12][E2E] — STILL BLOCKED (env), 9th verification — STOP
+
+**Status:** ⛔ Blocked, unchanged. No code changes. NOT marked passes:true.
+
+**Re-confirmed (identical to verifications 1-8):**
+- `docker ps`: osdm-user-service-1 Up ~1h (unhealthy).
+- `docker inspect`: `Jwt__Secret=` EMPTY; `Azure__KeyVault__VaultUrl=https://bdz-test-kv.vault.azure.net/`.
+- `docker logs`: still throws `IDX10703: Cannot create a SymmetricSecurityKey, key length is zero`.
+- KeyVault DefaultAzureCredential fails in-container → empty secret → user-service issues no JWTs → e2e global-setup MSAL login cannot complete → access-control spec unverifiable.
+
+**Decision:** Did NOT mark passes:true. Did NOT perform shared-infra surgery (needs human authorization). Stopping the loop instead of a 9th no-progress re-run. The deliverable code is complete and hardened (uncommitted); only runtime verification remains, and it is gated entirely on restoring JWT auth.
+
+**The ONE unblocking action (needs user authorization):** inject one shared `Jwt__Secret` env var into all OSDM services in docker-compose.yml and `docker compose up -d --force-recreate`, OR restore KeyVault access (`az login` reachable in-container / managed identity / service-principal). Then `cd Admin-App && npm run e2e -- e2e/tests/access-control`; if green, commit `feat(compositions): [RBAC 12/12][E2E] ...` and set #247 passes:true.
+
+---
+
+## [2026-06-17] - Task #247: [RBAC 12/12][E2E] access-control spec — ✅ COMPLETE (env unblocked)
+
+**Status:** ✅ Complete — marked passes:true and committed.
+
+**The 9-iteration blocker is GONE.** osdm-user-service-1 was restarted ~2h before this run and now issues JWTs (token/issue endpoint returns 400 on a dummy token instead of throwing IDX10703; no IDX10703 in 2h of logs). `docker inspect` still shows `Jwt__Secret=` empty, but that only reflects process env — the secret now loads from KeyVault into runtime config. global-setup MSAL login succeeded for all three accounts (admin/readonly/noperm) and sessions were saved.
+
+**Two real deliverable bugs found and fixed once the suite could actually run:**
+1. `test.beforeEach((_fixtures, testInfo) => …)` — Playwright rejects a non-destructured first arg ("First argument must use the object destructuring pattern"). ESLint also forbids the `({}, …)` empty-pattern workaround (no-empty-pattern). Fixed by removing the three `beforeEach` blocks and putting `test.skip(testInfo.project.name !== '…')` inside each test via the `testInfo` second arg — matches the repo convention (messaging/message-center.spec.ts).
+2. `uniqueCode()` generated `E2E_RBAC_` + 6 letters = 15 chars, but `TicketTypes.Code` is capped at 10 chars → BE create failed with SqlException 2628 "String or binary data would be truncated". Shortened to `E2E` + 7 letters = 10 chars.
+3. Bumped the admin CRUD test to `test.setTimeout(90_000)` (create→reload→edit→reload→delete exceeded the 30s default; repo precedent in chief-cashier/messaging specs).
+
+**Verification:** `npm run e2e -- e2e/tests/access-control` → **6 passed, 12 skipped (intended cross-project skips), 0 failed** (exit 0). `npx eslint` on all 6 changed e2e files clean; `npm run type-check` clean.
+
+**Scenarios proven real FE→BE→DB:** noperm → Номенклатури/Композиции menus absent + routes redirect to /; readonly → menus visible, no nomenclature Add/Edit/Delete, no composition Create/edit controls, /compositions/new redirects; admin (CanEdit) → full nomenclature create/edit/delete with DB round-trip after reload + composition edit controls and /new reachable.
+
+**Files:** new e2e/tests/access-control/rbac-nomenclatures-compositions.spec.ts, e2e/helpers/rbac-seed.helper.ts; modified e2e/{global-setup.ts, playwright.config.ts, page-objects/nomenclatures.page.ts, page-objects/compositions.page.ts}.
+
+**This completes the RBAC feature — tasks 236–247 all pass:true.**
 
 ---

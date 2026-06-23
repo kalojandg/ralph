@@ -1,0 +1,18 @@
+﻿Task #236 done. Guarded the 6 write actions in `CompositionsController` with `[AuthorizePermissions(ResourceCodes.Composition, AccessLevel.CanEdit)]`, left both GET reads public, wired the missing `AddCustomAuthorization()` in `Program.cs`, and added a reflection test (8/8 green; full suite 62/62). Committed as `8cf17b88a`.
+
+```xml
+<task-complete>
+  <task-id>236</task-id>
+  <tests>PASSED</tests>
+  <visual>N/A</visual>
+  <committed>YES</committed>
+</task-complete>
+```
+
+```xml
+<status>CONTINUE</status>
+<next-task>237</next-task>
+```
+
+Stopping here ΓÇö task #237 is the next iteration (new agent, clean context), per the one-task-per-iteration rule.
+

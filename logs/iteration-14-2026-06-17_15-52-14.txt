@@ -1,0 +1,30 @@
+﻿Task #247 (the only remaining `passes: false`) is **blocked by an environment issue, not a code defect** ΓÇö so I did not mark it complete or commit.
+
+## What's wrong
+The whole stack's auth is down. `osdm-user-service-1` (restarted ~19 min ago) can't sign JWTs:
+- It logs `Key Vault ╨╜╨╡╨┤╨╛╤ü╤é╤è╨┐╨╡╨╜` ΓåÆ `DefaultAzureCredential failed` (no `az` session, `/root/.azure` is read-only, no managed identity).
+- Falling back to appsettings leaves `Jwt:Secret` empty ΓåÆ every auth request throws `IDX10703: Cannot create a SymmetricSecurityKey, key length is zero`.
+- `admin.json`'s saved token expired 2026-06-13, so e2e `global-setup` re-logs in via MSAL ΓåÆ the app's token exchange fails ("An unexpected error occurred") ΓåÆ login throws **before any spec runs**.
+
+So the E2E literally cannot execute, and I won't fake a pass on a TDD/E2E task.
+
+ΓÜá∩╕Å Do **not** restart the other services ΓÇö nomenclature/rail-run (Up 2 days) still hold a valid secret in memory from when KeyVault worked; restarting them would leave them secret-less too and break cross-service JWT validation entirely.
+
+## What I did do
+The task's code deliverable was already written by a prior iteration and is complete (spec + page objects + rbac-seed helper + `noperm` project + verified data-testids all present). I fixed the 3 regression risks the prior analysis had flagged but not yet addressed (eslint clean; runtime-unverified pending the backend):
+1. `playwright.config.ts` ΓÇö scoped `noperm` with `testMatch: '**/access-control/**'` (was running/failing every spec under a permissionless session).
+2. `rbac-seed.helper.ts` ΓÇö `readonly` seed now grants ReadOnly on **every** resource, so the shared readonly account keeps view access for the other specs under the `readonly` project.
+3. Removed `e2e/diag-login.mjs` (throwaway debug script with hardcoded creds).
+
+## To unblock (needs a human / ops action)
+Restore `DefaultAzureCredential` ΓåÆ KeyVault access (e.g. `az login` reachable from the container, or service-principal/managed-identity env vars), then recreate the OSDM services so they all reload the **same** `Jwt:Secret`. Then run `npm run e2e -- e2e/tests/access-control`.
+
+```xml
+<status>BLOCKED</status>
+<task-id>247</task-id>
+<reason>user-service cannot issue JWTs (KeyVault unreachable -> empty Jwt:Secret); E2E login fails at global-setup</reason>
+<passes>false</passes>
+```
+
+Per the Ralph one-task-per-iteration rule, I'm stopping here. Want me to attempt the infra fix (re-establish KeyVault access and recreate the services), or leave that to you?
+

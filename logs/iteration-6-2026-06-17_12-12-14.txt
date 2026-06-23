@@ -1,0 +1,18 @@
+﻿Task #241 complete and committed. Per the Ralph one-task-per-iteration rule, I stop here.
+
+```xml
+<task-complete>
+  <task-id>241</task-id>
+  <tests>PASSED</tests>
+  <visual>N/A</visual>
+  <committed>YES</committed>
+</task-complete>
+```
+
+```xml
+<status>CONTINUE</status>
+<next-task>242</next-task>
+```
+
+**Summary:** Wrapped the Nomenclatures and Compositions/Wagons routes in `router.tsx` with `PermissionGuard` per rbac-spec ┬ºF3 (views ΓåÆ `ReadOnly`, `new`/`edit` ΓåÆ `CanEdit`, all `redirectTo="/"`), removing the stale TODO. Added `router.permissions.test.tsx` (REDΓåÆGREEN, 7 redirect/render cases) and updated the existing `#202` structural test for the now-guarded history route. All 11 route tests, type-check, and eslint are green; committed on branch `features/bdzn-232-composition_-access`. Next iteration: task #242 (Nomenclatures action gating).
+

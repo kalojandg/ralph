@@ -60,9 +60,10 @@ Working dirs:
 > го (както е в `PricingService.API/Program.cs:143`), иначе `[AuthorizePermissions]` няма да се прилага.
 
 ### B4. `NomenclatureService.API/Controllers/NomenclatureController.cs`
-- **Публични (БЕЗ гард, ползват се от други модули):** `GetGroupTypes` (~52), `Get` (~61),
-  `GetMultiple` (~111), `GetAll` (~143).
-- **ReadOnly:** `GetAllForAdmin` (~74), `GetById` (~168) → `[AuthorizePermissions(ResourceCodes.Nomenclatures, AccessLevel.ReadOnly)]`.
+- **Публични (БЕЗ гард, ползват се от други модули/клиентски приложения):** `GetGroupTypes` (~52),
+  `Get` (~61), `GetMultiple` (~111), `GetAll` (~143), `GetById` (~168) — детайлите на единичен запис се
+  четат и от клиенти, затова остават публични (PR review).
+- **ReadOnly:** само `GetAllForAdmin` (~74, admin листинг) → `[AuthorizePermissions(ResourceCodes.Nomenclatures, AccessLevel.ReadOnly)]`.
 - **CanEdit:** `Create` (POST, ~205), `Update` (PUT, ~282), `Delete` (DELETE, ~373).
 
 > Провери дали `AddCustomAuthorization()` е в `NomenclatureService.API/Program.cs`; export/import контролерите

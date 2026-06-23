@@ -6736,7 +6736,7 @@
       { "id": "236.3", "phase": "GREEN", "action": "Add the using statements (copy exact namespaces from AdminTariffVersionController.cs: Common.Authorization, Common.Constants, Common.Enums). Put [AuthorizePermissions(ResourceCodes.Composition, AccessLevel.CanEdit)] above each of the 6 write actions. Do NOT touch the two GET actions. Run test -> PASSES." },
       { "id": "236.4", "phase": "DONE", "action": "cd OSDM-Src/DotNetServices/RailRunService && dotnet build && dotnet test RailRunService.API.Tests — green. gitnexus detect-changes --repo Transport-OSDM-Src. Commit." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 237,
@@ -6750,7 +6750,7 @@
       { "id": "237.3", "phase": "GREEN", "action": "Add usings + [AuthorizePermissions(ResourceCodes.Composition, AccessLevel.CanEdit)] above the 5 write actions in the two controllers. Leave GETs untouched. Run -> PASSES." },
       { "id": "237.4", "phase": "DONE", "action": "dotnet build && dotnet test RailRunService.API.Tests — green. gitnexus detect-changes --repo Transport-OSDM-Src. Commit." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 238,
@@ -6764,7 +6764,7 @@
       { "id": "238.3", "phase": "GREEN", "action": "Add usings + attributes: [AuthorizePermissions(ResourceCodes.Nomenclatures, AccessLevel.ReadOnly)] on GetAllForAdmin + GetById; [AuthorizePermissions(ResourceCodes.Nomenclatures, AccessLevel.CanEdit)] on Create + Update + Delete. Leave the 4 public GETs with no attribute. Run -> PASSES." },
       { "id": "238.4", "phase": "DONE", "action": "cd OSDM-Src/DotNetServices/NomenclatureService && dotnet build && dotnet test NomenclatureService.API.Tests — green. gitnexus detect-changes --repo Transport-OSDM-Src. Commit." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 239,
@@ -6778,7 +6778,7 @@
       { "id": "239.3", "phase": "GREEN", "action": "Create src/app/features/nomenclatures/hooks/useNomenclaturePermissions.ts and src/app/features/compositions/hooks/useCompositionPermissions.ts exactly as in rbac-spec.md §F1 (Composition hook uses ResourceCodes.Composition). Export from the feature index.ts if hooks are exported there. Run -> PASSES." },
       { "id": "239.4", "phase": "DONE", "action": "cd Admin-App && npm run test:run -- <the two test files> && npm run type-check && npx eslint <changed files> — green. Commit." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 240,
@@ -6792,7 +6792,7 @@
       { "id": "240.3", "phase": "GREEN", "action": "Add const canSeeNomenclatures = hasPermission(ResourceCodes.Nomenclatures, AccessLevel.ReadOnly); const canSeeCompositions = hasPermission(ResourceCodes.Composition, AccessLevel.ReadOnly);. Make bottomMenuItems conditional (= canSeeNomenclatures ? [...] : []). Wrap the Compositions title ListItem + Collapse block in {canSeeCompositions && ( ... )}. Run -> PASSES." },
       { "id": "240.4", "phase": "DONE", "action": "npm run test:run -- src/app/layout && npm run type-check && npx eslint <changed files> — green. Commit." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 241,
@@ -6806,7 +6806,7 @@
       { "id": "241.3", "phase": "GREEN", "action": "Remove the TODO comment and wrap NomenclaturesPage in <PermissionGuard resourceCode={ResourceCodes.Nomenclatures} requiredLevel={AccessLevel.ReadOnly} redirectTo='/'>. Wrap each compositions/wagons route element per the §F3 table: compositions, compositions/history, compositions/wagon-history -> ReadOnly; compositions/new -> CanEdit; compositions/:id/edit -> ReadOnly; wagons -> ReadOnly; wagons/new + wagons/:id/edit -> CanEdit. Run -> PASSES." },
       { "id": "241.4", "phase": "DONE", "action": "npm run test:run -- src/app/routes && npm run type-check && npx eslint <changed files> — green. Commit." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 242,
@@ -6820,7 +6820,7 @@
       { "id": "242.3", "phase": "GREEN", "action": "Call const { canEdit } = useNomenclaturePermissions() in NomenclatureTable and wrap Add, row Edit, row Delete in {canEdit && ...} (keep existing disabled={!item.isActive} on Delete combined). Run -> PASSES." },
       { "id": "242.4", "phase": "DONE", "action": "npm run test:run -- src/app/features/nomenclatures && npm run type-check && npx eslint <changed files> — green. Commit." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 243,
@@ -6834,7 +6834,7 @@
       { "id": "243.3", "phase": "GREEN", "action": "In CompositionsListPage call useCompositionPermissions(); gate the Create button; pass canEdit to CompositionList (gate row Edit ~152, Clone ~160, Delete ~167) and to CreateCompositionModal (block submit). In CompositionEditorPage compute canEdit and pass to EditorHeader; gate Save(~335), Clone(~325), Status dropdown(~226), Name edit(~195), Link Trip(~296). Run -> PASSES." },
       { "id": "243.4", "phase": "DONE", "action": "npm run test:run -- src/app/features/compositions && npm run type-check && npx eslint <changed files> — green. Commit." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 244,
@@ -6848,7 +6848,7 @@
       { "id": "244.3", "phase": "GREEN", "action": "Thread canEdit from CompositionEditorPage into WagonPalette (disable drag source), WagonPropertiesPanel (gate Save/Delete), SeatActionsToolbar (gate Block/Unblock — note backend seat endpoints stay open, this is FE-only), BlockSeatDialog (gate submit), SubRoutesPanel (gate sub-route edit), and the Add Sub-Route control. Run -> PASSES." },
       { "id": "244.4", "phase": "DONE", "action": "npm run test:run -- src/app/features/compositions && npm run type-check && npx eslint <changed files> — green. Commit." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 245,
@@ -6862,7 +6862,7 @@
       { "id": "245.3", "phase": "GREEN", "action": "Call useCompositionPermissions() (or receive canEdit prop) and gate the Create/Edit/Delete controls in the wagons feature. Run -> PASSES." },
       { "id": "245.4", "phase": "DONE", "action": "npm run test:run -- src/app/features/wagons && npm run type-check && npx eslint <changed files> — green. Commit." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 246,
@@ -6875,7 +6875,7 @@
       { "id": "246.2", "action": "Add stable data-testid attributes to the controls the e2e task (247) will assert: nomenclature Add/Edit/Delete, composition Create/Save/Delete, and the Номенклатури/Композиции menu items. Keep names consistent with existing testid conventions (e.g. nomenclature-export-button)." },
       { "id": "246.3", "action": "npm run test:run && npm run type-check && npx eslint <changed files> — green. Commit." }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 247,
@@ -6887,6 +6887,114 @@
       { "id": "247.1", "phase": "RECON", "action": "Read rbac-spec.md §F7. Read e2e/playwright.config.ts, an existing spec (e.g. e2e/tests/nomenclatures/*.spec.ts) and helpers/page-objects for auth/seed/cleanup. Identify how to seed roles/permissions (UserService) — see reference_userservice_rbac for granting role permissions; create 3 test roles: none / ReadOnly / CanEdit on NOMENCLATURES + COMPOSITION." },
       { "id": "247.2", "phase": "RED/GREEN", "action": "Create e2e/tests/access-control/rbac-nomenclatures-compositions.spec.ts: (1) no-permission role -> Номенклатури & Композиции menu items absent; (2) ReadOnly role -> menus visible, NomenclatureTable Add/Edit/Delete absent, CompositionsList Create/Delete absent, navigating to /compositions/new redirects to /; (3) CanEdit role -> create a nomenclature row and a composition, edit and delete them, asserting persistence after reload (DB round-trip). Add page-object methods as needed." },
       { "id": "247.3", "phase": "DONE", "action": "cd Admin-App && npm run e2e -- e2e/tests/access-control against running nomenclature-service + railrun-service — green. gitnexus detect-changes. Confirm 236-246 all pass, then this completes the RBAC feature. Commit." }
+    ],
+    "passes": true
+  },
+  {
+    "id": 248,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[NOM-IMPORT-RT 1/8][BE] Canonical column keys + resolve the 'Изисква резервация' collision. See nomenclature-import-roundtrip-spec.md. Unify AncillaryType reservation column to canonical key 'ReservationRequired' (same as ServiceBrand) so ExportColumnLabels.ResolveKey is unambiguous for CSV/XLSX.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "248.1", "phase": "RECON", "action": "Read OSDM-Src/DotNetServices/NomenclatureService/.../Services/Export/ExportColumnLabels.cs and .../Features/AncillaryTypes/ExportAncillaryTypeQuery.cs. Confirm both 'ReservationRequired' and 'RequiresReservation' map to BG label 'Изисква резервация' (collision) and that AncillaryType entity field is RequiresReservation." },
+      { "id": "248.2", "phase": "RED", "action": "Add/extend a unit test asserting ExportColumnLabels.ResolveKey(\"Изисква резервация\") and ResolveKey(\"Reservation required\") return a single, deterministic key 'ReservationRequired'; and that no two distinct keys share a BG or EN label (add a dictionary-uniqueness guard test over Bg/En label values)." },
+      { "id": "248.3", "phase": "GREEN", "action": "In ExportColumnLabels.cs remove the 'RequiresReservation' entries from BOTH Bg and En dictionaries (keep only 'ReservationRequired'). In ExportAncillaryTypeQuery.cs rename the ExportColumnSchema key 'RequiresReservation' -> 'ReservationRequired' (column list + ToValues ordering unchanged; ProjectRow still reads entity.RequiresReservation). grep the whole NomenclatureService for the string \"RequiresReservation\" used as a COLUMN KEY (not the entity property) and update; leave entity.RequiresReservation property name intact." },
+      { "id": "248.4", "phase": "DONE", "action": "dotnet test for NomenclatureService.Application.Tests (export label + ancillary export tests) green. Re-export an AncillaryType file and confirm header label is still 'Изисква резервация'/'Reservation required' (no user-visible change). Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 249,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[NOM-IMPORT-RT 2/8][BE] Extend CreateNomenclatureDto + UpdateNomenclatureDto with all type-specific nullable fields (fat DTO). See spec 'DTO additions'.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "249.1", "phase": "RECON", "action": "Read .../Application/DTOs/CreateNomenclatureDto.cs and UpdateNomenclatureDto.cs. Note existing optional fields (CountryCode, TransportModeCode, IsServedStation, ReservationRequired) and their XML-doc style." },
+      { "id": "249.2", "phase": "GREEN", "action": "Add these nullable init properties to BOTH DTOs with brief 'X only' XML docs: OsdmType:string?, MaxQuantity:int?, Website:string?, VatNumber:string?, ValidityUnit:string?, ValidityCount:int?, IsCalendarBased:bool?, SupportsReductions:bool?, SupportsFirstClass:bool?, MinPassengers:int?, MaxPassengers:int?, IsOrganizedGroup:bool?, ValidityDays:int?, MinAge:int?, MaxAge:int?, AgeMin:int?, AgeMax:int?, IsOvernight:bool?, SeatsPerCompartment:int?, IsDigital:bool?, IssuesPaperTicket:bool?, Country:string?, Configuration:string?, Latitude:decimal?, Longitude:decimal?. Keep existing fields." },
+      { "id": "249.3", "phase": "DONE", "action": "dotnet build NomenclatureService solution green (no provider yet reads new fields — that is tasks 251/252). Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 250,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[NOM-IMPORT-RT 3/8][BE] Rewrite ImportNomenclatureCommandHandler to map EVERY canonical key into the fat DTO with typed parsing. Fixes the TransportMode key mismatch. See spec 'Canonical key -> DTO field'.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "250.1", "phase": "RECON", "action": "Read .../Features/NomenclatureFeatures/Commands/ImportNomenclatureCommand.cs (handler + BuildCreateDto/BuildUpdateDto + Bool/SortOrder helpers). Read ExportRowBuilder.BaseColumns and a few ExportColumnSchema lists to confirm canonical keys + CLR types." },
+      { "id": "250.2", "phase": "RED", "action": "Add handler unit tests: a cells dictionary containing every canonical key with valid values produces a Create/Update DTO with each field set & typed correctly; key 'TransportMode' maps to DTO.TransportModeCode; bool accepts true/false AND 1/0 (case-insensitive); int/decimal parsed invariant-culture; empty cell -> null; missing Code -> row Failed." },
+      { "id": "250.3", "phase": "GREEN", "action": "Replace the fixed key constants with a complete key->field mapping covering ALL canonical keys (base + every type-specific key in the spec table). Add typed helpers Int(cells,key):int?, Decimal(cells,key):decimal?, and make Bool also accept '1'/'0'. Map key 'TransportMode' -> TransportModeCode. Keep translations mapping (NameBg/En/De/Fr) and the per-row no-abort + audit behavior. Do NOT hardcode per-entity logic — one generic mapping for all types (providers consume only their own fields)." },
+      { "id": "250.4", "phase": "DONE", "action": "dotnet test handler tests green. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 251,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[NOM-IMPORT-RT 4/8][BE] Wire scalar-only providers to read their type-specific DTO fields on Create AND Update: AncillaryType, Carrier, DurationPassType, GroupType, LoyaltyCardType, PassengerGroup, ReservationType, SalesChannel, TransportOperator.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "251.1", "phase": "RECON", "action": "For each provider read .../Infrastructure/Providers/<Entity>Provider.cs + .../Domain/Entities/<Entity>.cs + the matching Export<Entity>Query.cs ProjectRow, to get exact entity field names/types. Map per spec table (e.g. AncillaryType: OsdmType, MaxQuantity, ReservationRequired->entity.RequiresReservation; TransportOperator: Country, Configuration as plain strings)." },
+      { "id": "251.2", "phase": "RED", "action": "For each provider add/extend unit tests: CreateAsync sets each type-specific entity field from the DTO; UpdateAsync sets them when provided and keeps existing when the DTO field is null." },
+      { "id": "251.3", "phase": "GREEN", "action": "In each provider's CreateAsync and UpdateAsync, assign entity fields from the new DTO fields (null on update = keep existing, mirroring the existing ServiceBrand pattern). No FK resolution needed for these (all scalars/strings). Keep bg-required + code-uniqueness checks unchanged." },
+      { "id": "251.4", "phase": "DONE", "action": "dotnet test all 9 provider test classes green. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 252,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[NOM-IMPORT-RT 5/8][BE] Wire FK/special providers: ServiceBrand (TransportMode now arrives -> insert no longer fails) and StopPlace (add Latitude/Longitude; CountryCode/IsServedStation already wired).",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "252.1", "phase": "RECON", "action": "Read ServiceBrandProvider.cs (ResolveServiceBrandTransportModeIdAsync) and StopPlaceProvider.cs + StopPlace entity + ExportStopPlaceQuery.ProjectRow. Confirm StopPlace already maps CountryCode/IsServedStation; identify Latitude/Longitude entity fields (decimal)." },
+      { "id": "252.2", "phase": "RED", "action": "ServiceBrand: test that CreateAsync with TransportModeCode='TRAM' (now populated by the handler) resolves the FK and inserts a NEW code successfully (the previously-failing case from service-brand (1).csv row 'LEL'). StopPlace: test CreateAsync+UpdateAsync set Latitude/Longitude from DTO (invariant decimals)." },
+      { "id": "252.3", "phase": "GREEN", "action": "ServiceBrand: no logic change expected beyond confirming the value now arrives (TransportModeCode non-null); if it still null-guards too early, ensure required-FK message only triggers on genuinely missing input. StopPlace: assign entity.Latitude/Longitude from dto.Latitude/Longitude on create+update (null=keep on update)." },
+      { "id": "252.4", "phase": "DONE", "action": "dotnet test ServiceBrand + StopPlace provider tests green. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 253,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[NOM-IMPORT-RT 6/8][BE] Parametrized export->import round-trip tests for ALL entities across ALL 3 formats (CSV/XLSX/XML) — the strongest symmetry guarantee. See spec 'Round-trip unit'.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "253.1", "phase": "RECON", "action": "Read existing CsvImportParserTests / ExcelImportParserTests / XmlImportParserTests and the export formatter tests to reuse helpers for producing export bytes from an ExportTable." },
+      { "id": "253.2", "phase": "RED/GREEN", "action": "Add a parametrized test: for each entity's ExportRow.Columns build a sample ExportTable (incl. type-specific columns with representative typed values), serialize via each IExportFormatter (csv/xlsx/xml), parse via the matching IImportParser, and assert ImportTable.ColumnKeys + every cell value equal the originals (XML also carries EntityType). This must catch any future key/label drift." },
+      { "id": "253.3", "phase": "DONE", "action": "dotnet test round-trip suite green for all entities x 3 formats. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 254,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[NOM-IMPORT-RT 7/8][BE] Full-stack import handler test: a real exported file (with type-specific columns) imported end-to-end calls the provider and persists every field; partial-batch reporting (Inserted/Updated/Failed) correct.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "254.1", "phase": "RECON", "action": "Read ImportNomenclatureCommandHandlerTests + BaseNomenclatureController.ImportNomenclatureAsync to mirror the request shape (format inferred from extension; supported formats)." },
+      { "id": "254.2", "phase": "RED/GREEN", "action": "Add tests covering ServiceBrand and StopPlace: import a CSV+XLSX+XML payload mirroring service-brand (1).csv structure (existing code -> Updated, new code -> Inserted with TransportMode set). Assert ImportResult counts and that the provider received the typed fields. Include a regression test for the original bug (new code with TransportMode must be Inserted, not Failed)." },
+      { "id": "254.3", "phase": "DONE", "action": "dotnet test green. gitnexus detect-changes to confirm scope. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 255,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[NOM-IMPORT-RT 8/8][E2E] Playwright real FE->BE->DB export->import round-trip for representative types in all 3 formats. 'Ready' per feedback_tdd_includes_e2e.",
+    "tddWorkflow": true,
+    "steps": [
+      { "id": "255.1", "phase": "RECON", "action": "Read Admin-App e2e config + an existing nomenclature spec/page-object. Identify the export + import UI controls (data-testid) for a nomenclature grid; ensure nomenclature-service is running with the rebuilt image (import endpoint present)." },
+      { "id": "255.2", "phase": "RED/GREEN", "action": "Add e2e/tests/nomenclatures/import-export-roundtrip.spec.ts: for ServiceBrand and StopPlace and DurationPassType, export to CSV (and repeat XLSX/XML), re-import the downloaded file, and assert the rows persist with type-specific values intact after reload (DB round-trip), including a row whose code did NOT previously exist (the original insert-fails bug)." },
+      { "id": "255.3", "phase": "DONE", "action": "cd Admin-App && npm run e2e -- e2e/tests/nomenclatures/import-export-roundtrip against running nomenclature-service — green. Confirm 248-254 pass. Mark feature done. Commit." }
     ],
     "passes": false
   }

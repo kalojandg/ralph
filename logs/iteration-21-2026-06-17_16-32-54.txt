@@ -1,0 +1,24 @@
+﻿I'm not going to mark #247 complete or re-loop ΓÇö this is the same environment block as the prior 7 iterations, and the unblocking action needs your authorization. Stopping the loop here.
+
+## Iteration Summary
+
+**Task #247** ΓÇö `[RBAC 12/12][E2E]` Playwright access-control spec ΓÇö is the only remaining `passes: false` task.
+
+**The code is done and verified static:**
+- Spec `e2e/tests/access-control/rbac-nomenclatures-compositions.spec.ts` + `helpers/rbac-seed.helper.ts` + modified `global-setup.ts`, `playwright.config.ts`, and both page objects ΓÇö all present (uncommitted).
+- `npx eslint` (6 changed files) clean; `npm run type-check` clean.
+- All `data-testid`s exist in src; Mongo RBAC seed connects; both test accounts have correct roles (admin = SYSTEM_ADMINISTRATOR, readonly = E2E_RBAC_READONLY).
+
+**The blocker (runtime, shared infra):**
+`osdm-user-service-1` has an empty `Jwt__Secret` ΓÇö its KeyVault `DefaultAzureCredential` fails in-container, so it throws `IDX10703: key length is zero` on every auth request and issues no app JWTs. I ran the suite to confirm: `global-setup` MSAL login fails (app bounces back to `/login`, never gets a JWT, 30s timeout), so **zero tests execute**. The spec is unverifiable until auth is restored.
+
+**Why I did not act autonomously:** the only fix is high-blast-radius ΓÇö either restore KeyVault access for the containers, or inject one shared `Jwt__Secret` into all OSDM services in docker-compose and `docker compose up -d --force-recreate`. Recreating the 16-service stack risks bringing the currently-working services (rail-run, nomenclature ΓÇö Up 2 days with a valid in-memory secret) up secret-less and breaking cross-service JWT validation. That needs your sign-off.
+
+**What I need from you (pick one):**
+1. Restore KeyVault access for the containers (e.g. reachable `az login` / managed identity in-container), **or**
+2. Authorize me to add one shared explicit `Jwt__Secret` to all OSDM services and recreate them.
+
+Once auth works, the verify-and-finish step is: `cd Admin-App && npm run e2e -- e2e/tests/access-control`; if green, commit `feat(compositions): [RBAC 12/12][E2E] ...` and set #247 `passes: true`.
+
+Recorded as the 8th verification in `ralph/activity.md`. Recommend keeping the Ralph loop **stopped** on #247 until then.
+
