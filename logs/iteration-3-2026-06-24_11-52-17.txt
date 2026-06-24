@@ -1,0 +1,15 @@
+﻿Task #258 complete.
+
+Implemented the SYS-OPS-COMP-04 LOCAL reporting catalog report ΓÇö a single-source pass-through over the `railrun.seat-map-detail` partial. Added the runner, a dedicated `trainNumber`+`date` parser path with two new error codes (bg/en resx), DI registration, the resolver wiring on `RailRunReportingPartialClient` (the missing link ΓÇö task 257 only wired the RailRun gateway side), the SQL seed row, and tests. All suites green: Infrastructure.Tests 1595/1595, Application.Tests 175/175. Committed; tasks.json #258 marked `passes: true`; activity logged.
+
+<task-complete>
+  <task-id>258</task-id>
+  <description>[WAGON-OCC 3/8][BE] Reporting catalog report SYS-OPS-COMP-04 (handler + SQL seed + DI). Single-source pass-through over railrun.seat-map-detail. Spec ┬º4.2-4.3.</description>
+  <commit>521d4782d</commit>
+  <tests>ReportingService.Infrastructure.Tests 1595/1595; ReportingService.Application.Tests 175/175</tests>
+</task-complete>
+<status>CONTINUE</status>
+<next-task>259</next-task>
+
+Stopping here per the one-task-per-iteration rule.
+

@@ -7979,7 +7979,7 @@
         "action": "cd OSDM-Src && dotnet test for RailRunService.Application(.Tests) green. gitnexus detect-changes to confirm scope. Commit."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 257,
@@ -8004,7 +8004,7 @@
         "action": "cd OSDM-Src && dotnet test RailRunService.Application.Tests green. Commit."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 258,
@@ -8029,7 +8029,7 @@
         "action": "cd OSDM-Src && dotnet test ReportingService.Application.Tests / Infrastructure green. Deploy ReportingServiceSQL so the seed lands (MERGE upsert). Commit."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 259,
@@ -8054,7 +8054,7 @@
         "action": "cd OSDM-Src && dotnet test ReportingService.Application.Tests green (incl. ExportReportByCodeCommandHandlerTests). Verify GET /reporting-service/api/v1/reports/exports/SYS-OPS-COMP-04?format=xlsx&trainNumber=...&date=... returns a multi-sheet xlsx. Commit."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 260,
@@ -8079,7 +8079,7 @@
         "action": "Apply seed locally; call the COMP-04 export and confirm a non-empty matrix with both indicators. Commit."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 261,
@@ -8104,7 +8104,7 @@
         "action": "cd Admin-App && npm run lint (changed files) && npm run type-check && npm run test:run green. Commit."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 262,
@@ -8129,7 +8129,7 @@
         "action": "cd Admin-App && npm run lint (changed files) && npm run type-check && npm run test:run green. Commit."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 263,
@@ -8152,6 +8152,36 @@
         "id": "263.3",
         "phase": "DONE",
         "action": "cd Admin-App && npm run e2e -- e2e/tests/compositions/wagon-occupancy-report against running reporting-service + rail-run-service — green. Confirm 256-262 pass. Mark feature done. Commit."
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 264,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[WAGON-OCC 9/9][BE] Report must show ALL physical seats as rows (free seat = empty cell) and all route stops as columns, and fix the wagon occupancy % (currently wrongly 100% because only SOLD/BLOCKED seats are emitted). Old-system format: every seat row present; occupied=✓, blocked=Б, free=empty. Spec: ralph/wagon-occupancy-report-spec.md §2.",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "264.1",
+        "phase": "RECON",
+        "action": "Read RailRunService.Infrastructure/Repositories/RailRunReportingRepository.cs GetSeatMapDetailAsync (line ~186): currently 'from sa in db.SeatAvailabilities ... join sd on sa.SeatDefId' = anchored on SeatAvailability (inner join) -> only occupied/blocked seats appear and only segments that have data. Find how to enumerate ALL physically-present seats per carriage: CompositionCarriage -> its coach layout -> SeatDefinitions where IsPhysicallyPresent=1 (locate the carriage->layout->SeatDefinitions.LayoutId link). Read tripScheduleService.GetStopsAsync (ordered route stops -> segments = consecutive stop pairs) and ReportingService.Application/Reporting/WagonOccupancyMatrixXlsxBuilder.cs — NOTE it derives seat rows, station columns AND the % denominator (occupiedSeats / seats.Count) from the emitted rows, so emitting the full grid auto-fixes rows+columns+%. Confirm SeatAvailability segment granularity: per-segment rows vs a single spanning row (SegmentStartUic->SegmentEndUic across several stops)."
+      },
+      {
+        "id": "264.2",
+        "phase": "RED/GREEN",
+        "action": "Rework GetSeatMapDetailAsync to emit the FULL grid: for the composition(s) matching trainNumber+travelDate, for each carriage x each physically-present SeatDefinition x each route segment, set Status = the matching SeatAvailability row (LEFT JOIN by CompCarriageId + SeatDefId + segment UICs + TravelDate) else AVAILABLE (free). If availability is stored as spanning rows (start->end across multiple stops), mark every covered segment occupied. Build the cross-product in-memory (fetch physical seats per carriage, fetch availability, fetch ordered stops; join in C#), preserving ordering (WagonSequence, SeatNumber ordinal, SegmentIndex). Update RailRunService.Infrastructure.Tests/Reporting/SeatMapDetailRepositoryTests.cs: a free seat appears as rows with AVAILABLE on every segment; a segment with zero sales still appears as a column; occupied/blocked rows unchanged; physically-absent seats excluded."
+      },
+      {
+        "id": "264.3",
+        "phase": "RED/GREEN",
+        "action": "Verify ReportingService.Application/Reporting/WagonOccupancyMatrixXlsxBuilder.cs renders AVAILABLE as an EMPTY cell (writes a mark only for occupied ✓ / blocked Б), lists every physical seat as a row and every stop as a column, and occupancy % = (#physical seats with >=1 occupied|blocked segment / #physical seats)*100. Only change builder logic if AVAILABLE currently emits a mark. Update ReportingService.Application.Tests/WagonOccupancyMatrixXlsxBuilderTests.cs: full-grid input -> free seats present as empty rows; % < 100 (e.g. wagon 70-71 with 15 SOLD + 3 BLOCKED of N physical seats -> correct %, not 100)."
+      },
+      {
+        "id": "264.4",
+        "phase": "DONE",
+        "action": "cd OSDM-Src && dotnet test (RailRunService + ReportingService) green. Rebuild + recreate reporting-service and rail-run-service images (docker compose up -d --build reporting-service rail-run-service). Extend Admin-App e2e/tests/compositions/wagon-occupancy-report.spec.ts: assert free seats appear as rows with empty cells and the wagon occupancy % is < 100, for composition 'БВ 2601-18.06.2026' / 2026-06-18 (seed has 15 SOLD + 3 BLOCKED per wagon). npm run e2e green. Commit."
       }
     ],
     "passes": false

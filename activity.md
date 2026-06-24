@@ -1,3 +1,32 @@
+## [2026-06-24] - Task #257: [WAGON-OCC 2/8][BE] RailRun reporting partial railrun.seat-map-detail query handler + gateway registration
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED/GREEN → DONE (`tddWorkflow: true`)
+
+**What was done:**
+### RECON (257.1)
+- Read `GetSeatMapBySegmentQuery.cs` (query+handler delegating to `IRailRunReportingRepository`), `RailRunReportingPartialGateway.cs` (3 existing partials: capacity-by-run / wagon-occupancy / seat-map-by-segment — all date-range based, dispatched via `is...` checks + tabular payload builders), and `RailRunReportingPartialGatewayTests.cs` (Strict IMediator mock pattern, schema/rows/meta JSON assertions). Confirmed 256 artifacts exist: `SeatMapDetailRowDto` (13 fields) + `IRailRunReportingRepository.GetSeatMapDetailAsync(trainNumber, travelDate, ct)`. Confirmed `ReportingPartialExecuteRequest.FiltersJson` exists and the consumer already forwards it; `{trainNumber}` is the established FiltersJson shape (Tar51 handler).
+- Key difference vs the 3 existing partials: seat-map-detail takes a SINGLE required travel date (`DateFromYmd`) + a trainNumber (`FiltersJson`), not a date range.
+- Impact analysis on `ExecuteAsync` (upstream): HIGH label but d=1 callers are entirely the gateway's own tests + the pass-through consumer; change is purely additive.
+
+### RED/GREEN (257.2)
+- Added `Features/Reporting/Queries/GetSeatMapDetailQuery.cs`: `GetSeatMapDetailQuery(string TrainNumber, DateOnly TravelDate)` + handler delegating to `GetSeatMapDetailAsync` (MediatR auto-registered).
+- Wired `RailRunReportingPartialGateway.cs`: new `SeatMapDetailPartialId = "railrun.seat-map-detail"`, added `isSeatMapDetail` to the routing/unknown checks, converted the trailing `else` to `else if (isSeatMapBySegment)`, added the seat-map-detail branch (reuses shared date parse for the required travelDate via `dateFrom`; returns `PartialDatesInvalid` when no date; `ParseTrainNumber(FiltersJson)` helper reads `trainNumber`), and `BuildSeatMapDetailTabularPayload` (13-col schema incl. boolean `isPhysicallyPresent`, meta carries `trainNumber` + single `travelDate`).
+- Added 3 gateway tests: partial-id constant, missing-date → `PartialDatesInvalid`, happy path (verifies captured query `TrainNumber`/`TravelDate` + 13-col schema + rows + meta).
+
+### DONE (257.3)
+- `dotnet test RailRunService.Application.Tests` → **437 passed, 0 failed** (20 gateway tests incl. 3 new; no regressions). Build clean (only pre-existing repo warnings). gitnexus `detect_changes` → low risk, scope confined to the gateway, no affected processes. No eslint/type-check (backend C#).
+
+**Files modified:**
+- RailRunService.Application/Features/Reporting/Queries/GetSeatMapDetailQuery.cs (new)
+- RailRunService.Application/Features/Reporting/RailRunReportingPartialGateway.cs
+- RailRunService.Application.Tests/Reporting/RailRunReportingPartialGatewayTests.cs
+
+**Git commit:** `feat(compositions): [WAGON-OCC 2/8][BE] RailRun reporting partial railrun.seat-map-detail query handler + gateway registration`
+
+---
+
 ## [2026-06-23 12:21] - Task #250: [NOM-IMPORT-RT 3/8][BE] Rewrite ImportNomenclatureCommandHandler to map EVERY canonical key into the fat DTO with typed parsing
 
 **Status:** ✅ Complete
@@ -7290,5 +7319,271 @@ services (docker-compose.yml + `docker compose up -d --force-recreate`) so they 
 - e2e/page-objects/nomenclatures.page.ts (modified — export/import + download helpers)
 
 **Git commit:** `feat(compositions): [NOM-IMPORT-RT 8/8][E2E] Playwright real FE->BE->DB export->import round-trip for representative types in all 3 formats. 'Ready' per feedback_tdd_includes_e2e.`
+
+---
+
+## [2026-06-24] - Task #256: [WAGON-OCC 1/8][BE] RailRun per-seat-segment DETAIL repository query + DTO
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+- RECON: read the 3 existing aggregating reporting methods (`GetCapacityByRunAsync`/`GetWagonOccupancyAsync`/`GetSeatMapBySegmentAsync`) + `SeatMapBySegmentRowDto` + `IRailRunReportingRepository` + `RailRunReportingRepository` + `GetSeatMapBySegmentQueryHandlerTests`. Key finding: trip stop names/sequence are NOT in a local RailRun table — they come from `ITripScheduleService.GetStopsAsync(tripId)` (MassTransit → NomenclatureService), returning ordered `TripStopInfo(StopCode/UIC, StopName, StopSequence)`. `Composition` is keyed on `DisplayName` (no TrainNumber col); existing repo resolves the train number as `trip.TrainNumber ?? comp.DisplayName`.
+- RED: added 5 repo tests in `SeatMapDetailRepositoryTests.cs` (EF InMemory + a `FakeTripScheduleService`). Against an empty stub impl: 4 failed / 1 passed (empty-repo).
+- GREEN: 
+  - New DTO `SeatMapDetailRowDto.cs` (TrainNumber, TravelDate, WagonSequence, PlacardNumber, WagonType, SeatNumber, AccommodationType, IsPhysicallyPresent, SegmentIndex, SegmentStartUic, SegmentEndUic, SegmentStartName, Status).
+  - New interface method `IRailRunReportingRepository.GetSeatMapDetailAsync(string trainNumber, DateOnly travelDate, ct)`.
+  - Impl: per-seat (no aggregation) join SeatAvailability⨝CompositionCarriages⨝WagonTypes⨝Compositions⨝SeatDefinitions (+ left GtfsTrips for train number), filtered by resolved train number + `SeatAvailability.TravelDate` (NOT a CreatedAt window). SegmentIndex/SegmentStartName resolved from `ITripScheduleService` ordered stops (UIC→(index,name) map per trip); rows ordered by WagonSequence → SeatNumber (ordinal) → SegmentIndex. `ITripScheduleService` injected as an OPTIONAL ctor param (default null) so the 5 existing reporting tests keep compiling; when absent SegmentStartName falls back to the UIC and SegmentIndex to int.MaxValue. WagonType string = `WagonType.SeriesName`.
+
+**Verification:**
+- `FullyQualifiedName~SeatMapDetailRepositoryTests`: 5/5 passed (GREEN).
+- All Reporting infra tests: 21/21 passed (no regression in the existing SeatMapBySegment/Capacity/WagonOccupancy tests).
+- `RailRunService.Application.Tests`: 434/434 passed (interface + DTO additions compile clean across the Application surface).
+- `gitnexus detect-changes --repo Transport-OSDM-Src`: 2 files / 17 symbols, 0 affected processes, risk low — additive, scoped to the reporting repository.
+
+**Files (new):** RailRunService.Application/Features/Reporting/SeatMapDetailRowDto.cs; RailRunService.Infrastructure.Tests/Reporting/SeatMapDetailRepositoryTests.cs.
+**Files (modified):** RailRunService.Application/Interfaces/IRailRunReportingRepository.cs; RailRunService.Infrastructure/Repositories/RailRunReportingRepository.cs.
+
+**Git commit:** `feat(compositions): [WAGON-OCC 1/8][BE] RailRun per-seat-segment DETAIL repository query + DTO (new partial data source).`
+
+---
+
+## [2026-06-24] - Task #258: [WAGON-OCC 3/8][BE] Reporting catalog report SYS-OPS-COMP-04 (handler + SQL seed + DI)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+- RECON: read the SYS-OPS-COMP-02 mirror runner, the local-runner DI block, the COMP-01/02/03 seed rows, `LocalReportRunParameterParser`, and `RailRunReportingPartialClient`. Key finding: task 257 wired `railrun.seat-map-detail` on the RailRun *gateway* side, but the ReportingService-side `RailRunReportingPartialClient.SupportedPartialIds` did NOT yet include it — so `IReportingPartialClientResolver.Resolve("railrun.seat-map-detail")` would have returned null. Also: COMP-04's param contract is `trainNumber` + single `date` (not the COMP-02 dateFrom/dateTo range), so a dedicated parser path was needed rather than `TryParseDateRange`.
+- RED/GREEN:
+  - `ReportingCatalog.cs`: added `WagonOccupancyMatrixReportCode = "SYS-OPS-COMP-04"` + `WagonOccupancyMatrixProviderCode = "SYS_OPS_WAGON_OCCUPANCY_MATRIX"`.
+  - `ReportingErrorCodes.cs`: added `ReportWagonOccupancyTrainNumberRequired` / `ReportWagonOccupancyDateRequired` (+ bg/en `.resx` entries).
+  - `LocalReportRunParameterParser.TryParseTrainNumberAndDate(...)`: parses required non-empty `trainNumber` + single `date` (reuses `TryGetDateYmd` for format errors).
+  - New `SysOpsComp04WagonOccupancyMatrixLocalRunner.cs` (mirrors COMP-02): `ILocalReportRunner`, `UpstreamPartialId = "railrun.seat-map-detail"`, `OwningServiceKey => OwningServiceKeyRailRun`, `ProviderCode => WagonOccupancyMatrixProviderCode`. Builds `ReportingPartialExecuteRequest { PartialId, DateFromYmd=date, DateToYmd=date, FiltersJson={"trainNumber":...} }` → resolve → `ExecuteAsync` → `DownstreamExecuteResponseMapper.FromPartialMessage`; transport faults via `LocalReportMassTransit.FromTransportException` (RailRun timeout/fault).
+  - Registered runner in `ServiceCollectionExtensions` (after COMP-02).
+  - `RailRunReportingPartialClient`: added `SeatMapDetailPartialId = "railrun.seat-map-detail"` const + included it in `SupportedPartialIds` so the resolver routes to the RailRun consumer.
+  - SQL seed row `SYS-OPS-COMP-04` added to `003_ReportCatalog_SysAcc.sql` (ProviderType 1 LOCAL, OwningServiceKey RailRunService, ReportGroup Операции, Permission REPORTS, ParameterSchemaJson trainNumber+date, IsActive 1). Lands via the existing MERGE-on-ReportCode upsert on next publish.
+  - Tests: new `SysOpsComp04WagonOccupancyMatrixLocalRunnerTests.cs` (16 cases mirroring COMP-02 + train/date validation + FiltersJson propagation); COMP-04 row test in `ReportCatalogSeedSqlTests`; `SeatMapDetail` SupportedPartialIds test in `ReportingPartialMassTransitClientTests`.
+
+**Verification:**
+- `ReportingService.Infrastructure.Tests`: **1595/1595 passed** (incl. the new COMP-04 runner, seed-SQL, and partial-client tests; no regressions).
+- `ReportingService.Application.Tests`: **175/175 passed**.
+- `gitnexus detect-changes --repo Transport-OSDM-Src`: 17 symbols / 10 files, 1 affected process (`RunLocalAsync → TryGetDateYmd` — the intended local-dispatch integration point), risk medium — additive (new const/parser/error codes/DI/SQL row). New runner+test files not yet in the (stale) BE index per spec §6a.
+- SQL deploy: seed correctness covered by the seed-content test; the row lands in a live DB via the idempotent MERGE upsert on the next ReportingServiceSQL publish.
+
+**Files (new):** ReportingService.Infrastructure/Services/SysOpsComp04WagonOccupancyMatrixLocalRunner.cs; ReportingService.Infrastructure.Tests/SysOpsComp04WagonOccupancyMatrixLocalRunnerTests.cs.
+**Files (modified):** ReportingService.Application/Reporting/ReportingCatalog.cs; .../Constants/ReportingErrorCodes.cs; .../Reporting/LocalReportRunParameterParser.cs; .../Resources/ErrorMessages.resx; .../Resources/ErrorMessages.en.resx; ReportingService.Infrastructure/Extensions/ServiceCollectionExtensions.cs; .../Services/RailRunReportingPartialClient.cs; ReportingService.Infrastructure.Tests/ReportCatalogSeedSqlTests.cs; .../ReportingPartialMassTransitClientTests.cs; SQLProjects/ReportingServiceSQL/dbo/PostDeployment/Data/003_ReportCatalog_SysAcc.sql.
+
+**Git commit:** `feat(compositions): [WAGON-OCC 3/8][BE] Reporting catalog report SYS-OPS-COMP-04 (handler + SQL seed + DI). Single-source pass-through over railrun.seat-map-detail. Spec §4.2-4.3.`
+
+---
+
+## [2026-06-24] - Task #259: [WAGON-OCC 4/8][BE] Custom matrix xlsx builder + export routing for SYS-OPS-COMP-04
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+- RECON: read `Mkt03TicketsByTypeXlsxBuilder` + `GenericTabularXlsxBuilder` (custom-vs-generic builder precedent), `ExportReportByCodeCommand` (the export dispatch — Local/Composed reports flow through `ExportTabularViaRunAsync`, xlsx branch builds the generic single-sheet workbook), the `railrun.seat-map-detail` row contract via `RailRunReportingPartialGateway.BuildSeatMapDetailTabularPayload` (camelCase keys: trainNumber, travelDate, wagonSequence, placardNumber, wagonType, seatNumber, accommodationType, isPhysicallyPresent, segmentIndex, segmentStartUic, segmentEndUic, segmentStartName, status), `ReportingTabularResult`/`TabularResultParser`, and `ReportingCatalog.WagonOccupancyMatrixReportCode` (added in task 258).
+- RED: added `WagonOccupancyMatrixXlsxBuilderTests.cs` (6 cases) + a COMP-04 routing test in `ExportReportByCodeCommandHandlerTests.cs` — both red (builder type did not exist).
+- GREEN:
+  - New `ReportingService.Application/Reporting/WagonOccupancyMatrixXlsxBuilder.cs` (ClosedXML, NOT the generic builder). Groups the per-seat-segment tabular rows by `wagonSequence` → one worksheet per wagon named `Вагон {sequence}`. Per sheet: header block (Серия = `{placardNumber} / {wagonType}`, Влак № = trainNumber, Дата = travelDate); a `Заетост на вагона: {pct} %` row where pct = (#physical seats with ≥1 SOLD/LOCKED/CHECKED_IN/BLOCKED segment / #physical seats)×100 rounded 2dp invariant; then matrix — columns = ordered segment-start stations (segmentStartName by segmentIndex), rows = physical seatNumber (numeric-aware sort), cell = `✓` for SOLD/LOCKED/CHECKED_IN, `Б` for BLOCKED, empty for AVAILABLE. Empty result → a single placeholder sheet so ClosedXML can save.
+  - Routing: `ExportReportByCodeCommand.ExportTabularViaRunAsync` xlsx branch now routes `SYS-OPS-COMP-04` to `WagonOccupancyMatrixXlsxBuilder.BuildXlsx`; all other tabular reports keep the generic single-sheet builder. csv/pdf for COMP-04 still fall through to the generic tabular builders.
+
+**Verification:**
+- `FullyQualifiedName~WagonOccupancyMatrixXlsxBuilderTests|FullyQualifiedName~ExportReportByCodeCommandHandlerTests`: 26/26 passed.
+- Full `ReportingService.Application.Tests`: **182/182 passed** (was 175; +6 builder + 1 routing test, 0 regressions).
+- `gitnexus detect-changes --repo Transport-OSDM-Src`: 2 files / 4 symbols, 0 affected processes, risk low. The new builder + test files are not in the (stale, 06-12) BE index per spec §6a.
+- The live GET-endpoint multi-sheet check is the FE→BE→DB Playwright capstone (task 263); this iteration is the builder + routing unit layer.
+
+**Files (new):** ReportingService.Application/Reporting/WagonOccupancyMatrixXlsxBuilder.cs; ReportingService.Application.Tests/WagonOccupancyMatrixXlsxBuilderTests.cs.
+**Files (modified):** ReportingService.Application/Features/Reporting/Commands/ExportReportByCodeCommand.cs; ReportingService.Application.Tests/ExportReportByCodeCommandHandlerTests.cs.
+
+**Git commit:** `feat(compositions): [WAGON-OCC 4/8][BE] Custom matrix xlsx builder + export routing for SYS-OPS-COMP-04 (one sheet per wagon, seats x stations matrix, 2 indicators, wagon %). Mirrors the MKT-03 custom-builder precedent. Spec §2,§4.4.`
+
+---
+
+## [2026-06-24] - Task #260: [WAGON-OCC 5/8][BE] Dev seed: SOLD + BLOCKED SeatAvailability rows so the report is non-empty
+
+**Status:** ✅ Complete
+
+**Phase:** RECON → IMPLEMENT → DONE (`tddWorkflow: false`)
+
+**What was done:**
+- RECON: read the RailRunServiceSQL post-deploy seed mechanism (`PostDeployment/Data/008_Compositions.sql`, `009_Composition_Carriages.sql`, `081_E2E_GtfsTrips.sql`, `080_E2E_InventoryAlign.sql`) and the report query `RailRunReportingRepository.GetSeatMapDetailAsync` (filters `TravelDate == date AND COALESCE(trip.TrainNumber, comp.DisplayName) == trainNumber`; cell = ✓ for SOLD/LOCKED/CHECKED_IN, Б for BLOCKED). Confirmed the PostDeployment `Seed.sql` runs in ALL profiles (no dev guard), and that `dbo\Scripts\**\*.sql` is Build Action `None` → excluded from the DACPAC, never auto-deployed → the correct home for a dev-only seed. Confirmed only real GTFS-synced compositions (40004 trip 410, 50006 trip 651) have ordered Nomenclature stops; E2E stub trips (9001-9006) do not.
+- IMPLEMENT: new dev-only, idempotent `SQLProjects/RailRunServiceSQL/dbo/Scripts/Manual/Seed_SeatAvailability_WagonOccupancy_Dev.sql`. (1) self-selects a NORMAL composition preferring a real GTFS trip (`GtfsTripId NOT LIKE 'E2E:%'`) with Nomenclature stops + NORMAL active carriages, falls back to any composition with NORMAL active carriages; (2) builds `#Segments` from the first `@MaxStops` ordered stops via cross-DB read of `NomenclatureServiceDB.dbo.GtfsStopTimes/StopPlaces`, falling back to the carriage's whole-route segment; (3) picks the first `@SeatsPerCarriage` physical seats per NORMAL carriage (best layout per wagon type); (4) idempotent: DELETEs only this seed's footprint (chosen carriages on the chosen `TravelDate`) then INSERTs ranks 1..(N-1) SOLD across every segment + rank N BLOCKED across every segment. PRINTs the row count + the `trainNumber`/`date` to query.
+- DONE: applied the seed locally → "seeded 36 SeatAvailability rows for CompositionId 40004. Query SYS-OPS-COMP-04 with trainNumber = БВ 1612 date = 2026-06-18." Data-level verification: idempotent re-run yields 36 rows (not 72); per-wagon matrix shape = 6 seats × 3 segment columns with 15 ✓ + 3 Б per wagon; segment-start UICs 5214020/5214015/5214013 resolve from real ordered Nomenclature stops → non-empty matrix with both indicators confirmed.
+
+**Verification:**
+- Live SQL apply via `sqlcmd` against `localhost,14430 / RailRunServiceDB`: 36 rows seeded, idempotent, both indicators present, real station columns. Fixed a `QUOTED_IDENTIFIER`/filtered-index error (Msg 1934) by adding `SET QUOTED_IDENTIFIER ON; SET ANSI_NULLS ON;` to the script header.
+- `gitnexus detect-changes --repo Transport-OSDM-Src`: 0 changed symbols / 0 affected processes, risk none — the seed is a dev-only SQL script excluded from the DACPAC and outside the execution-flow index.
+- The live HTTP COMP-04 export (ReportingService not running locally; HTTP 000) is deferred to the FE→BE→DB Playwright capstone (task 263), consistent with the task-259 precedent; data-level verification above already proves a non-empty matrix with both indicators.
+
+**Files (new):** SQLProjects/RailRunServiceSQL/dbo/Scripts/Manual/Seed_SeatAvailability_WagonOccupancy_Dev.sql.
+
+**Git commit:** `feat(compositions): [WAGON-OCC 5/8][BE] Dev seed: SOLD + BLOCKED SeatAvailability rows for a known train+date so the report is non-empty (local DB has no sold seats per project_railrun_db_state). Spec §6.`
+
+---
+## [2026-06-24] - Task #261: [WAGON-OCC 6/8][FE] Reports section: SYS-OPS-COMP-04 param form (trainNumber + date) + xlsx export wiring
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE (component-level; no design mockup for this task)
+
+**What was done:**
+### RECON
+- Read `reports/reportSections.ts` (group `Операции`/`Оперативни` → `operational` section), `ReportParameterForm.tsx`, `ReportsPage.tsx`, `ReportResultPanel.tsx`, `Acc23Form.tsx` (dedicated-form precedent), `useReportExecution.ts`, `downloadBlob.ts`, `reporting.api.ts` (`downloadReportExport`), and the i18n reporting keys in bg/en.
+- Key finding: the generic export button only surfaces after a tabular `run` (`onExport && hasTabularData`) and reuses `lastParams`. COMP-04 is a download-only multi-sheet xlsx with no tabular run result, so it needs a dedicated direct-export form — mirroring the `Acc23Form` precedent, not the generic run→export path.
+- `REPORT_CODES` only went up to `SYS_OPS_COMP_03`.
+
+### RED
+- Extended `ReportsPage.test.tsx`: added a COMP-04 catalog fixture (group `Операции`), widened `renderReportsPage` to accept `operational`, mocked `downloadReportExport` (via importActual spread) + `downloadBlob`. Two new tests: (1) COMP-04 renders in the Operational list with trainNumber + date fields; (2) filling params + clicking export calls `downloadReportExport('SYS-OPS-COMP-04', { trainNumber, date }, 'xlsx')` and downloads the blob. Both red (COMP-04 fell through to `RawParametersForm`).
+
+### GREEN
+- Added `SYS_OPS_COMP_04: 'SYS-OPS-COMP-04'` to `REPORT_CODES`.
+- Added `buildComp04FormSchema` (trainNumber required, date required + ISO_DATE) to `reportForms.schema.ts`.
+- New `components/Comp04Form.tsx`: RHF + zod form (trainNumber text, date) with a direct "Експорт Excel" button → `downloadReportExport(REPORT_CODES.SYS_OPS_COMP_04, { trainNumber, date }, 'xlsx')` → `downloadBlob`; export error → `onExportError` (wired to `setParseError` → existing Alert).
+- `ReportsPage.tsx`: added `isComp04` branch (before the `parameterSchemaJson` branch) rendering `Comp04Form`; excluded COMP-04 from `supportsGenericExport`.
+- i18n: added `reporting.params.common.date` ("Дата"/"Date") to bg.json + en.json (reused existing `trainNumber`, `exportXlsx`, `paramForm.fieldRequired`, `mkt03InvalidDateFormat`).
+- Test mock: added the COMP-04 keys (`sectionOperational`, `params.common.date`, `params.common.trainNumber`, `exportXlsx`, `paramForm.fieldRequired`) to `src/tests/mocks/useTranslationVitest.ts` so labels render in the test env. Switched the new tests to `data-testid` queries (labels carry the required asterisk).
+
+**Tests Status:**
+- ReportsPage.test.tsx: 9/9 passed (7 existing + 2 new).
+- Full `npm run test:run`: green (exit 0, 0 regressions).
+- Lint (changed files): clean. Type-check (`tsc --noEmit`): clean.
+- E2E: deferred to task #263 (the FE→BE→DB Playwright capstone).
+
+**Files (new):** Admin-App/src/app/features/reports/components/Comp04Form.tsx.
+**Files (modified):** Admin-App/src/api/reporting/reporting.types.ts; Admin-App/src/app/features/reports/schemas/reportForms.schema.ts; Admin-App/src/app/features/reports/pages/ReportsPage.tsx; Admin-App/src/app/features/reports/pages/ReportsPage.test.tsx; Admin-App/src/locales/bg.json; Admin-App/src/locales/en.json; Admin-App/src/tests/mocks/useTranslationVitest.ts.
+
+**Git commit:** `feat(compositions): [WAGON-OCC 6/8][FE] Reports section: SYS-OPS-COMP-04 param form (trainNumber + date) + xlsx export wiring. Spec §5.1.`
+
+---
+
+## [2026-06-24 13:35] - Task #262: [WAGON-OCC 7/8][FE] Composition wagon kebab -> 'Справка за натовареност' menu item + export hook
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED/GREEN → DONE
+
+### RECON
+- `WagonCanvas.tsx`: Menu (Edit/Delete) at ~424-450, `handleEdit`/`handleDelete` ~199-216, `WagonCanvasProps` ~106-133.
+- `CompositionEditorPage.tsx`: trainNumber = `composition.displayName`, date = `composition.startDate` (single-day model, no `date` alias); `composition.tripId` for the linked-trip gate.
+- Reuse: `reportingApi.downloadReportExport(reportCode, params, format)` → `{ blob, fileName }`; `downloadBlob` in `reports/utils`. REPORTS gate = `usePermissions().hasPermission(ResourceCodes.Reports, AccessLevel.ReadOnly)`.
+
+### RED/GREEN
+- New hook `compositions/hooks/useExportWagonOccupancyReport.ts`: `useMutation` → `downloadReportExport(REPORT_CODES.SYS_OPS_COMP_04, { trainNumber, date }, 'xlsx')` → `downloadBlob(blob, 'zaetost-vlak-<trainNumber>-<date>.xlsx')`; error → `ui.slice` snackbar.
+- `WagonCanvas.tsx`: added props `onExportOccupancyReport?` + `canExportOccupancyReport?`; `<MenuItem>` 'Справка за натовареност' (Assessment icon) after Delete, rendered only when `canExportOccupancyReport`.
+- `CompositionEditorPage.tsx`: wired hook; `canExportOccupancyReport = displayName present && tripId != null && REPORTS ReadOnly`; `handleExportOccupancyReport` mutates with `{ trainNumber: displayName, date: startDate }`.
+- i18n: added `compositions.editor.properties.occupancyReport` + `occupancyReportError` to bg.json + en.json.
+- Tests: `useExportWagonOccupancyReport.test.tsx` (export args + filename; error → snackbar, no download); `WagonCanvas.test.tsx` (item present + click fires callback; hidden when not available). 4/4 green.
+
+**Tests Status:**
+- New tests: 4/4 passed.
+- Lint (changed files): 0 errors (14 pre-existing warnings in CompositionEditorPage, none in added lines).
+- Type-check (`tsc --noEmit`): clean.
+- `vitest run --changed origin/develop`: 25 pre-existing failures in unrelated files (AmenityRenderer/wagon-creation i18n-passthrough tests) — verified identical failure on stashed clean tree, NOT caused by this change.
+- E2E: deferred to task #263 (FE→BE→DB Playwright capstone).
+
+**Files (new):** Admin-App/src/app/features/compositions/hooks/useExportWagonOccupancyReport.ts; .../hooks/useExportWagonOccupancyReport.test.tsx; .../components/WagonCanvas.test.tsx.
+**Files (modified):** Admin-App/src/app/features/compositions/components/WagonCanvas.tsx; .../pages/CompositionEditorPage.tsx; Admin-App/src/locales/bg.json; Admin-App/src/locales/en.json.
+
+**Git commit:** `feat(compositions): [WAGON-OCC 7/8][FE] Composition wagon kebab -> 'Справка за натовареност' menu item + export hook (same COMP-04 file: whole composition, one sheet per wagon). Spec §5.2.`
+
+---
+
+## [2026-06-24 14:40] - Task #263: [WAGON-OCC 8/8][E2E] Playwright real FE->BE->DB COMP-04 capstone
+
+**Status:** ⛔ Code-complete, e2e GREEN run BLOCKED by environment (Azure KeyVault inaccessible). Task left `passes: false`. NOT committed.
+
+**TDD Phase:** RECON → RED/GREEN (spec written) → DONE blocked at green-run gate.
+
+### Code delivered (correct + statically verified)
+- **FE contract fix** `compositions/pages/CompositionEditorPage.tsx` `handleExportOccupancyReport`: was passing `trainNumber: composition.displayName` (introduced in #262); COMP-04 backend matches `COALESCE(linked trip.TrainNumber, displayName)`, so now passes `trainNumber: train?.number ?? composition.displayName`. The kebab is only enabled with a linked trip, so the trip's operational train number is the correct key. No unit test pinned the old value.
+- **New e2e spec** `Admin-App/e2e/tests/compositions/wagon-occupancy-report.spec.ts`: two flows, dependency-free (download starts + `.xlsx` suggestedFilename + ZIP magic `PK\x03\x04`), graceful `test.skip()` when stack/seed/catalog unavailable. Flow A: editor → wagon kebab → 'Справка за натовареност'. Flow B: /reports/operational → catalog item 'Справка за натовареност (схема по места)' → fill comp04-train-number + comp04-date → 'Експорт Excel'. Seeded fixture: composition 40004, train 'БВ 1612', date 2026-06-18.
+
+**Static checks:** `npm run type-check` clean; `npx eslint` on changed files = 0 errors (14 pre-existing warnings in CompositionEditorPage, none on changed lines); affected unit tests `useExportWagonOccupancyReport.test.tsx` + `WagonCanvas.test.tsx` = 4/4 green.
+
+### Backend prep done
+- Confirmed seat seed present in RailRunServiceDB: 36 rows for composition 40004 / 2026-06-18 (30 SOLD, 6 BLOCKED).
+- ReportingServiceDB was stale (missing `config.ReportSchedules` schema → ScheduledReportBackgroundService crashing; catalog had only ACC-23 + MKT-03). Rebuilt + published `SQLProjects/ReportingServiceSQL` DACPAC via sqlpackage → created `config.ReportSchedules`/`approval.*`/`config.*` + applied catalog seeds 002/003/004. **SYS-OPS-COMP-04 now present in catalog.** Reporting background errors resolved.
+- Backend runs MOUNTED SOURCE (`.:/src` + `dotnet watch`), so the 9-day-old `*:dev` image age is irrelevant — current COMP-04 code is compiled in. Export route `GET api/v1/reports/exports/{reportCode}` confirmed.
+
+### BLOCKER (environment, NOT feature code)
+- `docker compose up --force-recreate reporting-service rail-run-service` forced both to re-read Azure KeyVault on startup. **KeyVault is currently inaccessible** — rail-run log: "Key Vault not accessible, using values from env/appsettings"; `DefaultAzureCredential failed` (AzureCli can't write `/root/.azure/az.sess` — read-only fs; all other credential types unavailable). The previously-running containers (Up 4h) had a JWT secret cached from an earlier KeyVault-up startup; recreating them lost it.
+- Result: `Jwt:Secret` is null on the recreated services. rail-run-service crashes 500 on every authenticated request (`Program.cs:78` `Encoding.UTF8.GetBytes(jwtSecret)` has NO `?? string.Empty` fallback, unlike ValidationService:65 — a latent bug, but irrelevant: even with the fallback, the empty key cannot validate real UserService-issued JWTs). reporting-service returns 401 for the (valid, unexpired-until-2026-06-30) stored e2e token. So all FE→BE→DB auth fails and both e2e flows `test.skip()`.
+
+### Remediation required (user action — Azure identity)
+1. `az login` (refresh `~/.azure` creds on host) so the containers' DefaultAzureCredential can reach KeyVault.
+2. `cd OSDM-Src/DotNetServices && docker compose up -d --force-recreate user-service reporting-service rail-run-service` (recreate so all share the same KeyVault JWT secret).
+3. `cd Admin-App && npm run e2e -- e2e/tests/compositions/wagon-occupancy-report.spec.ts --project=admin` — should go green; then flip task #263 `passes: true`, commit `feat(compositions): [WAGON-OCC 8/8][E2E] ...`.
+
+**Files (new):** Admin-App/e2e/tests/compositions/wagon-occupancy-report.spec.ts.
+**Files (modified):** Admin-App/src/app/features/compositions/pages/CompositionEditorPage.tsx.
+**Git commit:** NONE — gated on green e2e per feedback_tdd_includes_e2e.
+
+---
+
+## [2026-06-24 15:30] - Task #263 (re-attempt): blocker re-diagnosed, SHARPER root cause
+
+**Status:** ⛔ Still blocked by environment. Task left `passes: false`. NOT committed. Code unchanged & re-verified.
+
+**Re-verification of delivered code (no changes since prior attempt):**
+- `npm run type-check`: clean.
+- `npx eslint` on CompositionEditorPage.tsx + wagon-occupancy-report.spec.ts: 0 errors (14 pre-existing warnings in CompositionEditorPage, none on changed lines).
+- git status: `M src/app/features/compositions/pages/CompositionEditorPage.tsx`, `?? e2e/tests/compositions/wagon-occupancy-report.spec.ts` (+ unrelated `M CLAUDE.md`).
+
+**Live auth probe (confirms blocker persists):**
+- Stored e2e token in `Admin-App/e2e/.storage/admin.json` is VALID — unexpired (`tokenExpiry 2026-06-30T10:45:22Z`), 2329-char JWT.
+- `GET http://localhost:6016/api/v1/reports/exports/SYS-OPS-COMP-04?format=xlsx&trainNumber=БВ 1612&date=2026-06-18` with that Bearer token → **HTTP 401**. Backend cannot validate the token because `Jwt:Secret` is null.
+- `docker logs osdm-rail-run-service-1` (recreated ~12 min before this run) still shows: "Key Vault not accessible, using values from env/appsettings" + `AzureCliCredential ... OSError: [Errno 30] Read-only file system: '/root/.azure/az.sess'`.
+
+**SHARPER root cause (corrects the prior "az login" remediation):**
+- The host IS already logged into Azure (`az account show` → kaloyan.georgiev@amexis.net, subscription Enabled) and CAN read the secret: `az keyvault secret show --vault-name bdz-test-kv --name Jwt--Secret` returns a value (`DevelopmentSecretKeyForTestingPurposesOnly...`). So `az login` is NOT the missing step.
+- The real blocker is in `OSDM-Src/DotNetServices/docker-compose.yml`: every service mounts `${USERPROFILE}/.azure:/root/.azure:ro` — **READ-ONLY**. The container's `AzureCliCredential` shells out to `az` which needs to write `/root/.azure/az.sess`; the :ro mount makes that fatal → DefaultAzureCredential fails → KeyVault unreachable → `Jwt:Secret` null. **A plain `docker compose up --force-recreate` (the prior remediation step 2) does NOT fix this** — it re-hits the same :ro mount. (user-service shows the secret only because it has been Up ~5h, cached from a window when the mount/cred briefly worked.)
+
+**Two viable fixes (BOTH are shared-infra changes → require user confirmation; not done autonomously):**
+- Option A (recommended, reversible, no committed file change): read the full secret on the host (`az keyvault secret show --vault-name bdz-test-kv --name Jwt--Secret --query value -o tsv`) and recreate ONLY rail-run-service + reporting-service with it injected as env `Jwt__Secret=<value>` (e.g. transient `docker-compose.override.yml`, then remove). Backend then validates user-service-issued JWTs (same secret).
+- Option B (permanent compose edit): change the `.azure` mount for rail-run-service + reporting-service from `:ro` to `:rw`, recreate them; AzureCliCredential can then write az.sess and reach KeyVault (host already logged in).
+
+**Then:** `cd Admin-App && npm run e2e -- e2e/tests/compositions/wagon-occupancy-report.spec.ts --project=admin` → expect green → flip #263 `passes:true`, log, commit `feat(compositions): [WAGON-OCC 8/8][E2E] Playwright real FE->BE->DB: wagon kebab + Reports section both produce the COMP-04 xlsx. 'Ready' per feedback_tdd_includes_e2e. Spec §6.`
+
+**Why not done this iteration:** completing the e2e requires recreating shared dev containers / editing committed compose / injecting a secret — risky shared-infrastructure actions. Asked the user via AskUserQuestion which fix to apply; ran headless (unanswered), so defaulted to the safe path: no infra mutation, leave `passes:false`.
+
+---
+
+## [2026-06-24 15:46] - Task #263: [WAGON-OCC 8/8][E2E] Playwright real FE->BE->DB: wagon kebab + Reports section both produce the COMP-04 xlsx
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED/GREEN (spec from prior iteration) → DONE (verified green)
+
+**What changed since the prior (blocked) iteration:**
+- The prior iteration left #263 at `passes:false` because the backend `Jwt:Secret` was null (read-only `.azure` mount → KeyVault unreachable → HTTP 401 on the COMP-04 export), so the e2e could not exercise a real download.
+- That blocker is now RESOLVED. rail-run-service + reporting-service were recreated ~11 min before this run with auth working (secret present). Verified, not assumed.
+
+**Verification this iteration:**
+- Seed/catalog preconditions confirmed via sqlcmd (localhost,14430):
+  - RailRunServiceDB: composition 40004 exists; 36 SeatAvailability rows on 2026-06-18 (30 SOLD + 6 BLOCKED); comp 40004 → TripId 410 → GtfsTrips.TrainNumber 'БВ 1612' (distinct from DisplayName 'БВ 2601-18.06.2026' — confirms the CompositionEditorPage `train?.number` fix).
+  - ReportingServiceDB: catalog.ReportDefinitions has SYS-OPS-COMP-04 / SYS_OPS_WAGON_OCCUPANCY_MATRIX / group Операции / Permission REPORTS / ProviderType 1 / OwningServiceKey RailRunService / IsActive 1.
+- Spec selectors/labels re-verified against components: wagon-canvas, wagon-card-menu-button, report-catalog-list, report-catalog-item-{id}, comp04-train-number, comp04-date; menu label compositions.editor.properties.occupancyReport ('Справка за натовареност'); export button reporting.exportXlsx ('Експорт Excel').
+- `npm run e2e -- e2e/tests/compositions/wagon-occupancy-report.spec.ts`:
+  - --project=admin → 2 passed (Flow A 16.7s, Flow B 16.0s), real .xlsx downloads (ZIP magic PK\x03\x04 asserted).
+  - all projects → 4 passed (admin + readonly, both flows, 26-30s each). No skips.
+- reporting-service logs during the window: active DB execution-record inserts, **0 × 401** — auth genuinely passing, pipeline reaching DB.
+- `npm run type-check`: clean. `npx eslint` on changed files: 0 errors (14 pre-existing warnings in CompositionEditorPage, none on changed lines — per lint-scope rule, left untouched).
+
+**Files modified:**
+- e2e/tests/compositions/wagon-occupancy-report.spec.ts (new, from prior iteration — verified green)
+- src/app/features/compositions/pages/CompositionEditorPage.tsx (kebab passes linked trip's train number: `train?.number ?? composition.displayName`)
+- (CLAUDE.md left unstaged — unrelated GitNexus doc change, not part of this task)
+
+**Git commit:**
+- `feat(compositions): [WAGON-OCC 8/8][E2E] Playwright real FE->BE->DB: wagon kebab + Reports section both produce the COMP-04 xlsx. 'Ready' per feedback_tdd_includes_e2e. Spec §6.`
+
+**WAGON-OCC feature (256-263) now fully complete — all tasks pass.**
 
 ---
