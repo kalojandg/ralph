@@ -34,14 +34,21 @@
 
 > Съществуващите партиали `railrun.wagon-occupancy` / `railrun.seat-map-by-segment` носят само **агрегирани броячи** — НЕ per-seat детайл (изрично записано в SQL описанията на COMP-01/02/03 като „follow-up wave“). Затова е нужен **нов per-seat партиал**.
 
-1. **Нов RailRun партиал `railrun.seat-map-detail`:**
-   - `RailRunService.Application/Features/Reporting/SeatMapDetailRowDto.cs` (нов) — поля: `trainNumber, travelDate, wagonSequence, placardNumber, wagonType, seatNumber, accommodationType, isPhysicallyPresent, segmentIndex, segmentStartUic, segmentEndUic, segmentStartName, status`.
-   - `IRailRunReportingRepository.GetSeatMapDetailAsync(displayName, travelDate)` + имплементация (SQL join по §3; подреждане на сегменти по trip `stopSequence`, за да съвпадат с колоните).
-   - `GetSeatMapDetailQuery.cs` + handler; регистрация в `RailRunReportingPartialGateway.cs`.
-   - Mirror: `GetSeatMapBySegmentQuery.cs`, `SeatMapBySegmentRowDto.cs`, `RailRunReportingPartialGatewayTests.cs`.
-2. **Reporting handler SYS-OPS-COMP-04:**
-   - `ReportingService.Infrastructure/Services/SysOpsComp04WagonOccupancyMatrixLocalRunner.cs` (нов, `ILocalReportRunner`, `OwningServiceKey = RailRunService`, `ProviderCode = SYS_OPS_WAGON_OCCUPANCY_MATRIX`, `UpstreamPartialId = railrun.seat-map-detail`). Single-source pass-through (mirror `SysOpsComp02SeatMapOccupancyBySegmentLocalRunner.cs`).
-   - DI: `ReportingService.Infrastructure/Extensions/ServiceCollectionExtensions.cs`.
+> **Верифицирани сигнатури (gitnexus, индекс 06-24 ea3671d):** веригата на партиала е
+> `RailRunReportingPartialGateway.ExecuteAsync` (рутира по `PartialId` const) →
+> `mediator.Send(GetXxxQuery(dateFrom,dateTo))` → `IRailRunReportingRepository.GetXxxAsync(...)` →
+> `BuildXxxTabularPayload(rows,...)` → `{schema:[{name,type}], rows:[...]}` JSON.
+
+1. **Нов RailRun партиал `railrun.seat-map-detail`** (4 файла, mirror на `*SeatMapBySegment*`):
+   - **DTO** `RailRunService.Application/Features/Reporting/SeatMapDetailRowDto.cs` — поля: `TrainNumber, TravelDate, WagonSequence, PlacardNumber, WagonType, SeatNumber, AccommodationType, IsPhysicallyPresent, SegmentIndex, SegmentStartUic, SegmentEndUic, SegmentStartName, Status`. Mirror `SeatMapBySegmentRowDto.cs`.
+   - **Repo** `IRailRunReportingRepository.GetSeatMapDetailAsync(string trainNumber, DateOnly travelDate, CancellationToken)` → `IReadOnlyList<SeatMapDetailRowDto>` (в `Application/Interfaces/IRailRunReportingRepository.cs`); имплементация в `Infrastructure/Repositories/RailRunReportingRepository.cs`. ⚠️ **Gotcha:** филтрирай по `Composition.TrainNumber` + `SeatAvailability.TravelDate` и връщай **per-seat** редове — НЕ агрегат и НЕ по `CreatedAt` window (както правят съществуващите `GetCapacityByRunAsync/GetWagonOccupancyAsync/GetSeatMapBySegmentAsync`). Join `SeatDefinitions` (SeatNumber, IsPhysicallyPresent, AccommodationType) + `CompositionCarriage` (SequenceNumber, PlacardNumber, WagonType) + подреден списък спирки за `SegmentStartName`/`SegmentIndex`.
+   - **Query** `GetSeatMapDetailQuery(string trainNumber, DateOnly travelDate)` + handler (MediatR) викащ repo-то. Mirror `GetSeatMapBySegmentQuery.cs`.
+   - **Gateway** `RailRunReportingPartialGateway.cs`: добави const `SeatMapDetailPartialId = "railrun.seat-map-detail"`; включи го в рутирането на `ExecuteAsync` (`is...` проверките + dispatch клона); `travelDate` идва от `request.DateFromYmd`, а `trainNumber` от **`request.FiltersJson`** (полето на `ReportingPartialExecuteRequest` за partial-specific филтри — gateway-ът засега чете само DateFrom/DateTo, тук добави парсване на FiltersJson); добави `BuildSeatMapDetailTabularPayload(rows, ...)`.
+   - Тестове: mirror `RailRunReportingPartialGatewayTests.cs`.
+2. **Reporting LOCAL runner SYS-OPS-COMP-04** (mirror `SysOpsComp02SeatMapOccupancyBySegmentLocalRunner.cs`):
+   - `ReportingService.Infrastructure/Services/SysOpsComp04WagonOccupancyMatrixLocalRunner.cs` — `: ILocalReportRunner`, ctor `(IReportingPartialClientResolver partialResolver, ILogger<...> logger)`, `const UpstreamPartialId = "railrun.seat-map-detail"`, `OwningServiceKey => ReportingCatalog.OwningServiceKeyRailRun`, `ProviderCode => ReportingCatalog.WagonOccupancyMatrixProviderCode` (нов const в `ReportingCatalog.cs`).
+   - `RunAsync(RunReportRequestDto request, ct)`: вземи `date` + `trainNumber` от `request.Parameters` (date през `LocalReportRunParameterParser.TryParseDateRange`; trainNumber парсни допълнително); построй `ReportingPartialExecuteRequest { PartialId=UpstreamPartialId, DateFromYmd=date, DateToYmd=date, FiltersJson = {"trainNumber": ...} }`; `partialResolver.Resolve(UpstreamPartialId)` → `client.ExecuteAsync(...)` → `DownstreamExecuteResponseMapper.FromPartialMessage(...)`.
+   - DI: регистрирай като `ILocalReportRunner` в `ReportingService.Infrastructure/Extensions/ServiceCollectionExtensions.cs`.
 3. **SQL seed:** ред в `SQLProjects/ReportingServiceSQL/dbo/PostDeployment/Data/003_ReportCatalog_SysAcc.sql`:
    `SYS-OPS-COMP-04`, ProviderCode `SYS_OPS_WAGON_OCCUPANCY_MATRIX`, Name `Справка за натовареност (схема по места)`, ReportGroup `Операции`, Permission `REPORTS`, ProviderType `1` (LOCAL), OwningServiceKey `RailRunService`, ParameterSchemaJson:
    `{"type":"object","required":["trainNumber","date"],"properties":{"trainNumber":{"type":"string"},"date":{"type":"string","format":"date"}}}`, IsActive `1`.
@@ -62,6 +69,13 @@
 
 - Памет `project_railrun_db_state`: локалната DB няма продадени места → справката ще е празна. Нужен **dev seed**: композиция с `trainNumber` + дата + няколко `SOLD` и `BLOCKED` реда в `SeatAvailability` по различни сегменти.
 - E2E (Playwright, real FE→BE→DB, per feedback_tdd_includes_e2e): от композиция → kebab на вагон → „Справка за натовареност“ → asserт сваляне на `.xlsx`; + Reports секция → run COMP-04. Изисква вдигнати `reporting-service` и `rail-run-service` с ребилднати образи.
+
+## 6a. gitnexus верификация (2026-06-24)
+
+- **FE граф свеж (Admin-App, индексиран 06-24) — потвърдено:**
+  - `WagonCanvas` се рендира САМО от `CompositionEditorPage` (impact upstream: d=1 директен, LOW risk) → новият `onExportOccupancyReport` prop е един hop, без prop-drilling.
+  - `downloadReportExport` → `src/api/reporting/reporting.api.ts`; `downloadBlob` → `src/app/features/reports/utils/downloadBlob.ts` (вече преизползван в audit export); `ReportParameterForm` → `src/app/features/reports/components/ReportParameterForm.tsx`; pattern `useExportDailyReport` → `chief-cashier/hooks/`. Тасковете 261/262 са точни.
+- **⚠️ BE граф остарял (OSDM-Src индексиран 06-12, 246 коммита назад):** липсват `RailRunReportingPartialGateway`, `SysOpsComp0x...`, `ExportReportByCodeCommand`, `GenericTabularXlsxBuilder`, `Mkt03TicketsByTypeXlsxBuilder` — добавени са след индекса. Затова бекенд символите в §4 / тасковете 256-260 са взети с директен grep на текущия HEAD (валидни), НЕ от gitnexus. За да помага gitnexus на Ralph по бекенда, OSDM-Src трябва да се преиндексира (analyze).
 
 ## 7. Отворени въпроси за PO
 
