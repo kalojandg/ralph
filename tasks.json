@@ -7955,5 +7955,205 @@
       }
     ],
     "passes": true
+  },
+  {
+    "id": 256,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[WAGON-OCC 1/8][BE] RailRun per-seat-segment DETAIL repository query + DTO (new partial data source). Existing railrun.wagon-occupancy / railrun.seat-map-by-segment carry only aggregated counts — NOT per-seat detail (the 'follow-up wave' noted in SYS-OPS-COMP-01/02/03 SQL descriptions). Spec: ralph/wagon-occupancy-report-spec.md §4.1.",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "256.1",
+        "phase": "RECON",
+        "action": "Read OSDM-Src/DotNetServices/RailRunService/RailRunService.Application/Features/Reporting/{GetSeatMapBySegmentQuery.cs,SeatMapBySegmentRowDto.cs}, Interfaces/IRailRunReportingRepository.cs, and SQLProjects/RailRunServiceSQL/dbo/Tables/{SeatAvailability.sql,SeatDefinitions.sql,CompositionCarriages.sql,Compositions.sql}. Identify how the existing repo resolves ordered trip stops/station names for a composition (TripId -> stop sequence)."
+      },
+      {
+        "id": "256.2",
+        "phase": "RED/GREEN",
+        "action": "Add SeatMapDetailRowDto.cs (trainNumber, travelDate, wagonSequence, placardNumber, wagonType, seatNumber, accommodationType, isPhysicallyPresent, segmentIndex, segmentStartUic, segmentEndUic, segmentStartName, status). Add IRailRunReportingRepository.GetSeatMapDetailAsync(displayName, travelDate) + implementation: SeatAvailability JOIN SeatDefinitions JOIN CompositionCarriages JOIN Compositions, segments ordered by trip stopSequence so they align with report columns. Write repository/query unit tests (mirror existing seat-map-by-segment tests): assert one row per (wagon, physical seat, segment) with correct Status and segment ordering."
+      },
+      {
+        "id": "256.3",
+        "phase": "DONE",
+        "action": "cd OSDM-Src && dotnet test for RailRunService.Application(.Tests) green. gitnexus detect-changes to confirm scope. Commit."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 257,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[WAGON-OCC 2/8][BE] RailRun reporting partial 'railrun.seat-map-detail' query handler + gateway registration (exposes the 256 repository as a reporting partial). Spec §4.1.",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "257.1",
+        "phase": "RECON",
+        "action": "Read RailRunService.Application/Features/Reporting/{GetSeatMapBySegmentQuery.cs,RailRunReportingPartialGateway.cs} and RailRunService.Application.Tests/Reporting/RailRunReportingPartialGatewayTests.cs to mirror the partial-id registration + tabular response shape."
+      },
+      {
+        "id": "257.2",
+        "phase": "RED/GREEN",
+        "action": "Add GetSeatMapDetailQuery.cs + handler returning the 256 rows as the partial's tabular result. Register partial id 'railrun.seat-map-detail' in RailRunReportingPartialGateway. Add gateway test mirroring RailRunReportingPartialGatewayTests: requesting 'railrun.seat-map-detail' with (trainNumber, date) routes to the handler and returns the per-seat-segment rows."
+      },
+      {
+        "id": "257.3",
+        "phase": "DONE",
+        "action": "cd OSDM-Src && dotnet test RailRunService.Application.Tests green. Commit."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 258,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[WAGON-OCC 3/8][BE] Reporting catalog report SYS-OPS-COMP-04 (handler + SQL seed + DI). Single-source pass-through over railrun.seat-map-detail. Spec §4.2-4.3.",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "258.1",
+        "phase": "RECON",
+        "action": "Read ReportingService.Infrastructure/Services/SysOpsComp02SeatMapOccupancyBySegmentLocalRunner.cs (mirror posture), Extensions/ServiceCollectionExtensions.cs (DI registration of local runners), and the SYS-OPS-COMP-02 row in SQLProjects/ReportingServiceSQL/dbo/PostDeployment/Data/003_ReportCatalog_SysAcc.sql."
+      },
+      {
+        "id": "258.2",
+        "phase": "RED/GREEN",
+        "action": "Add SysOpsComp04WagonOccupancyMatrixLocalRunner.cs (ILocalReportRunner, OwningServiceKey=RailRunService, ProviderCode=SYS_OPS_WAGON_OCCUPANCY_MATRIX, UpstreamPartialId='railrun.seat-map-detail'). Register in ServiceCollectionExtensions. Add SQL seed row: SYS-OPS-COMP-04 / SYS_OPS_WAGON_OCCUPANCY_MATRIX / N'Справка за натовареност (схема по места)' / ReportGroup N'Операции' / Permission 'REPORTS' / ProviderType 1 / OwningServiceKey 'RailRunService' / ParameterSchemaJson {\"type\":\"object\",\"required\":[\"trainNumber\",\"date\"],\"properties\":{\"trainNumber\":{\"type\":\"string\"},\"date\":{\"type\":\"string\",\"format\":\"date\"}}} / IsActive 1. Test: handler resolves the partial and returns rows; catalog query returns COMP-04 under group Операции."
+      },
+      {
+        "id": "258.3",
+        "phase": "DONE",
+        "action": "cd OSDM-Src && dotnet test ReportingService.Application.Tests / Infrastructure green. Deploy ReportingServiceSQL so the seed lands (MERGE upsert). Commit."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 259,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[WAGON-OCC 4/8][BE] Custom matrix xlsx builder + export routing for SYS-OPS-COMP-04 (one sheet per wagon, seats x stations matrix, 2 indicators, wagon %). Mirrors the MKT-03 custom-builder precedent. Spec §2,§4.4.",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "259.1",
+        "phase": "RECON",
+        "action": "Read ReportingService.Application/Reporting/{Mkt03TicketsByTypeXlsxBuilder.cs,GenericTabularXlsxBuilder.cs} and Features/Reporting/Commands/ExportReportByCodeCommand.cs to see how MKT-03 is routed to its custom (non-generic) ClosedXML builder in the export pipeline."
+      },
+      {
+        "id": "259.2",
+        "phase": "RED/GREEN",
+        "action": "Add WagonOccupancyMatrixXlsxBuilder.cs (ClosedXML): group tabular rows by wagonSequence -> one worksheet per wagon named 'Вагон {sequence}'. Per sheet: header rows (серия=placardNumber/wagonType, влак №=trainNumber, дата=travelDate); a 'Заетост на вагона: {pct} %' row where pct = (#physical seats with >=1 occupied|blocked segment / #physical seats)*100 rounded to 2dp; then matrix: columns = ordered segment-start stations (segmentStartName by segmentIndex), rows = seatNumber (physical only), cell = '✓' for SOLD/LOCKED/CHECKED_IN, 'Б' for BLOCKED, empty for AVAILABLE. Route SYS-OPS-COMP-04 in ExportReportByCodeCommand to this builder. Unit tests: 2 wagons -> 2 sheets; occupied/blocked indicators correct; pct matches a hand-computed fixture; last station column empty."
+      },
+      {
+        "id": "259.3",
+        "phase": "DONE",
+        "action": "cd OSDM-Src && dotnet test ReportingService.Application.Tests green (incl. ExportReportByCodeCommandHandlerTests). Verify GET /reporting-service/api/v1/reports/exports/SYS-OPS-COMP-04?format=xlsx&trainNumber=...&date=... returns a multi-sheet xlsx. Commit."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 260,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[WAGON-OCC 5/8][BE] Dev seed: SOLD + BLOCKED SeatAvailability rows for a known train+date so the report is non-empty (local DB has no sold seats per project_railrun_db_state). Spec §6.",
+    "tddWorkflow": false,
+    "steps": [
+      {
+        "id": "260.1",
+        "phase": "RECON",
+        "action": "Read existing RailRun seed approach: SQLProjects/RailRunServiceSQL post-deployment data scripts and the wagon-migrations/ folder. Pick an existing NORMAL composition (DisplayName) with a TripId that has ordered stops."
+      },
+      {
+        "id": "260.2",
+        "phase": "IMPLEMENT",
+        "action": "Add an idempotent dev seed (MERGE/IF NOT EXISTS) inserting a handful of SeatAvailability rows: several seats SOLD across the first few segments and 1-2 seats BLOCKED, for the chosen composition's carriages on a fixed TravelDate. Keep it dev-only (guard so it does not run in prod profile)."
+      },
+      {
+        "id": "260.3",
+        "phase": "DONE",
+        "action": "Apply seed locally; call the COMP-04 export and confirm a non-empty matrix with both indicators. Commit."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 261,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[WAGON-OCC 6/8][FE] Reports section: SYS-OPS-COMP-04 param form (trainNumber + date) + xlsx export wiring. Spec §5.1.",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "261.1",
+        "phase": "RECON",
+        "action": "Read Admin-App src/app/features/reports/{pages/ReportsOperationalPage.tsx,components/ReportParameterForm.tsx,reportSections.ts} and src/api/reporting/reporting.api.ts (downloadReportExport). Confirm group 'Операции' maps to operational section."
+      },
+      {
+        "id": "261.2",
+        "phase": "RED/GREEN",
+        "action": "Ensure COMP-04 renders in the Operational list with a param form binding trainNumber (text) + date (date). Wire export button to reportingApi.downloadReportExport('SYS-OPS-COMP-04', { trainNumber, date }, 'xlsx') + downloadBlob. Add/extend tests (mock reporting.api): selecting COMP-04, filling params, clicking export calls downloadReportExport with the right args and downloads the blob."
+      },
+      {
+        "id": "261.3",
+        "phase": "DONE",
+        "action": "cd Admin-App && npm run lint (changed files) && npm run type-check && npm run test:run green. Commit."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 262,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[WAGON-OCC 7/8][FE] Composition wagon kebab -> 'Справка за натовареност' menu item + export hook (same COMP-04 file: whole composition, one sheet per wagon). Spec §5.2.",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "262.1",
+        "phase": "RECON",
+        "action": "Read Admin-App src/app/features/compositions/components/WagonCanvas.tsx (Menu at lines ~424-450; handleEdit/handleDelete ~199-216; WagonCanvasProps ~106-133), pages/CompositionEditorPage.tsx (how trainNumber + composition.startDate are resolved), src/app/features/chief-cashier/hooks/useExportDailyReport.ts and reports/utils/downloadBlob.ts. Check the REPORTS permission gate helper used elsewhere."
+      },
+      {
+        "id": "262.2",
+        "phase": "RED/GREEN",
+        "action": "Add hook compositions/hooks/useExportWagonOccupancyReport.ts (useMutation -> reportingApi.downloadReportExport('SYS-OPS-COMP-04',{trainNumber,date},'xlsx') -> downloadBlob('zaetost-vlak-<trainNumber>-<date>.xlsx'); error -> ui.slice snackbar). Add prop onExportOccupancyReport + a <MenuItem> 'Справка за натовареност' (ListItemIcon + ListItemText t('compositions.editor.properties.occupancyReport')) after Delete in WagonCanvas; wire from CompositionEditorPage passing the composition trainNumber + startDate. Disable/hide the item when trainNumber/tripId missing or user lacks REPORTS. Add i18n keys to BOTH src/locales/bg.json and en.json. Component tests: menu item present; click triggers the hook with composition trainNumber+date; hidden/disabled when no trainNumber."
+      },
+      {
+        "id": "262.3",
+        "phase": "DONE",
+        "action": "cd Admin-App && npm run lint (changed files) && npm run type-check && npm run test:run green. Commit."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 263,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[WAGON-OCC 8/8][E2E] Playwright real FE->BE->DB: wagon kebab + Reports section both produce the COMP-04 xlsx. 'Ready' per feedback_tdd_includes_e2e. Spec §6.",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "263.1",
+        "phase": "RECON",
+        "action": "Read Admin-App e2e config + an existing compositions e2e spec/page-object. Ensure reporting-service AND rail-run-service are running with rebuilt images (COMP-04 seed deployed, partial registered) and the 260 dev seat data is applied. Identify data-testid for the wagon kebab + menu item."
+      },
+      {
+        "id": "263.2",
+        "phase": "RED/GREEN",
+        "action": "Add e2e/tests/compositions/wagon-occupancy-report.spec.ts: open the seeded composition view, open a wagon kebab, click 'Справка за натовареност', assert an .xlsx download starts; optionally parse the workbook to assert >=1 sheet per wagon and the header text (серия/влак №/дата) + that occupied/blocked cells are populated. Add a second flow: Reports > Операции > SYS-OPS-COMP-04 with the seeded trainNumber+date exports the same file."
+      },
+      {
+        "id": "263.3",
+        "phase": "DONE",
+        "action": "cd Admin-App && npm run e2e -- e2e/tests/compositions/wagon-occupancy-report against running reporting-service + rail-run-service — green. Confirm 256-262 pass. Mark feature done. Commit."
+      }
+    ],
+    "passes": false
   }
 ]
