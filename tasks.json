@@ -8239,7 +8239,7 @@
         "action": "cd Admin-App && npm run lint (changed files) && npm run type-check && npm run test:run green. Do NOT run e2e in this task — the spinner e2e assertion lives in the guarded task 268. Commit."
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 267,

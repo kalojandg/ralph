@@ -1,3 +1,34 @@
+## [2026-06-25 11:40] - Task #266: [WAGON-OCC-FIX 2/2][FE] Loading indicator while the occupancy report generates
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED/GREEN → DONE (`tddWorkflow: true`)
+
+**Problem:** COMP-04 "Справка за натовареност" export can take ~1 min; clicking the wagon-kebab item showed no feedback, so the user could not tell it was working (and could re-click).
+
+**What was done (RED → GREEN):**
+- RED: added `WagonCanvas.test.tsx` case asserting that with `isExportingOccupancyReport` the menu item shows the `occupancyReportGenerating` label (not the normal label), is `aria-disabled`, and a second click does NOT re-fire `onExportOccupancyReport`. Verified it failed first.
+- GREEN: `WagonCanvas` gained a new optional prop `isExportingOccupancyReport` (default false). While true the COMP-04 `MenuItem` is `disabled`, swaps the `Assessment` icon for a `<CircularProgress size={18}>`, and shows `t('compositions.editor.properties.occupancyReportGenerating')`. `handleExportOccupancy` early-returns when already exporting (double-trigger guard).
+- Wired `isExportingOccupancyReport={exportOccupancyReport.isPending}` from `CompositionEditorPage`.
+- i18n: `occupancyReportGenerating` = "Генериране…" (bg.json) / "Generating…" (en.json).
+
+**Verification (DONE 266.3):**
+- `WagonCanvas.test.tsx` → 3/3 pass (incl. new generating-state test).
+- `npx eslint` on the 3 changed source files → 0 errors (only pre-existing repo warnings).
+- `npm run type-check` → clean.
+- Full `npm run test:run`: 326 files pass, 10 fail. Confirmed all 10 are PRE-EXISTING (stashed my changes, the same files still failed at baseline) — none caused by this task. They span wagons/shared/composition-modal areas this task never touched.
+- e2e intentionally NOT run — that is the separate guarded task #268.
+
+**Files modified:**
+- `src/app/features/compositions/components/WagonCanvas.tsx`
+- `src/app/features/compositions/components/WagonCanvas.test.tsx`
+- `src/app/features/compositions/pages/CompositionEditorPage.tsx`
+- `src/locales/bg.json`, `src/locales/en.json`
+
+**Git commit:** `b21eee32` — `feat(compositions): [WAGON-OCC-FIX 2/2][FE] Show a generating indicator on the wagon 'Справка за натовареност' export`. (CLAUDE.md + the e2e spec were already modified by prior tasks and the e2e/.admintoken + e2e_comp04.json artifacts were left unstaged.)
+
+---
+
 ## [2026-06-25 11:23] - Task #265: [WAGON-OCC-FIX 1/2][BE] Occupancy matrix renders occupied/blocked seats as empty cells
 
 **Status:** ✅ Complete

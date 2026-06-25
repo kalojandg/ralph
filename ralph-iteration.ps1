@@ -158,6 +158,18 @@ while ($job.State -eq 'Running') {
             $timeoutReason = "No output growth for $maxStaleMinutes min (claude likely hung)"
             break
         }
+
+        # Completion detection (critical for unattended/overnight runs):
+        # claude -p --output-format stream-json emits a final "result" event carrying
+        # "terminal_reason" when the iteration is done. Break on it directly — a background
+        # process the agent left running (dev server / watch / vitest) can hold the PS job's
+        # stdout pipe open so $job.State NEVER leaves 'Running'. Without this, the loop would
+        # spin until the 60-min stale timeout (or Wait-Job would block forever) and the wrapper
+        # would never advance to the next task.
+        if ($size -gt 0) {
+            $tail = Get-Content $outputFile -Tail 3 -ErrorAction SilentlyContinue
+            if ($tail -match '"terminal_reason"') { break }
+        }
     }
 
     Start-Sleep -Milliseconds 500
@@ -189,9 +201,18 @@ if ($timedOut) {
     exit 3
 }
 
-# Wait for job to complete
-$null = Wait-Job $job
-$null = Remove-Job $job
+# Iteration finished (claude emitted its terminal "result" event). The PS job may still
+# report 'Running' if the agent left a background process holding the stdout pipe open — do
+# NOT Wait-Job (it would block forever). Force-stop it, then reap stray test runners the agent
+# may have spawned so they don't accumulate across iterations (overnight runs). NOTE: only
+# vitest/playwright are reaped — a `vite` dev server is left alone (could be the user's).
+Stop-Job $job -ErrorAction SilentlyContinue
+Remove-Job $job -Force -ErrorAction SilentlyContinue
+try {
+    Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match 'vitest|playwright' } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+} catch {}
 
 Write-Host ""
 Write-Host ""
