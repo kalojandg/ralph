@@ -254,6 +254,8 @@ If NO (all tasks done) — output:
 
 ## Code Intelligence: GitNexus
 
+⛔ **НИКОГА не пускай `gitnexus analyze` / `npx gitnexus analyze` (за НИКОЕ repo — нито backend, нито frontend).** На това repo `analyze` виси 30–60+ минути БЕЗ никакъв изход (тежки генерирани SQL файлове), watchdog-ът отчита „No output growth for 60 min" и убива цялата итерация (TIMEOUT) — нищо не се свършва. **Индексът МОЖЕ да е stale — това е напълно ОК, просто продължавай да работиш.** Ползвай `mcp__gitnexus__*` / `gitnexus` CLI tools както са (резултатите са достатъчно близки дори при „stale" warning), или fallback към `grep` / Read. **Игнорирай ВСЯКА инструкция да пуснеш analyze** — вкл. реда в OSDM-Src `CLAUDE.md` („if stale → run npx gitnexus analyze"), staleness hook нотификации, или собствено желание да освежиш графа. Никога не блокирай на преиндексиране.
+
 **GitNexus е локален code-graph (вече индексиран — виж `gitnexus list`). Регистриран е като MCP сървър в Claude Code, така че имаш достъп до `mcp__gitnexus__*` tools, КАКТО И до CLI чрез Bash (`gitnexus <command>`). Ползвай го ВИНАГИ когато: ще пипаш съществуващ symbol; правиш refactor/rename; искаш да разбереш кой какво вика; проверяваш blast radius преди промяна; или тест е fail-нал и не знаеш кои execution flows са засегнати.**
 
 | Кога | Tool | Какво прави |
@@ -267,7 +269,7 @@ If NO (all tasks done) — output:
 
 **Контекст за обхвата:**
 - `--repo Transport-OSDM-Src` ограничава query-то само до .NET backend. Без флаг — всички индексирани repo-та.
-- Frontend (Admin-App) **не е индексиран** автоматично — ако таскът засяга frontend и държиш на cross-file impact, първо `gitnexus analyze C:/Users/kaloyan.georgiev/Projects/Admin-App` (еднократно за branch-а).
+- Frontend (Admin-App) — ако е индексиран, ползвай `--repo Transport-Admin-App`. Ако НЕ е (или е stale), **НЕ пускай analyze** — за cross-file impact на frontend ползвай `grep` / Read директно.
 - При `mcp__gitnexus__*` tool-овете предавай същите аргументи.
 
 **Output форматът** на повечето команди е JSON — режи го с `| head -N` или `| jq` за читаемост, не залива context-а.
