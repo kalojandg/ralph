@@ -1,3 +1,35 @@
+## [2026-06-25 12:05] - Task #267: [WAGON-OCC-FIX 3/3][BE] Ship SYS-OPS-COMP-04 via a new apply-once file (deployment safety)
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED/GREEN → DONE (`tddWorkflow: true`)
+
+**Problem:** COMP-04 was added by EDITING the already-applied `003_ReportCatalog_SysAcc.sql`. apply-once (`_ApplyOnce.sql` + `dbo.__DeployHistory`) keys on FILENAME with no content hash, so on the long-lived DEV DB (003 already applied, can't be reseeded) the edit is SKIPPED and COMP-04 never reaches the catalog.
+
+**RECON (267.1):** Confirmed `Seed.sql` includes each Data file via `:setvar PayloadFile` + `:r .\_ApplyOnce.sql` + `GO` (001–004). `_ApplyOnce.sql` derives `ScriptKey` = filename-without-extension and skips if present in `__DeployHistory`. The `.sqlproj` `<None Include>` entries (001–003 listed; 004 absent) are Build Action = None → IDE-only; the real build inclusion is the `:r` in Seed.sql.
+
+**RED/GREEN (267.2):**
+- Created `Data/005_ReportCatalog_WagonOccupancyMatrix.sql` — idempotent MERGE upserting ONLY the SYS-OPS-COMP-04 row with the exact same column values as the 003 row (ReportCode/ProviderCode/Name/long Description/ReportGroup Операции/Permission REPORTS/ProviderType 1/OwningServiceKey RailRunService/trainNumber+date ParameterSchemaJson/IsActive 1). Mirrors the 004 temp-table+MERGE pattern.
+- Wired into `Seed.sql` after 004 (PayloadFile + `:r .\_ApplyOnce.sql` + GO); added the `<None Include>` for 005 to the `.sqlproj` (matching 001–003).
+- Kept 003's COMP-04 row UNCHANGED (fresh-env coverage; keeps existing seed test green).
+- Added two seed tests in `ReportCatalogSeedSqlTests.cs`: `SqlSeed_WagonOccupancyMatrix_005_upserts_SYS_OPS_COMP_04_row` (asserts the catalog constants + idempotent MERGE) and `SqlSeed_WagonOccupancyMatrix_005_registered_for_apply_once_in_Seed` (asserts 005 wired into Seed.sql).
+
+**Verification (267.3):**
+- `dotnet build` ReportingServiceDb.sqlproj (Release) → dacpac built, model validated.
+- Publish #1 (sqlpackage → live `ReportingServiceDB`, localhost,14430): printed `Skipping ...003_ReportCatalog_SysAcc (already applied)` then `Applying ...005_ReportCatalog_WagonOccupancyMatrix` (proves the bug + the fix). `catalog.ReportDefinitions` now has SYS-OPS-COMP-04 (ProviderType 1, OwningServiceKey RailRunService, IsActive 1); `__DeployHistory` has the 005 ScriptKey.
+- Publish #2: printed `Skipping ...005_ReportCatalog_WagonOccupancyMatrix (already applied)` → idempotent.
+- `dotnet test` ReportingService.Infrastructure.Tests → **1597/1597 passed** (incl. 2 new).
+
+**Files modified/created:**
+- `SQLProjects/ReportingServiceSQL/dbo/PostDeployment/Data/005_ReportCatalog_WagonOccupancyMatrix.sql` (new)
+- `SQLProjects/ReportingServiceSQL/dbo/PostDeployment/Seed.sql`
+- `SQLProjects/ReportingServiceSQL/ReportingServiceDb.sqlproj`
+- `DotNetServices/ReportingService/ReportingService.Infrastructure.Tests/ReportCatalogSeedSqlTests.cs`
+
+**Git commit:** `66c35c8ed` — `feat(reporting): [WAGON-OCC-FIX 3/3][BE] Ship SYS-OPS-COMP-04 via new apply-once 005 so it lands on the live DEV DB`. (Unrelated `docker-compose.yml` change and untracked CLAUDE.md/AGENTS.md/.claude artifacts intentionally left unstaged.)
+
+---
+
 ## [2026-06-25 11:40] - Task #266: [WAGON-OCC-FIX 2/2][FE] Loading indicator while the occupancy report generates
 
 **Status:** ✅ Complete

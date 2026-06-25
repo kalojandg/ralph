@@ -94,7 +94,7 @@
 **Phase DONE (Verification):**
 - Изпълни steps с `"phase": "DONE"`
 - **VERIFY ALL:**
-  - ✅ Tests pass: `npm run test:run` (unit/component) + `npm run e2e` **only when the change touches a UI flow / user journey** (виж "Test level selection" по-долу)
+  - ✅ Tests pass — **САМО релевантните, НИКОГА пълния suite** (пълният е ~50+ мин и убива скоростта на loop-а): пусни конкретните тест файлове, които си добавил/променил, ИЛИ `npx vitest run --changed` (FE — тества само засегнатото от текущите ти uncommitted промени) / `dotnet test <Changed>.Tests --filter <YourTestClass>` (BE — само засегнатия проект/клас). ⛔ НЕ пускай `npm run test:run` / голо `dotnet test` (целия suite). E2E само през guarded таск / select-e2e, когато промяната засяга UI flow.
   - ✅ Visual match: Screenshot съвпада с design mockup
   - ✅ No linter errors: `npx eslint <files-changed-on-this-branch>   # only fix branch-introduced errors, not pre-existing repo warnings`
   - ✅ TypeScript compiles: `npm run type-check`
@@ -452,9 +452,11 @@ Playwright specs взаимодействат през DOM (`getByRole`, `getByL
 ### 🎯 Testing Commands
 
 ```bash
-# Unit/Component tests (Vitest, CI-style single run)
-npm run test:run                          # пълен suite
-npm run test:run -- src/.../X.test.tsx    # таргетиран
+# Unit/Component tests — ВИНАГИ таргетирано, НИКОГА пълен suite (пълният е ~50+ мин в loop-а!)
+npx vitest run --changed                  # FE: само тестовете, засегнати от текущите ти (uncommitted) промени ← default
+npm run test:run -- src/.../X.test.tsx    # или точния файл, който си писал
+dotnet test path/to/Changed.Tests.csproj --filter <YourTestClass>   # BE: само засегнатия проект/клас
+# npm run test:run  /  dotnet test (целия)   # ⛔ пълен suite ~50+ мин — НЕ пускай в loop-а
 
 # E2E tests (Playwright)
 npm run e2e                                # пълен suite — БАВЕН, рядко

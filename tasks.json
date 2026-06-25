@@ -8264,7 +8264,7 @@
         "action": "Build ReportingServiceSQL dacpac; publish locally (sqlpackage /Action:Publish of bin/Release dacpac with the local profile) and confirm the log prints 'Applying 005_ReportCatalog_WagonOccupancyMatrix' and that catalog.ReportDefinitions still has SYS-OPS-COMP-04; run publish a SECOND time and confirm it prints 'Skipping 005_ReportCatalog_WagonOccupancyMatrix (already applied)'. dotnet test green. Commit. (On DEV deploy this new file upserts COMP-04 once on the live DB — no drop/reseed needed.)"
       }
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 268,

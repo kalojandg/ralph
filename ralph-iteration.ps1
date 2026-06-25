@@ -221,6 +221,26 @@ Write-Host ""
 if (Test-Path $outputFile) {
     $result = Get-Content $outputFile -Raw
 
+    # --output-format stream-json dumps an NDJSON event per step (needed so the file grows and
+    # the watchdog can see progress) — but that JSON is unreadable in the console/log. Extract
+    # just the human-readable assistant text + final result for display/logging. $result (raw)
+    # is kept for the substring quota/pattern checks below.
+    $display = $result
+    try {
+        $clean = foreach ($line in (Get-Content $outputFile)) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            try { $o = $line | ConvertFrom-Json } catch { continue }
+            if ($o.type -eq 'assistant' -and $o.message.content) {
+                foreach ($c in $o.message.content) {
+                    if ($c.type -eq 'text' -and $c.text) { $c.text }
+                }
+            } elseif ($o.type -eq 'result' -and $o.result) {
+                $o.result
+            }
+        }
+        if ($clean) { $display = ($clean -join "`n`n") }
+    } catch {}
+
     # === QUOTA DETECTION ===
     # Pattern: "You've hit your limit · resets 7pm (Europe/Sofia)"
     if ($result -match "hit your limit") {
@@ -287,7 +307,7 @@ if (Test-Path $outputFile) {
     Write-Host "   CLAUDE OUTPUT:" -ForegroundColor Yellow
     Write-Host "============================================" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host $result
+    Write-Host $display
     Write-Host ""
     Write-Host "============================================" -ForegroundColor Yellow
 
@@ -296,7 +316,7 @@ if (Test-Path $outputFile) {
     if (!(Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
     $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
     $logFile = "$logDir/iteration-$iterationNumber-$timestamp.txt"
-    $result | Out-File -FilePath $logFile -Encoding UTF8
+    $display | Out-File -FilePath $logFile -Encoding UTF8
     Write-Host "[+] Log saved: $logFile" -ForegroundColor Green
 
     # Cleanup
