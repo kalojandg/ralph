@@ -8211,7 +8211,7 @@
       {
         "id": "265.4",
         "phase": "DONE",
-        "action": "cd OSDM-Src && dotnet test (RailRunService + ReportingService) green. Rebuild+recreate the services: docker compose up -d --build reporting-service rail-run-service. RE-APPLY THE CORRECTED SEED YOURSELF (do not ask the user, do not republish the dacpac): the seat-availability dev seed is a MANUAL idempotent script (DELETE then INSERT) at SQLProjects/RailRunServiceSQL/dbo/Scripts/Manual/Seed_SeatAvailability_WagonOccupancy_Dev.sql — it is NOT in the _ApplyOnce/Data pipeline, NOT in dbo.__DeployHistory, NOT in the dacpac, so a dacpac publish will NOT re-run it. After editing it, run it against the live DB from the OSDM-Src folder: docker exec -i osdm-sqlserver-1 /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"YourStrong@Passw0rd\" -C -d RailRunServiceDB < SQLProjects/RailRunServiceSQL/dbo/Scripts/Manual/Seed_SeatAvailability_WagonOccupancy_Dev.sql  (the SqlServer__Password is YourStrong@Passw0rd per DotNetServices/.env). Then VERIFY: docker exec ... sqlcmd ... -Q \"SELECT Status, COUNT(*) FROM dbo.SeatAvailability sa JOIN dbo.CompositionCarriages cc ON sa.CompCarriageId=cc.Id WHERE cc.CompositionId=40004 GROUP BY Status\" returns SOLD+BLOCKED rows whose SegmentStartUic/EndUic match trip 410 stop codes. (If you ever change a PostDeployment/Data/*.sql instead, that pipeline is apply-once keyed by filename in dbo.__DeployHistory — editing an applied file is skipped; add a NEW numbered file or DELETE its __DeployHistory row before publishing.) Extend Admin-App e2e: assert occupied (✓) and blocked (Б) cells are populated, free cells show 'X', the matrix has grid lines, and % is correct, for БВ 2601-18.06.2026 / 2026-06-18. npm run e2e green. Commit."
+        "action": "cd OSDM-Src && dotnet test (RailRunService + ReportingService) green. Backend runs under `dotnet watch` (mounted volumes, hot-reload) — do NOT run 'docker compose up --build' (slow + the #1 iteration-hang source); the watch reloads your source. If a change is not picked up, just 'docker compose restart reporting-service rail-run-service' (fast). RE-APPLY THE CORRECTED SEED YOURSELF (do not ask the user, do not republish the dacpac): the seat-availability dev seed is a MANUAL idempotent script (DELETE then INSERT) at SQLProjects/RailRunServiceSQL/dbo/Scripts/Manual/Seed_SeatAvailability_WagonOccupancy_Dev.sql — it is NOT in the _ApplyOnce/Data pipeline, NOT in dbo.__DeployHistory, NOT in the dacpac, so a dacpac publish will NOT re-run it. After editing it, run it against the live DB from the OSDM-Src folder: docker exec -i osdm-sqlserver-1 /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"YourStrong@Passw0rd\" -C -d RailRunServiceDB < SQLProjects/RailRunServiceSQL/dbo/Scripts/Manual/Seed_SeatAvailability_WagonOccupancy_Dev.sql  (the SqlServer__Password is YourStrong@Passw0rd per DotNetServices/.env). Then VERIFY: docker exec ... sqlcmd ... -Q \"SELECT Status, COUNT(*) FROM dbo.SeatAvailability sa JOIN dbo.CompositionCarriages cc ON sa.CompCarriageId=cc.Id WHERE cc.CompositionId=40004 GROUP BY Status\" returns SOLD+BLOCKED rows whose SegmentStartUic/EndUic match trip 410 stop codes. (If you ever change a PostDeployment/Data/*.sql instead, that pipeline is apply-once keyed by filename in dbo.__DeployHistory — editing an applied file is skipped; add a NEW numbered file or DELETE its __DeployHistory row before publishing.) Commit. DO NOT run e2e in this task — the end-to-end check is the separate guarded task 268 (so a flaky/slow e2e never blocks this backend commit)."
       }
     ],
     "passes": false
@@ -8236,7 +8236,7 @@
       {
         "id": "266.3",
         "phase": "DONE",
-        "action": "cd Admin-App && npm run lint (changed files) && npm run type-check && npm run test:run green. Optionally extend e2e to assert the loading indicator appears on click. Commit."
+        "action": "cd Admin-App && npm run lint (changed files) && npm run type-check && npm run test:run green. Do NOT run e2e in this task — the spinner e2e assertion lives in the guarded task 268. Commit."
       }
     ],
     "passes": false
@@ -8262,6 +8262,31 @@
         "id": "267.3",
         "phase": "DONE",
         "action": "Build ReportingServiceSQL dacpac; publish locally (sqlpackage /Action:Publish of bin/Release dacpac with the local profile) and confirm the log prints 'Applying 005_ReportCatalog_WagonOccupancyMatrix' and that catalog.ReportDefinitions still has SYS-OPS-COMP-04; run publish a SECOND time and confirm it prints 'Skipping 005_ReportCatalog_WagonOccupancyMatrix (already applied)'. dotnet test green. Commit. (On DEV deploy this new file upserts COMP-04 once on the live DB — no drop/reseed needed.)"
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 268,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[WAGON-OCC-FIX 4/4][E2E] End-to-end verification of the occupancy-report fixes (tasks 265 + 266) — real FE->BE->DB. Isolated into its own GUARDED task so the heavy/fragile e2e (dev server + Playwright browser) can never hang the code-commit iterations. 'Ready' per feedback_tdd_includes_e2e.",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "268.1",
+        "phase": "RECON",
+        "action": "Confirm prerequisites are in place (do NOT rebuild): tasks 265 + 266 committed; reporting-service + rail-run-service up and the 265 changes hot-reloaded under dotnet watch (docker compose restart only if needed — never 'up --build'); the corrected manual seat seed applied for composition 'БВ 2601-18.06.2026' / 2026-06-18 (sqlcmd SELECT shows SOLD+BLOCKED with segment UICs matching trip 410 stop codes). Read Admin-App e2e/tests/compositions/wagon-occupancy-report.spec.ts + playwright.config webServer settings."
+      },
+      {
+        "id": "268.2",
+        "phase": "RED/GREEN",
+        "action": "Pre-start the Admin-App dev server ONCE in the background (Bash run_in_background: cd Admin-App && npm run dev) and wait until it reports ready, so Playwright reuses it instead of spinning a fresh webServer (30-60s) per run. Then run ONLY the targeted spec: cd Admin-App && npm run e2e -- e2e/tests/compositions/wagon-occupancy-report.spec.ts. Extend the spec to assert: occupied cells = ✓, blocked = Б, FREE cells = 'X' (not empty), the matrix has grid-line borders, wagon occupancy % is < 100 and correct, for 'БВ 2601-18.06.2026' / 2026-06-18; and that the loading spinner/disabled state appears on clicking 'Справка за натовареност' (task 266). HANG GUARD (critical): if the dev server or the Playwright browser does not become ready within ~5 minutes, ABORT the e2e step, capture the output, and STOP reporting e2e-blocked — never spin forever, never let e2e hang the iteration."
+      },
+      {
+        "id": "268.3",
+        "phase": "DONE",
+        "action": "Targeted e2e green → commit. If the e2e genuinely cannot run for environmental reasons (dev server/browser won't start within the guard window), leave this task passes:false with a one-line note of why and STOP the iteration cleanly — do NOT hang and do NOT loop retrying."
       }
     ],
     "passes": false

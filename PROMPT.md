@@ -99,6 +99,11 @@
   - ✅ No linter errors: `npx eslint <files-changed-on-this-branch>   # only fix branch-introduced errors, not pre-existing repo warnings`
   - ✅ TypeScript compiles: `npm run type-check`
 
+> ⚠️ **DONE-фаза hang guards (НЕ убивай итерацията на verify):**
+> - **НЕ пускай `docker compose up --build`** — бекендът върви на `dotnet watch` (mounted volumes, hot-reload); ребилдът е бавен и е честа причина за „No output growth → TIMEOUT". Ако промяна не е поета от watch-а → само `docker compose restart <svc>` (бързо).
+> - **E2E:** пускай само **таргетирания spec** (не пълен suite), преизползвай вече вдигнат `npm run dev` (стартирай го веднъж в background), и сложи **времеви guard** — ако dev server/браузър не тръгне за ~5 мин, прекрати e2e стъпката, логни причината и спри **чисто** (не върти безкрайно).
+> - Тежкият e2e може да е **отделен таск** — кодът + unit тестовете се commit-ват първо; e2e не бива да блокира кодовия commit.
+
 #### Ако таск НЯМА `"tddWorkflow"` (setup tasks):
 
 - Изпълни steps последователно (една по една!)
