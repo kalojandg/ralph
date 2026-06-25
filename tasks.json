@@ -8184,6 +8184,61 @@
         "action": "cd OSDM-Src && dotnet test (RailRunService + ReportingService) green. Rebuild + recreate reporting-service and rail-run-service images (docker compose up -d --build reporting-service rail-run-service). Extend Admin-App e2e/tests/compositions/wagon-occupancy-report.spec.ts: assert free seats appear as rows with empty cells and the wagon occupancy % is < 100, for composition 'БВ 2601-18.06.2026' / 2026-06-18 (seed has 15 SOLD + 3 BLOCKED per wagon). npm run e2e green. Commit."
       }
     ],
+    "passes": true
+  },
+  {
+    "id": 265,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[WAGON-OCC-FIX 1/2][BE] REGRESSION from 264: occupied/blocked seats now render as EMPTY cells in the matrix (whole table looks blank) even though seats are SOLD/BLOCKED — only the header % is non-zero. ALSO: free cell must show 'X' (not empty) so the table doesn't look broken, and add grid lines so cells are visible. Spec §2.",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "265.1",
+        "phase": "RECON",
+        "action": "Read RailRunService.Infrastructure/Repositories/RailRunReportingRepository.cs: GetSeatMapDetailAsync, BuildTripSegmentsAsync, ResolveSegmentStatus, SegmentCovers (line ~397: maps availability SegmentStartUic/EndUic to segment.Index via uicToIndex keyed by trip StopCode). Read ReportingService.Application/Reporting/WagonOccupancyMatrixXlsxBuilder.cs (IndicatorFor + the per-cell write keyed by (SeatNumber, SegmentIndex) vs stationColumns[c].Index). Data fact: composition БВ 2601-18.06.2026 (Id 40004, TripId 410) availability segments use UICs 5214020->5214015->5214013->5214906 (consecutive sold hops) + a blocked seat; the matrix renders ALL cells empty. Root-cause candidates (confirm which): (a) the dev seed (task 260 file in SQLProjects/RailRunServiceSQL/.../PostDeployment/Data) used segment UICs that DO NOT match the trip's real ordered stop codes returned by TripScheduleService.GetStopsAsync (stops come from НКЖИ GraphQL stored in the nomenclature service) -> uicToIndex.TryGetValue fails -> SegmentCovers returns false -> cell stays AVAILABLE; (b) SegmentCovers index math is off; (c) builder (seat,SegmentIndex) key does not line up with stationColumns Index. Compare the seed's 4 UICs against trip 410's actual StopCodes."
+      },
+      {
+        "id": "265.2",
+        "phase": "RED/GREEN",
+        "action": "Add a FAILING test reproducing 'occupied seats render as empty cells': drive GetSeatMapDetailAsync -> gateway BuildSeatMapDetailTabularPayload -> WagonOccupancyMatrixXlsxBuilder with the real data shape (availability segment UICs EQUAL the trip's ordered stop codes; 3 consecutive SOLD segments for a seat + 1 BLOCKED seat). Assert occupied cells carry ✓ and blocked Б at the correct columns (not empty). Then fix the confirmed root cause: if the dev seed's segment UICs don't match trip 410's real stop codes, align the seed to the trip's actual consecutive stop codes (the route Свиленград/Любимец/Харманли/Харманли Център...); if SegmentCovers/uicToIndex mapping is wrong, fix it there. Wagon occupancy % must stay correct."
+      },
+      {
+        "id": "265.3",
+        "phase": "RED/GREEN",
+        "action": "Polish WagonOccupancyMatrixXlsxBuilder.cs: (1) free-seat indicator = 'X' instead of empty (IndicatorFor: AVAILABLE -> \"X\"; keep ✓ for occupied, Б for blocked); (2) add thin grid-line borders around the whole matrix range (header row + every body cell) via ClosedXML (range.Style.Border.InsideBorder = XLBorderStyleValues.Thin and OutsideBorder = Thin). Update ReportingService.Application.Tests/WagonOccupancyMatrixXlsxBuilderTests.cs: free cell = 'X', occupied = ✓, blocked = Б, and matrix cells have borders."
+      },
+      {
+        "id": "265.4",
+        "phase": "DONE",
+        "action": "cd OSDM-Src && dotnet test (RailRunService + ReportingService) green. Rebuild+recreate reporting-service + rail-run-service; if the dev seed changed, re-publish RailRunServiceDB (sqlpackage publish of bin/Release dacpac) so the corrected seat-availability seed lands. Extend Admin-App e2e: assert occupied (✓) and blocked (Б) cells are populated, free cells show 'X', the matrix has grid lines, and % is correct, for БВ 2601-18.06.2026 / 2026-06-18. npm run e2e green. Commit."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 266,
+    "category": "frontend",
+    "repo": "frontend",
+    "description": "[WAGON-OCC-FIX 2/2][FE] Show a loading indicator while the occupancy report is generating — the COMP-04 export can take ~1 minute and currently clicking 'Справка за натовареност' shows nothing, which is confusing.",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "266.1",
+        "phase": "RECON",
+        "action": "Read Admin-App src/app/features/compositions/components/WagonCanvas.tsx (the 'Справка за натовареност' MenuItem) and the export hook compositions/hooks/useExportWagonOccupancyReport.ts (expose mutation isPending). Check existing loading patterns (MUI CircularProgress, ui.slice snackbar/backdrop)."
+      },
+      {
+        "id": "266.2",
+        "phase": "RED/GREEN",
+        "action": "While the export mutation isPending: disable the menu item and show a small MUI CircularProgress with label 'Генериране…' (and/or a global backdrop/snackbar so the user gets feedback even after the menu closes); block double-trigger. Add i18n keys to bg.json AND en.json (e.g. compositions.editor.properties.occupancyReportGenerating). Component test: clicking the item shows the spinner/disabled state until the mutation resolves."
+      },
+      {
+        "id": "266.3",
+        "phase": "DONE",
+        "action": "cd Admin-App && npm run lint (changed files) && npm run type-check && npm run test:run green. Optionally extend e2e to assert the loading indicator appears on click. Commit."
+      }
+    ],
     "passes": false
   }
 ]

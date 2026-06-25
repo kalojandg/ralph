@@ -7587,3 +7587,34 @@ services (docker-compose.yml + `docker compose up -d --force-recreate`) so they 
 **WAGON-OCC feature (256-263) now fully complete — all tasks pass.**
 
 ---
+
+## [2026-06-24] - Task #264: [WAGON-OCC 9/9][BE] Full seat×segment grid + occupancy % fix
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RED → GREEN → DONE
+
+**Context — prior iteration had already implemented most of 264 but left it uncommitted at `passes:false`:**
+- `GetSeatMapDetailAsync` already reworked to emit the FULL grid (anchored on physically-present SeatDefinitions × route segments, LEFT-JOIN to SeatAvailability → AVAILABLE fallback; spanning availability rows mark every covered segment). Repo + tests uncommitted in OSDM-Src.
+- `WagonOccupancyMatrixXlsxBuilder` already renders AVAILABLE as empty cell, every physical seat as a row, every stop as a column, and % = (#seats with ≥1 occupied|blocked segment / #physical seats). Builder + its tests committed earlier in WAGON-OCC 4/8 — spec §264.3 ("only change builder if AVAILABLE emits a mark") → no change needed.
+- e2e spec already extended (uncommitted in Admin-App) with assertOccupancyBelowFull + assertFreeSeatRowsPresent.
+
+**Verification this iteration:**
+- `dotnet test RailRunService.Infrastructure.Tests --filter SeatMapDetailRepositoryTests` → 6 passed (full grid, stop-sequence ordering, spanning rows, train+date filter, no-schedule fallback, empty repo).
+- `dotnet test ReportingService.Application.Tests --filter WagonOccupancyMatrixXlsxBuilderTests` → 6 passed (one-sheet-per-wagon, header, ✓/Б/empty indicators, % = 33.33 hand-computed, empty terminal column, physical-seats-only rows).
+- Backend running in `dotnet watch` (mounted volumes) → source changes hot-reloaded; containers functionally alive (rail-run processing outbox/inbox; reporting rebuilt + "🚀 Started"). Docker healthcheck reads "unhealthy" but services respond.
+- `npm run e2e -- e2e/tests/compositions/wagon-occupancy-report.spec.ts` → **4 passed** (Flow A wagon kebab + Flow B Reports section, admin + readonly, ~41s each — genuine .xlsx downloads, NOT skips). Asserts occupancy strictly <100 and ≥1 free seat row with empty cells — the regression fix proven end-to-end.
+- `npx eslint` on changed e2e spec → 0 errors.
+
+**Files committed:**
+- OSDM-Src: RailRunService.Infrastructure/Repositories/RailRunReportingRepository.cs
+- OSDM-Src: RailRunService.Infrastructure.Tests/Reporting/SeatMapDetailRepositoryTests.cs
+- Admin-App: e2e/tests/compositions/wagon-occupancy-report.spec.ts
+- (NOT committed: docker-compose.yml JWT_SECRET local-dev wiring, CLAUDE.md/AGENTS.md/.claude GitNexus docs — unrelated to this task)
+
+**Git commit:**
+- `feat(compositions): [WAGON-OCC 9/9][BE] Report must show ALL physical seats as rows (free seat = empty cell) and all route stops as columns, and fix the wagon occupancy %`
+
+**WAGON-OCC feature (256-264) now FULLY complete — all tasks pass.**
+
+---
