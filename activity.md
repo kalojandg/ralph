@@ -1,3 +1,36 @@
+## [2026-06-25 11:23] - Task #265: [WAGON-OCC-FIX 1/2][BE] Occupancy matrix renders occupied/blocked seats as empty cells
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED/GREEN → DONE (`tddWorkflow: true`)
+
+**Root cause (RECON 265.1):**
+- Compositions 40004 (`БВ 2601-18.06.2026`, 2026-06-18) and 50005 (`БВ 2601-19.06.2026`, 2026-06-19) **share TripId 410** → identical resolved trainNumber.
+- `GetSeatMapDetailAsync` filtered only by trainNumber, so the report for 06-18 pulled in BOTH compositions' sequence-1 carriages. The off-date (50005) carriage has the same wagon type / seat numbers but no sales on 06-18, so it contributed all-AVAILABLE rows.
+- `WagonOccupancyMatrixXlsxBuilder` keys cells by `(SeatNumber, SegmentIndex)` only — the leaked AVAILABLE cells **overwrote** 40004's SOLD/BLOCKED → matrix looked blank. The header % stayed non-zero because `ComputeOccupancyPercent` counts a seat occupied if ANY row is occupied. Exactly the reported symptom.
+- Verified the seed UICs are NOT the cause: for trip 410, `StripFeedPrefix(GtfsStopTimes.StopGtfsId)` (what `GetTripStopsConsumer` returns) **equals** `StopPlaces.Code` (what the seed uses) — both `5214020/5214015/5214013/5214906`. No seed change needed; live SeatAvailability for 40004 already holds 10 SOLD + 2 BLOCKED per segment with matching UICs.
+
+**What was done (RED/GREEN):**
+- Repository fix: `GetSeatMapDetailAsync` carriage query now also filters `comp.StartDate == travelDate`, so only the composition actually running on the report date contributes (no cross-date carriage leak).
+- Repo regression guard: `SeatMapDetailRepositoryTests.GetSeatMapDetail_TwoCompositionsShareTrainNumber_OnlyTravelDateCompositionContributes` (two single-day compositions on trip 410; asserts the off-date placard does not leak and the sold seat keeps SOLD).
+- Builder polish (265.3): free cell now renders `X` (was empty), occupied `✓`, blocked `Б`; thin grid-line borders around the whole matrix range. Builder tests assert indicators + borders.
+
+**Verification (DONE 265.4):**
+- `dotnet test` RailRunService.Infrastructure.Tests → **62/62 passed**.
+- `dotnet test` ReportingService.Application.Tests → **183/183 passed**.
+- Seed already applied & correct on live RailRunServiceDB (no re-run required).
+- e2e intentionally NOT run here — that is the separate guarded task #268.
+
+**Files modified:**
+- `RailRunService.Infrastructure/Repositories/RailRunReportingRepository.cs`
+- `RailRunService.Infrastructure.Tests/Reporting/SeatMapDetailRepositoryTests.cs`
+- `ReportingService.Application/Reporting/WagonOccupancyMatrixXlsxBuilder.cs`
+- `ReportingService.Application.Tests/WagonOccupancyMatrixXlsxBuilderTests.cs`
+
+**Git commit:** `115b2cfb7` — `feat(compositions): [WAGON-OCC-FIX 1/2][BE] REGRESSION from 264: ...` (unrelated docker-compose Jwt__Secret tweak left unstaged).
+
+---
+
 ## [2026-06-24] - Task #257: [WAGON-OCC 2/8][BE] RailRun reporting partial railrun.seat-map-detail query handler + gateway registration
 
 **Status:** ✅ Complete

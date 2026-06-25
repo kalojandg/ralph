@@ -114,7 +114,13 @@ Write-Host "[i] Working dir: $bdzProject" -ForegroundColor Cyan
 $job = Start-Job -ScriptBlock {
     param($prompt, $output, $modelName, $workDir)
     Set-Location $workDir
-    & claude -p "@$prompt" --model $modelName --dangerously-skip-permissions 2>&1 | Out-File -FilePath $output -Encoding UTF8
+    # --verbose --output-format stream-json => claude streams an NDJSON event per step,
+    # so $output grows continuously while it works. WITHOUT this, `claude -p` (text) buffers
+    # ALL output until the very end => the file stays 0 bytes the whole run => the
+    # "No output growth for 60 min" watchdog FALSE-kills any iteration that takes >60 min.
+    # Substring completion checks ("<promise>COMPLETE</promise>", "hit your limit") still match
+    # because those literals appear inside the JSON text events.
+    & claude -p "@$prompt" --model $modelName --dangerously-skip-permissions --verbose --output-format stream-json 2>&1 | Out-File -FilePath $output -Encoding UTF8
 } -ArgumentList $tempPrompt, $outputFile, $model, $bdzProject
 
 # Show spinner while waiting
