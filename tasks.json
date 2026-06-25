@@ -8211,7 +8211,7 @@
       {
         "id": "265.4",
         "phase": "DONE",
-        "action": "cd OSDM-Src && dotnet test (RailRunService + ReportingService) green. Rebuild+recreate reporting-service + rail-run-service; if the dev seed changed, re-publish RailRunServiceDB (sqlpackage publish of bin/Release dacpac) so the corrected seat-availability seed lands. Extend Admin-App e2e: assert occupied (✓) and blocked (Б) cells are populated, free cells show 'X', the matrix has grid lines, and % is correct, for БВ 2601-18.06.2026 / 2026-06-18. npm run e2e green. Commit."
+        "action": "cd OSDM-Src && dotnet test (RailRunService + ReportingService) green. Rebuild+recreate the services: docker compose up -d --build reporting-service rail-run-service. RE-APPLY THE CORRECTED SEED YOURSELF (do not ask the user, do not republish the dacpac): the seat-availability dev seed is a MANUAL idempotent script (DELETE then INSERT) at SQLProjects/RailRunServiceSQL/dbo/Scripts/Manual/Seed_SeatAvailability_WagonOccupancy_Dev.sql — it is NOT in the _ApplyOnce/Data pipeline, NOT in dbo.__DeployHistory, NOT in the dacpac, so a dacpac publish will NOT re-run it. After editing it, run it against the live DB from the OSDM-Src folder: docker exec -i osdm-sqlserver-1 /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"YourStrong@Passw0rd\" -C -d RailRunServiceDB < SQLProjects/RailRunServiceSQL/dbo/Scripts/Manual/Seed_SeatAvailability_WagonOccupancy_Dev.sql  (the SqlServer__Password is YourStrong@Passw0rd per DotNetServices/.env). Then VERIFY: docker exec ... sqlcmd ... -Q \"SELECT Status, COUNT(*) FROM dbo.SeatAvailability sa JOIN dbo.CompositionCarriages cc ON sa.CompCarriageId=cc.Id WHERE cc.CompositionId=40004 GROUP BY Status\" returns SOLD+BLOCKED rows whose SegmentStartUic/EndUic match trip 410 stop codes. (If you ever change a PostDeployment/Data/*.sql instead, that pipeline is apply-once keyed by filename in dbo.__DeployHistory — editing an applied file is skipped; add a NEW numbered file or DELETE its __DeployHistory row before publishing.) Extend Admin-App e2e: assert occupied (✓) and blocked (Б) cells are populated, free cells show 'X', the matrix has grid lines, and % is correct, for БВ 2601-18.06.2026 / 2026-06-18. npm run e2e green. Commit."
       }
     ],
     "passes": false
@@ -8237,6 +8237,31 @@
         "id": "266.3",
         "phase": "DONE",
         "action": "cd Admin-App && npm run lint (changed files) && npm run type-check && npm run test:run green. Optionally extend e2e to assert the loading indicator appears on click. Commit."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 267,
+    "category": "backend",
+    "repo": "backend",
+    "description": "[WAGON-OCC-FIX 3/3][BE] DEPLOYMENT SAFETY: the SYS-OPS-COMP-04 catalog row was added by EDITING the already-applied 003_ReportCatalog_SysAcc.sql. apply-once (_ApplyOnce.sql + dbo.__DeployHistory) is keyed by FILENAME with NO content hash, so on the long-lived DEV DB (003 already applied; DB cannot be dropped/reseeded — clients use it live) the edit is SKIPPED and COMP-04 never appears in the catalog. Fix: ship COMP-04 via a NEW numbered apply-once file so it applies exactly once on the live DB without any reseed.",
+    "tddWorkflow": true,
+    "steps": [
+      {
+        "id": "267.1",
+        "phase": "RECON",
+        "action": "Read SQLProjects/ReportingServiceSQL/dbo/PostDeployment/Seed.sql (include pattern per file: ':setvar PayloadFile \".\\Data\\NNN_X.sql\"' then ':r .\\_ApplyOnce.sql' then 'GO'; currently 001-004), _ApplyOnce.sql (keys by ScriptKey = filename-without-extension into dbo.__DeployHistory; no content hash), and the MERGE upsert for the SYS-OPS-COMP-04 ReportDefinition row inside Data/003_ReportCatalog_SysAcc.sql. Confirm how Data/004 is referenced in the .sqlproj so the new file is included the same way."
+      },
+      {
+        "id": "267.2",
+        "phase": "RED/GREEN",
+        "action": "Create SQLProjects/ReportingServiceSQL/dbo/PostDeployment/Data/005_ReportCatalog_WagonOccupancyMatrix.sql that MERGE-upserts ONLY the SYS-OPS-COMP-04 row into catalog.ReportDefinitions (same column values as the 003 row: ReportCode 'SYS-OPS-COMP-04', ProviderCode 'SYS_OPS_WAGON_OCCUPANCY_MATRIX', Name N'Справка за натовареност (схема по места)', ReportGroup N'Операции', Permission 'REPORTS', ProviderType 1, OwningServiceKey 'RailRunService', the ParameterSchemaJson trainNumber+date, IsActive 1) — idempotent MERGE (insert if missing, update if present). Wire it into Seed.sql after 004 (:setvar PayloadFile + :r .\\_ApplyOnce.sql + GO) and add the file to the .sqlproj mirroring 004. KEEP the COMP-04 line in 003 unchanged (idempotent; covers fresh environments and keeps ReportCatalogSeedSqlTests green). The new ScriptKey '005_ReportCatalog_WagonOccupancyMatrix' is absent from the long-lived DEV's __DeployHistory, so it runs exactly once there. Add/extend a seed SQL test asserting 005 upserts SYS-OPS-COMP-04."
+      },
+      {
+        "id": "267.3",
+        "phase": "DONE",
+        "action": "Build ReportingServiceSQL dacpac; publish locally (sqlpackage /Action:Publish of bin/Release dacpac with the local profile) and confirm the log prints 'Applying 005_ReportCatalog_WagonOccupancyMatrix' and that catalog.ReportDefinitions still has SYS-OPS-COMP-04; run publish a SECOND time and confirm it prints 'Skipping 005_ReportCatalog_WagonOccupancyMatrix (already applied)'. dotnet test green. Commit. (On DEV deploy this new file upserts COMP-04 once on the live DB — no drop/reseed needed.)"
       }
     ],
     "passes": false
