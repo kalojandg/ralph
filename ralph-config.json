@@ -14,6 +14,10 @@
     "steps_file": "user-steps.md",
     "append_to_prompt": true
   },
+  "task_steps": {
+    "enabled": true,
+    "steps_file": "task-steps.json"
+  },
   "completion_criteria": {
     "patterns": [
       "<promise>COMPLETE</promise>"

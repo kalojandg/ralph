@@ -93,6 +93,50 @@ if (Test-Path $stepsFile) {
     Write-Host "[+] Appended user-steps: $stepsFile" -ForegroundColor Green
 }
 
+# === Task-specific conditional steps (task-steps.json) ===
+# For the CURRENT task, inject ONLY the matching hooks (key == task id => whole task;
+# or key like "<id>." => a specific step). No match => nothing is added, so per-task
+# requirements do not leak into every other task's prompt.
+# NOTE: keep this block ASCII-only. PS 5.1 parses a no-BOM .ps1 as ANSI, so Cyrillic
+# literals here break the tokenizer. The Cyrillic CONTENT comes from task-steps.json,
+# read with -Encoding UTF8 below.
+$taskStepsFile = "task-steps.json"
+if ($config -and $config.task_steps -and $config.task_steps.steps_file) {
+    $taskStepsFile = $config.task_steps.steps_file
+}
+if ($currentTask -and (Test-Path $taskStepsFile)) {
+    try {
+        $taskSteps = Get-Content $taskStepsFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($taskSteps.hooks) {
+            $tid = "$($currentTask.id)"
+            $matched = @()
+            foreach ($prop in $taskSteps.hooks.PSObject.Properties) {
+                $key = $prop.Name
+                if ($key -eq $tid -or $key -like "$tid.*") {
+                    foreach ($h in @($prop.Value)) {
+                        $meta = @()
+                        if ($h.phase)   { $meta += $h.phase }
+                        if ($h.at)      { $meta += "at=$($h.at)" }
+                        if ($h.PSObject.Properties['blocking'] -and -not $h.blocking) { $meta += "non-blocking" } else { $meta += "BLOCKING" }
+                        $metaStr = if ($meta.Count) { " [" + ($meta -join ", ") + "]" } else { "" }
+                        $matched += "- **$key$metaStr**: $($h.action)"
+                    }
+                }
+            }
+            if ($matched.Count -gt 0) {
+                $promptText += "`n`n--- Task-Specific Steps (MANDATORY for task #$tid) ---`n`n"
+                $promptText += "This task has extra steps injected by the harness. Execute each at the point named in its 'at' field, IN ADDITION to the steps in tasks.json. A BLOCKING hook must pass before the task may be marked passes:true.`n`n"
+                $promptText += ($matched -join "`n")
+                Write-Host "[+] Injected $($matched.Count) task-specific step(s) for task #$tid" -ForegroundColor Green
+            } else {
+                Write-Host "[i] No task-specific steps for task #$tid" -ForegroundColor DarkGray
+            }
+        }
+    } catch {
+        Write-Host "[!] Could not parse ${taskStepsFile}: $_" -ForegroundColor Yellow
+    }
+}
+
 # Save prompt to temp file
 $tempPrompt = Join-Path $env:TEMP "ralph-prompt-$iterationNumber.txt"
 $promptText | Out-File -FilePath $tempPrompt -Encoding UTF8
