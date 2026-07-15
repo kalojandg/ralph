@@ -1,5 +1,7 @@
 {
   "prompt_file": "PROMPT.md",
+  "use_api_key": false,
+  "_use_api_key_comment": "false (default) = агентите МАХАТ ANTHROPIC_API_KEY от env-а си и вървят на абонамента (OAuth login). true = ползват API ключа (кредити). Сет-нат ANTHROPIC_API_KEY иначе тихо отвлича билинга към кредити и игнорира Max плана.",
   "claude_args": [
     "--output-format", "text",
     "--model", "claude-opus-4-8",

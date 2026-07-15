@@ -256,10 +256,19 @@ $outputFile = Join-Path $env:TEMP "ralph-output-$iterationNumber.txt"
 $agentWorkDir = if ($isParallel -and $workDir) { $workDir } else { $projectRoot }
 Write-Host "[i] Working dir: $agentWorkDir" -ForegroundColor Cyan
 
+# Billing routing: when use_api_key is false (default), strip ANTHROPIC_API_KEY from the
+# agent's environment so the claude CLI falls back to the subscription (OAuth) login.
+# A set ANTHROPIC_API_KEY silently hijacks billing to API credits and IGNORES the Max plan -
+# that is how the swarm burned through credits while the subscription sat unused. The var is
+# removed only inside the agent job, never from the user's global environment.
+$useApiKey = $false
+if ($config -and $config.PSObject.Properties['use_api_key']) { $useApiKey = [bool]$config.use_api_key }
+
 # Start claude in background and monitor
 $job = Start-Job -ScriptBlock {
-    param($prompt, $output, $modelName, $workDir)
+    param($prompt, $output, $modelName, $workDir, $useApiKey)
     Set-Location $workDir
+    if (-not $useApiKey) { Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue }
     # --verbose --output-format stream-json => claude streams an NDJSON event per step,
     # so $output grows continuously while it works. WITHOUT this, `claude -p` (text) buffers
     # ALL output until the very end => the file stays 0 bytes the whole run => the
@@ -267,7 +276,7 @@ $job = Start-Job -ScriptBlock {
     # Substring completion checks ("<promise>COMPLETE</promise>", "hit your limit") still match
     # because those literals appear inside the JSON text events.
     & claude -p "@$prompt" --model $modelName --dangerously-skip-permissions --verbose --output-format stream-json 2>&1 | Out-File -FilePath $output -Encoding UTF8
-} -ArgumentList $tempPrompt, $outputFile, $model, $agentWorkDir
+} -ArgumentList $tempPrompt, $outputFile, $model, $agentWorkDir, $useApiKey
 
 # Show spinner while waiting
 $spinChars = @('|', '/', '-', '\')
