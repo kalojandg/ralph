@@ -23,6 +23,11 @@
     "feedback_file": "feedback.md",
     "append_after_iteration": true
   },
+  "swarm": {
+    "agents": 3,
+    "worktree_root": "",
+    "_comment": "agents = паралелни слота (2-3 старт, 5-6 практичен таван). worktree_root празно = <parent>\\.ralph-worktrees. Виж ralph reference/parallel-swarm-reference.md"
+  },
   "logging": {
     "enabled": true,
     "log_dir": "logs",

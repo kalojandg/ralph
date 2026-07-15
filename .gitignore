@@ -1,2 +1,6 @@
 # Harness iteration logs — създават се на всяка итерация, не влизат в репото
 logs/
+
+# Swarm runtime state — claims са per-session locks, results са агентски отчети
+claims/
+results/

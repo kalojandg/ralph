@@ -31,6 +31,8 @@
 **Причина:** Избягваме context bloating. Всяка итерация = нов агент = чист context window.
 **Ако продължиш с втори таск в същата итерация — нарушаваш Ralph Wiggum алгоритъма.**
 
+> ⚡ **PARALLEL MODE:** Ако по-долу в prompt-а има секция **"PARALLEL MODE (OVERRIDES Steps 1, 4 and 5)"** — работиш в multi-agent swarm: таскът ти е ФИКСИРАН, работиш само в посочения worktree, НЕ пипаш tasks.json/activity.md и пишеш result файл вместо това. Тази секция ПЕЧЕЛИ над Step 1/4/5 по-долу. Ако я няма — каноничен режим, всичко по-долу важи както е написано.
+
 ## TDD Workflow (RED → GREEN → VISUAL → REFACTOR)
 
 ### Step 1: Find Next Task

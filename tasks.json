@@ -3,6 +3,9 @@
     "id": 1,
     "category": "frontend",
     "repo": "frontend",
+    "lane": "feature-a",
+    "dependsOn": [],
+    "files": ["src/app/features/feature-a/**"],
     "description": "ПРИМЕР — замени с реален таск. Формат: кратко, императивно описание, което става git commit message дословно.",
     "tddWorkflow": true,
     "priority": "medium",
@@ -15,7 +18,7 @@
       { "id": "1.3", "phase": "GREEN",    "action": "Минимална имплементация за да мине тестът. Пусни теста пак → verify PASSES." },
       { "id": "1.4", "phase": "VISUAL",   "action": "Само ако има designReference: screenshot vs дизайн. Сравни Layout / Colors / Typography / Spacing." },
       { "id": "1.5", "phase": "REFACTOR", "action": "Изчисти кода без да променяш поведение. Пусни теста пак → still PASSES." },
-      { "id": "1.6", "phase": "DONE",     "action": "Verify: релевантни тестове pass, lint clean, type-check clean. После: tasks.json passes:true + запис в activity.md + git commit." }
+      { "id": "1.6", "phase": "DONE",     "action": "Verify: релевантни тестове pass, lint clean, type-check clean. После: tasks.json passes:true + запис в activity.md + git commit. (В PARALLEL MODE: resultFile вместо tasks.json/activity.md — виж инжектираната секция.)" }
     ],
     "passes": false
   },
@@ -23,13 +26,33 @@
     "id": 2,
     "category": "backend",
     "repo": "backend",
+    "lane": "feature-b-api",
+    "dependsOn": [],
+    "files": ["DotNetServices/RailRunService/RailRunService.Application/Features/X/**", "DotNetServices/RailRunService/RailRunService.API/Controllers/XController.cs"],
     "description": "ПРИМЕР (backend) — замени с реален таск. Напр. '[BE] CRUD API за X — POST /api/x'.",
     "tddWorkflow": true,
     "priority": "medium",
     "steps": [
       { "id": "2.1", "phase": "RED",   "action": "Напиши integration тест (xUnit) за Command/Query + Handler. Пусни таргетирано (dotnet test --filter) → FAILS." },
       { "id": "2.2", "phase": "GREEN", "action": "Имплементирай Command + Handler по CQRS pattern от reference файла (Aggregate Repository + IUnitOfWork при 2+ writes). Добави endpoint. Тестът PASSES." },
-      { "id": "2.3", "phase": "DONE",  "action": "Verify: dotnet build + таргетиран тест pass. После: tasks.json passes:true + activity.md + commit." }
+      { "id": "2.3", "phase": "DONE",  "action": "Verify: dotnet build + таргетиран тест pass. После: маркиране complete (tasks.json/activity.md, или resultFile в PARALLEL MODE) + commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 3,
+    "category": "frontend",
+    "repo": "frontend",
+    "lane": "feature-b-ui",
+    "dependsOn": [2],
+    "files": ["src/app/features/feature-b/**", "src/api/featureB/**"],
+    "description": "ПРИМЕР (зависим) — FE консуматор на API-то от таск #2. dependsOn:[2] => стартира чак когато #2 е merged. Друга lane от #1 => може паралелно с #1.",
+    "tddWorkflow": true,
+    "priority": "medium",
+    "steps": [
+      { "id": "3.1", "phase": "RED",   "action": "Component тест с мокнат API слой → FAILS." },
+      { "id": "3.2", "phase": "GREEN", "action": "API клиент + hook + компонент → PASSES." },
+      { "id": "3.3", "phase": "DONE",  "action": "Verify + маркиране complete + commit." }
     ],
     "passes": false
   }

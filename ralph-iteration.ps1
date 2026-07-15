@@ -1,7 +1,15 @@
 param(
     [int]$iterationNumber = 1,
-    [string]$configFile = "ralph-config.json"
+    [string]$configFile = "ralph-config.json",
+    # === Parallel (swarm) mode — all optional; passing -taskId activates it ===
+    [int]$taskId = 0,          # exact task to work on (instead of "first passes:false")
+    [string]$workDir = "",     # agent working dir = worktree (sub)dir; overrides project root
+    [string]$branch = "",      # git branch the worktree is on (informational, for the prompt)
+    [string]$resultFile = "",  # where the agent must write its result JSON (instead of tasks.json/activity.md)
+    [int]$agentSlot = 0        # 1-based slot number -> port offsets, labels
 )
+
+$isParallel = $taskId -gt 0
 
 # Setup paths — ralph lives in C:\Users\kaloyan.georgiev\Projects\ralph\, project is C:\Users\kaloyan.georgiev\Projects\
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -31,10 +39,21 @@ if ($config -and $config.claude_args) {
 Write-Host "[i] Iteration $iterationNumber starting..." -ForegroundColor Cyan
 Write-Host "[i] Model: $model" -ForegroundColor Cyan
 
-# Show current task before starting
+# Show current task before starting.
+# Canonical mode: first passes:false in array order. Parallel mode: the exact -taskId
+# assigned by the orchestrator (claiming already happened there - no race here).
 if (Test-Path $tasksFile) {
     $allTasks = Get-Content $tasksFile -Raw | ConvertFrom-Json
-    $currentTask = $allTasks | Where-Object { $_.passes -eq $false } | Select-Object -First 1
+    if ($isParallel) {
+        $currentTask = $allTasks | Where-Object { $_.id -eq $taskId } | Select-Object -First 1
+        if (-not $currentTask) {
+            Write-Host "[X] Parallel mode: task #$taskId not found in tasks.json!" -ForegroundColor Red
+            exit 1
+        }
+        Write-Host "[i] PARALLEL MODE - agent slot $agentSlot, task #$taskId, branch $branch" -ForegroundColor Magenta
+    } else {
+        $currentTask = $allTasks | Where-Object { $_.passes -eq $false } | Select-Object -First 1
+    }
     if ($currentTask) {
         $repo = if ($currentTask.repo) { $currentTask.repo } else { "frontend" }
         Write-Host "[>] Task #$($currentTask.id): $($currentTask.description)" -ForegroundColor Green
@@ -137,6 +156,41 @@ if ($currentTask -and (Test-Path $taskStepsFile)) {
     }
 }
 
+# === PARALLEL MODE override (injected only in swarm runs) ===
+# Placed AFTER task-specific steps (it overrides workflow Steps 1/4/5) but BEFORE feedback
+# (feedback stays the final word on acceptance). ASCII-only (PS 5.1 ANSI parsing).
+if ($isParallel) {
+    $fePort = 3000 + $agentSlot
+    $vitePort = 5173 + $agentSlot
+    $promptText += @"
+
+
+--- PARALLEL MODE (OVERRIDES Steps 1, 4 and 5 above) ---
+
+You are agent slot $agentSlot in a MULTI-AGENT run. Other agents are working on OTHER tasks in OTHER worktrees at the same time. Your assignment is FIXED:
+
+1. TASK: work ONLY on task #$taskId. Do NOT pick a task yourself. Do NOT touch any other task.
+2. WORKDIR: work ONLY inside: $workDir
+   This is an isolated git worktree already checked out on branch '$branch'. NEVER edit files outside it (the main repo checkout and other worktrees belong to other agents).
+3. GIT: commit on the CURRENT branch only. FORBIDDEN: git checkout/switch/merge/rebase/push/worktree/branch -d. The orchestrator merges your branch later.
+4. SCOPE: if the task has a "files" list, treat it as your ownership boundary - modify only files matching it (plus new test files for them). If you believe you must edit something outside the boundary, STOP and report it in the result file instead ("status": "failed", explain in "summary").
+5. PORTS: if you need a dev server, use port $vitePort (vite) / $fePort (node) - NOT the defaults - to avoid collisions with other agents. Pass it explicitly (e.g. 'npm run dev -- --port $vitePort').
+6. DO NOT edit tasks.json or activity.md (shared files - the orchestrator updates them). INSTEAD, when finished, WRITE EXACTLY this file (UTF-8, valid JSON, no markdown fences):
+   $resultFile
+   {
+     "taskId": $taskId,
+     "status": "done",            // or "failed"
+     "commit": "<full or short hash of your final commit, empty if none>",
+     "testsPassed": true,          // false if anything red
+     "summary": "<1-3 sentences: what you did / why it failed>",
+     "activity": "<the FULL activity.md entry for this task, markdown, same template as usual>"
+   }
+7. SETUP: worktrees start WITHOUT untracked build artifacts. If node_modules is missing (FE), run 'npm ci' once before tests. .env files were copied in by the orchestrator when present.
+8. Then output the usual <task-complete> XML and STOP. Do not start anything else.
+"@
+    Write-Host "[+] Injected PARALLEL MODE override (task #$taskId, slot $agentSlot)" -ForegroundColor Magenta
+}
+
 # === Iteration-level feedback (feedback.md) — LAST so it has the final word ===
 # Injected at the very END of the prompt (recency) so it can set/override the ACCEPTANCE
 # CRITERIA: what "done" means for THIS iteration. NOT per-task (task-scoped steps go in
@@ -175,8 +229,10 @@ Write-Host ""
 # Run Claude - capture output but also display progress indicator
 $outputFile = Join-Path $env:TEMP "ralph-output-$iterationNumber.txt"
 
-# Working directory is the BDZ Project root — Claude navigates to specific repos via prerequisite
-Write-Host "[i] Working dir: $bdzProject" -ForegroundColor Cyan
+# Working directory: canonical mode = project root (Claude navigates to repos via prerequisite);
+# parallel mode = the agent's isolated worktree (sub)dir.
+$agentWorkDir = if ($isParallel -and $workDir) { $workDir } else { $bdzProject }
+Write-Host "[i] Working dir: $agentWorkDir" -ForegroundColor Cyan
 
 # Start claude in background and monitor
 $job = Start-Job -ScriptBlock {
@@ -189,7 +245,7 @@ $job = Start-Job -ScriptBlock {
     # Substring completion checks ("<promise>COMPLETE</promise>", "hit your limit") still match
     # because those literals appear inside the JSON text events.
     & claude -p "@$prompt" --model $modelName --dangerously-skip-permissions --verbose --output-format stream-json 2>&1 | Out-File -FilePath $output -Encoding UTF8
-} -ArgumentList $tempPrompt, $outputFile, $model, $bdzProject
+} -ArgumentList $tempPrompt, $outputFile, $model, $agentWorkDir
 
 # Show spinner while waiting
 $spinChars = @('|', '/', '-', '\')
@@ -277,8 +333,11 @@ if ($timedOut) {
 Stop-Job $job -ErrorAction SilentlyContinue
 Remove-Job $job -Force -ErrorAction SilentlyContinue
 try {
+    # In parallel mode, only reap runners spawned from OUR worktree - a blanket kill would
+    # murder the vitest/playwright of the OTHER agents running concurrently.
+    $reapScope = if ($isParallel -and $workDir) { [regex]::Escape($workDir) } else { $null }
     Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -match 'vitest|playwright' } |
+        Where-Object { $_.CommandLine -match 'vitest|playwright' -and (-not $reapScope -or $_.CommandLine -match $reapScope) } |
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 } catch {}
 
@@ -395,6 +454,25 @@ if (Test-Path $outputFile) {
 
 # Cleanup temp prompt
 Remove-Item $tempPrompt -ErrorAction SilentlyContinue
+
+# === Parallel mode: success = the agent produced its result file (orchestrator merges &
+# updates tasks.json). Skip the shared tasks.json completion count entirely. ===
+if ($isParallel) {
+    Write-Host ""
+    if ($resultFile -and (Test-Path $resultFile)) {
+        try {
+            $res = Get-Content $resultFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            Write-Host "[+] Result file written: status=$($res.status), commit=$($res.commit)" -ForegroundColor Green
+            exit 0
+        } catch {
+            Write-Host "[!] Result file exists but is not valid JSON: $_" -ForegroundColor Yellow
+            exit 1
+        }
+    } else {
+        Write-Host "[!] Agent finished WITHOUT writing the result file - treating as failed." -ForegroundColor Yellow
+        exit 1
+    }
+}
 
 # Check tasks.json for completion
 Write-Host ""

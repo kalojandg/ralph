@@ -1,11 +1,15 @@
 {
   "_comment": "Repo mapping — single source of truth за 'кое репо къде е на диска и кой архитектурен reference да прочета'. Алгоритъмът: таск има поле `repo` → намери го тук → cd в `location` + прочети `reference` (в тази папка) преди да пишеш код. Позволява едновременна работа по няколко репота.",
   "_reference_base": "Всички `reference` пътища са спрямо тази папка (ralph/ralph reference/project reference/).",
-  "version": 1,
+  "_worktree_fields": "gitRoot = коренът на git репото (оттам се прави `git worktree add`). workSubdir = относителен път ВЪТРЕ в репото до работната директория (празен = коренът). mainBranch = integration branch, от който тръгват task branches и в който orchestrator-ът merge-ва. ЗАБЕЛЕЖКА: backend и database споделят ЕДИН gitRoot (OSDM-Src) — worktree на OSDM-Src носи и двете.",
+  "version": 2,
 
   "repos": {
     "frontend": {
       "location": "C:\\Users\\kaloyan.georgiev\\Projects\\Admin-App",
+      "gitRoot": "C:\\Users\\kaloyan.georgiev\\Projects\\Admin-App",
+      "workSubdir": "",
+      "mainBranch": "devdev",
       "reference": "admin-app-frontend-structure.md",
       "description": "React 19 + TypeScript + Vite Admin-App. Folder structure, routing, API layer, React Query hooks, MUI, i18n, testing patterns.",
       "commands": {
@@ -20,6 +24,9 @@
 
     "backend": {
       "location": "C:\\Users\\kaloyan.georgiev\\Projects\\OSDM-Src\\DotNetServices\\RailRunService",
+      "gitRoot": "C:\\Users\\kaloyan.georgiev\\Projects\\OSDM-Src",
+      "workSubdir": "DotNetServices\\RailRunService",
+      "mainBranch": "devdev",
       "reference": "railrun-backend-structure.md",
       "description": ".NET 8 Clean Architecture, CQRS, Aggregate Repositories + IUnitOfWork, DTO location rules, Validation.",
       "commands": {
@@ -31,6 +38,9 @@
 
     "database": {
       "location": "C:\\Users\\kaloyan.georgiev\\Projects\\OSDM-Src\\SQLProjects\\RailRunServiceSQL",
+      "gitRoot": "C:\\Users\\kaloyan.georgiev\\Projects\\OSDM-Src",
+      "workSubdir": "SQLProjects\\RailRunServiceSQL",
+      "mainBranch": "devdev",
       "reference": "railrun-database-guide.md",
       "description": "SQL Server schema (WagonTypes/CoachLayouts/SeatDefinitions), seed data, idempotent post-deployment migrations, grid coordinate system.",
       "commands": {
