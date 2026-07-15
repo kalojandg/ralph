@@ -400,21 +400,28 @@ if (Test-Path $outputFile) {
     } catch {}
 
     # === QUOTA DETECTION ===
-    # Pattern: "You've hit your limit · resets 7pm (Europe/Sofia)"
-    if ($result -match "hit your limit") {
+    # Message wording DRIFTS across claude CLI versions - match loosely:
+    #   old  (<= 2.1.47):  "You've hit your limit · resets 7pm (Europe/Sofia)"
+    #   new  (>= 2.1.210): "You've hit your session limit · resets 8:30pm (Europe/Kiev)"
+    # so: "hit your" + optional qualifier word(s) + "limit", and reset time with optional :MM.
+    if ($result -match "hit your(?:\s+\w+)?\s+limit") {
         $waitMinutes = 60  # default fallback: wait 1 hour
 
-        if ($result -match "resets\s+(\d{1,2})(am|pm)\s*\(([^)]+)\)") {
+        $resetHour = $null
+        $resetMin = 0
+        $tz = "?"
+        if ($result -match "resets\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*\(([^)]+)\)") {
             $resetHour = [int]$Matches[1]
-            $ampm = $Matches[2]
-            $tz = $Matches[3]
+            if ($Matches[2]) { $resetMin = [int]$Matches[2] }
+            $ampm = $Matches[3]
+            $tz = $Matches[4]
 
             # Convert to 24h
             if ($ampm -eq "pm" -and $resetHour -ne 12) { $resetHour += 12 }
             if ($ampm -eq "am" -and $resetHour -eq 12) { $resetHour = 0 }
 
             $now = Get-Date
-            $resetTime = Get-Date -Hour $resetHour -Minute 0 -Second 0
+            $resetTime = Get-Date -Hour $resetHour -Minute $resetMin -Second 0
             # If reset time is in the past, it means tomorrow
             if ($resetTime -le $now) { $resetTime = $resetTime.AddDays(1) }
 
@@ -427,7 +434,7 @@ if (Test-Path $outputFile) {
         Write-Host ""
         Write-Host "============================================" -ForegroundColor Red
         Write-Host "   QUOTA EXCEEDED" -ForegroundColor Red
-        Write-Host "   Resets at: ${resetHour}:00 ($tz)" -ForegroundColor Red
+        Write-Host "   Resets at: $(if ($null -ne $resetHour) { '{0}:{1:d2} ({2})' -f $resetHour, $resetMin, $tz } else { 'unknown - waiting 60 min fallback' })" -ForegroundColor Red
         Write-Host "   Waiting $waitMinutes minutes..." -ForegroundColor Red
         Write-Host "============================================" -ForegroundColor Red
         Write-Host ""

@@ -54,7 +54,7 @@ if ($tail -match '"terminal_reason"') { break }
 **Други изходи от watchdog-а:**
 - Hard timeout 180 мин → exit 3
 - Stale 60 мин без растеж на output → exit 3
-- Открит `"hit your limit"` → изчаква reset → exit 2 (retry)
+- Открит quota текст → изчаква reset → exit 2 (retry). Match-ът е ХЛАБАВ (`hit your(?:\s+\w+)?\s+limit`), защото формулировката дрейфи между CLI версии: старо „hit your limit · resets 7pm (TZ)", ново (≥2.1.210) „hit your **session** limit · resets **8:30**pm (TZ)" — и reset парсерът поддържа опционални минути
 
 ### Ниво 3 — „Готово ли е?" → броене на `tasks.json` → exit код
 
