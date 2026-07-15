@@ -64,6 +64,29 @@ if (Test-Path $promptFile) {
     exit 1
 }
 
+# === Iteration-level feedback (feedback.md) ===
+# Injected into EVERY iteration's prompt (NOT per-task; task-scoped steps go in task-steps.json).
+# The human (or a prior agent) writes short steering notes; stale notes should be deleted.
+# HTML comments are stripped; if nothing real remains, injection is skipped.
+# ASCII-only here (PS 5.1 parses no-BOM .ps1 as ANSI); Cyrillic content comes from the file (UTF8).
+$feedbackFile = "feedback.md"
+$feedbackEnabled = $true
+if ($config -and $config.feedback) {
+    if ($config.feedback.feedback_file) { $feedbackFile = $config.feedback.feedback_file }
+    if ($config.feedback.PSObject.Properties['enabled']) { $feedbackEnabled = $config.feedback.enabled }
+}
+if ($feedbackEnabled -and (Test-Path $feedbackFile)) {
+    $fbRaw = Get-Content $feedbackFile -Raw -Encoding UTF8
+    $fbStripped = ($fbRaw -replace '(?s)<!--.*?-->', '').Trim()
+    if ($fbStripped.Length -gt 0) {
+        $promptText += "`n`n--- Feedback (steering for THIS iteration) ---`n`n"
+        $promptText += $fbStripped
+        Write-Host "[+] Injected iteration feedback ($($fbStripped.Length) chars)" -ForegroundColor Green
+    } else {
+        Write-Host "[i] feedback.md has no active feedback - nothing injected" -ForegroundColor DarkGray
+    }
+}
+
 # Get prerequisite file from config (appended BEFORE user-steps — read after task selection, before coding)
 $prereqFile = "prerequisite-steps.md"
 if ($config -and $config.prerequisite_steps -and $config.prerequisite_steps.steps_file) {

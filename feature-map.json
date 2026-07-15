@@ -56,7 +56,6 @@
     "_comment": "Changed files matching these globs neither map to specs nor trigger full suite. They simply don't require E2E (docs, configs unrelated to runtime).",
     "paths": [
       "**/*.md",
-      "DOCS/**",
       "ralph/**",
       "src/**/*.test.ts",
       "src/**/*.test.tsx",

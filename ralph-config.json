@@ -18,16 +18,6 @@
     "enabled": true,
     "steps_file": "task-steps.json"
   },
-  "completion_criteria": {
-    "patterns": [
-      "<promise>COMPLETE</promise>"
-    ],
-    "continue_patterns": [
-      "<task-complete>",
-      "<status>CONTINUE</status>"
-    ],
-    "user_defined_file": "completion-check.ps1"
-  },
   "feedback": {
     "enabled": true,
     "feedback_file": "feedback.md",

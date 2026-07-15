@@ -9,6 +9,8 @@
 3. **C:/Users/kaloyan.georgiev/Projects/Admin-App/docs/composition/PRD.json** - Requirements и TDD methodology
 4. **C:/Users/kaloyan.georgiev/Projects/Admin-App/docs/composition/designs/** - UI mockups за visual testing
 
+> 📌 **Feedback:** Ако най-долу в prompt-а има секция **"Feedback (steering for THIS iteration)"** — това са актуални насоки на ниво итерация (от `feedback.md`), инжектирани от харнеса. Имат **приоритет** над общите инструкции при конфликт. Ако секцията липсва — няма активен feedback.
+
 **Working directories по repo** (source of truth: `ralph/ralph reference/project reference/repos.json` → `repos.<repo>.location`):
 - `frontend` → `C:\Users\kaloyan.georgiev\Projects\Admin-App`
 - `backend` → `C:\Users\kaloyan.georgiev\Projects\OSDM-Src\DotNetServices\RailRunService`
