@@ -247,6 +247,17 @@ function Complete-Agent($info) {
         # merge_skipped / merge_conflict: work exists on the branch but is NOT in the
         # integration branch => passes stays FALSE; worktree/branch kept for a human.
     } else {
+        # Exit code 2 = quota hit; the agent already WAITED for the reset inside its own
+        # window and then exited. Re-queue the task (it becomes eligible again on the next
+        # scheduler pass with a FRESH worktree) instead of counting it as failed.
+        $exitCode = $null
+        try { $exitCode = $info.proc.ExitCode } catch {}
+        if ($exitCode -eq 2) {
+            Write-Host "[~] Task #$($t.id): QUOTA hit (agent waited for reset) - RE-QUEUED" -ForegroundColor Yellow
+            & git -C $info.gitRoot worktree remove --force $info.wtPath 2>$null | Out-Null
+            Release-Claim $t.id
+            return "quota_requeue"
+        }
         $why = "no result file"
         if ($result) { $why = "status=$($result.status): $($result.summary)" }
         Write-Host "[X] Task #$($t.id): FAILED ($why). Worktree removed, branch kept: $($info.branch)" -ForegroundColor Red
@@ -260,7 +271,7 @@ function Complete-Agent($info) {
 # ---------------------------------------------------------------- main rolling loop
 $running   = @{}    # taskId -> agent info
 $failedIds = @()
-$stats = @{ merged = 0; conflicts = 0; skipped = 0; failed = 0 }
+$stats = @{ merged = 0; conflicts = 0; skipped = 0; failed = 0; requeued = 0 }
 $freeSlots = New-Object System.Collections.ArrayList
 1..$agents | ForEach-Object { [void]$freeSlots.Add($_) }
 $launchedTotal = 0
@@ -316,6 +327,7 @@ while ($true) {
                 "merged"         { $stats.merged++ }
                 "merge_conflict" { $stats.conflicts++; $failedIds += $id }
                 "merge_skipped"  { $stats.skipped++;  $failedIds += $id }
+                "quota_requeue"  { $stats.requeued++ }   # NOT failed - eligible again next pass
                 default          { $stats.failed++;   $failedIds += $id }
             }
             $running.Remove($id)
@@ -336,6 +348,7 @@ Write-Host "Merged           : $($stats.merged)"    -ForegroundColor Green
 Write-Host "Merge conflicts  : $($stats.conflicts)" -ForegroundColor $(if ($stats.conflicts) { 'Red' } else { 'Gray' })
 Write-Host "Merge skipped    : $($stats.skipped)"   -ForegroundColor $(if ($stats.skipped)   { 'Yellow' } else { 'Gray' })
 Write-Host "Failed           : $($stats.failed)"    -ForegroundColor $(if ($stats.failed)    { 'Red' } else { 'Gray' })
+Write-Host "Quota re-queues  : $($stats.requeued)"  -ForegroundColor $(if ($stats.requeued)  { 'Yellow' } else { 'Gray' })
 Write-Host ""
 Write-Host "Conflict/skipped branches are kept as ralph/task-<id> for manual resolve." -ForegroundColor Gray
 Write-Host "Stale worktrees (if any): git worktree list  (in each gitRoot)" -ForegroundColor Gray
