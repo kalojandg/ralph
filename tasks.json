@@ -600,7 +600,7 @@
                           "action":  "npm run test:unit -\u003e зелен без редакция на тестове. Commit."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  26,
@@ -637,6 +637,6 @@
                           "action":  "npm run test:unit -\u003e целият suite зелен. git status чист след commit. Commit."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     }
 ]

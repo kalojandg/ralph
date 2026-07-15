@@ -34,6 +34,41 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #26 — refactor: finalize app.js as thin orchestrator facade and document module structure in README
+
+**Date:** 2026-07-15
+**Status:** ✅ Done
+
+**What was done:**
+- Cleaned up dead/unused imports in `app.js` that were only present for direct `export ... from` re-exports:
+  - `firebase.js`: dropped `db, doc, collection, updateDoc, deleteDoc, getDoc` (kept `GOLD_DOC, ITEMS_DOC, QUESTS_DOC, onSnapshot, setDoc`).
+  - `gold.js`: dropped `spendGold, coinInputs, clearCoinInputs` (kept `renderGold, handleGain, handleSpend`).
+  - `ui.js`: dropped `esc, initSortable` (kept `syncMsg, initTabs, initModalBackdrops`).
+- Verified the facade is complete — all 15 legacy exports still present (spendGold, renderGold, coinInputs, clearCoinInputs, renderItems, renderQuests, saveItems, saveQuests, initSortable, esc, syncMsg, BADGE, NEXT_STATUS, getState, setState).
+- Wrote a `Structure` section in `README.md` documenting each file/module, how to run unit + e2e tests, and the intentional CDN-imports (no-bundler) decision.
+
+**Files modified:** `app.js`, `README.md`
+
+**Verification:** `npm run test:unit` → 6 files / 75 tests passed. No app.js behavior change; unit tests untouched.
+
+**Git commit:** `bb856f7172abd6e6a8174a1cbaa1bf375ecb90f5`
+
+
+### 2026-07-15 — Task #25: refactor: move gold handlers, tabs and modal backdrop wiring into their modules
+
+**Status:** DONE (passes: true)
+
+**What was done:**
+- `modules/gold.js`: added imports for `syncMsg` (./ui.js) and `GOLD_DOC`, `setDoc` (./firebase.js); moved `handleGain` and `handleSpend` verbatim from app.js as exported `async function`s. No import cycle (ui.js does not import gold.js).
+- `modules/ui.js`: extracted the `.tab-btn` click wiring into `export function initTabs()` and the modal backdrop-close wiring into `export function initModalBackdrops()`; both moved verbatim.
+- `app.js`: imports `handleGain`/`handleSpend` from gold.js and `initTabs`/`initModalBackdrops` from ui.js; replaced the handler function bodies with `window.handleGain = handleGain` / `window.handleSpend = handleSpend` wiring; replaced the tabs and backdrop wiring blocks with `initTabs();` / `initModalBackdrops();` at the same top-level positions (execution order preserved); added `handleGain`/`handleSpend` to the gold.js facade re-export.
+- Characterization tests untouched; `npm run test:unit` green (6 files, 75 tests).
+
+**Files modified:** `app.js`, `modules/gold.js`, `modules/ui.js`
+
+**Git commit:** d572efb61d6fa7b1156ed0d18387164e78d1db44
+
+
 ## Task #24 — refactor: extract quests logic into modules/quests.js
 
 **Date:** 2026-07-15
@@ -289,6 +324,8 @@
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
 
 
 
