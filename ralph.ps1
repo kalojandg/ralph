@@ -106,6 +106,16 @@ while ($i -le $iterations) {
         Start-Sleep -Seconds 5
         continue
     }
+    elseif ($exitCode -eq 4) {
+        # Fatal environment error (API credit balance / auth) — no reset time to wait for,
+        # a human must fix it. Retrying would just mark tasks failed for no reason.
+        Write-Host ""
+        Write-Host "====================================================" -ForegroundColor Red
+        Write-Host "   [X] FATAL: billing/auth error (see log). Loop stopped." -ForegroundColor Red
+        Write-Host "   Top up API credits or switch --model, then re-run." -ForegroundColor Red
+        Write-Host "====================================================" -ForegroundColor Red
+        exit 1
+    }
 
     # Detect silent failure (Claude never produced output)
     if (-not $producedLog) {

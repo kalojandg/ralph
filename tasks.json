@@ -1,278 +1,642 @@
-[
-  {
-    "id": 1,
-    "category": "refactor",
-    "repo": "frontend",
-    "lane": "bootstrap",
-    "files": ["index.html", "styles.css"],
-    "description": "refactor: extract inline CSS from index.html into styles.css",
-    "specRef": "shared-inventory-structure.md §1, §3",
-    "notes": "Чисто механичен таск — умишлено първи: валидира целия pipeline (worktree -> merge -> verify gate) с тривиална промяна. НУЛА промени по правилата/селекторите.",
-    "steps": [
-      { "id": "1.1", "phase": "RECON", "action": "Прочети index.html. Идентифицирай <style> блока в <head> (започва ~ред 11)." },
-      { "id": "1.2", "phase": "IMPLEMENT", "action": "Създай styles.css с ТОЧНОТО съдържание на <style> блока (без <style> таговете), без 'подобрения', без преформатиране." },
-      { "id": "1.3", "phase": "IMPLEMENT", "action": "В index.html замени целия <style>...</style> блок с <link rel=\"stylesheet\" href=\"./styles.css\">. Нищо друго в index.html не се пипа." },
-      { "id": "1.4", "phase": "DONE", "action": "Провери: index.html вече няма <style> блок; styles.css съдържа всички правила; git diff показва САМО изваждането + link реда. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 2,
-    "category": "refactor",
-    "repo": "frontend",
-    "lane": "bootstrap",
-    "files": ["index.html", "app.js"],
-    "description": "refactor: extract inline module script from index.html into app.js verbatim with named exports",
-    "specRef": "shared-inventory-structure.md §2, §3, §7",
-    "notes": "VERBATIM extraction — нула логически промени. Единствените добавки: export статменти в края. Малкият inline classic script за service worker регистрацията ОСТАВА в index.html. CDN import-ите ОСТАВАТ както са.",
-    "steps": [
-      { "id": "2.1", "phase": "RECON", "action": "Прочети index.html и structure reference §2 (инвентар на кода). Идентифицирай <script type=\"module\"> блока (~ред 323 до затварящия </script> преди </body>)." },
-      { "id": "2.2", "phase": "IMPLEMENT", "action": "Създай app.js с ТОЧНОТО съдържание на module script блока (без script таговете), verbatim — включително firebaseConfig, коментарите и подредбата на регионите." },
-      { "id": "2.3", "phase": "IMPLEMENT", "action": "В КРАЯ на app.js добави: export { spendGold, renderGold, coinInputs, clearCoinInputs, renderItems, renderQuests, saveItems, saveQuests, initSortable, esc, syncMsg, BADGE, NEXT_STATUS }; и export const getState = () => ({ gold, items, quests }); и export function setState(s) { if (s.gold !== undefined) gold = s.gold; if (s.items !== undefined) items = s.items; if (s.quests !== undefined) quests = s.quests; } — НИЩО ДРУГО не се добавя." },
-      { "id": "2.4", "phase": "IMPLEMENT", "action": "В index.html замени module script блока с <script type=\"module\" src=\"./app.js\"></script>. Service worker inline скриптът и SortableJS <script src> тагът остават непокътнати." },
-      { "id": "2.5", "phase": "DONE", "action": "Провери: git diff на index.html показва САМО замяната на блока със src reference; app.js е идентичен на стария блок + export-ите накрая; window.* assignments са на място (onclick handler-ите в HTML разчитат на тях). Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 3,
-    "category": "setup",
-    "repo": "frontend",
-    "lane": "bootstrap",
-    "dependsOn": [2],
-    "files": ["package.json", "package-lock.json", "vitest.config.js", "test/mocks/**", "test/helpers/**", "test/unit/smoke.spec.js"],
-    "description": "chore: add vitest unit test infrastructure with firebase CDN mocks and bootApp helper",
-    "specRef": "shared-inventory-structure.md §5, §6",
-    "notes": "Инфраструктурата, която всички тестови таскове (10-14) КОНСУМИРАТ. Контрактите в §5 (мокове) и §6 (bootApp) са ЗАДЪЛЖИТЕЛНИ — тестовите таскове са писани срещу тях. app.js и index.html НЕ се пипат.",
-    "steps": [
-      { "id": "3.1", "phase": "RECON", "action": "Прочети structure reference §5 и §6 (точните контракти) и app.js (какво import-ва, какви глобали ползва: Sortable, confirm, alert)." },
-      { "id": "3.2", "phase": "IMPLEMENT", "action": "npm i -D vitest jsdom (само тези две). Добави script \"test:unit\": \"vitest run\" в package.json. НЕ пипай съществуващите scripts." },
-      { "id": "3.3", "phase": "IMPLEMENT", "action": "Създай vitest.config.js: environment 'jsdom', include 'test/unit/**/*.spec.js', resolve.alias мапващ двата CDN URL-а ('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js' и 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js') към ./test/mocks/firebase-app.js и ./test/mocks/firebase-firestore.js." },
-      { "id": "3.4", "phase": "IMPLEMENT", "action": "Създай test/mocks/firebase-app.js и test/mocks/firebase-firestore.js ТОЧНО по контракта от §5: doc() връща string token 'col/id', calls обект записва setDoc/updateDoc/deleteDoc извиквания, onSnapshot регистрира callback, __emit(token, data) вика callbacks със snap {exists, data}, __reset() чисти всичко." },
-      { "id": "3.5", "phase": "IMPLEMENT", "action": "Създай test/helpers/dom.js с export async function bootApp(...) ТОЧНО по контракта от §6: зарежда body markup от index.html без script таговете, стъбва Sortable/confirm/alert, vi.resetModules + __reset, import app.js, __emit за трите дока, връща {fs}." },
-      { "id": "3.6", "phase": "IMPLEMENT", "action": "Създай test/unit/smoke.spec.js: (а) bootApp() без данни -> #dispGP показва 0, #invBody има empty state ред, #questBody има empty state ред; (б) bootApp({items:[{name:'Меч'}]}) -> ред с 'Меч' в таблицата; (в) app.js export-ва spendGold, getState, setState (typeof проверки)." },
-      { "id": "3.7", "phase": "DONE", "action": "npm run test:unit -> зелен. Провери, че package-lock.json е commit-нат, а node_modules НЕ е. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 10,
-    "category": "testing",
-    "repo": "frontend",
-    "lane": "tests-gold",
-    "dependsOn": [2, 3],
-    "files": ["test/unit/gold.spec.js"],
-    "description": "test: characterization tests for gold treasury (spendGold borrow-down, gain/spend handlers, input clamping)",
-    "specRef": "shared-inventory-structure.md §2 (GOLD), §4, §6",
-    "notes": "ХАРАКТЕРИЗАЦИЯ: тестовете документират ТЕКУЩОТО поведение и минават срещу непроменен app.js. app.js НЕ се пипа. Ползвай bootApp() от test/helpers/dom.js и fs.calls за Firestore assertions.",
-    "steps": [
-      { "id": "10.1", "phase": "RECON", "action": "Прочети GOLD региона на app.js (spendGold, renderGold, coinInputs, clearCoinInputs, handleGain, handleSpend) и §4 от reference-а." },
-      { "id": "10.2", "phase": "IMPLEMENT", "action": "Тествай spendGold като чиста функция (direct import): точна сума без borrow; borrow cp<-sp, sp<-gp, gp<-pp; верижен borrow (плащаш 1cp само с 1pp); недостиг -> null; float стойности (toCp ползва floor); нулев cost; cost с липсващи полета (default 0)." },
-      { "id": "10.3", "phase": "IMPLEMENT", "action": "Тествай през DOM с bootApp({gold:{pp:1,gp:2,sp:3,cp:4}}): renderGold показва стойностите в #dispPP/GP/SP/CP; window.handleGain събира input стойностите, чисти inputs, вика setDoc с token 'inventory/gold' и новата сума (fs.calls.setDoc); coinInputs клампва отрицателни->0, floats->floor, празно->0." },
-      { "id": "10.4", "phase": "IMPLEMENT", "action": "Тествай window.handleSpend: успешен spend (setDoc с borrow-down резултата, #goldError без 'visible' клас); недостиг (#goldError получава 'visible', gold НЕ се променя, setDoc НЕ се вика); повторен успешен spend маха 'visible' класа." },
-      { "id": "10.5", "phase": "DONE", "action": "npm run test:unit -> целият suite зелен. app.js untouched (git diff чист извън test/unit/gold.spec.js). Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 11,
-    "category": "testing",
-    "repo": "frontend",
-    "lane": "tests-items",
-    "dependsOn": [2, 3],
-    "files": ["test/unit/items.spec.js"],
-    "description": "test: characterization tests for inventory items (render, totals, escaping, save/edit/delete, accordion)",
-    "specRef": "shared-inventory-structure.md §2 (ITEMS), §4, §6",
-    "notes": "ХАРАКТЕРИЗАЦИЯ: app.js НЕ се пипа. bootApp() + fs.calls. confirm() се стъбва per-test при delete сценариите.",
-    "steps": [
-      { "id": "11.1", "phase": "RECON", "action": "Прочети ITEMS региона на app.js (renderItems, item modal функциите, saveItem, deleteItem, saveItems) и §4." },
-      { "id": "11.2", "phase": "IMPLEMENT", "action": "renderItems: празен списък -> empty state ред + празен footer; списък -> редове с name/qty/weight/value/carrier (default 'Party'); footer = сума weight*qty с toFixed(1) + сума value*qty с toFixed(2); esc() escape-ва <script> тагове и кавички в name/note (провери, че innerHTML НЕ съдържа суров таг)." },
-      { "id": "11.3", "phase": "IMPLEMENT", "action": "saveItem през DOM: попълни модал полетата, window.saveItem() -> нов item НАЙ-ОТГОРЕ (unshift), setDoc 'inventory/items' с {list}; празно име -> НЕ записва; редакция (openItemModal(idx) + saveItem) -> старият се маха, редактираният е най-отгоре." },
-      { "id": "11.4", "phase": "IMPLEMENT", "action": "deleteItem: confirm=true -> маха item-а + setDoc; confirm=false -> нищо не се променя. Snapshot echo: докато saveItems е in-flight (флаг saving), __emit на 'inventory/items' НЕ презаписва списъка (виж §4)." },
-      { "id": "11.5", "phase": "IMPLEMENT", "action": "Акордеон: клик на ред -> 'item-expanded' клас; втори клик -> маха се; клик на друг ред -> само той е expanded; клик върху бутон/drag-handle НЕ toggle-ва; expanded state оцелява re-render (renderItems пак)." },
-      { "id": "11.6", "phase": "DONE", "action": "npm run test:unit -> целият suite зелен. app.js untouched. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 12,
-    "category": "testing",
-    "repo": "frontend",
-    "lane": "tests-quests",
-    "dependsOn": [2, 3],
-    "files": ["test/unit/quests.spec.js"],
-    "description": "test: characterization tests for quests (render, status badges, cycleStatus, save/edit/delete, accordion)",
-    "specRef": "shared-inventory-structure.md §2 (QUESTS), §4, §6",
-    "notes": "ХАРАКТЕРИЗАЦИЯ: app.js НЕ се пипа. bootApp() + fs.calls.",
-    "steps": [
-      { "id": "12.1", "phase": "RECON", "action": "Прочети QUESTS региона на app.js (BADGE, NEXT_STATUS, renderQuests, quest modal, saveQuest, cycleStatus, deleteQuest, saveQuests) и §4." },
-      { "id": "12.2", "phase": "IMPLEMENT", "action": "renderQuests: празно -> empty state; куест -> име, badge клас по статус (BADGE map: Активен->badge-active, Изпълнен->badge-done, Провален->badge-failed, Паузиран->badge-paused), giver/reward с '—' fallback, desc се показва само ако има." },
-      { "id": "12.3", "phase": "IMPLEMENT", "action": "NEXT_STATUS цикъл: direct import assert на map-а (Активен->Изпълнен->Паузиран->Активен; Провален->Активен). window.cycleStatus(i): сменя статуса по map-а И мести куеста НАЙ-ОТГОРЕ (unshift), вика setDoc 'quests/items'." },
-      { "id": "12.4", "phase": "IMPLEMENT", "action": "saveQuest: нов куест най-отгоре + setDoc; празно име -> не записва; редакция -> старият се маха, новият най-отгоре. deleteQuest с confirm true/false. Echo guard: __emit при savingQuests in-flight не презаписва (§4)." },
-      { "id": "12.5", "phase": "IMPLEMENT", "action": "Куест акордеон: същото поведение като items (един expanded, бутоните не toggle-ват, оцелява re-render), но върху 'quest-expanded' класа." },
-      { "id": "12.6", "phase": "DONE", "action": "npm run test:unit -> целият suite зелен. app.js untouched. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 13,
-    "category": "testing",
-    "repo": "frontend",
-    "lane": "tests-sync",
-    "dependsOn": [2, 3],
-    "files": ["test/unit/sync.spec.js"],
-    "description": "test: characterization tests for firestore snapshots, export bundle and import flow",
-    "specRef": "shared-inventory-structure.md §2 (LISTENERS, EXPORT/IMPORT), §4, §5, §6",
-    "notes": "ХАРАКТЕРИЗАЦИЯ: app.js НЕ се пипа. Snapshot поведението се тества през __emit от мока. За exportData: стъбни URL.createObjectURL/revokeObjectURL и HTMLAnchorElement.prototype.click, хвани Blob съдържанието.",
-    "steps": [
-      { "id": "13.1", "phase": "RECON", "action": "Прочети LISTENERS и EXPORT/IMPORT регионите на app.js и мок контракта §5." },
-      { "id": "13.2", "phase": "IMPLEMENT", "action": "Snapshots: __emit('inventory/gold', null) -> нули; __emit с данни -> renderGold ги показва; __emit('quests/items', {...}) -> #syncStatus става 'Live sync ✓' и window.__appReady === true; items/quests __emit с null -> празни списъци (empty state)." },
-      { "id": "13.3", "phase": "IMPLEMENT", "action": "exportData: bundle-ът е {version:1, exportedAt ISO string, gold, items, quests} (парсни Blob-а); download името започва с 'shared-inventory-'." },
-      { "id": "13.4", "phase": "IMPLEMENT", "action": "importData: валиден bundle + confirm=true -> setDoc за 'inventory/gold', 'inventory/items' ({list}), 'quests/items' ({list}) — само за наличните ключове (bundle само с items -> само 1 setDoc); confirm=false -> нула setDoc; невалиден JSON -> alert, нула setDoc; file input value се чисти след всеки опит." },
-      { "id": "13.5", "phase": "DONE", "action": "npm run test:unit -> целият suite зелен. app.js untouched. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 14,
-    "category": "testing",
-    "repo": "frontend",
-    "lane": "tests-ui",
-    "dependsOn": [2, 3],
-    "files": ["test/unit/ui.spec.js"],
-    "description": "test: characterization tests for tabs, modals, esc helper and sortable wiring",
-    "specRef": "shared-inventory-structure.md §2 (DND, TABS/MODALS, HELPERS), §6",
-    "notes": "ХАРАКТЕРИЗАЦИЯ: app.js НЕ се пипа. Sortable стъбът от bootApp пази opts -> тестът вика ръчно opts.onEnd за reorder сценария.",
-    "steps": [
-      { "id": "14.1", "phase": "RECON", "action": "Прочети DND/TABS/MODALS/HELPERS регионите на app.js и Sortable стъба в test/helpers/dom.js." },
-      { "id": "14.2", "phase": "IMPLEMENT", "action": "Табове: клик на data-tab='quests' бутона -> той е .active, инвентарният НЕ е; #tab-quests има .active, #tab-inventory няма; обратен клик връща." },
-      { "id": "14.3", "phase": "IMPLEMENT", "action": "Модали: openItemModal() -> #itemModal има .open + полетата са reset-нати (defaults от §2); клик върху backdrop (e.target == модала) затваря; клик ВЪТРЕ в modal-card НЕ затваря; същото за questModal." },
-      { "id": "14.4", "phase": "IMPLEMENT", "action": "esc(): '&'->'&amp;', '<'->'&lt;', '>'->'&gt;', '\"'->'&quot;'; не пипа други знаци; работи с не-string input (String() cast)." },
-      { "id": "14.5", "phase": "IMPLEMENT", "action": "initSortable: повторно викане destroy-ва предишния instance (стъбът брои destroy извикванията); симулиран onEnd({oldIndex, newIndex}) размества масива и вика saveFn (setDoc call в fs.calls)." },
-      { "id": "14.6", "phase": "DONE", "action": "npm run test:unit -> целият suite зелен. app.js untouched. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 20,
-    "category": "refactor",
-    "repo": "frontend",
-    "lane": "refactor",
-    "dependsOn": [10, 11, 12, 13, 14],
-    "files": ["app.js", "modules/**"],
-    "description": "refactor: extract firebase init and doc refs into modules/firebase.js",
-    "specRef": "shared-inventory-structure.md §3, §7",
-    "notes": "ИНВАРИАНТ за цялата refactor lane: тестовете от test/unit/ НЕ се редактират и остават зелени — app.js е фасада, която re-export-ва всичко. Кодът се МЕСТИ verbatim, не се пренаписва. Vitest alias-ите продължават да прихващат CDN import-ите и през modules/firebase.js.",
-    "steps": [
-      { "id": "20.1", "phase": "RECON", "action": "Прочети §7 (целевата структура) и CONFIG/INIT регионите на app.js. Пусни npm run test:unit за baseline (зелен)." },
-      { "id": "20.2", "phase": "REFACTOR", "action": "Създай modules/firebase.js: премести verbatim firebaseConfig, initializeApp/getFirestore извикванията, db, GOLD_DOC/ITEMS_DOC/QUESTS_DOC. Re-export-ни от него и ползваните firestore функции (setDoc, onSnapshot, doc и т.н.). CDN import URL-ите остават байт по байт същите." },
-      { "id": "20.3", "phase": "REFACTOR", "action": "app.js: замени CONFIG/INIT региона с import { db, GOLD_DOC, ITEMS_DOC, QUESTS_DOC, setDoc, onSnapshot, ... } from './modules/firebase.js'. PLAYERS остава в app.js." },
-      { "id": "20.4", "phase": "DONE", "action": "npm run test:unit -> зелен БЕЗ редакция на тестове. index.html не е пипан. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 21,
-    "category": "refactor",
-    "repo": "frontend",
-    "lane": "refactor",
-    "files": ["app.js", "modules/**"],
-    "description": "refactor: extract mutable app state into modules/state.js",
-    "specRef": "shared-inventory-structure.md §7",
-    "notes": "НАЙ-РИСКОВИЯТ таск в lane-а. Голите let променливи стават полета на export const state = {...}; всички четения/писания в app.js се пренасочват към state.x. getState/setState фасадата в app.js запазва ТОЧНО старата сигнатура (тестовете я ползват).",
-    "steps": [
-      { "id": "21.1", "phase": "RECON", "action": "Изброй ВСИЧКИ места в app.js, които четат/пишат gold, items, quests, editingItemIdx, editingQuestIdx, expandedItemIdx, expandedQuestIdx, saving, savingQuests (вкл. в onSnapshot callbacks и saveItems/saveQuests флаговете)." },
-      { "id": "21.2", "phase": "REFACTOR", "action": "Създай modules/state.js: export const state = { gold: {pp:0,gp:0,sp:0,cp:0}, items: [], quests: [], editingItemIdx: null, editingQuestIdx: null, expandedItemIdx: null, expandedQuestIdx: null, saving: false, savingQuests: false }." },
-      { "id": "21.3", "phase": "REFACTOR", "action": "В app.js: махни let декларациите, import { state }, замени ВСЯКА употреба с state.x (замяната е механична, но проверявай всяко място — пропуснато писане в стар local = тихо счупване)." },
-      { "id": "21.4", "phase": "REFACTOR", "action": "getState/setState в app.js стават делегати към state обекта СЪС СЪЩАТА сигнатура: getState() връща {gold: state.gold, items: state.items, quests: state.quests}; setState пише в state полетата." },
-      { "id": "21.5", "phase": "DONE", "action": "npm run test:unit -> целият suite зелен БЕЗ редакция на тестове. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 22,
-    "category": "refactor",
-    "repo": "frontend",
-    "lane": "refactor",
-    "files": ["app.js", "modules/**"],
-    "description": "refactor: extract pure gold logic into modules/gold.js",
-    "specRef": "shared-inventory-structure.md §7",
-    "notes": "Местят се САМО чистите функции: spendGold, coinInputs, clearCoinInputs, renderGold. handleGain/handleSpend ОСТАВАТ в app.js (зависят от syncMsg, който се мести чак в таск 23) — така се избягва import цикъл app.js <-> modules.",
-    "steps": [
-      { "id": "22.1", "phase": "RECON", "action": "Baseline: npm run test:unit зелен. Прегледай GOLD региона и зависимостите му (state, syncMsg, setDoc/GOLD_DOC)." },
-      { "id": "22.2", "phase": "REFACTOR", "action": "Създай modules/gold.js: премести verbatim spendGold, renderGold, coinInputs, clearCoinInputs. renderGold ползва state -> import { state } from './state.js'." },
-      { "id": "22.3", "phase": "REFACTOR", "action": "app.js: import { spendGold, renderGold, coinInputs, clearCoinInputs } from './modules/gold.js' и re-export същите (export { ... } from './modules/gold.js'). handleGain/handleSpend продължават да ги ползват, но вече през import-а." },
-      { "id": "22.4", "phase": "DONE", "action": "npm run test:unit -> зелен без редакция на тестове. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 23,
-    "category": "refactor",
-    "repo": "frontend",
-    "lane": "refactor",
-    "files": ["app.js", "modules/**"],
-    "description": "refactor: extract leaf ui helpers and inventory items logic into modules/ui.js and modules/items.js",
-    "specRef": "shared-inventory-structure.md §7",
-    "notes": "Двустъпков: ПЪРВО leaf helpers (esc, syncMsg, initSortable) отиват в modules/ui.js — те нямат зависимости към items/quests и така се чупи потенциалният import цикъл. ЧАК ТОГАВА items логиката отива в modules/items.js, който import-ва ui.js/state.js/firebase.js.",
-    "steps": [
-      { "id": "23.1", "phase": "RECON", "action": "Baseline зелен. Начертай зависимостите на ITEMS региона: state, ITEMS_DOC/setDoc, esc, initSortable, syncMsg." },
-      { "id": "23.2", "phase": "REFACTOR", "action": "Създай modules/ui.js с verbatim преместени esc, syncMsg, initSortable. app.js ги import-ва и re-export-ва (export { esc, syncMsg, initSortable } from './modules/ui.js')." },
-      { "id": "23.3", "phase": "REFACTOR", "action": "Създай modules/items.js: премести renderItems, saveItems и телата на openItemModal/closeItemModal/saveItem/deleteItem като export функции; import от ./state.js, ./firebase.js, ./ui.js. PLAYERS populate-ът на iCarrier остава в app.js." },
-      { "id": "23.4", "phase": "REFACTOR", "action": "app.js: import от modules/items.js, запази window.* wiring-а (window.saveItem = saveItem и т.н.) и re-export-ни renderItems/saveItems (фасада)." },
-      { "id": "23.5", "phase": "DONE", "action": "npm run test:unit -> зелен без редакция на тестове. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 24,
-    "category": "refactor",
-    "repo": "frontend",
-    "lane": "refactor",
-    "files": ["app.js", "modules/**"],
-    "description": "refactor: extract quests logic into modules/quests.js",
-    "specRef": "shared-inventory-structure.md §7",
-    "notes": "Огледален на таск 23: BADGE, NEXT_STATUS, renderQuests, saveQuests + modal/save/cycle/delete телата -> modules/quests.js. modules/ui.js вече съществува (от 23).",
-    "steps": [
-      { "id": "24.1", "phase": "RECON", "action": "Baseline зелен. Прегледай QUESTS региона и зависимостите (state, firebase, ui)." },
-      { "id": "24.2", "phase": "REFACTOR", "action": "Създай modules/quests.js: премести verbatim BADGE, NEXT_STATUS, renderQuests, saveQuests и телата на openQuestModal/closeQuestModal/saveQuest/cycleStatus/deleteQuest като export функции." },
-      { "id": "24.3", "phase": "REFACTOR", "action": "app.js: import, window.* wiring, re-export (BADGE, NEXT_STATUS, renderQuests, saveQuests — тестовете ги import-ват от app.js)." },
-      { "id": "24.4", "phase": "DONE", "action": "npm run test:unit -> зелен без редакция на тестове. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 25,
-    "category": "refactor",
-    "repo": "frontend",
-    "lane": "refactor",
-    "files": ["app.js", "modules/**"],
-    "description": "refactor: move gold handlers, tabs and modal backdrop wiring into their modules",
-    "specRef": "shared-inventory-structure.md §7",
-    "notes": "Довършва разпределението: handleGain/handleSpend отиват в modules/gold.js (syncMsg вече е в ui.js -> няма цикъл); tabs wiring-ът и modal backdrop логиката стават export функции initTabs()/initModalBackdrops() в modules/ui.js, които app.js вика при boot на същото място в реда на изпълнение.",
-    "steps": [
-      { "id": "25.1", "phase": "RECON", "action": "Baseline зелен. Прегледай какво е останало в app.js: handleGain/handleSpend, TABS/MODALS wiring, PLAYERS populate, onSnapshot-ите, export/import, PWA." },
-      { "id": "25.2", "phase": "REFACTOR", "action": "Премести handleGain/handleSpend в modules/gold.js (import syncMsg от ./ui.js, setDoc/GOLD_DOC от ./firebase.js, state от ./state.js). app.js: window.handleGain = handleGain wiring + re-export." },
-      { "id": "25.3", "phase": "REFACTOR", "action": "Премести tab-btn wiring-а в export function initTabs() и backdrop логиката в export function initModalBackdrops() в modules/ui.js. app.js ги вика на мястото, където беше wiring-ът (редът на top-level изпълнение се запазва)." },
-      { "id": "25.4", "phase": "DONE", "action": "npm run test:unit -> зелен без редакция на тестове. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 26,
-    "category": "refactor",
-    "repo": "frontend",
-    "lane": "refactor",
-    "files": ["app.js", "modules/**", "README.md"],
-    "description": "refactor: finalize app.js as thin orchestrator facade and document module structure in README",
-    "specRef": "shared-inventory-structure.md §7",
-    "notes": "Финализация на фазата. app.js остава: imports, window.* assignments, PLAYERS populate, 3-те onSnapshot wiring-а, exportData/importData, PWA install, фасадните re-exports. НУЛА мъртъв код.",
-    "steps": [
-      { "id": "26.1", "phase": "RECON", "action": "Baseline зелен. Прегледай какво е останало в app.js след таскове 20-25." },
-      { "id": "26.2", "phase": "REFACTOR", "action": "Изчисти остатъци: дублиран/мъртъв код, неизползвани import-и. Провери, че ВСИЧКИ стари export-и на app.js още съществуват (фасадата е пълна): spendGold, renderGold, coinInputs, clearCoinInputs, renderItems, renderQuests, saveItems, saveQuests, initSortable, esc, syncMsg, BADGE, NEXT_STATUS, getState, setState." },
-      { "id": "26.3", "phase": "REFACTOR", "action": "README.md: кратка секция 'Structure' — файловете и модулите (какво къде живее), как се пускат unit тестовете и e2e, бележка че CDN imports са умишлени (no bundler)." },
-      { "id": "26.4", "phase": "DONE", "action": "npm run test:unit -> целият suite зелен. git status чист след commit. Commit." }
-    ],
-    "passes": false
-  }
+﻿[
+    {
+        "id":  1,
+        "category":  "refactor",
+        "repo":  "frontend",
+        "lane":  "bootstrap",
+        "files":  [
+                      "index.html",
+                      "styles.css"
+                  ],
+        "description":  "refactor: extract inline CSS from index.html into styles.css",
+        "specRef":  "shared-inventory-structure.md §1, §3",
+        "notes":  "Чисто механичен таск — умишлено първи: валидира целия pipeline (worktree -\u003e merge -\u003e verify gate) с тривиална промяна. НУЛА промени по правилата/селекторите.",
+        "steps":  [
+                      {
+                          "id":  "1.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети index.html. Идентифицирай \u003cstyle\u003e блока в \u003chead\u003e (започва ~ред 11)."
+                      },
+                      {
+                          "id":  "1.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Създай styles.css с ТОЧНОТО съдържание на \u003cstyle\u003e блока (без \u003cstyle\u003e таговете), без \u0027подобрения\u0027, без преформатиране."
+                      },
+                      {
+                          "id":  "1.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "В index.html замени целия \u003cstyle\u003e...\u003c/style\u003e блок с \u003clink rel=\"stylesheet\" href=\"./styles.css\"\u003e. Нищо друго в index.html не се пипа."
+                      },
+                      {
+                          "id":  "1.4",
+                          "phase":  "DONE",
+                          "action":  "Провери: index.html вече няма \u003cstyle\u003e блок; styles.css съдържа всички правила; git diff показва САМО изваждането + link реда. Commit."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  2,
+        "category":  "refactor",
+        "repo":  "frontend",
+        "lane":  "bootstrap",
+        "files":  [
+                      "index.html",
+                      "app.js"
+                  ],
+        "description":  "refactor: extract inline module script from index.html into app.js verbatim with named exports",
+        "specRef":  "shared-inventory-structure.md §2, §3, §7",
+        "notes":  "VERBATIM extraction — нула логически промени. Единствените добавки: export статменти в края. Малкият inline classic script за service worker регистрацията ОСТАВА в index.html. CDN import-ите ОСТАВАТ както са.",
+        "steps":  [
+                      {
+                          "id":  "2.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети index.html и structure reference §2 (инвентар на кода). Идентифицирай \u003cscript type=\"module\"\u003e блока (~ред 323 до затварящия \u003c/script\u003e преди \u003c/body\u003e)."
+                      },
+                      {
+                          "id":  "2.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Създай app.js с ТОЧНОТО съдържание на module script блока (без script таговете), verbatim — включително firebaseConfig, коментарите и подредбата на регионите."
+                      },
+                      {
+                          "id":  "2.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "В КРАЯ на app.js добави: export { spendGold, renderGold, coinInputs, clearCoinInputs, renderItems, renderQuests, saveItems, saveQuests, initSortable, esc, syncMsg, BADGE, NEXT_STATUS }; и export const getState = () =\u003e ({ gold, items, quests }); и export function setState(s) { if (s.gold !== undefined) gold = s.gold; if (s.items !== undefined) items = s.items; if (s.quests !== undefined) quests = s.quests; } — НИЩО ДРУГО не се добавя."
+                      },
+                      {
+                          "id":  "2.4",
+                          "phase":  "IMPLEMENT",
+                          "action":  "В index.html замени module script блока с \u003cscript type=\"module\" src=\"./app.js\"\u003e\u003c/script\u003e. Service worker inline скриптът и SortableJS \u003cscript src\u003e тагът остават непокътнати."
+                      },
+                      {
+                          "id":  "2.5",
+                          "phase":  "DONE",
+                          "action":  "Провери: git diff на index.html показва САМО замяната на блока със src reference; app.js е идентичен на стария блок + export-ите накрая; window.* assignments са на място (onclick handler-ите в HTML разчитат на тях). Commit."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  3,
+        "category":  "setup",
+        "repo":  "frontend",
+        "lane":  "bootstrap",
+        "dependsOn":  [
+                          2
+                      ],
+        "files":  [
+                      "package.json",
+                      "package-lock.json",
+                      "vitest.config.js",
+                      "test/mocks/**",
+                      "test/helpers/**",
+                      "test/unit/smoke.spec.js"
+                  ],
+        "description":  "chore: add vitest unit test infrastructure with firebase CDN mocks and bootApp helper",
+        "specRef":  "shared-inventory-structure.md §5, §6",
+        "notes":  "Инфраструктурата, която всички тестови таскове (10-14) КОНСУМИРАТ. Контрактите в §5 (мокове) и §6 (bootApp) са ЗАДЪЛЖИТЕЛНИ — тестовите таскове са писани срещу тях. app.js и index.html НЕ се пипат.",
+        "steps":  [
+                      {
+                          "id":  "3.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети structure reference §5 и §6 (точните контракти) и app.js (какво import-ва, какви глобали ползва: Sortable, confirm, alert)."
+                      },
+                      {
+                          "id":  "3.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "npm i -D vitest jsdom (само тези две). Добави script \"test:unit\": \"vitest run\" в package.json. НЕ пипай съществуващите scripts."
+                      },
+                      {
+                          "id":  "3.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Създай vitest.config.js: environment \u0027jsdom\u0027, include \u0027test/unit/**/*.spec.js\u0027, resolve.alias мапващ двата CDN URL-а (\u0027https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js\u0027 и \u0027https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js\u0027) към ./test/mocks/firebase-app.js и ./test/mocks/firebase-firestore.js."
+                      },
+                      {
+                          "id":  "3.4",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Създай test/mocks/firebase-app.js и test/mocks/firebase-firestore.js ТОЧНО по контракта от §5: doc() връща string token \u0027col/id\u0027, calls обект записва setDoc/updateDoc/deleteDoc извиквания, onSnapshot регистрира callback, __emit(token, data) вика callbacks със snap {exists, data}, __reset() чисти всичко."
+                      },
+                      {
+                          "id":  "3.5",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Създай test/helpers/dom.js с export async function bootApp(...) ТОЧНО по контракта от §6: зарежда body markup от index.html без script таговете, стъбва Sortable/confirm/alert, vi.resetModules + __reset, import app.js, __emit за трите дока, връща {fs}."
+                      },
+                      {
+                          "id":  "3.6",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Създай test/unit/smoke.spec.js: (а) bootApp() без данни -\u003e #dispGP показва 0, #invBody има empty state ред, #questBody има empty state ред; (б) bootApp({items:[{name:\u0027Меч\u0027}]}) -\u003e ред с \u0027Меч\u0027 в таблицата; (в) app.js export-ва spendGold, getState, setState (typeof проверки)."
+                      },
+                      {
+                          "id":  "3.7",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit -\u003e зелен. Провери, че package-lock.json е commit-нат, а node_modules НЕ е. Commit."
+                      }
+                  ],
+        "passes":  false
+    },
+    {
+        "id":  10,
+        "category":  "testing",
+        "repo":  "frontend",
+        "lane":  "tests-gold",
+        "dependsOn":  [
+                          2,
+                          3
+                      ],
+        "files":  [
+                      "test/unit/gold.spec.js"
+                  ],
+        "description":  "test: characterization tests for gold treasury (spendGold borrow-down, gain/spend handlers, input clamping)",
+        "specRef":  "shared-inventory-structure.md §2 (GOLD), §4, §6",
+        "notes":  "ХАРАКТЕРИЗАЦИЯ: тестовете документират ТЕКУЩОТО поведение и минават срещу непроменен app.js. app.js НЕ се пипа. Ползвай bootApp() от test/helpers/dom.js и fs.calls за Firestore assertions.",
+        "steps":  [
+                      {
+                          "id":  "10.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети GOLD региона на app.js (spendGold, renderGold, coinInputs, clearCoinInputs, handleGain, handleSpend) и §4 от reference-а."
+                      },
+                      {
+                          "id":  "10.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Тествай spendGold като чиста функция (direct import): точна сума без borrow; borrow cp\u003c-sp, sp\u003c-gp, gp\u003c-pp; верижен borrow (плащаш 1cp само с 1pp); недостиг -\u003e null; float стойности (toCp ползва floor); нулев cost; cost с липсващи полета (default 0)."
+                      },
+                      {
+                          "id":  "10.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Тествай през DOM с bootApp({gold:{pp:1,gp:2,sp:3,cp:4}}): renderGold показва стойностите в #dispPP/GP/SP/CP; window.handleGain събира input стойностите, чисти inputs, вика setDoc с token \u0027inventory/gold\u0027 и новата сума (fs.calls.setDoc); coinInputs клампва отрицателни-\u003e0, floats-\u003efloor, празно-\u003e0."
+                      },
+                      {
+                          "id":  "10.4",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Тествай window.handleSpend: успешен spend (setDoc с borrow-down резултата, #goldError без \u0027visible\u0027 клас); недостиг (#goldError получава \u0027visible\u0027, gold НЕ се променя, setDoc НЕ се вика); повторен успешен spend маха \u0027visible\u0027 класа."
+                      },
+                      {
+                          "id":  "10.5",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit -\u003e целият suite зелен. app.js untouched (git diff чист извън test/unit/gold.spec.js). Commit."
+                      }
+                  ],
+        "passes":  false
+    },
+    {
+        "id":  11,
+        "category":  "testing",
+        "repo":  "frontend",
+        "lane":  "tests-items",
+        "dependsOn":  [
+                          2,
+                          3
+                      ],
+        "files":  [
+                      "test/unit/items.spec.js"
+                  ],
+        "description":  "test: characterization tests for inventory items (render, totals, escaping, save/edit/delete, accordion)",
+        "specRef":  "shared-inventory-structure.md §2 (ITEMS), §4, §6",
+        "notes":  "ХАРАКТЕРИЗАЦИЯ: app.js НЕ се пипа. bootApp() + fs.calls. confirm() се стъбва per-test при delete сценариите.",
+        "steps":  [
+                      {
+                          "id":  "11.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети ITEMS региона на app.js (renderItems, item modal функциите, saveItem, deleteItem, saveItems) и §4."
+                      },
+                      {
+                          "id":  "11.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "renderItems: празен списък -\u003e empty state ред + празен footer; списък -\u003e редове с name/qty/weight/value/carrier (default \u0027Party\u0027); footer = сума weight*qty с toFixed(1) + сума value*qty с toFixed(2); esc() escape-ва \u003cscript\u003e тагове и кавички в name/note (провери, че innerHTML НЕ съдържа суров таг)."
+                      },
+                      {
+                          "id":  "11.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "saveItem през DOM: попълни модал полетата, window.saveItem() -\u003e нов item НАЙ-ОТГОРЕ (unshift), setDoc \u0027inventory/items\u0027 с {list}; празно име -\u003e НЕ записва; редакция (openItemModal(idx) + saveItem) -\u003e старият се маха, редактираният е най-отгоре."
+                      },
+                      {
+                          "id":  "11.4",
+                          "phase":  "IMPLEMENT",
+                          "action":  "deleteItem: confirm=true -\u003e маха item-а + setDoc; confirm=false -\u003e нищо не се променя. Snapshot echo: докато saveItems е in-flight (флаг saving), __emit на \u0027inventory/items\u0027 НЕ презаписва списъка (виж §4)."
+                      },
+                      {
+                          "id":  "11.5",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Акордеон: клик на ред -\u003e \u0027item-expanded\u0027 клас; втори клик -\u003e маха се; клик на друг ред -\u003e само той е expanded; клик върху бутон/drag-handle НЕ toggle-ва; expanded state оцелява re-render (renderItems пак)."
+                      },
+                      {
+                          "id":  "11.6",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit -\u003e целият suite зелен. app.js untouched. Commit."
+                      }
+                  ],
+        "passes":  false
+    },
+    {
+        "id":  12,
+        "category":  "testing",
+        "repo":  "frontend",
+        "lane":  "tests-quests",
+        "dependsOn":  [
+                          2,
+                          3
+                      ],
+        "files":  [
+                      "test/unit/quests.spec.js"
+                  ],
+        "description":  "test: characterization tests for quests (render, status badges, cycleStatus, save/edit/delete, accordion)",
+        "specRef":  "shared-inventory-structure.md §2 (QUESTS), §4, §6",
+        "notes":  "ХАРАКТЕРИЗАЦИЯ: app.js НЕ се пипа. bootApp() + fs.calls.",
+        "steps":  [
+                      {
+                          "id":  "12.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети QUESTS региона на app.js (BADGE, NEXT_STATUS, renderQuests, quest modal, saveQuest, cycleStatus, deleteQuest, saveQuests) и §4."
+                      },
+                      {
+                          "id":  "12.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "renderQuests: празно -\u003e empty state; куест -\u003e име, badge клас по статус (BADGE map: Активен-\u003ebadge-active, Изпълнен-\u003ebadge-done, Провален-\u003ebadge-failed, Паузиран-\u003ebadge-paused), giver/reward с \u0027—\u0027 fallback, desc се показва само ако има."
+                      },
+                      {
+                          "id":  "12.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "NEXT_STATUS цикъл: direct import assert на map-а (Активен-\u003eИзпълнен-\u003eПаузиран-\u003eАктивен; Провален-\u003eАктивен). window.cycleStatus(i): сменя статуса по map-а И мести куеста НАЙ-ОТГОРЕ (unshift), вика setDoc \u0027quests/items\u0027."
+                      },
+                      {
+                          "id":  "12.4",
+                          "phase":  "IMPLEMENT",
+                          "action":  "saveQuest: нов куест най-отгоре + setDoc; празно име -\u003e не записва; редакция -\u003e старият се маха, новият най-отгоре. deleteQuest с confirm true/false. Echo guard: __emit при savingQuests in-flight не презаписва (§4)."
+                      },
+                      {
+                          "id":  "12.5",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Куест акордеон: същото поведение като items (един expanded, бутоните не toggle-ват, оцелява re-render), но върху \u0027quest-expanded\u0027 класа."
+                      },
+                      {
+                          "id":  "12.6",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit -\u003e целият suite зелен. app.js untouched. Commit."
+                      }
+                  ],
+        "passes":  false
+    },
+    {
+        "id":  13,
+        "category":  "testing",
+        "repo":  "frontend",
+        "lane":  "tests-sync",
+        "dependsOn":  [
+                          2,
+                          3
+                      ],
+        "files":  [
+                      "test/unit/sync.spec.js"
+                  ],
+        "description":  "test: characterization tests for firestore snapshots, export bundle and import flow",
+        "specRef":  "shared-inventory-structure.md §2 (LISTENERS, EXPORT/IMPORT), §4, §5, §6",
+        "notes":  "ХАРАКТЕРИЗАЦИЯ: app.js НЕ се пипа. Snapshot поведението се тества през __emit от мока. За exportData: стъбни URL.createObjectURL/revokeObjectURL и HTMLAnchorElement.prototype.click, хвани Blob съдържанието.",
+        "steps":  [
+                      {
+                          "id":  "13.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети LISTENERS и EXPORT/IMPORT регионите на app.js и мок контракта §5."
+                      },
+                      {
+                          "id":  "13.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Snapshots: __emit(\u0027inventory/gold\u0027, null) -\u003e нули; __emit с данни -\u003e renderGold ги показва; __emit(\u0027quests/items\u0027, {...}) -\u003e #syncStatus става \u0027Live sync ✓\u0027 и window.__appReady === true; items/quests __emit с null -\u003e празни списъци (empty state)."
+                      },
+                      {
+                          "id":  "13.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "exportData: bundle-ът е {version:1, exportedAt ISO string, gold, items, quests} (парсни Blob-а); download името започва с \u0027shared-inventory-\u0027."
+                      },
+                      {
+                          "id":  "13.4",
+                          "phase":  "IMPLEMENT",
+                          "action":  "importData: валиден bundle + confirm=true -\u003e setDoc за \u0027inventory/gold\u0027, \u0027inventory/items\u0027 ({list}), \u0027quests/items\u0027 ({list}) — само за наличните ключове (bundle само с items -\u003e само 1 setDoc); confirm=false -\u003e нула setDoc; невалиден JSON -\u003e alert, нула setDoc; file input value се чисти след всеки опит."
+                      },
+                      {
+                          "id":  "13.5",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit -\u003e целият suite зелен. app.js untouched. Commit."
+                      }
+                  ],
+        "passes":  false
+    },
+    {
+        "id":  14,
+        "category":  "testing",
+        "repo":  "frontend",
+        "lane":  "tests-ui",
+        "dependsOn":  [
+                          2,
+                          3
+                      ],
+        "files":  [
+                      "test/unit/ui.spec.js"
+                  ],
+        "description":  "test: characterization tests for tabs, modals, esc helper and sortable wiring",
+        "specRef":  "shared-inventory-structure.md §2 (DND, TABS/MODALS, HELPERS), §6",
+        "notes":  "ХАРАКТЕРИЗАЦИЯ: app.js НЕ се пипа. Sortable стъбът от bootApp пази opts -\u003e тестът вика ръчно opts.onEnd за reorder сценария.",
+        "steps":  [
+                      {
+                          "id":  "14.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети DND/TABS/MODALS/HELPERS регионите на app.js и Sortable стъба в test/helpers/dom.js."
+                      },
+                      {
+                          "id":  "14.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Табове: клик на data-tab=\u0027quests\u0027 бутона -\u003e той е .active, инвентарният НЕ е; #tab-quests има .active, #tab-inventory няма; обратен клик връща."
+                      },
+                      {
+                          "id":  "14.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Модали: openItemModal() -\u003e #itemModal има .open + полетата са reset-нати (defaults от §2); клик върху backdrop (e.target == модала) затваря; клик ВЪТРЕ в modal-card НЕ затваря; същото за questModal."
+                      },
+                      {
+                          "id":  "14.4",
+                          "phase":  "IMPLEMENT",
+                          "action":  "esc(): \u0027\u0026\u0027-\u003e\u0027\u0026amp;\u0027, \u0027\u003c\u0027-\u003e\u0027\u0026lt;\u0027, \u0027\u003e\u0027-\u003e\u0027\u0026gt;\u0027, \u0027\"\u0027-\u003e\u0027\u0026quot;\u0027; не пипа други знаци; работи с не-string input (String() cast)."
+                      },
+                      {
+                          "id":  "14.5",
+                          "phase":  "IMPLEMENT",
+                          "action":  "initSortable: повторно викане destroy-ва предишния instance (стъбът брои destroy извикванията); симулиран onEnd({oldIndex, newIndex}) размества масива и вика saveFn (setDoc call в fs.calls)."
+                      },
+                      {
+                          "id":  "14.6",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit -\u003e целият suite зелен. app.js untouched. Commit."
+                      }
+                  ],
+        "passes":  false
+    },
+    {
+        "id":  20,
+        "category":  "refactor",
+        "repo":  "frontend",
+        "lane":  "refactor",
+        "dependsOn":  [
+                          10,
+                          11,
+                          12,
+                          13,
+                          14
+                      ],
+        "files":  [
+                      "app.js",
+                      "modules/**"
+                  ],
+        "description":  "refactor: extract firebase init and doc refs into modules/firebase.js",
+        "specRef":  "shared-inventory-structure.md §3, §7",
+        "notes":  "ИНВАРИАНТ за цялата refactor lane: тестовете от test/unit/ НЕ се редактират и остават зелени — app.js е фасада, която re-export-ва всичко. Кодът се МЕСТИ verbatim, не се пренаписва. Vitest alias-ите продължават да прихващат CDN import-ите и през modules/firebase.js.",
+        "steps":  [
+                      {
+                          "id":  "20.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети §7 (целевата структура) и CONFIG/INIT регионите на app.js. Пусни npm run test:unit за baseline (зелен)."
+                      },
+                      {
+                          "id":  "20.2",
+                          "phase":  "REFACTOR",
+                          "action":  "Създай modules/firebase.js: премести verbatim firebaseConfig, initializeApp/getFirestore извикванията, db, GOLD_DOC/ITEMS_DOC/QUESTS_DOC. Re-export-ни от него и ползваните firestore функции (setDoc, onSnapshot, doc и т.н.). CDN import URL-ите остават байт по байт същите."
+                      },
+                      {
+                          "id":  "20.3",
+                          "phase":  "REFACTOR",
+                          "action":  "app.js: замени CONFIG/INIT региона с import { db, GOLD_DOC, ITEMS_DOC, QUESTS_DOC, setDoc, onSnapshot, ... } from \u0027./modules/firebase.js\u0027. PLAYERS остава в app.js."
+                      },
+                      {
+                          "id":  "20.4",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit -\u003e зелен БЕЗ редакция на тестове. index.html не е пипан. Commit."
+                      }
+                  ],
+        "passes":  false
+    },
+    {
+        "id":  21,
+        "category":  "refactor",
+        "repo":  "frontend",
+        "lane":  "refactor",
+        "files":  [
+                      "app.js",
+                      "modules/**"
+                  ],
+        "description":  "refactor: extract mutable app state into modules/state.js",
+        "specRef":  "shared-inventory-structure.md §7",
+        "notes":  "НАЙ-РИСКОВИЯТ таск в lane-а. Голите let променливи стават полета на export const state = {...}; всички четения/писания в app.js се пренасочват към state.x. getState/setState фасадата в app.js запазва ТОЧНО старата сигнатура (тестовете я ползват).",
+        "steps":  [
+                      {
+                          "id":  "21.1",
+                          "phase":  "RECON",
+                          "action":  "Изброй ВСИЧКИ места в app.js, които четат/пишат gold, items, quests, editingItemIdx, editingQuestIdx, expandedItemIdx, expandedQuestIdx, saving, savingQuests (вкл. в onSnapshot callbacks и saveItems/saveQuests флаговете)."
+                      },
+                      {
+                          "id":  "21.2",
+                          "phase":  "REFACTOR",
+                          "action":  "Създай modules/state.js: export const state = { gold: {pp:0,gp:0,sp:0,cp:0}, items: [], quests: [], editingItemIdx: null, editingQuestIdx: null, expandedItemIdx: null, expandedQuestIdx: null, saving: false, savingQuests: false }."
+                      },
+                      {
+                          "id":  "21.3",
+                          "phase":  "REFACTOR",
+                          "action":  "В app.js: махни let декларациите, import { state }, замени ВСЯКА употреба с state.x (замяната е механична, но проверявай всяко място — пропуснато писане в стар local = тихо счупване)."
+                      },
+                      {
+                          "id":  "21.4",
+                          "phase":  "REFACTOR",
+                          "action":  "getState/setState в app.js стават делегати към state обекта СЪС СЪЩАТА сигнатура: getState() връща {gold: state.gold, items: state.items, quests: state.quests}; setState пише в state полетата."
+                      },
+                      {
+                          "id":  "21.5",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit -\u003e целият suite зелен БЕЗ редакция на тестове. Commit."
+                      }
+                  ],
+        "passes":  false
+    },
+    {
+        "id":  22,
+        "category":  "refactor",
+        "repo":  "frontend",
+        "lane":  "refactor",
+        "files":  [
+                      "app.js",
+                      "modules/**"
+                  ],
+        "description":  "refactor: extract pure gold logic into modules/gold.js",
+        "specRef":  "shared-inventory-structure.md §7",
+        "notes":  "Местят се САМО чистите функции: spendGold, coinInputs, clearCoinInputs, renderGold. handleGain/handleSpend ОСТАВАТ в app.js (зависят от syncMsg, който се мести чак в таск 23) — така се избягва import цикъл app.js \u003c-\u003e modules.",
+        "steps":  [
+                      {
+                          "id":  "22.1",
+                          "phase":  "RECON",
+                          "action":  "Baseline: npm run test:unit зелен. Прегледай GOLD региона и зависимостите му (state, syncMsg, setDoc/GOLD_DOC)."
+                      },
+                      {
+                          "id":  "22.2",
+                          "phase":  "REFACTOR",
+                          "action":  "Създай modules/gold.js: премести verbatim spendGold, renderGold, coinInputs, clearCoinInputs. renderGold ползва state -\u003e import { state } from \u0027./state.js\u0027."
+                      },
+                      {
+                          "id":  "22.3",
+                          "phase":  "REFACTOR",
+                          "action":  "app.js: import { spendGold, renderGold, coinInputs, clearCoinInputs } from \u0027./modules/gold.js\u0027 и re-export същите (export { ... } from \u0027./modules/gold.js\u0027). handleGain/handleSpend продължават да ги ползват, но вече през import-а."
+                      },
+                      {
+                          "id":  "22.4",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit -\u003e зелен без редакция на тестове. Commit."
+                      }
+                  ],
+        "passes":  false
+    },
+    {
+        "id":  23,
+        "category":  "refactor",
+        "repo":  "frontend",
+        "lane":  "refactor",
+        "files":  [
+                      "app.js",
+                      "modules/**"
+                  ],
+        "description":  "refactor: extract leaf ui helpers and inventory items logic into modules/ui.js and modules/items.js",
+        "specRef":  "shared-inventory-structure.md §7",
+        "notes":  "Двустъпков: ПЪРВО leaf helpers (esc, syncMsg, initSortable) отиват в modules/ui.js — те нямат зависимости към items/quests и така се чупи потенциалният import цикъл. ЧАК ТОГАВА items логиката отива в modules/items.js, който import-ва ui.js/state.js/firebase.js.",
+        "steps":  [
+                      {
+                          "id":  "23.1",
+                          "phase":  "RECON",
+                          "action":  "Baseline зелен. Начертай зависимостите на ITEMS региона: state, ITEMS_DOC/setDoc, esc, initSortable, syncMsg."
+                      },
+                      {
+                          "id":  "23.2",
+                          "phase":  "REFACTOR",
+                          "action":  "Създай modules/ui.js с verbatim преместени esc, syncMsg, initSortable. app.js ги import-ва и re-export-ва (export { esc, syncMsg, initSortable } from \u0027./modules/ui.js\u0027)."
+                      },
+                      {
+                          "id":  "23.3",
+                          "phase":  "REFACTOR",
+                          "action":  "Създай modules/items.js: премести renderItems, saveItems и телата на openItemModal/closeItemModal/saveItem/deleteItem като export функции; import от ./state.js, ./firebase.js, ./ui.js. PLAYERS populate-ът на iCarrier остава в app.js."
+                      },
+                      {
+                          "id":  "23.4",
+                          "phase":  "REFACTOR",
+                          "action":  "app.js: import от modules/items.js, запази window.* wiring-а (window.saveItem = saveItem и т.н.) и re-export-ни renderItems/saveItems (фасада)."
+                      },
+                      {
+                          "id":  "23.5",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit -\u003e зелен без редакция на тестове. Commit."
+                      }
+                  ],
+        "passes":  false
+    },
+    {
+        "id":  24,
+        "category":  "refactor",
+        "repo":  "frontend",
+        "lane":  "refactor",
+        "files":  [
+                      "app.js",
+                      "modules/**"
+                  ],
+        "description":  "refactor: extract quests logic into modules/quests.js",
+        "specRef":  "shared-inventory-structure.md §7",
+        "notes":  "Огледален на таск 23: BADGE, NEXT_STATUS, renderQuests, saveQuests + modal/save/cycle/delete телата -\u003e modules/quests.js. modules/ui.js вече съществува (от 23).",
+        "steps":  [
+                      {
+                          "id":  "24.1",
+                          "phase":  "RECON",
+                          "action":  "Baseline зелен. Прегледай QUESTS региона и зависимостите (state, firebase, ui)."
+                      },
+                      {
+                          "id":  "24.2",
+                          "phase":  "REFACTOR",
+                          "action":  "Създай modules/quests.js: премести verbatim BADGE, NEXT_STATUS, renderQuests, saveQuests и телата на openQuestModal/closeQuestModal/saveQuest/cycleStatus/deleteQuest като export функции."
+                      },
+                      {
+                          "id":  "24.3",
+                          "phase":  "REFACTOR",
+                          "action":  "app.js: import, window.* wiring, re-export (BADGE, NEXT_STATUS, renderQuests, saveQuests — тестовете ги import-ват от app.js)."
+                      },
+                      {
+                          "id":  "24.4",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit -\u003e зелен без редакция на тестове. Commit."
+                      }
+                  ],
+        "passes":  false
+    },
+    {
+        "id":  25,
+        "category":  "refactor",
+        "repo":  "frontend",
+        "lane":  "refactor",
+        "files":  [
+                      "app.js",
+                      "modules/**"
+                  ],
+        "description":  "refactor: move gold handlers, tabs and modal backdrop wiring into their modules",
+        "specRef":  "shared-inventory-structure.md §7",
+        "notes":  "Довършва разпределението: handleGain/handleSpend отиват в modules/gold.js (syncMsg вече е в ui.js -\u003e няма цикъл); tabs wiring-ът и modal backdrop логиката стават export функции initTabs()/initModalBackdrops() в modules/ui.js, които app.js вика при boot на същото място в реда на изпълнение.",
+        "steps":  [
+                      {
+                          "id":  "25.1",
+                          "phase":  "RECON",
+                          "action":  "Baseline зелен. Прегледай какво е останало в app.js: handleGain/handleSpend, TABS/MODALS wiring, PLAYERS populate, onSnapshot-ите, export/import, PWA."
+                      },
+                      {
+                          "id":  "25.2",
+                          "phase":  "REFACTOR",
+                          "action":  "Премести handleGain/handleSpend в modules/gold.js (import syncMsg от ./ui.js, setDoc/GOLD_DOC от ./firebase.js, state от ./state.js). app.js: window.handleGain = handleGain wiring + re-export."
+                      },
+                      {
+                          "id":  "25.3",
+                          "phase":  "REFACTOR",
+                          "action":  "Премести tab-btn wiring-а в export function initTabs() и backdrop логиката в export function initModalBackdrops() в modules/ui.js. app.js ги вика на мястото, където беше wiring-ът (редът на top-level изпълнение се запазва)."
+                      },
+                      {
+                          "id":  "25.4",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit -\u003e зелен без редакция на тестове. Commit."
+                      }
+                  ],
+        "passes":  false
+    },
+    {
+        "id":  26,
+        "category":  "refactor",
+        "repo":  "frontend",
+        "lane":  "refactor",
+        "files":  [
+                      "app.js",
+                      "modules/**",
+                      "README.md"
+                  ],
+        "description":  "refactor: finalize app.js as thin orchestrator facade and document module structure in README",
+        "specRef":  "shared-inventory-structure.md §7",
+        "notes":  "Финализация на фазата. app.js остава: imports, window.* assignments, PLAYERS populate, 3-те onSnapshot wiring-а, exportData/importData, PWA install, фасадните re-exports. НУЛА мъртъв код.",
+        "steps":  [
+                      {
+                          "id":  "26.1",
+                          "phase":  "RECON",
+                          "action":  "Baseline зелен. Прегледай какво е останало в app.js след таскове 20-25."
+                      },
+                      {
+                          "id":  "26.2",
+                          "phase":  "REFACTOR",
+                          "action":  "Изчисти остатъци: дублиран/мъртъв код, неизползвани import-и. Провери, че ВСИЧКИ стари export-и на app.js още съществуват (фасадата е пълна): spendGold, renderGold, coinInputs, clearCoinInputs, renderItems, renderQuests, saveItems, saveQuests, initSortable, esc, syncMsg, BADGE, NEXT_STATUS, getState, setState."
+                      },
+                      {
+                          "id":  "26.3",
+                          "phase":  "REFACTOR",
+                          "action":  "README.md: кратка секция \u0027Structure\u0027 — файловете и модулите (какво къде живее), как се пускат unit тестовете и e2e, бележка че CDN imports са умишлени (no bundler)."
+                      },
+                      {
+                          "id":  "26.4",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit -\u003e целият suite зелен. git status чист след commit. Commit."
+                      }
+                  ],
+        "passes":  false
+    }
 ]

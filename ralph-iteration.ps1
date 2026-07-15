@@ -31,7 +31,7 @@ if (Test-Path $configFile) {
 }
 
 # Get model from config or use default
-$model = "claude-fable-5"
+$model = "claude-opus-4-8"
 if ($config -and $config.claude_args) {
     $modelIndex = [array]::IndexOf($config.claude_args, "--model")
     if ($modelIndex -ge 0 -and $modelIndex -lt $config.claude_args.Count - 1) {
@@ -449,6 +449,26 @@ if (Test-Path $outputFile) {
         Remove-Item $outputFile -ErrorAction SilentlyContinue
         Remove-Item $tempPrompt -ErrorAction SilentlyContinue
         exit 2
+    }
+
+    # === FATAL BILLING/AUTH DETECTION ===
+    # "Credit balance is too low" = API credits exhausted. Unlike quota there is NO reset
+    # time to wait for - a human must top up or switch the model/auth. Exit 4 = fatal
+    # environment error: the outer loop / orchestrator aborts the whole run instead of
+    # counting these as task failures and burning retry budgets.
+    if ($result -match "Credit balance is too low") {
+        Write-Host ""
+        Write-Host "============================================" -ForegroundColor Red
+        Write-Host "   [X] FATAL: API credit balance too low" -ForegroundColor Red
+        Write-Host "   Top up credits or switch --model, then re-run." -ForegroundColor Red
+        Write-Host "============================================" -ForegroundColor Red
+        $logDir = "logs"
+        if (!(Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
+        $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
+        "FATAL: API credit balance too low`n`n$display" | Out-File -FilePath "$logDir/iteration-$iterationNumber-$timestamp-CREDITS.txt" -Encoding UTF8
+        Remove-Item $outputFile -ErrorAction SilentlyContinue
+        Remove-Item $tempPrompt -ErrorAction SilentlyContinue
+        exit 4
     }
 
     # === NORMAL OUTPUT ===

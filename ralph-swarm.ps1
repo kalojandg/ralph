@@ -412,6 +412,15 @@ function Complete-Agent($info) {
             return "quota_requeue"
         }
 
+        # Exit code 4 = fatal environment error (API credit balance / auth). NOT the task's
+        # fault - do not touch its retry budget or failedIds; signal the main loop to abort
+        # the entire run so a human can fix billing/model and re-run.
+        if ($exitCode -eq 4) {
+            & git -C $info.gitRoot worktree remove --force $info.wtPath 2>$null | Out-Null
+            Release-Claim $t.id
+            return "fatal_env"
+        }
+
         # Exit code 3 = watchdog kill (180 min hard timeout / 60 min stale). Hangs are the
         # most STOCHASTIC failure mode (stuck dev server, network stall, wedged prompt) -
         # a blind re-run with a fresh worktree usually clears them. Re-queue up to budget.
@@ -463,6 +472,7 @@ $failedIds = @()
 $script:timeoutCounts = @{}   # taskId -> watchdog-kill re-queues used this session
 $script:failCounts    = @{}   # taskId -> informed retries used this session
 $script:fastFails     = 0     # consecutive instant (<60s) agent deaths -> environment problem guard
+$script:fatalEnv      = $false # exit 4 seen (credits/auth) -> abort the whole run immediately
 $stats = @{ merged = 0; conflicts = 0; skipped = 0; failed = 0; requeued = 0; timeoutRequeues = 0; failRetries = 0; verifyReverts = 0 }
 $freeSlots = New-Object System.Collections.ArrayList
 1..$agents | ForEach-Object { [void]$freeSlots.Add($_) }
@@ -523,11 +533,22 @@ while ($true) {
                 "timeout_requeue" { $stats.timeoutRequeues++ } # watchdog kill - fresh blind re-run
                 "fail_requeue"    { $stats.failRetries++ }     # informed retry (failure context injected)
                 "verify_requeue"  { $stats.verifyReverts++ }   # merge undone by verify gate - informed retry
+                "fatal_env"       { $script:fatalEnv = $true } # credits/auth dead - abort below, task NOT failed
                 default           { $stats.failed++;   $failedIds += $id }
             }
             $running.Remove($id)
             [void]$freeSlots.Add($info.slot)
         }
+    }
+
+    # Fatal billing/auth error reported by an agent (exit 4): abort the whole run NOW.
+    # No retry can fix an empty credit balance; tasks stay pending for the next run.
+    if ($script:fatalEnv) {
+        Write-Host ""
+        Write-Host "[X] FATAL: agent reported billing/auth failure (API credit balance too low)." -ForegroundColor Red
+        Write-Host "    Run aborted. Top up credits or switch swarm model (ralph-config.json" -ForegroundColor Red
+        Write-Host "    claude_args --model), then re-run - pending tasks are untouched." -ForegroundColor Red
+        break
     }
 
     # Environment-failure guard (mirrors ralph.ps1's silent-failure guard): 3 consecutive

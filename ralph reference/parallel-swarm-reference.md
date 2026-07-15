@@ -101,6 +101,7 @@ repos.json                 ← + gitRoot / workSubdir / mainBranch (worktree т�
 | 1 | Няма result file / невалиден | Информиран retry (до `max_fail_retries`), после failed |
 | 2 | Quota (агентът вече е изчакал reset-а) | Re-queue, не брои за нищо лошо |
 | 3 | Timeout/stale (watchdog kill) | Re-queue с чист worktree (до `max_timeout_requeues`), после failed |
+| 4 | Фатална billing/auth грешка ("Credit balance is too low") | **ABORT на целия run** — таскът НЕ се брои за failed, retry бюджетът му не се пипа; човек оправя кредити/модел и пуска нов run |
 
 ### Retry поведение (двата бюджета, per task, config: `swarm.max_timeout_requeues` / `swarm.max_fail_retries`)
 
