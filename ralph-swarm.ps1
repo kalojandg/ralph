@@ -241,7 +241,9 @@ function Start-AgentForTask($task, $slot) {
     $gitRoot = $r.gitRoot
     if (-not $gitRoot) { $gitRoot = $r.location }
     $baseBranch = $r.mainBranch
-    if (-not $baseBranch) { $baseBranch = (& git -C $gitRoot branch --show-current 2>$null) }
+    # rev-parse --abbrev-ref, NOT branch --show-current: the latter needs git >= 2.22 and
+    # silently returns '' on older gits (this machine runs 2.21) - see the merge check too.
+    if (-not $baseBranch) { $baseBranch = (& git -C $gitRoot rev-parse --abbrev-ref HEAD 2>$null) }
 
     $branchName = "ralph/task-$($task.id)"
     $wtPath = Join-Path $worktreeRoot "$rKey-task-$($task.id)"
@@ -339,7 +341,10 @@ function Complete-Agent($info) {
     $outcome = "failed"
     if ($result -and $result.status -eq "done") {
         # -------- sequential merge back into the integration branch (single-threaded here)
-        $cur = (& git -C $info.gitRoot branch --show-current 2>$null)
+        # rev-parse works on any git version (branch --show-current needs >= 2.22 and
+        # returns '' on git 2.21 -> every merge got skipped as "on '' expected 'main'").
+        # Detached HEAD returns literal 'HEAD' which correctly fails the branch check.
+        $cur = (& git -C $info.gitRoot rev-parse --abbrev-ref HEAD 2>$null)
         $dirty = (& git -C $info.gitRoot status --porcelain 2>$null)
         if ($cur -ne $info.baseBranch) {
             Write-Host "[!] Task #$($t.id): main checkout is on '$cur' (expected '$($info.baseBranch)') - MERGE SKIPPED. Branch kept: $($info.branch)" -ForegroundColor Yellow
