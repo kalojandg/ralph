@@ -9,7 +9,7 @@
 3. **C:/Users/kaloyan.georgiev/Projects/Admin-App/docs/composition/PRD.json** - Requirements и TDD methodology
 4. **C:/Users/kaloyan.georgiev/Projects/Admin-App/docs/composition/designs/** - UI mockups за visual testing
 
-**Working directories по repo:**
+**Working directories по repo** (source of truth: `ralph/ralph reference/project reference/repos.json` → `repos.<repo>.location`):
 - `frontend` → `C:\Users\kaloyan.georgiev\Projects\Admin-App`
 - `backend` → `C:\Users\kaloyan.georgiev\Projects\OSDM-Src\DotNetServices\RailRunService`
 - `database` → `C:\Users\kaloyan.georgiev\Projects\OSDM-Src\SQLProjects\RailRunServiceSQL`
@@ -285,18 +285,27 @@ If NO (all tasks done) — output:
 
 **ЗАДЪЛЖИТЕЛНО преди да започнеш таск прочети съответния файл. Патърните в тези файлове са ПРАВИЛА, не препоръки — не следваш ли ги, PR-ът ще получи коментари и ще се връща за преработка.**
 
-| Тип таск | Файл за четене | Какво съдържа |
-|----------|---------------|---------------|
-| **[BE] Backend** | `C:/Users/kaloyan.georgiev/Projects/railrun-backend-structure.md` | .NET 8 Clean Architecture, CQRS, **Aggregate Repositories + IUnitOfWork** (избягва multiple SaveChanges), nav-property за create-graph, DTOs location (**API request/response DTOs → `*.API/DTOs/`, НЕ в контролера**), Validation |
-| **[FE] Frontend** | `C:/Users/kaloyan.georgiev/Projects/admin-app-frontend-structure.md` | React 19 + TypeScript + Vite, folder structure, routing, API layer, React Query hooks, MUI components, i18n, testing patterns |
-| **[BE] Database** | `C:/Users/kaloyan.georgiev/Projects/railrun-database-guide.md` | SQL Server schema, WagonTypes/CoachLayouts/SeatDefinitions таблици, seed data, migrations, grid coordinate system |
+**Кой файл да четеш се решава от repo mapping-а** — не hardcode-вай пътища:
+```
+C:/Users/kaloyan.georgiev/Projects/ralph/ralph reference/project reference/repos.json
+```
+Намери своя `repo` там → вземи `reference` (файл в същата `project reference/` папка) и `location` (работна директория). Всички reference файлове живеят в:
+```
+C:/Users/kaloyan.georgiev/Projects/ralph/ralph reference/project reference/
+```
+
+| Тип таск | `reference` файл | Какво съдържа |
+|----------|-----------------|---------------|
+| **[BE] Backend** | `railrun-backend-structure.md` | .NET 8 Clean Architecture, CQRS, **Aggregate Repositories + IUnitOfWork** (избягва multiple SaveChanges), nav-property за create-graph, DTOs location (**API request/response DTOs → `*.API/DTOs/`, НЕ в контролера**), Validation |
+| **[FE] Frontend** | `admin-app-frontend-structure.md` | React 19 + TypeScript + Vite, folder structure, routing, API layer, React Query hooks, MUI components, i18n, testing patterns |
+| **[BE] Database** | `railrun-database-guide.md` | SQL Server schema, WagonTypes/CoachLayouts/SeatDefinitions таблици, seed data, migrations, grid coordinate system |
 | **[E2E] End-to-end** | Прочети и трите файла | FE→BE→DB пълен workflow |
 
 **Ако таскът засяга API contract (endpoint URL, DTO shape) — прочети И frontend И backend файловете!**
 
 ### 🚨 [BE] Pre-flight checklist (чети преди ВСЕКИ backend таск)
 
-Преди да напишеш код в `RailRunService.API` / `.Application` / `.Infrastructure`, отвори `C:/Users/kaloyan.georgiev/Projects/railrun-backend-structure.md` секция **"Code Patterns"** и потвърди, че разбираш тези правила. Всички са извлечени от реални PR ревюта:
+Преди да напишеш код в `RailRunService.API` / `.Application` / `.Infrastructure`, отвори `C:/Users/kaloyan.georgiev/Projects/ralph/ralph reference/project reference/railrun-backend-structure.md` секция **"Code Patterns"** и потвърди, че разбираш тези правила. Всички са извлечени от реални PR ревюта:
 
 **Преди да добавиш нов handler или da пипнеш съществуващ aggregate repo:** `gitnexus context I<Repo>Repository --repo Transport-OSDM-Src` за да видиш кой го inject-ва и каква е историческата употреба — да не направиш патърн дублиран или да счупиш съществуващ caller.
 
@@ -324,6 +333,8 @@ If NO (all tasks done) — output:
 4. Handler inject-ва `IXxxRepository` + `IUnitOfWork`, вика един `_unitOfWork.SaveChangesAsync(ct)` накрая.
 
 ## Working Directories
+
+> Source of truth: `ralph/ralph reference/project reference/repos.json` (`repos.<repo>.location`). Таблицата долу е бърза справка — при разминаване вярвай на `repos.json`.
 
 | Слой | Директория |
 |------|-----------|

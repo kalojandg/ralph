@@ -9,9 +9,9 @@
 ### Архитектурен Reference
 
 **Преди да започнеш BE таск, ЗАДЪЛЖИТЕЛНО прочети:**
-- `C:/Users/kaloyan.georgiev/Projects/railrun-backend-structure.md` — .NET 8 Clean Architecture, CQRS pattern, Controllers, Domain, Infrastructure
-- `C:/Users/kaloyan.georgiev/Projects/railrun-database-guide.md` — DB schema, WagonTypes таблица, migrations
-- `C:/Users/kaloyan.georgiev/Projects/admin-app-frontend-structure.md` — за API contract с FE
+- `C:/Users/kaloyan.georgiev/Projects/ralph/ralph reference/project reference/railrun-backend-structure.md` — .NET 8 Clean Architecture, CQRS pattern, Controllers, Domain, Infrastructure
+- `C:/Users/kaloyan.georgiev/Projects/ralph/ralph reference/project reference/railrun-database-guide.md` — DB schema, WagonTypes таблица, migrations
+- `C:/Users/kaloyan.georgiev/Projects/ralph/ralph reference/project reference/admin-app-frontend-structure.md` — за API contract с FE
 
 ### BE TDD Workflow
 
@@ -43,7 +43,7 @@
 ### Архитектурен Reference
 
 **Преди да започнеш FE таск, ЗАДЪЛЖИТЕЛНО прочети:**
-- `C:/Users/kaloyan.georgiev/Projects/admin-app-frontend-structure.md` — React 19, folder structure, routing, API layer, hooks, MUI, i18n, testing
+- `C:/Users/kaloyan.georgiev/Projects/ralph/ralph reference/project reference/admin-app-frontend-structure.md` — React 19, folder structure, routing, API layer, hooks, MUI, i18n, testing
 
 ### Реален API (НЕ localStorage!)
 
@@ -99,7 +99,7 @@ dispatch(showSnackbar({ message: t('wagons.featureComingSoon'), severity: 'info'
 ### Архитектурен Reference
 
 **Преди да работиш по DB таск, ЗАДЪЛЖИТЕЛНО прочети:**
-- `C:/Users/kaloyan.georgiev/Projects/railrun-database-guide.md` — SQL Server schema, WagonTypes таблица, seed data, migrations
+- `C:/Users/kaloyan.georgiev/Projects/ralph/ralph reference/project reference/railrun-database-guide.md` — SQL Server schema, WagonTypes таблица, seed data, migrations
 
 ### DB Rules
 
@@ -593,7 +593,7 @@ POST   /api/wagon-types            → Create wagon type (Draft)
 2. **`C:/Users/kaloyan.georgiev/Projects/Admin-App/docs/composition/frontend-requirements.md §5`** —
    формалните функционални изисквания (FR-1..FR-7), acceptance criteria,
    разбивка на таскове.
-3. **`C:/Users/kaloyan.georgiev/Projects/admin-app-frontend-structure.md`** — React/TS/MUI patterns.
+3. **`C:/Users/kaloyan.georgiev/Projects/ralph/ralph reference/project reference/admin-app-frontend-structure.md`** — React/TS/MUI patterns.
 
 **Ако таскът засяга OSDM JSON формат** — прочети и
 https://raw.githubusercontent.com/UnionInternationalCheminsdeFer/OSDM/master/specification/schemas/place.yml
@@ -774,7 +774,7 @@ Elimination на dual source of truth. Визуален паритет — ка�
 2. **`C:/Users/kaloyan.georgiev/Projects/Admin-App/docs/composition/osdm-audit.md`** —
    **създаден от Task 113**. След Task 113, всеки следващ таск го консултира
    за полета, които са "направени на око".
-3. **`C:/Users/kaloyan.georgiev/Projects/admin-app-frontend-structure.md`** — React/TS/MUI patterns.
+3. **`C:/Users/kaloyan.georgiev/Projects/ralph/ralph reference/project reference/admin-app-frontend-structure.md`** — React/TS/MUI patterns.
 
 ### 🎯 Архитектурни правила за Етап 6 (КРИТИЧНИ!)
 
@@ -1029,7 +1029,7 @@ Click "Клониране" → dialog с параметри (target train + date
 2. **`C:/Users/kaloyan.georgiev/Projects/ralph/PROMPT.md`** §"Existing aggregate repos" — за #125 ако
    се build-ва handler (използвай `ICompositionRepository` pattern, **не**
    generic `IRepository<T>`).
-3. **`C:/Users/kaloyan.georgiev/Projects/admin-app-frontend-structure.md`** — за #130-#139.
+3. **`C:/Users/kaloyan.georgiev/Projects/ralph/ralph reference/project reference/admin-app-frontend-structure.md`** — за #130-#139.
 
 ### 🚨 Critical rules за Етап 7 (червени линии)
 

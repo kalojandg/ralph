@@ -4,41 +4,43 @@
 
 ---
 
-## Стъпка 1: Определи repo на таска
+## Стъпка 1: Определи repo и намери го в mapping-а
 
-Погледни полето `"repo"` в таска от `tasks.json`:
+Погледни полето `"repo"` в таска от `tasks.json` (`frontend` / `backend` / `database`).
 
-| repo | Какво е | Working Directory |
-|------|---------|-------------------|
-| `frontend` | React Admin-App | `C:\Users\kaloyan.georgiev\Projects\Admin-App` |
-| `backend` | .NET RailRunService | `C:\Users\kaloyan.georgiev\Projects\OSDM-Src\DotNetServices\RailRunService` |
-| `database` | SQL seed data & schema | `C:\Users\kaloyan.georgiev\Projects\OSDM-Src\SQLProjects\RailRunServiceSQL` |
+**Единственият source of truth за „кое репо къде е на диска и кой reference да чета" е mapping файлът:**
+```
+C:/Users/kaloyan.georgiev/Projects/ralph/ralph reference/project reference/repos.json
+```
 
-Ако `"repo"` липсва — определи от описанието на таска:
+Прочети го, намери своя `repo` ключ и вземи оттам:
+- `location` → работната директория (`cd` тук преди да пишеш код)
+- `reference` → архитектурния файл за това репо (в същата `project reference/` папка)
+- `commands` → build / test / lint команди за това репо
+
+**Ако `"repo"` липсва** в таска — изведи го по `fallback.rules` в `repos.json`:
 - UI компонент, страница, React тест → `frontend`
 - Endpoint, command, query, DTO, C# → `backend`
 - Seed data, миграция, SQL скрипт → `database`
 
 ---
 
-## Стъпка 2: Прочети САМО файла за твоето repo
+## Стъпка 2: Прочети САМО reference файла за твоето repo
 
-**НЕ чети другите! Прочети ЕДИНСТВЕНО файла, който съответства на `repo`:**
+**НЕ чети другите reference файлове! Прочети ЕДИНСТВЕНО този, който `repos.json` сочи за твоя `repo`:**
 
-- Ако `repo` = **frontend** →
-  ```bash
-  cat C:/Users/kaloyan.georgiev/Projects/admin-app-frontend-structure.md
-  ```
+```bash
+# Пример за backend (заместИ с reference-а от твоя repo запис):
+cat "C:/Users/kaloyan.georgiev/Projects/ralph/ralph reference/project reference/railrun-backend-structure.md"
+```
 
-- Ако `repo` = **backend** →
-  ```bash
-  cat C:/Users/kaloyan.georgiev/Projects/railrun-backend-structure.md
-  ```
+| repo | reference файл (в `project reference/`) |
+|------|------------------------------------------|
+| `frontend` | `admin-app-frontend-structure.md` |
+| `backend` | `railrun-backend-structure.md` |
+| `database` | `railrun-database-guide.md` |
 
-- Ако `repo` = **database** →
-  ```bash
-  cat C:/Users/kaloyan.georgiev/Projects/railrun-database-guide.md
-  ```
+Reference файлът ти казва **къде са файловете в това репо и какви patterns се ползват** — спазвай ги, не импровизирай.
 
 ---
 
@@ -83,20 +85,11 @@ END
 
 ---
 
-## Стъпка 5: Прочети и спазвай structure файловете
+## Стъпка 5: Спазвай reference файла (вече прочетен в Стъпка 2)
 
-При **frontend** таскове — ЗАДЪЛЖИТЕЛНО прочети и спазвай:
-```bash
-cat C:/Users/kaloyan.georgiev/Projects/admin-app-frontend-structure.md
-```
+Reference файлът от Стъпка 2 съдържа актуалната архитектура, конвенции за именуване, folder structure и patterns за твоето репо. **Не импровизирай** — следвай установените patterns.
 
-При **backend** таскове — ЗАДЪЛЖИТЕЛНО прочети и спазвай:
-```bash
-cat C:/Users/kaloyan.georgiev/Projects/railrun-backend-structure.md
-```
-
-Тези файлове съдържат актуалната архитектура, конвенции за именуване, folder structure и patterns.
-**Не импровизирай** — следвай установените patterns от файла.
+При таск, който **засяга API contract** (endpoint URL / DTO shape между FE и BE) — прочети **и двата** reference файла (frontend + backend) от `project reference/`.
 
 ---
 

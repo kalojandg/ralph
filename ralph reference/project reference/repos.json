@@ -1,0 +1,51 @@
+{
+  "_comment": "Repo mapping — single source of truth за 'кое репо къде е на диска и кой архитектурен reference да прочета'. Алгоритъмът: таск има поле `repo` → намери го тук → cd в `location` + прочети `reference` (в тази папка) преди да пишеш код. Позволява едновременна работа по няколко репота.",
+  "_reference_base": "Всички `reference` пътища са спрямо тази папка (ralph/ralph reference/project reference/).",
+  "version": 1,
+
+  "repos": {
+    "frontend": {
+      "location": "C:\\Users\\kaloyan.georgiev\\Projects\\Admin-App",
+      "reference": "admin-app-frontend-structure.md",
+      "description": "React 19 + TypeScript + Vite Admin-App. Folder structure, routing, API layer, React Query hooks, MUI, i18n, testing patterns.",
+      "commands": {
+        "test": "npm run test:run",
+        "test_changed": "npx vitest run --changed",
+        "e2e": "npm run e2e",
+        "lint": "npx eslint <changed-files>",
+        "typecheck": "npm run type-check",
+        "dev": "npm run dev"
+      }
+    },
+
+    "backend": {
+      "location": "C:\\Users\\kaloyan.georgiev\\Projects\\OSDM-Src\\DotNetServices\\RailRunService",
+      "reference": "railrun-backend-structure.md",
+      "description": ".NET 8 Clean Architecture, CQRS, Aggregate Repositories + IUnitOfWork, DTO location rules, Validation.",
+      "commands": {
+        "build": "dotnet build",
+        "test": "dotnet test <Changed>.Tests --filter <TestClass>",
+        "run": "dotnet run --project RailRunService.API"
+      }
+    },
+
+    "database": {
+      "location": "C:\\Users\\kaloyan.georgiev\\Projects\\OSDM-Src\\SQLProjects\\RailRunServiceSQL",
+      "reference": "railrun-database-guide.md",
+      "description": "SQL Server schema (WagonTypes/CoachLayouts/SeatDefinitions), seed data, idempotent post-deployment migrations, grid coordinate system.",
+      "commands": {
+        "build": "dotnet build -c Release --no-incremental",
+        "publish": "SqlPackage /Action:Publish /SourceFile:bin/Release/RailRunServiceDb.dacpac /TargetConnectionString:\"Server=localhost,14430;Database=RailRunServiceDB;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;Encrypt=True\""
+      }
+    }
+  },
+
+  "fallback": {
+    "_comment": "Ако таск няма `repo` поле — изведи от описанието: UI компонент/страница/React тест → frontend; endpoint/command/query/DTO/C# → backend; seed data/миграция/SQL → database.",
+    "rules": [
+      { "if_description_matches": "UI, компонент, страница, React, .tsx", "repo": "frontend" },
+      { "if_description_matches": "endpoint, command, query, DTO, handler, C#, .cs", "repo": "backend" },
+      { "if_description_matches": "seed, миграция, SQL, schema, .sql", "repo": "database" }
+    ]
+  }
+}
