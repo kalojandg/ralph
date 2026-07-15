@@ -66,6 +66,18 @@ if ($config -and $config.swarm) {
     if ($config.swarm.PSObject.Properties['max_fail_retries'])     { $maxFailRetries     = [int]$config.swarm.max_fail_retries }
 }
 
+# Post-merge verification gate: after every successful merge, run the repo's `verify`
+# commands (repos.json) in the MAIN checkout, i.e. on the freshly merged integration
+# branch. Two branches that were each green in isolation can still break each other
+# (semantic conflict - no textual conflict, broken logic); this gate is the only place
+# that catches it. RED -> the merge is undone and the task goes through informed retry.
+$verifyEnabled = $true
+$verifyTimeoutMin = 20
+if ($config -and $config.swarm) {
+    if ($config.swarm.PSObject.Properties['verify_enabled'])     { $verifyEnabled    = [bool]$config.swarm.verify_enabled }
+    if ($config.swarm.PSObject.Properties['verify_timeout_min']) { $verifyTimeoutMin = [int]$config.swarm.verify_timeout_min }
+}
+
 $tasksFile  = Join-Path $scriptDir "tasks.json"
 $reposFile  = Join-Path $scriptDir "ralph reference\project reference\repos.json"
 $claimsDir  = Join-Path $scriptDir "claims"
@@ -100,6 +112,7 @@ Write-Host "Agents (slots) : $agents"       -ForegroundColor White
 Write-Host "Max tasks      : $(if ($maxTasks -gt 0) { $maxTasks } else { 'until done' })" -ForegroundColor White
 Write-Host "Worktree root  : $worktreeRoot" -ForegroundColor White
 Write-Host "Retry budgets  : timeout x$maxTimeoutRequeues, fail x$maxFailRetries (per task)" -ForegroundColor White
+Write-Host "Verify gate    : $(if ($verifyEnabled) { "ON - repos.json 'verify' commands, timeout ${verifyTimeoutMin}m/cmd" } else { 'OFF' })" -ForegroundColor White
 Write-Host ""
 
 # ---------------------------------------------------------------- helpers
@@ -149,6 +162,45 @@ function Save-RetryContext($taskId, $attempt, $why) {
         $block = (Get-Content $f -Raw -Encoding UTF8).TrimEnd() + "`n`n" + $block
     }
     $block | Out-File $f -Encoding UTF8
+}
+
+# Post-merge verification gate. Runs the task's repo `verify` commands (repos.json) in the
+# repo's MAIN working dir (location), which at call time sits on the just-merged integration
+# branch. Returns $null when green (or when no gate is configured for the repo), otherwise a
+# failure report string that goes into the retry context. Runs in the orchestrator, so merges
+# stay strictly sequential - the next merge only happens onto a VERIFIED-green branch.
+# NOTE: verify commands must not leave untracked files behind (gitignore build artifacts),
+# or every later merge gets skipped as "dirty".
+function Invoke-VerifyGate($task) {
+    if (-not $verifyEnabled) { return $null }
+    $rKey = "frontend"
+    if ($task.PSObject.Properties['repo'] -and $task.repo) { $rKey = $task.repo }
+    $r = $reposMap.repos.$rKey
+    if (-not $r) { return $null }
+    if (-not ($r.PSObject.Properties['verify'] -and $r.verify)) { return $null }
+    foreach ($cmd in @($r.verify)) {
+        Write-Host "[v] Task #$($task.id): verify gate ($rKey): $cmd" -ForegroundColor Cyan
+        $job = Start-Job -ScriptBlock {
+            param($dir, $c)
+            Set-Location $dir
+            $o = & cmd /c $c 2>&1 | Out-String
+            [pscustomobject]@{ out = $o; code = $LASTEXITCODE }
+        } -ArgumentList $r.location, $cmd
+        $done = Wait-Job $job -Timeout ($verifyTimeoutMin * 60)
+        if (-not $done) {
+            Stop-Job $job -ErrorAction SilentlyContinue
+            Remove-Job $job -Force -ErrorAction SilentlyContinue
+            return "VERIFY GATE TIMEOUT: '$cmd' did not finish in $verifyTimeoutMin min on the integration branch after merging this task. Treated as RED."
+        }
+        $res = Receive-Job $job
+        Remove-Job $job -Force -ErrorAction SilentlyContinue
+        if ($res.code -ne 0) {
+            $tailLines = (($res.out -split "`r?`n") | Select-Object -Last 60) -join "`n"
+            return "VERIFY GATE RED: '$cmd' exited $($res.code) on the integration branch AFTER merging this task. Your changes passed in isolation but break the integrated state (or vice versa).`n--- last verify output ---`n$tailLines"
+        }
+    }
+    Write-Host "[v] Task #$($task.id): verify gate GREEN" -ForegroundColor Green
+    return $null
 }
 
 # Eligible = for each lane, the FIRST pending task in array order (lane preserves order),
@@ -297,13 +349,36 @@ function Complete-Agent($info) {
             $outcome = "merge_skipped"
         } else {
             $desc = "$($t.description)" -replace '"', "'"
+            $preMergeSha = (& git -C $info.gitRoot rev-parse HEAD 2>$null)
             & git -C $info.gitRoot merge --no-ff $info.branch -m "ralph: merge task #$($t.id) - $desc" 2>&1 | Out-Null
             if ($LASTEXITCODE -ne 0) {
                 & git -C $info.gitRoot merge --abort 2>$null | Out-Null
                 Write-Host "[X] Task #$($t.id): MERGE CONFLICT - aborted. Branch kept for manual resolve: $($info.branch)" -ForegroundColor Red
                 $outcome = "merge_conflict"
             } else {
-                $outcome = "merged"
+                # ---- post-merge verification gate (semantic-conflict catcher) ----
+                $verifyErr = Invoke-VerifyGate $t
+                if (-not $verifyErr) {
+                    $outcome = "merged"
+                } else {
+                    # The integration branch must stay green at all times - undo the merge
+                    # (checkout was clean pre-merge, so a hard reset is safe), then send the
+                    # task through the informed-retry path with the verify report as context.
+                    & git -C $info.gitRoot reset --hard $preMergeSha 2>&1 | Out-Null
+                    Write-Host "[X] Task #$($t.id): VERIFY GATE RED - merge undone (reset to $preMergeSha)" -ForegroundColor Red
+                    & git -C $info.gitRoot worktree remove --force $info.wtPath 2>$null | Out-Null
+                    $n = $script:failCounts[$t.id]; if (-not $n) { $n = 0 }
+                    if ($n -lt $maxFailRetries) {
+                        $script:failCounts[$t.id] = $n + 1
+                        Save-RetryContext $t.id ($n + 1) $verifyErr
+                        Write-Host "[~] Task #$($t.id): RETRY $($n + 1)/$maxFailRetries with verify failure context injected" -ForegroundColor Yellow
+                        Release-Claim $t.id
+                        return "verify_requeue"
+                    }
+                    Write-Host "[X] Task #$($t.id): verify gate red - retry budget ($maxFailRetries) exhausted. Branch kept: $($info.branch)" -ForegroundColor Red
+                    Release-Claim $t.id
+                    return "failed"
+                }
             }
         }
 
@@ -375,7 +450,7 @@ $running   = @{}    # taskId -> agent info
 $failedIds = @()
 $script:timeoutCounts = @{}   # taskId -> watchdog-kill re-queues used this session
 $script:failCounts    = @{}   # taskId -> informed retries used this session
-$stats = @{ merged = 0; conflicts = 0; skipped = 0; failed = 0; requeued = 0; timeoutRequeues = 0; failRetries = 0 }
+$stats = @{ merged = 0; conflicts = 0; skipped = 0; failed = 0; requeued = 0; timeoutRequeues = 0; failRetries = 0; verifyReverts = 0 }
 $freeSlots = New-Object System.Collections.ArrayList
 1..$agents | ForEach-Object { [void]$freeSlots.Add($_) }
 $launchedTotal = 0
@@ -434,6 +509,7 @@ while ($true) {
                 "quota_requeue"   { $stats.requeued++ }        # NOT failed - eligible again next pass
                 "timeout_requeue" { $stats.timeoutRequeues++ } # watchdog kill - fresh blind re-run
                 "fail_requeue"    { $stats.failRetries++ }     # informed retry (failure context injected)
+                "verify_requeue"  { $stats.verifyReverts++ }   # merge undone by verify gate - informed retry
                 default           { $stats.failed++;   $failedIds += $id }
             }
             $running.Remove($id)
@@ -457,6 +533,7 @@ Write-Host "Failed           : $($stats.failed)"    -ForegroundColor $(if ($stat
 Write-Host "Quota re-queues  : $($stats.requeued)"  -ForegroundColor $(if ($stats.requeued)  { 'Yellow' } else { 'Gray' })
 Write-Host "Timeout re-queues: $($stats.timeoutRequeues)" -ForegroundColor $(if ($stats.timeoutRequeues) { 'Yellow' } else { 'Gray' })
 Write-Host "Fail retries     : $($stats.failRetries)"     -ForegroundColor $(if ($stats.failRetries)     { 'Yellow' } else { 'Gray' })
+Write-Host "Verify reverts   : $($stats.verifyReverts)"   -ForegroundColor $(if ($stats.verifyReverts)   { 'Yellow' } else { 'Gray' })
 Write-Host ""
 Write-Host "Conflict/skipped branches are kept as ralph/task-<id> for manual resolve." -ForegroundColor Gray
 Write-Host "Stale worktrees (if any): git worktree list  (in each gitRoot)" -ForegroundColor Gray

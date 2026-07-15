@@ -18,6 +18,7 @@
 | Как влиза в главния клон? | Оркестраторът merge-ва завършените branch-ове **последователно** (`--no-ff`) в integration branch-а |
 | Конфликт при merge? | `merge --abort`, branch-ът се пази за ръчен resolve, таскът остава `passes:false` |
 | Retry при провал? | ✅ Bounded: timeout/stale kill → re-queue с чист worktree (x`max_timeout_requeues`); истински провал → retry с **инжектиран failure контекст** от `retry/task-<id>.md` (x`max_fail_retries`). Виж §1 „Retry поведение". |
+| Кой пази integration branch-а зелен? | **Post-merge verify gate**: след всеки merge оркестраторът пуска `verify` командите на репото (repos.json); червено → merge-ът се връща (`reset --hard`) + информиран retry. Следващият merge стъпва само върху ВЕРИФИЦИРАНО зелен branch. |
 
 ---
 
@@ -54,8 +55,13 @@ repos.json                 ← + gitRoot / workSubdir / mainBranch (worktree т�
      накрая пише results/task-<id>.json → exit 0
 6. Оркестраторът (rolling poll на 15s) хваща приключилия процес:
      status=done → SEQUENTIAL MERGE: git merge --no-ff ralph/task-<id> в mainBranch
-       merged   → tasks.json passes:true + prepend activity entry + изтрий worktree/branch
-                  + изтрий retry/task-<id>.md (никакъв stale retry контекст след успех)
+       merged   → POST-MERGE VERIFY GATE: пуска `verify` командите на репото (repos.json)
+                  върху merged integration branch-а:
+                    зелено  → tasks.json passes:true + prepend activity entry
+                              + изтрий worktree/branch + изтрий retry/task-<id>.md
+                    червено/timeout → git reset --hard до pre-merge SHA (merge-ът се ВРЪЩА,
+                              integration branch-ът остава зелен) → информиран retry
+                              с verify отчета като контекст (бюджет max_fail_retries)
        conflict → merge --abort, branch остава, таскът НЕ е passed (ръчен resolve)
        skipped  → главният checkout е на друг branch/dirty → branch остава
      exit 2 (quota)         → re-queue (НЕ е failed), чист worktree при следващия pass
@@ -100,6 +106,7 @@ repos.json                 ← + gitRoot / workSubdir / mainBranch (worktree т�
 
 - **Timeout/stale (exit 3) → сляп re-queue.** Увисванията са най-стохастичният провал (заклещен dev server, network stall) — нов опит с чист worktree обикновено ги оправя. Без контекст, просто наново.
 - **Истински провал → информиран retry.** Оркестраторът записва в `retry/task-<id>.md` причината (status/summary от result файла или „no result file") + последните ~60 реда от лога на агента. Следващият опит получава файла чрез `-retryFile` и той се инжектира в prompt-а СЛЕД parallel-mode секцията, ПРЕДИ feedback (feedback остава последната дума) — с инструкция „диагностицирай защо предишният опит фейлна и подходи различно". Опит N+1 ≠ опит N → лови и детерминистични провали.
+- **Verify gate провал → същият информиран retry.** Ако merge-ът мине, но `verify` командите на репото са червени на integration branch-а, merge-ът се връща и таскът се retry-ва с verify отчета (команда, exit код, последните ~60 реда изход) като контекст — споделя бюджета `max_fail_retries`.
 - Няколко провала се **акумулират** в същия файл (в prompt-а влизат последните ~8000 знака — най-новото печели).
 - `retry/task-<id>.md` **преживява сесиите** (нов run започва с контекста от стария) и се **трие при успешен merge**; при старт на run се измитат и retry файловете на таскове, които вече са `passes:true` (напр. завършени ръчно) — няма stale състояние.
 - Броячите са per-session; изчерпан бюджет → failed за сесията, lane-ът спира (нов run започва с нулирани броячи + запазения контекст).
@@ -178,7 +185,7 @@ START-RALPH-SWARM.bat 2          → 2 агента
 START-RALPH-SWARM.bat 4 10       → 4 агента, спри след 10 таска
 powershell .\ralph-swarm.ps1 -agents 3 -maxTasks 0
 ```
-Config: `ralph-config.json → swarm: { agents, worktree_root, keep_windows, window_style, max_timeout_requeues, max_fail_retries }`.
+Config: `ralph-config.json → swarm: { agents, worktree_root, keep_windows, window_style, max_timeout_requeues, max_fail_retries, verify_enabled, verify_timeout_min }`. Verify командите per repo: `repos.json → repos.<key>.verify` (масив; липсва → няма gate за това репо).
 
 ### Изисквания преди пускане
 - Integration branch-ът (`repos.json → mainBranch`, сега `devdev`) е **checked out и чист** във всеки gitRoot — иначе merge-ът се skip-ва (safe, но ръчна работа после).
@@ -189,7 +196,7 @@ Config: `ralph-config.json → swarm: { agents, worktree_root, keep_windows, win
 
 1. **Прозорец на агент** — всеки агент е отделен PowerShell прозорец със заглавие `Ralph SLOT N - task #X (ralph/task-X)`: там виждаш каквото и в соло режим (таск инфо, spinner, CLAUDE OUTPUT). По default прозорецът се затваря при край; `-keepWindows` (или config `swarm.keep_windows:true`) го оставя отворен за преглед.
    **Стил на прозорците** — `-agentWindows Normal|Minimized|Hidden` (или config `swarm.window_style`, default в config-а: `Minimized`): `Normal` изскача на екрана; `Minimized` стои тихо в taskbar-а (не краде фокус — отваряш го само ако искаш да гледаш); `Hidden` изобщо без конзоли — следиш само таблото на оркестратора + `logs/`.
-2. **Оркестраторска конзола (таблото)** — събития (`[>] SLOT started`, `[+] DONE+MERGED`, `[X] CONFLICT`, `[~] QUOTA re-queued`, `[~] TIMEOUT re-queued`, `[~] FAILED - RETRY n/m`) + статус ред на всеки 15s: `running: [ids] | merged X | conflicts Y | skipped Z | failed W`. Summary-то накрая показва и `Timeout re-queues` / `Fail retries`.
+2. **Оркестраторска конзола (таблото)** — събития (`[>] SLOT started`, `[v] verify gate ...`, `[+] DONE+MERGED`, `[X] CONFLICT`, `[X] VERIFY GATE RED - merge undone`, `[~] QUOTA re-queued`, `[~] TIMEOUT re-queued`, `[~] FAILED - RETRY n/m`) + статус ред на всеки 15s: `running: [ids] | merged X | conflicts Y | skipped Z | failed W`. Summary-то накрая показва и `Timeout re-queues` / `Fail retries` / `Verify reverts`.
 3. **Трайни следи** — `logs/iteration-<taskId>-*.txt` (пълният изход на всеки агент; iterationNumber = task id → логовете са per-таск), `results/task-<id>.json` (отчетът), `retry/task-<id>.md` (история на провалените опити — съществува само докато таскът не merge-не), `tasks.json`/`activity.md` (board + наратив).
 
 Playbook правило: проверявай агентите на всеки 20–30 мин за drift.
@@ -216,7 +223,8 @@ Swarm x3:   ████████████░░░░  същото ко�
 ### Ограничения (известни, приети)
 - **Retry-ята са bounded** (виж „Retry поведение" в Част 1): timeout → до `max_timeout_requeues` слепи re-queue-та; провал → до `max_fail_retries` информирани retry-та. След изчерпване таскът е failed за сесията и lane-ът му спира — предпазва от вечно зацикляне. Нов run тръгва с нулирани броячи, но пази retry контекста.
 - **Merge conflict НЕ се retry-ва автоматично** — branch-ът се пази за ръчен resolve (retry би изхвърлил свършената работа).
-- **Няма post-merge verification gate** — оркестраторът не пуска тестове на integration branch-а след merge; семантичен конфликт между два поотделно зелени branch-а се хваща чак от следващ таск/ръчно. (Известна дупка, кандидат за следваща доработка.)
+- **Verify gate-ът е синхронен в оркестратора** — докато `verify` командите вървят (мин-мин), поредните merges и събирането на приключили агенти изчакват. Агентите продължават да работят необезпокоявани (те са в worktrees). Това е цената merges-ите да са строго последователни върху верифицирано зелена база. Дълъг suite → вдигни `verify_timeout_min` или подреди бързите команди първи (fail fast).
+- **Verify командите НЕ трябва да оставят untracked файлове** в главния checkout (build артефакти → .gitignore) — иначе следващите merges се skip-ват като "dirty".
 - **`files` boundary не се enforce-ва механично** — инструкция е към агента (+ ревюто при merge). Дисциплината в декомпозицията е първата защита.
 - **tasks.json се преформатира** от оркестратора при ъпдейт (PowerShell ConvertTo-Json — кирилицата става `\uXXXX` escapes; валиден JSON, но по-грозен за четене).
 - Quota: всеки агент сам си чака reset-а (exit 2 логиката е в агентската обвивка).
