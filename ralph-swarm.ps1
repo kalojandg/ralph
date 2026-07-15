@@ -383,6 +383,7 @@ function Complete-Agent($info) {
         }
 
         if ($outcome -eq "merged") {
+            $script:fastFails = 0
             Set-TaskPassed $t.id
             if ($result.PSObject.Properties['activity']) { Add-ActivityEntry $result.activity }
             & git -C $info.gitRoot worktree remove --force $info.wtPath 2>$null | Out-Null
@@ -427,6 +428,12 @@ function Complete-Agent($info) {
         # INFORMED: the failure reason + the agent's log tail go to retry\task-<id>.md and
         # the next attempt gets them via -retryFile. Attempt N+1 differs from attempt N, so
         # this also catches deterministic failures, not just unlucky ones.
+        # Instant deaths (<60s) are almost never task failures - they are config/CLI/API
+        # problems (bad model name, expired auth, API 400s). Count them; the main loop
+        # aborts the whole run after 3 consecutive ones instead of burning every task's
+        # retry budget on the same environment error. Any merge or slow failure resets.
+        $runtimeSec = ((Get-Date) - $info.started).TotalSeconds
+        if ($runtimeSec -lt 60) { $script:fastFails++ } else { $script:fastFails = 0 }
         $why = "no result file"
         if ($result) { $why = "status=$($result.status): $($result.summary)" }
         & git -C $info.gitRoot worktree remove --force $info.wtPath 2>$null | Out-Null
@@ -450,6 +457,7 @@ $running   = @{}    # taskId -> agent info
 $failedIds = @()
 $script:timeoutCounts = @{}   # taskId -> watchdog-kill re-queues used this session
 $script:failCounts    = @{}   # taskId -> informed retries used this session
+$script:fastFails     = 0     # consecutive instant (<60s) agent deaths -> environment problem guard
 $stats = @{ merged = 0; conflicts = 0; skipped = 0; failed = 0; requeued = 0; timeoutRequeues = 0; failRetries = 0; verifyReverts = 0 }
 $freeSlots = New-Object System.Collections.ArrayList
 1..$agents | ForEach-Object { [void]$freeSlots.Add($_) }
@@ -515,6 +523,18 @@ while ($true) {
             $running.Remove($id)
             [void]$freeSlots.Add($info.slot)
         }
+    }
+
+    # Environment-failure guard (mirrors ralph.ps1's silent-failure guard): 3 consecutive
+    # agents dying in <60s = config/CLI/API problem (bad model, expired auth, API 400),
+    # not task failures. Abort instead of burning every task's retry budget on it.
+    if ($script:fastFails -ge 3) {
+        Write-Host ""
+        Write-Host "[X] FATAL: 3 consecutive agents died in under 60s each." -ForegroundColor Red
+        Write-Host "    This is an ENVIRONMENT problem, not task failures. Check the newest" -ForegroundColor Red
+        Write-Host "    logs\iteration-*.txt for the real error (API 400 / bad --model /" -ForegroundColor Red
+        Write-Host "    expired auth / claude CLI too old), fix it, then re-run the swarm." -ForegroundColor Red
+        break
     }
 
     $rIds = (@($running.Keys) | Sort-Object) -join ', '
