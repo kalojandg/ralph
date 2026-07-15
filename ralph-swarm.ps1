@@ -17,7 +17,8 @@ param(
     [int]$agents = 0,             # 0 = take from config (swarm.agents), fallback 3
     [int]$maxTasks = 0,           # stop after N completed tasks (0 = run until done/blocked)
     [string]$configFile = "ralph-config.json",
-    [string]$worktreeRoot = ""    # default: <parent-of-ralph>\.ralph-worktrees
+    [string]$worktreeRoot = "",   # default: <parent-of-ralph>\.ralph-worktrees
+    [switch]$keepWindows          # keep each agent's console window open after it finishes
 )
 
 $ErrorActionPreference = 'Continue'
@@ -40,6 +41,11 @@ if ($agents -le 0) {
 if (-not $worktreeRoot) {
     if ($config -and $config.swarm -and $config.swarm.worktree_root) { $worktreeRoot = $config.swarm.worktree_root }
     else { $worktreeRoot = Join-Path (Split-Path -Parent $scriptDir) ".ralph-worktrees" }
+}
+if (-not $PSBoundParameters.ContainsKey('keepWindows')) {
+    if ($config -and $config.swarm -and $config.swarm.PSObject.Properties['keep_windows'] -and $config.swarm.keep_windows) {
+        $keepWindows = $true
+    }
 }
 
 $tasksFile  = Join-Path $scriptDir "tasks.json"
@@ -158,8 +164,10 @@ function Start-AgentForTask($task, $slot) {
     Remove-Item $resFile -Force -ErrorAction SilentlyContinue
 
     # -iterationNumber = task id => unique %TEMP% prompt/output files per concurrent agent
-    $argList = @(
-        "-ExecutionPolicy", "Bypass", "-NoProfile",
+    # -NoExit (via -keepWindows) leaves the agent's console open after it finishes
+    $argList = @("-ExecutionPolicy", "Bypass", "-NoProfile")
+    if ($keepWindows) { $argList += "-NoExit" }
+    $argList += @(
         "-File", "`"$scriptDir\ralph-iteration.ps1`"",
         "-iterationNumber", "$($task.id)",
         "-configFile", "`"$configFile`"",

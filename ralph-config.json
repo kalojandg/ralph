@@ -26,7 +26,8 @@
   "swarm": {
     "agents": 3,
     "worktree_root": "",
-    "_comment": "agents = паралелни слота (2-3 старт, 5-6 практичен таван). worktree_root празно = <parent>\\.ralph-worktrees. Виж ralph reference/parallel-swarm-reference.md"
+    "keep_windows": false,
+    "_comment": "agents = паралелни слота (2-3 старт, 5-6 практичен таван). worktree_root празно = <parent>\\.ralph-worktrees. keep_windows = агентските конзоли остават отворени след края. Виж ralph reference/parallel-swarm-reference.md"
   },
   "logging": {
     "enabled": true,

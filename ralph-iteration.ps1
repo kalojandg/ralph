@@ -51,6 +51,8 @@ if (Test-Path $tasksFile) {
             exit 1
         }
         Write-Host "[i] PARALLEL MODE - agent slot $agentSlot, task #$taskId, branch $branch" -ForegroundColor Magenta
+        # Window title so the user can tell agent consoles apart at a glance
+        try { $host.UI.RawUI.WindowTitle = "Ralph SLOT $agentSlot - task #$taskId ($branch)" } catch {}
     } else {
         $currentTask = $allTasks | Where-Object { $_.passes -eq $false } | Select-Object -First 1
     }

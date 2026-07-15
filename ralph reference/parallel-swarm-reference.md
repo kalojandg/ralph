@@ -165,10 +165,13 @@ Config: `ralph-config.json → swarm: { agents, worktree_root }`.
 - `tasks.json` е декомпозиран по правилата от Част 2 (най-вече: без файлово застъпване между lanes).
 - Забележка за OSDM-Src: backend и database споделят един gitRoot — един OSDM worktree носи и двете подпапки, но lanes пак определят кой какво пипа.
 
-### Мониторинг
-- Всеки агент = отделен PowerShell прозорец (виждаш spinner-а/лога му на живо).
-- Оркестраторът печата на 15s: `running: [ids] | merged X | conflicts Y | skipped Z | failed W`.
-- Playbook правило: проверявай агентите на всеки 20–30 мин за drift.
+### Мониторинг (3 нива на видимост)
+
+1. **Прозорец на агент** — всеки агент е отделен PowerShell прозорец със заглавие `Ralph SLOT N - task #X (ralph/task-X)`: там виждаш каквото и в соло режим (таск инфо, spinner, CLAUDE OUTPUT). По default прозорецът се затваря при край; `-keepWindows` (или config `swarm.keep_windows:true`) го оставя отворен за преглед.
+2. **Оркестраторска конзола (таблото)** — събития (`[>] SLOT started`, `[+] DONE+MERGED`, `[X] CONFLICT`, `[~] QUOTA re-queued`) + статус ред на всеки 15s: `running: [ids] | merged X | conflicts Y | skipped Z | failed W`.
+3. **Трайни следи** — `logs/iteration-<taskId>-*.txt` (пълният изход на всеки агент; iterationNumber = task id → логовете са per-таск), `results/task-<id>.json` (отчетът), `tasks.json`/`activity.md` (board + наратив).
+
+Playbook правило: проверявай агентите на всеки 20–30 мин за drift.
 
 ### Възстановяване след провал
 | Ситуация | Какво остава | Какво правиш |
