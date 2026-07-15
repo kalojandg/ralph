@@ -18,7 +18,9 @@ param(
     [int]$maxTasks = 0,           # stop after N completed tasks (0 = run until done/blocked)
     [string]$configFile = "ralph-config.json",
     [string]$worktreeRoot = "",   # default: <parent-of-ralph>\.ralph-worktrees
-    [switch]$keepWindows          # keep each agent's console window open after it finishes
+    [switch]$keepWindows,         # keep each agent's console window open after it finishes
+    [ValidateSet("Normal","Minimized","Hidden")]
+    [string]$agentWindows = ""    # agent console style: Normal (popup), Minimized (taskbar only), Hidden (no console - logs only)
 )
 
 $ErrorActionPreference = 'Continue'
@@ -45,6 +47,12 @@ if (-not $worktreeRoot) {
 if (-not $PSBoundParameters.ContainsKey('keepWindows')) {
     if ($config -and $config.swarm -and $config.swarm.PSObject.Properties['keep_windows'] -and $config.swarm.keep_windows) {
         $keepWindows = $true
+    }
+}
+if (-not $agentWindows) {
+    $agentWindows = "Normal"
+    if ($config -and $config.swarm -and $config.swarm.PSObject.Properties['window_style'] -and $config.swarm.window_style) {
+        $agentWindows = $config.swarm.window_style
     }
 }
 
@@ -177,7 +185,7 @@ function Start-AgentForTask($task, $slot) {
         "-resultFile", "`"$resFile`"",
         "-agentSlot", "$slot"
     )
-    $proc = Start-Process powershell.exe -ArgumentList ($argList -join ' ') -PassThru -WindowStyle Normal
+    $proc = Start-Process powershell.exe -ArgumentList ($argList -join ' ') -PassThru -WindowStyle $agentWindows
     Write-Host "[>] SLOT $slot -> task #$($task.id) [$rKey / lane '$(Get-LaneKey $task)'] branch $branchName (pid $($proc.Id))" -ForegroundColor Green
 
     return @{

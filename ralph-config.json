@@ -27,6 +27,7 @@
     "agents": 3,
     "worktree_root": "",
     "keep_windows": false,
+    "window_style": "Minimized",
     "_comment": "agents = паралелни слота (2-3 старт, 5-6 практичен таван). worktree_root празно = <parent>\\.ralph-worktrees. keep_windows = агентските конзоли остават отворени след края. Виж ralph reference/parallel-swarm-reference.md"
   },
   "logging": {

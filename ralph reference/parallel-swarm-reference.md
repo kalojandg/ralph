@@ -168,6 +168,7 @@ Config: `ralph-config.json → swarm: { agents, worktree_root }`.
 ### Мониторинг (3 нива на видимост)
 
 1. **Прозорец на агент** — всеки агент е отделен PowerShell прозорец със заглавие `Ralph SLOT N - task #X (ralph/task-X)`: там виждаш каквото и в соло режим (таск инфо, spinner, CLAUDE OUTPUT). По default прозорецът се затваря при край; `-keepWindows` (или config `swarm.keep_windows:true`) го оставя отворен за преглед.
+   **Стил на прозорците** — `-agentWindows Normal|Minimized|Hidden` (или config `swarm.window_style`, default в config-а: `Minimized`): `Normal` изскача на екрана; `Minimized` стои тихо в taskbar-а (не краде фокус — отваряш го само ако искаш да гледаш); `Hidden` изобщо без конзоли — следиш само таблото на оркестратора + `logs/`.
 2. **Оркестраторска конзола (таблото)** — събития (`[>] SLOT started`, `[+] DONE+MERGED`, `[X] CONFLICT`, `[~] QUOTA re-queued`) + статус ред на всеки 15s: `running: [ids] | merged X | conflicts Y | skipped Z | failed W`.
 3. **Трайни следи** — `logs/iteration-<taskId>-*.txt` (пълният изход на всеки агент; iterationNumber = task id → логовете са per-таск), `results/task-<id>.json` (отчетът), `tasks.json`/`activity.md` (board + наратив).
 
