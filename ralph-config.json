@@ -28,7 +28,9 @@
     "worktree_root": "",
     "keep_windows": false,
     "window_style": "Minimized",
-    "_comment": "agents = паралелни слота (2-3 старт, 5-6 практичен таван). worktree_root празно = <parent>\\.ralph-worktrees. keep_windows = агентските конзоли остават отворени след края. Виж ralph reference/parallel-swarm-reference.md"
+    "max_timeout_requeues": 2,
+    "max_fail_retries": 2,
+    "_comment": "agents = паралелни слота (2-3 старт, 5-6 практичен таван). worktree_root празно = <parent>\\.ralph-worktrees. keep_windows = агентските конзоли остават отворени след края. max_timeout_requeues = колко пъти watchdog-убит таск (timeout/stale) се пуска наново с чист worktree. max_fail_retries = колко пъти реално провалил се таск се retry-ва с инжектиран failure контекст (retry/task-<id>.md). Виж ralph reference/parallel-swarm-reference.md"
   },
   "logging": {
     "enabled": true,

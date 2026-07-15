@@ -6,7 +6,8 @@ param(
     [string]$workDir = "",     # agent working dir = worktree (sub)dir; overrides project root
     [string]$branch = "",      # git branch the worktree is on (informational, for the prompt)
     [string]$resultFile = "",  # where the agent must write its result JSON (instead of tasks.json/activity.md)
-    [int]$agentSlot = 0        # 1-based slot number -> port offsets, labels
+    [int]$agentSlot = 0,       # 1-based slot number -> port offsets, labels
+    [string]$retryFile = ""    # failure context from previous attempt(s) - injected so the retry is informed
 )
 
 $isParallel = $taskId -gt 0
@@ -191,6 +192,23 @@ You are agent slot $agentSlot in a MULTI-AGENT run. Other agents are working on 
 8. Then output the usual <task-complete> XML and STOP. Do not start anything else.
 "@
     Write-Host "[+] Injected PARALLEL MODE override (task #$taskId, slot $agentSlot)" -ForegroundColor Magenta
+}
+
+# === Retry context (previous FAILED attempts) - written by the orchestrator ===
+# Injected AFTER the parallel-mode override but BEFORE feedback (feedback keeps the final
+# word on acceptance). Makes a retry informed instead of blind: the agent sees why the
+# previous attempt died and is told to take a different approach. ASCII-only here (PS 5.1
+# ANSI parsing); the content itself comes from the file, read as UTF8.
+if ($retryFile -and (Test-Path $retryFile)) {
+    $retryRaw = (Get-Content $retryFile -Raw -Encoding UTF8).Trim()
+    # cap so accumulated attempts can't flood the prompt - the newest (last) part wins
+    if ($retryRaw.Length -gt 8000) { $retryRaw = $retryRaw.Substring($retryRaw.Length - 8000) }
+    if ($retryRaw.Length -gt 0) {
+        $promptText += "`n`n--- PREVIOUS ATTEMPTS FAILED (harness retry context) ---`n`n"
+        $promptText += "This task was attempted before and FAILED. The report below is from the harness. Read it BEFORE starting: diagnose why the previous attempt failed and take a DIFFERENT approach where the log shows the old one dead-ends. Do NOT blindly repeat the same steps. Your worktree is FRESH - nothing from the failed attempts survives except this report.`n`n"
+        $promptText += $retryRaw
+        Write-Host "[+] Injected retry context ($($retryRaw.Length) chars)" -ForegroundColor Yellow
+    }
 }
 
 # === Iteration-level feedback (feedback.md) — LAST so it has the final word ===

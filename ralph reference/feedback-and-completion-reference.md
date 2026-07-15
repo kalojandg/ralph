@@ -107,8 +107,9 @@ ralph.ps1 реагира на exit кода → пуска нов агент с 
 В паралелен режим (`ralph-swarm.ps1`) Ниво 1 и 2 са същите, но Ниво 3 се сменя:
 - Агентът НЕ брои tasks.json. Успех = написан валиден `results/task-<id>.json` → exit 0; липсва/невалиден → exit 1.
 - **Оркестраторът** решава „готово ли е всичко": merge-ва branch-а, маркира `passes:true` (single writer) и спира, когато няма pending таскове и няма работещи агенти.
-- Quota (exit 2) си остава в агентската обвивка — всеки агент сам изчаква reset-а.
-Виж [[parallel-swarm-reference]] за пълния поток.
+- Quota (exit 2) си остава в агентската обвивка — всеки агент сам изчаква reset-а; оркестраторът re-queue-ва.
+- **Провалите се retry-ват bounded:** timeout (exit 3) → сляп re-queue с чист worktree (до `max_timeout_requeues`); истински провал → **информиран retry** — оркестраторът пише `retry/task-<id>.md` (причина + log tail) и следващият опит го получава в prompt-а през `-retryFile`. До `max_fail_retries`, после failed за сесията.
+Виж [[parallel-swarm-reference]] §„Retry поведение" за пълния поток.
 
 ---
 
@@ -139,6 +140,9 @@ PROMPT.md
   + prerequisite-steps.md
   + user-steps.md
   + [task-specific hooks]   ← per-task, от task-steps.json
+  + [PARALLEL MODE override] ← само в swarm режим
+  + [PREVIOUS ATTEMPTS FAILED] ← само при retry: retry/task-<id>.md (причина + log tail
+                                 на провалилите се опити; cap ~8000 знака, най-новото печели)
   + [Feedback & Acceptance Criteria]  ← ПОСЛЕДЕН, ако има активен текст (recency = финална дума)
 ```
 `PROMPT.md` също уведомява агента, че тази секция е **последната дума** и дефинира кога итерацията е приключена.

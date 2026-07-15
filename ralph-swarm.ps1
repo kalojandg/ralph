@@ -56,20 +56,41 @@ if (-not $agentWindows) {
     }
 }
 
+# Retry budgets (unattended autonomy): a watchdog-killed (timeout/stale) task and a truly
+# failed task are re-queued a BOUNDED number of times instead of blocking their lane for
+# the whole session. Failed retries are INFORMED - see Save-RetryContext below.
+$maxTimeoutRequeues = 2
+$maxFailRetries = 2
+if ($config -and $config.swarm) {
+    if ($config.swarm.PSObject.Properties['max_timeout_requeues']) { $maxTimeoutRequeues = [int]$config.swarm.max_timeout_requeues }
+    if ($config.swarm.PSObject.Properties['max_fail_retries'])     { $maxFailRetries     = [int]$config.swarm.max_fail_retries }
+}
+
 $tasksFile  = Join-Path $scriptDir "tasks.json"
 $reposFile  = Join-Path $scriptDir "ralph reference\project reference\repos.json"
 $claimsDir  = Join-Path $scriptDir "claims"
 $resultsDir = Join-Path $scriptDir "results"
+$retryDir   = Join-Path $scriptDir "retry"
 
 if (-not (Test-Path $tasksFile)) { Write-Host "[X] tasks.json not found" -ForegroundColor Red; exit 1 }
 if (-not (Test-Path $reposFile)) { Write-Host "[X] repos.json not found ($reposFile)" -ForegroundColor Red; exit 1 }
 $reposMap = Get-Content $reposFile -Raw -Encoding UTF8 | ConvertFrom-Json
 
-foreach ($d in @($claimsDir, $resultsDir, $worktreeRoot)) {
+foreach ($d in @($claimsDir, $resultsDir, $worktreeRoot, $retryDir)) {
     if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d | Out-Null }
 }
 # stale claims are from a previous session - this orchestrator is the only claimer, so reset
 Remove-Item (Join-Path $claimsDir "*.claim") -Force -ErrorAction SilentlyContinue
+# retry context outlives sessions ON PURPOSE (a new run retries informed, not blind), but a
+# task completed OUTSIDE the swarm (manual conflict resolve + passes:true by hand) must not
+# keep one around - sweep retry files whose task is already done
+$doneNow = @((Get-Content $tasksFile -Raw -Encoding UTF8 | ConvertFrom-Json) |
+             Where-Object { $_.passes -eq $true } | ForEach-Object { $_.id })
+Get-ChildItem $retryDir -Filter "task-*.md" -ErrorAction SilentlyContinue | ForEach-Object {
+    if ($_.BaseName -match '^task-(\d+)$' -and ($doneNow -contains [int]$Matches[1])) {
+        Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+    }
+}
 
 Write-Host ""
 Write-Host "====================================================" -ForegroundColor Cyan
@@ -78,6 +99,7 @@ Write-Host "====================================================" -ForegroundCol
 Write-Host "Agents (slots) : $agents"       -ForegroundColor White
 Write-Host "Max tasks      : $(if ($maxTasks -gt 0) { $maxTasks } else { 'until done' })" -ForegroundColor White
 Write-Host "Worktree root  : $worktreeRoot" -ForegroundColor White
+Write-Host "Retry budgets  : timeout x$maxTimeoutRequeues, fail x$maxFailRetries (per task)" -ForegroundColor White
 Write-Host ""
 
 # ---------------------------------------------------------------- helpers
@@ -101,6 +123,32 @@ function Try-Claim($id) {
 
 function Release-Claim($id) {
     Remove-Item (Join-Path $claimsDir "task-$id.claim") -Force -ErrorAction SilentlyContinue
+}
+
+# Newest agent log for a task. Agents log to logs\iteration-<taskId>-<timestamp>[-TIMEOUT].txt
+# (iterationNumber = task id in swarm mode), so the tail of the newest match is what the
+# failed attempt was doing when it died.
+function Get-AgentLogTail($taskId, $lines = 60) {
+    $latest = Get-ChildItem (Join-Path $scriptDir "logs") -Filter "iteration-$taskId-*.txt" -ErrorAction SilentlyContinue |
+              Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $latest) { return "(no agent log found)" }
+    return ((Get-Content $latest.FullName -Tail $lines -ErrorAction SilentlyContinue) -join "`n")
+}
+
+# Append a failure report to retry\task-<id>.md. Start-AgentForTask hands this file to the
+# NEXT attempt via -retryFile, so the retry is INFORMED (sees why the last attempt failed)
+# instead of blind. The file survives across sessions and is deleted only when the task
+# finally merges - no stale context can leak into an already-completed task.
+function Save-RetryContext($taskId, $attempt, $why) {
+    $fence = '```'
+    $tail = Get-AgentLogTail $taskId 60
+    $stamp = Get-Date -Format "yyyy-MM-dd HH:mm"
+    $block = "## Attempt at $stamp - FAILED (retry $attempt)`n`nReason: $why`n`n### Tail of the failed agent's log`n$fence`n$tail`n$fence`n"
+    $f = Join-Path $retryDir "task-$taskId.md"
+    if (Test-Path $f) {
+        $block = (Get-Content $f -Raw -Encoding UTF8).TrimEnd() + "`n`n" + $block
+    }
+    $block | Out-File $f -Encoding UTF8
 }
 
 # Eligible = for each lane, the FIRST pending task in array order (lane preserves order),
@@ -185,6 +233,12 @@ function Start-AgentForTask($task, $slot) {
         "-resultFile", "`"$resFile`"",
         "-agentSlot", "$slot"
     )
+    # failure context from previous attempt(s) -> the retry is informed, not blind
+    $retryCtx = Join-Path $retryDir "task-$($task.id).md"
+    if (Test-Path $retryCtx) {
+        $argList += @("-retryFile", "`"$retryCtx`"")
+        Write-Host "[i] Task #$($task.id): injecting retry context from previous failed attempt(s)" -ForegroundColor Yellow
+    }
     $proc = Start-Process powershell.exe -ArgumentList ($argList -join ' ') -PassThru -WindowStyle $agentWindows
     Write-Host "[>] SLOT $slot -> task #$($task.id) [$rKey / lane '$(Get-LaneKey $task)'] branch $branchName (pid $($proc.Id))" -ForegroundColor Green
 
@@ -258,6 +312,8 @@ function Complete-Agent($info) {
             if ($result.PSObject.Properties['activity']) { Add-ActivityEntry $result.activity }
             & git -C $info.gitRoot worktree remove --force $info.wtPath 2>$null | Out-Null
             & git -C $info.gitRoot branch -d $info.branch 2>$null | Out-Null
+            # task succeeded -> its retry context is spent; delete so no stale state survives
+            Remove-Item (Join-Path $retryDir "task-$($t.id).md") -Force -ErrorAction SilentlyContinue
             Write-Host "[+] Task #$($t.id): DONE + MERGED into '$($info.baseBranch)' (commit $($result.commit)). passes:true" -ForegroundColor Green
         }
         # merge_skipped / merge_conflict: work exists on the branch but is NOT in the
@@ -274,10 +330,40 @@ function Complete-Agent($info) {
             Release-Claim $t.id
             return "quota_requeue"
         }
+
+        # Exit code 3 = watchdog kill (180 min hard timeout / 60 min stale). Hangs are the
+        # most STOCHASTIC failure mode (stuck dev server, network stall, wedged prompt) -
+        # a blind re-run with a fresh worktree usually clears them. Re-queue up to budget.
+        if ($exitCode -eq 3) {
+            & git -C $info.gitRoot worktree remove --force $info.wtPath 2>$null | Out-Null
+            $n = $script:timeoutCounts[$t.id]; if (-not $n) { $n = 0 }
+            if ($n -lt $maxTimeoutRequeues) {
+                $script:timeoutCounts[$t.id] = $n + 1
+                Write-Host "[~] Task #$($t.id): TIMEOUT/STALE kill - RE-QUEUED with fresh worktree ($($n + 1)/$maxTimeoutRequeues)" -ForegroundColor Yellow
+                Release-Claim $t.id
+                return "timeout_requeue"
+            }
+            Write-Host "[X] Task #$($t.id): timed out again after $maxTimeoutRequeues re-queue(s) - FAILED for this session. Branch kept: $($info.branch)" -ForegroundColor Red
+            Release-Claim $t.id
+            return "failed"
+        }
+
+        # Real failure (status:"failed" or no/invalid result file). Retry up to budget, but
+        # INFORMED: the failure reason + the agent's log tail go to retry\task-<id>.md and
+        # the next attempt gets them via -retryFile. Attempt N+1 differs from attempt N, so
+        # this also catches deterministic failures, not just unlucky ones.
         $why = "no result file"
         if ($result) { $why = "status=$($result.status): $($result.summary)" }
-        Write-Host "[X] Task #$($t.id): FAILED ($why). Worktree removed, branch kept: $($info.branch)" -ForegroundColor Red
         & git -C $info.gitRoot worktree remove --force $info.wtPath 2>$null | Out-Null
+        $n = $script:failCounts[$t.id]; if (-not $n) { $n = 0 }
+        if ($n -lt $maxFailRetries) {
+            $script:failCounts[$t.id] = $n + 1
+            Save-RetryContext $t.id ($n + 1) $why
+            Write-Host "[~] Task #$($t.id): FAILED ($why) - RETRY $($n + 1)/$maxFailRetries with failure context injected" -ForegroundColor Yellow
+            Release-Claim $t.id
+            return "fail_requeue"
+        }
+        Write-Host "[X] Task #$($t.id): FAILED ($why) - retry budget ($maxFailRetries) exhausted. Branch kept: $($info.branch)" -ForegroundColor Red
     }
 
     Release-Claim $t.id
@@ -287,7 +373,9 @@ function Complete-Agent($info) {
 # ---------------------------------------------------------------- main rolling loop
 $running   = @{}    # taskId -> agent info
 $failedIds = @()
-$stats = @{ merged = 0; conflicts = 0; skipped = 0; failed = 0; requeued = 0 }
+$script:timeoutCounts = @{}   # taskId -> watchdog-kill re-queues used this session
+$script:failCounts    = @{}   # taskId -> informed retries used this session
+$stats = @{ merged = 0; conflicts = 0; skipped = 0; failed = 0; requeued = 0; timeoutRequeues = 0; failRetries = 0 }
 $freeSlots = New-Object System.Collections.ArrayList
 1..$agents | ForEach-Object { [void]$freeSlots.Add($_) }
 $launchedTotal = 0
@@ -340,11 +428,13 @@ while ($true) {
         if ($info.proc.HasExited) {
             $outcome = Complete-Agent $info
             switch ($outcome) {
-                "merged"         { $stats.merged++ }
-                "merge_conflict" { $stats.conflicts++; $failedIds += $id }
-                "merge_skipped"  { $stats.skipped++;  $failedIds += $id }
-                "quota_requeue"  { $stats.requeued++ }   # NOT failed - eligible again next pass
-                default          { $stats.failed++;   $failedIds += $id }
+                "merged"          { $stats.merged++ }
+                "merge_conflict"  { $stats.conflicts++; $failedIds += $id }
+                "merge_skipped"   { $stats.skipped++;  $failedIds += $id }
+                "quota_requeue"   { $stats.requeued++ }        # NOT failed - eligible again next pass
+                "timeout_requeue" { $stats.timeoutRequeues++ } # watchdog kill - fresh blind re-run
+                "fail_requeue"    { $stats.failRetries++ }     # informed retry (failure context injected)
+                default           { $stats.failed++;   $failedIds += $id }
             }
             $running.Remove($id)
             [void]$freeSlots.Add($info.slot)
@@ -365,6 +455,8 @@ Write-Host "Merge conflicts  : $($stats.conflicts)" -ForegroundColor $(if ($stat
 Write-Host "Merge skipped    : $($stats.skipped)"   -ForegroundColor $(if ($stats.skipped)   { 'Yellow' } else { 'Gray' })
 Write-Host "Failed           : $($stats.failed)"    -ForegroundColor $(if ($stats.failed)    { 'Red' } else { 'Gray' })
 Write-Host "Quota re-queues  : $($stats.requeued)"  -ForegroundColor $(if ($stats.requeued)  { 'Yellow' } else { 'Gray' })
+Write-Host "Timeout re-queues: $($stats.timeoutRequeues)" -ForegroundColor $(if ($stats.timeoutRequeues) { 'Yellow' } else { 'Gray' })
+Write-Host "Fail retries     : $($stats.failRetries)"     -ForegroundColor $(if ($stats.failRetries)     { 'Yellow' } else { 'Gray' })
 Write-Host ""
 Write-Host "Conflict/skipped branches are kept as ralph/task-<id> for manual resolve." -ForegroundColor Gray
 Write-Host "Stale worktrees (if any): git worktree list  (in each gitRoot)" -ForegroundColor Gray

@@ -17,6 +17,7 @@
 | Кой пише tasks.json/activity.md? | **Само оркестраторът.** Агентите пишат `results/task-<id>.json` |
 | Как влиза в главния клон? | Оркестраторът merge-ва завършените branch-ове **последователно** (`--no-ff`) в integration branch-а |
 | Конфликт при merge? | `merge --abort`, branch-ът се пази за ръчен resolve, таскът остава `passes:false` |
+| Retry при провал? | ✅ Bounded: timeout/stale kill → re-queue с чист worktree (x`max_timeout_requeues`); истински провал → retry с **инжектиран failure контекст** от `retry/task-<id>.md` (x`max_fail_retries`). Виж §1 „Retry поведение". |
 
 ---
 
@@ -30,6 +31,8 @@ ralph-iteration.ps1        ← агентска обвивка; +parallel mode �
 tasks.json                 ← task board (+ lane / dependsOn / files полета)
 claims/task-<id>.claim     ← atomic claim файлове (session-scoped locks)
 results/task-<id>.json     ← агентски отчети (заместват писането в tasks.json/activity.md)
+retry/task-<id>.md         ← failure контекст (причина + log tail на провалилия се опит);
+                             инжектира се в prompt-а на СЛЕДВАЩИЯ опит; трие се при merge
 repos.json                 ← + gitRoot / workSubdir / mainBranch (worktree топология)
 <parent>\.ralph-worktrees\ ← worktree директории: <repoKey>-task-<id>
 ```
@@ -52,9 +55,16 @@ repos.json                 ← + gitRoot / workSubdir / mainBranch (worktree т�
 6. Оркестраторът (rolling poll на 15s) хваща приключилия процес:
      status=done → SEQUENTIAL MERGE: git merge --no-ff ralph/task-<id> в mainBranch
        merged   → tasks.json passes:true + prepend activity entry + изтрий worktree/branch
+                  + изтрий retry/task-<id>.md (никакъв stale retry контекст след успех)
        conflict → merge --abort, branch остава, таскът НЕ е passed (ръчен resolve)
        skipped  → главният checkout е на друг branch/dirty → branch остава
-     status=failed / няма result → failed за сесията (не се retry-ва автоматично)
+     exit 2 (quota)         → re-queue (НЕ е failed), чист worktree при следващия pass
+     exit 3 (timeout/stale) → re-queue с чист worktree, до max_timeout_requeues пъти
+                              (default 2); след изчерпване → failed за сесията
+     status=failed / няма result → ИНФОРМИРАН RETRY: причината + tail на лога отиват в
+                              retry/task-<id>.md, следващият опит го получава в prompt-а
+                              (-retryFile) — до max_fail_retries пъти (default 2);
+                              след изчерпване → failed за сесията
 7. Слотът се освобождава → следващият eligible таск стартира (rolling pipeline)
 8. Всички passes:true → SWARM SUMMARY → exit
 ```
@@ -77,13 +87,23 @@ repos.json                 ← + gitRoot / workSubdir / mainBranch (worktree т�
 7. Worktree започва без node_modules → `npm ci` при нужда; .env* са копирани
 8. `<task-complete>` XML → STOP
 
-### Exit кодове (parallel mode на ralph-iteration.ps1)
+### Exit кодове (parallel mode на ralph-iteration.ps1) и реакцията на оркестратора
 
-| Exit | Значение |
-|------|----------|
-| 0 | Result file написан и валиден JSON |
-| 1 | Няма result file / невалиден → оркестраторът го брои за failed |
-| 2/3 | Quota / timeout — както в каноничния режим |
+| Exit | Значение | Оркестраторът прави |
+|------|----------|---------------------|
+| 0 | Result file написан и валиден JSON | status=done → merge; status=failed → информиран retry (до `max_fail_retries`) |
+| 1 | Няма result file / невалиден | Информиран retry (до `max_fail_retries`), после failed |
+| 2 | Quota (агентът вече е изчакал reset-а) | Re-queue, не брои за нищо лошо |
+| 3 | Timeout/stale (watchdog kill) | Re-queue с чист worktree (до `max_timeout_requeues`), после failed |
+
+### Retry поведение (двата бюджета, per task, config: `swarm.max_timeout_requeues` / `swarm.max_fail_retries`)
+
+- **Timeout/stale (exit 3) → сляп re-queue.** Увисванията са най-стохастичният провал (заклещен dev server, network stall) — нов опит с чист worktree обикновено ги оправя. Без контекст, просто наново.
+- **Истински провал → информиран retry.** Оркестраторът записва в `retry/task-<id>.md` причината (status/summary от result файла или „no result file") + последните ~60 реда от лога на агента. Следващият опит получава файла чрез `-retryFile` и той се инжектира в prompt-а СЛЕД parallel-mode секцията, ПРЕДИ feedback (feedback остава последната дума) — с инструкция „диагностицирай защо предишният опит фейлна и подходи различно". Опит N+1 ≠ опит N → лови и детерминистични провали.
+- Няколко провала се **акумулират** в същия файл (в prompt-а влизат последните ~8000 знака — най-новото печели).
+- `retry/task-<id>.md` **преживява сесиите** (нов run започва с контекста от стария) и се **трие при успешен merge**; при старт на run се измитат и retry файловете на таскове, които вече са `passes:true` (напр. завършени ръчно) — няма stale състояние.
+- Броячите са per-session; изчерпан бюджет → failed за сесията, lane-ът спира (нов run започва с нулирани броячи + запазения контекст).
+- Quota re-queue е ИЗВЪН бюджетите — не хаби retry.
 
 ---
 
@@ -158,7 +178,7 @@ START-RALPH-SWARM.bat 2          → 2 агента
 START-RALPH-SWARM.bat 4 10       → 4 агента, спри след 10 таска
 powershell .\ralph-swarm.ps1 -agents 3 -maxTasks 0
 ```
-Config: `ralph-config.json → swarm: { agents, worktree_root }`.
+Config: `ralph-config.json → swarm: { agents, worktree_root, keep_windows, window_style, max_timeout_requeues, max_fail_retries }`.
 
 ### Изисквания преди пускане
 - Integration branch-ът (`repos.json → mainBranch`, сега `devdev`) е **checked out и чист** във всеки gitRoot — иначе merge-ът се skip-ва (safe, но ръчна работа после).
@@ -169,8 +189,8 @@ Config: `ralph-config.json → swarm: { agents, worktree_root }`.
 
 1. **Прозорец на агент** — всеки агент е отделен PowerShell прозорец със заглавие `Ralph SLOT N - task #X (ralph/task-X)`: там виждаш каквото и в соло режим (таск инфо, spinner, CLAUDE OUTPUT). По default прозорецът се затваря при край; `-keepWindows` (или config `swarm.keep_windows:true`) го оставя отворен за преглед.
    **Стил на прозорците** — `-agentWindows Normal|Minimized|Hidden` (или config `swarm.window_style`, default в config-а: `Minimized`): `Normal` изскача на екрана; `Minimized` стои тихо в taskbar-а (не краде фокус — отваряш го само ако искаш да гледаш); `Hidden` изобщо без конзоли — следиш само таблото на оркестратора + `logs/`.
-2. **Оркестраторска конзола (таблото)** — събития (`[>] SLOT started`, `[+] DONE+MERGED`, `[X] CONFLICT`, `[~] QUOTA re-queued`) + статус ред на всеки 15s: `running: [ids] | merged X | conflicts Y | skipped Z | failed W`.
-3. **Трайни следи** — `logs/iteration-<taskId>-*.txt` (пълният изход на всеки агент; iterationNumber = task id → логовете са per-таск), `results/task-<id>.json` (отчетът), `tasks.json`/`activity.md` (board + наратив).
+2. **Оркестраторска конзола (таблото)** — събития (`[>] SLOT started`, `[+] DONE+MERGED`, `[X] CONFLICT`, `[~] QUOTA re-queued`, `[~] TIMEOUT re-queued`, `[~] FAILED - RETRY n/m`) + статус ред на всеки 15s: `running: [ids] | merged X | conflicts Y | skipped Z | failed W`. Summary-то накрая показва и `Timeout re-queues` / `Fail retries`.
+3. **Трайни следи** — `logs/iteration-<taskId>-*.txt` (пълният изход на всеки агент; iterationNumber = task id → логовете са per-таск), `results/task-<id>.json` (отчетът), `retry/task-<id>.md` (история на провалените опити — съществува само докато таскът не merge-не), `tasks.json`/`activity.md` (board + наратив).
 
 Playbook правило: проверявай агентите на всеки 20–30 мин за drift.
 
@@ -179,8 +199,8 @@ Playbook правило: проверявай агентите на всеки 2
 |----------|--------------|--------------|
 | merge_conflict | branch `ralph/task-<id>` | ръчен merge/rebase → after: маркирай `passes:true` ръчно |
 | merge_skipped (dirty/друг branch) | branch + result | почисти главния checkout → merge ръчно или нов swarm run |
-| failed (без result) | branch (worktree е изтрит) | виж лога на агента в `logs/`; поправи таска/спека; нов run |
-| Оркестраторът убит насред run | worktrees + claims | нов run чисти claims автоматично; stale worktrees се пресъздават force |
+| failed след изчерпани retry-та | branch (worktree е изтрит) + `retry/task-<id>.md` с историята на опитите | виж retry файла + лога в `logs/`; поправи таска/спека; нов run (тръгва с нулирани броячи + запазения контекст) |
+| Оркестраторът убит насред run | worktrees + claims + retry файлове | нов run чисти claims автоматично; stale worktrees се пресъздават force; retry файловете се преизползват (информиран retry) |
 
 ### Квота при паралелна работа (важно!)
 
@@ -194,7 +214,9 @@ Swarm x3:   ████████████░░░░  същото ко�
 **Контрол на изгарянето:** `-agents 2` (по-полека), `-maxTasks N` („направи N таска и спри" — бюджетиране на run-а). За нощен run на голям backlog: няма смисъл от >3 агента, ако квотата издържа ~X таска на прозорец — те просто ще ги свършат в началото и ще чакат.
 
 ### Ограничения (известни, приети)
-- **Няма автоматичен retry** на failed таск в същата сесия (предпазва от зацикляне; quota re-queue е изключението). Нов run на swarm-а ги пробва пак.
+- **Retry-ята са bounded** (виж „Retry поведение" в Част 1): timeout → до `max_timeout_requeues` слепи re-queue-та; провал → до `max_fail_retries` информирани retry-та. След изчерпване таскът е failed за сесията и lane-ът му спира — предпазва от вечно зацикляне. Нов run тръгва с нулирани броячи, но пази retry контекста.
+- **Merge conflict НЕ се retry-ва автоматично** — branch-ът се пази за ръчен resolve (retry би изхвърлил свършената работа).
+- **Няма post-merge verification gate** — оркестраторът не пуска тестове на integration branch-а след merge; семантичен конфликт между два поотделно зелени branch-а се хваща чак от следващ таск/ръчно. (Известна дупка, кандидат за следваща доработка.)
 - **`files` boundary не се enforce-ва механично** — инструкция е към агента (+ ревюто при merge). Дисциплината в декомпозицията е първата защита.
 - **tasks.json се преформатира** от оркестратора при ъпдейт (PowerShell ConvertTo-Json — кирилицата става `\uXXXX` escapes; валиден JSON, но по-грозен за четене).
 - Quota: всеки агент сам си чака reset-а (exit 2 логиката е в агентската обвивка).
