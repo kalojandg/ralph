@@ -1,0 +1,18 @@
+﻿Task #191 complete. All phases (REDΓåÆGREENΓåÆDONE) done; both audit test projects green (238 + 69 passing); `passes` flipped to true; activity logged; changes committed.
+
+<task-complete>
+  <id>191</id>
+  <description>Phase A ΓÇö granular audit event types. Replace the single 'composition_modified' with per-operation event types using existing AuditMessages.RailRun keys. Repo: Transport-OSDM-Src.</description>
+  <commit>1c82f14e3</commit>
+  <branch>features/bdzn-265-history</branch>
+  <summary>
+    Added 13 granular RailRun composition-history event types to both the shared producer constants (MessageBus.AuditConstants.EventTypes) and the central AuditService.EventTypes registry (including AllTypes registration so ingestion accepts them). Added the one missing message key AuditMessages.RailRun.CompositionCloned (carriage_removed reuses the existing CarriageDeleted key). New CompositionEventTypesTests asserts a 1:1 eventΓåÆRailRun-key mapping. Count tests updated (RailRun 28ΓåÆ30, GetAll 49ΓåÆ62). CompositionModified retained for backward-compat. Tests: 238 (MessageBus.Tests) + 69 (AuditService.Application.Tests) passing.
+  </summary>
+  <followups>Tasks #192ΓÇô#196 migrate the 10 handlers + 8 audit tests off CompositionModified (full list recorded in activity.md).</followups>
+</task-complete>
+
+<status>CONTINUE</status>
+<next-task>192</next-task>
+
+Stopping here ΓÇö per the Ralph protocol, task #192 is picked up by the next iteration (a fresh agent), not this one.
+

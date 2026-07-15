@@ -1,0 +1,34 @@
+﻿Task #262 complete and committed (`db5b0060`).
+
+```xml
+<task-complete>
+  <task-id>262</task-id>
+  <tests>PASSED</tests>
+  <visual>N/A</visual>
+  <committed>YES</committed>
+</task-complete>
+```
+
+```xml
+<status>CONTINUE</status>
+<next-task>263</next-task>
+```
+
+## Iteration Summary
+
+**Task Worked On:** #262 ΓÇö [WAGON-OCC 7/8][FE] Composition wagon kebab ΓåÆ '╨í╨┐╤Ç╨░╨▓╨║╨░ ╨╖╨░ ╨╜╨░╤é╨╛╨▓╨░╤Ç╨╡╨╜╨╛╤ü╤é' menu item + export hook
+
+**TDD Phase Completed:** RECON ΓåÆ RED/GREEN ΓåÆ DONE
+
+**What changed:**
+- New `useExportWagonOccupancyReport` hook ΓåÆ `downloadReportExport('SYS-OPS-COMP-04', {trainNumber, date}, 'xlsx')` ΓåÆ `downloadBlob('zaetost-vlak-<trainNumber>-<date>.xlsx')`; error ΓåÆ ui.slice snackbar.
+- `WagonCanvas`: added `onExportOccupancyReport` + `canExportOccupancyReport` props and a gated "╨í╨┐╤Ç╨░╨▓╨║╨░ ╨╖╨░ ╨╜╨░╤é╨╛╨▓╨░╤Ç╨╡╨╜╨╛╤ü╤é" menu item after Delete.
+- `CompositionEditorPage`: wired the hook; gate = `displayName` present && `tripId != null` && REPORTS ReadOnly; passes `displayName` (trainNumber) + `startDate` (date).
+- i18n keys added to bg.json + en.json.
+
+**Tests Status:** new hook + component tests 4/4 PASSED ┬╖ Lint: 0 errors ┬╖ Type-check: clean. The 25 failures from `vitest --changed` are pre-existing (verified identical on a stashed clean tree ΓÇö unrelated i18n-passthrough tests). E2E deferred to #263.
+
+**Next Action:** Continue to task #263 (E2E capstone) ΓÇö next iteration / new agent.
+
+One task remains with `passes: false`: **#263** (the Playwright FEΓåÆBEΓåÆDB capstone). Stopping here per the one-task-per-iteration rule.
+

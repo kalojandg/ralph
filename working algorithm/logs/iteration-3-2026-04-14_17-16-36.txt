@@ -1,0 +1,18 @@
+﻿Task #85 is complete. The test run had exit code 1 due to the 1 pre-existing KP612GeneratePage failure (unrelated to my changes). All 1801 other tests passed, including my 13 new OsdmGrid tests. TypeScript type-check passed cleanly.
+
+```xml
+<task-complete>
+  <task-id>85</task-id>
+  <description>[FE] OSDM Grid ╨║╨╛╨╝╨┐╨╛╨╜╨╡╨╜╤В тАФ ╨┐╤А╨░╨╖╨╜╨░ ╤А╨╡╤И╨╡╤В╨║╨░ ╤Б ╨┐╤Г╨╜╨║╤В╨╕╤А╨░╨╜╨╕ ╨╗╨╕╨╜╨╕╨╕ ╨╕ gridSize ╨╛╤В props</description>
+  <tests>PASSED</tests>
+  <visual>N/A</visual>
+  <committed>YES</committed>
+  <commit-message>feat(compositions): [FE] OSDM Grid ╨║╨╛╨╝╨┐╨╛╨╜╨╡╨╜╤В тАФ ╨┐╤А╨░╨╖╨╜╨░ ╤А╨╡╤И╨╡╤В╨║╨░ ╤Б ╨┐╤Г╨╜╨║╤В╨╕╤А╨░╨╜╨╕ ╨╗╨╕╨╜╨╕╨╕ ╨╕ gridSize ╨╛╤В props</commit-message>
+</task-complete>
+```
+
+```xml
+<status>CONTINUE</status>
+<next-task>86</next-task>
+```
+

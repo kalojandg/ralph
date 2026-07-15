@@ -1,0 +1,14 @@
+﻿Committed (`f6a8deb0d`). Task 252 complete. There are more tasks remaining (253, 254, 255 still `passes: false`).
+
+<task-complete>
+  <task-id>252</task-id>
+  <tests>PASSED</tests>
+  <visual>N/A</visual>
+  <committed>YES</committed>
+</task-complete>
+
+<status>CONTINUE</status>
+<next-task>253</next-task>
+
+Summary: Wired StopPlace `Latitude`/`Longitude` mapping on create/update (ServiceBrand's TransportMode FK already resolved correctly after the task-250 handler fix). Added `ServiceBrandProviderTests` + `StopPlaceProviderTests` ΓÇö 4/4 new pass, full Infrastructure.Tests suite 120/120 green, committed. Stopping per the one-task-per-iteration rule; task 253 (round-trip tests) is next.
+

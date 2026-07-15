@@ -1,0 +1,18 @@
+﻿Task #235 complete. The full REDΓåÆGREENΓåÆVISUALΓåÆDONE cycle is finished and verified.
+
+**What landed (commit `cc9359e2`):**
+- `e2e/tests/nomenclatures/nomenclatures-import.spec.ts` ΓÇö real FEΓåÆBEΓåÆDB upsert round-trip on `transport-card-status`: seed-import ΓåÆ export & verify round-trip ΓåÆ CSV editing an existing row + appending a new Code ΓåÆ import asserting `updated:1 inserted:1 failed:0` ΓåÆ reload + search asserting both changes persisted in the DB.
+- `e2e/page-objects/nomenclatures.page.ts` ΓÇö `exportCsv`/`importCsv`/`search`/`row`/`closeImportDialog`.
+- `NomenclatureTable.tsx` ΓÇö `nomenclature-search-input` testid (only production change).
+
+**Backend unblock:** the rebuilt `nomenclature-service` was 500-ing on every auth'd request (null `Jwt:Secret` ΓÇö KeyVault unreachable from inside the container). Recovered az KeyVault access (cleared a corrupt `msal_http_cache.bin`), read `Jwt--Secret` from `bdz-test-kv`, and recreated only that service with the secret injected via a temp compose override kept out of any tracked file. Health ΓåÆ 200, auth'd endpoints ΓåÆ 401.
+
+**Verification:** `playwright ΓÇª nomenclatures-import.spec.ts` ΓåÆ **1 passed (35s)**; `detect-changes` ΓåÆ 3 files / medium risk / 1 expected process.
+
+Task #235 flipped to `passes: true`, `activity.md` logged. The CLAUDE.md gitnexus auto-block was left unstaged (unrelated).
+
+This was the last task in `tasks.json`, and the IMPORT feature (224ΓÇô235) is now complete.
+
+<task-complete>235</task-complete>
+<promise>COMPLETE</promise>
+

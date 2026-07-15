@@ -1,0 +1,18 @@
+﻿Committed as `abd5a7cbf`. Task #228 complete. (GitNexus index is now stale post-commit; re-indexing is a separate maintenance step, not part of this task.)
+
+<task-complete>
+  <task-id>228</task-id>
+  <description>[Nomenclature IMPORT 5/12] Audit plumbing for import</description>
+  <summary>
+    Added NomenclatureImport event type + Import operation to MessageBus AuditConstants, import audit messages (Imported/ImportFailed) to AuditMessages, registered NomenclatureImport in AuditService EventTypes.AllTypes (else silently dropped), and added PublishImportSucceededAsync/PublishImportFailedAsync to INomenclatureAuditPublisher + implementation.
+    Tests green: MessageBus.Tests 187/187, AuditService.Application.Tests 68/68, NomenclatureService.Application.Tests publisher filter 9/9. detect-changes: LOW risk, additive.
+    Fixed a pre-existing stale Nomenclatures count assertion (was 10, class had 26 @HEAD ΓåÆ 30 after my +4) since it lives in the class I edited.
+  </description>
+  <commit>abd5a7cbf</commit>
+</task-complete>
+
+<status>CONTINUE</status>
+<next-task>229 ΓÇö [Nomenclature IMPORT 6/12] Generic ImportNomenclatureCommand + Handler (the CORE upsert-by-Code logic)</next-task>
+
+Stopping now ΓÇö the next task runs in a fresh agent iteration.
+

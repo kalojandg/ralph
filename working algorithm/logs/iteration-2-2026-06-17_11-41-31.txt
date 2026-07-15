@@ -1,0 +1,20 @@
+﻿Task #237 done following RED ΓåÆ GREEN ΓåÆ DONE. Added `[AuthorizePermissions(ResourceCodes.Composition, AccessLevel.CanEdit)]` to the 5 write actions (CarriagesController: AddCarriage, UpdateCarriage; CoachLayoutsController: CreateCoachLayout, UpdateCoachLayout, SaveSeatDefinitions); GETs left public. New reflection tests pass; full suite 70/70 green; detect-changes low-risk; committed.
+
+Note: spec ┬ºB2 only lists Add+Update as Carriages writes, so DeleteCarriage/ReorderCarriages were intentionally left unguarded per the spec ΓÇö flagging in case that's an oversight worth a follow-up.
+
+```xml
+<task-complete>
+  <task-id>237</task-id>
+  <tests>PASSED</tests>
+  <visual>N/A</visual>
+  <committed>YES</committed>
+</task-complete>
+```
+
+```xml
+<status>CONTINUE</status>
+<next-task>238</next-task>
+```
+
+Stopping here ΓÇö per the Ralph one-task-per-iteration rule, task #238 will be picked up by a fresh agent in the next iteration.
+

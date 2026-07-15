@@ -1,0 +1,16 @@
+﻿Task #260 is complete. Stopping here as instructed ΓÇö the next task (261) will be picked up by a fresh agent.
+
+<task-complete>
+  <task-id>260</task-id>
+  <title>[WAGON-OCC 5/8][BE] Dev seed: SOLD + BLOCKED SeatAvailability rows for a known train+date so the report is non-empty</title>
+  <phases>RECON ΓåÆ IMPLEMENT ΓåÆ DONE (tddWorkflow: false)</phases>
+  <deliverable>SQLProjects/RailRunServiceSQL/dbo/Scripts/Manual/Seed_SeatAvailability_WagonOccupancy_Dev.sql (dev-only, excluded from DACPAC, idempotent)</deliverable>
+  <verification>Applied locally: 36 SeatAvailability rows for CompositionId 40004 (╨æ╨Æ 1612, 2026-06-18). Idempotent re-run = 36 rows (not 72). Per-wagon matrix = 6 seats ├ù 3 segment columns, 15 Γ£ô (SOLD) + 3 ╨æ (BLOCKED) per wagon; segment-start UICs 5214020/5214015/5214013 resolve from real ordered Nomenclature stops ΓåÆ non-empty matrix with both indicators. gitnexus detect-changes: 0 symbols / 0 processes, risk none (SQL outside index). Live HTTP COMP-04 export deferred to Playwright capstone (task 263) ΓÇö service not running locally; data-level proof suffices.</verification>
+  <commit>aff2403f9 ΓÇö feat(compositions): [WAGON-OCC 5/8][BE] Dev seed: SOLD + BLOCKED SeatAvailability rows for a known train+date so the report is non-empty (local DB has no sold seats per project_railrun_db_state). Spec ┬º6.</commit>
+  <files-changed>1 file (+173): Seed_SeatAvailability_WagonOccupancy_Dev.sql</files-changed>
+  <tracking>tasks.json #260 passes:true; activity.md entry appended</tracking>
+</task-complete>
+
+<status>CONTINUE</status>
+<next-task>261</next-task>
+

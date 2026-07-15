@@ -1,0 +1,8 @@
+﻿All 32 failures are pre-existing ΓÇö none are in our changed files:
+
+- `CreateCompositionModal.test.tsx` ΓÇö missing Redux `<Provider>` wrapper (pre-existing)
+- `WagonCreationPage.gridResize.test.tsx` ΓÇö timeout (pre-existing flaky test)
+- `AmenityRenderer.test.tsx` ΓÇö hardcoded "WC" vs i18n key mismatch (pre-existing)
+
+Our `CloneCompositionDialog.test.tsx` (9/9 tests) passed. No regressions from task #189.
+

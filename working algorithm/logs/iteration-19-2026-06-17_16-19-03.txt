@@ -1,0 +1,19 @@
+﻿Task #247 remains **blocked by the same environment issue for the 6th consecutive iteration** ΓÇö I made no code changes and did not mark it `passes:true`.
+
+## Status: Γ¢ö BLOCKED (not complete)
+
+**Deliverable code is complete** (and was in prior iterations): the spec, seed helper, global-setup, scoped `noperm` project, and both page-objects all exist; every referenced `data-testid` is confirmed present in `src`.
+
+**The blocker is infrastructure, not code:**
+- `osdm-user-service-1` is up but **unhealthy**; `Jwt__Secret=` is **empty**.
+- KeyVault `DefaultAzureCredential` fails in-container ΓåÆ empty-secret fallback ΓåÆ every auth request throws `IDX10703: SymmetricSecurityKey, key length is zero`.
+- User-service issues no JWTs ΓåÆ e2e `global-setup` MSAL login can't complete ΓåÆ the access-control spec **cannot be run/verified**.
+
+**Why I did not "fix" it autonomously:** the only fixes are restoring KeyVault access or injecting a shared `Jwt__Secret` and recreating all three OSDM services. The 2-days-up `nomenclature`/`rail-run` services still hold a valid in-memory secret from a prior KeyVault-OK start; recreating them would bring the whole stack up secret-less and break cross-service JWT validation. That's high-blast-radius shared-infra surgery with a guessed secret value ΓÇö deferred to a human, consistent with all 5 prior iterations.
+
+**Action needed (human / shared-infra):** restore KeyVault access for the containers (`az login` reachable in-container, or managed identity / service-principal env), **or** authorize injecting one shared `Jwt__Secret` into all three services + `docker compose up -d --force-recreate`. Then `cd Admin-App && npm run e2e -- e2e/tests/access-control`; if green, commit and set #247 `passes:true`.
+
+**Recommendation:** pause the Ralph loop on #247 ΓÇö this is the 6th identical no-progress iteration. I logged this verification in `ralph/activity.md`.
+
+`<status>BLOCKED</status>` ΓÇö #247 is the only remaining task with `passes:false`; it will keep re-blocking until JWT auth is restored.
+

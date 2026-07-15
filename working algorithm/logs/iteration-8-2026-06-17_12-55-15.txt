@@ -1,0 +1,18 @@
+﻿Task #243 is fully done. Summary:
+
+- **Gated by COMPOSITION CanEdit** (prop-drilling per rbac-spec.md ┬ºF5): `CompositionsListPage` Create + empty-state buttons; `CompositionList` row Edit/Clone/Delete; `CreateCompositionModal` submit; `EditorHeader` Save/Clone/Status/Name-edit/LinkTrip (page-level `useCompositionPermissions()` ΓåÆ `canEdit` prop).
+- **Tests**: added gating describes to CompositionList/EditorHeader/CreateCompositionModal; mocked `useCompositionPermissions` (ΓåÆ`canEdit:true`) in CompositionEditorPage.test and cloneComposition.integration.test to fix the regressions where the real hook returns `canEdit:false` in the test env.
+- **Verification**: `test:run -- src/app/features/compositions` ΓåÆ 919 pass / 11 fail (all 11 are pre-existing TripPicker failures, confirmed identical on pristine baseline via `git stash`). `type-check` clean. `eslint <changed files>` ΓåÆ 0 errors.
+- Updated tasks.json (#243 `passes: true`), logged activity.md, committed `36e8f490`.
+
+<task-complete>
+  <task-id>243</task-id>
+  <description>[RBAC 8/12][FE] Compositions action gating part A ΓÇö CompositionsListPage, CompositionList (Edit/Clone/Delete), CreateCompositionModal, EditorHeader (Save/Clone/Status/Name/LinkTrip) gated by COMPOSITION CanEdit. See rbac-spec.md ┬ºF5.</description>
+  <commit>36e8f490</commit>
+  <tests>919 passed; 11 pre-existing TripPicker failures (baseline-confirmed, not regressions); type-check clean; eslint 0 errors</tests>
+</task-complete>
+<status>CONTINUE</status>
+<next-task>244</next-task>
+
+Stopping here ΓÇö a fresh agent will pick up task #244.
+

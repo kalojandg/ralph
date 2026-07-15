@@ -1,0 +1,23 @@
+﻿Task #247 is the only remaining task (`passes: false`), and it is **blocked on environment/shared-infrastructure**, not on code. I re-verified the blocker, logged the verification, and did not take the risky autonomous infra action.
+
+## Iteration Summary
+
+**Task Worked On:** #247 ΓÇö [RBAC 12/12][E2E] Playwright real FEΓåÆBEΓåÆDB role-based access for Nomenclatures & Compositions
+
+**Result:** Γ¢ö Blocked ΓÇö `passes` stays `false`. No code change this iteration (the e2e deliverable was already written and hardened in the two prior iterations; only runtime verification is missing).
+
+**Blocker (unchanged, re-verified):**
+- `osdm-user-service-1` is unhealthy and crashes auth with `IDX10703: Cannot create a SymmetricSecurityKey, key length is zero` (`Program.cs:97`).
+- Its `Jwt__Secret` env is empty; the real secret is meant to load from Azure KeyVault (`bdz-test-kv.vault.azure.net`), but `DefaultAzureCredential` fails inside the container. The whole auth flow is down, so Playwright global-setup can't log in and the e2e suite can't run.
+- Deliverable is intact and uncommitted: `e2e/tests/access-control/rbac-nomenclatures-compositions.spec.ts`, `e2e/helpers/rbac-seed.helper.ts`, plus modified `global-setup.ts`, `playwright.config.ts`, and the two page-objects.
+
+**Action needed (human / shared-infra):** Restore KeyVault access (e.g. `az login` reachable by the containers, or a managed identity / service-principal), then recreate the OSDM services so all three reload the **same** `Jwt:Secret` ΓÇö **or** authorize me to inject one shared `Jwt__Secret` into all three services in `docker-compose.yml` and `--force-recreate`. Then `npm run e2e -- e2e/tests/access-control` to verify and commit.
+
+**Recommendation:** Pause the Ralph loop on #247 until the auth backend is fixed ΓÇö this is the third consecutive iteration blocked on the same infra issue with no possible code progress. I won't recreate the shared OSDM stack with a guessed secret without your go-ahead.
+
+<status>BLOCKED</status>
+<task-id>247</task-id>
+<reason>Auth backend down (empty Jwt secret / KeyVault unreachable); e2e cannot run. Needs human shared-infra fix or explicit authorization to inject a shared secret and recreate the OSDM stack.</reason>
+
+Stopping here ΓÇö no further task this iteration.
+

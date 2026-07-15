@@ -1,0 +1,14 @@
+﻿Task #248 complete. One task this iteration, then stopping per the Ralph Wiggum algorithm.
+
+**Summary:** Resolved the `ReservationRequired` / `RequiresReservation` export column-key collision in NomenclatureService.
+
+- **RED:** Added tests to `ExportColumnLabelsTests` ΓÇö `ResolveKey` for the reservation header must return the single canonical key `ReservationRequired`, plus Bg/En label-uniqueness guards. 3 failed on the real collision.
+- **GREEN:** Removed the duplicate `RequiresReservation` Bg+En label entries and renamed the AncillaryType `ExportColumnSchema` key to `ReservationRequired`. Entity property `AncillaryType.RequiresReservation` and row ordering left untouched, so export headers are unchanged.
+- **Verify:** `dotnet test` ΓåÆ 246 passed / 0 failed; `gitnexus detect_changes` low risk, no affected processes.
+- Committed `fac3f8134` on `features/BDZN-279-import-columns-fix`; marked task 248 `passes: true`; logged in activity.md.
+
+<task-complete>248</task-complete>
+<status>CONTINUE</status>
+
+Next task is **#249** ([NOM-IMPORT-RT 2/8][BE] extend Create/Update DTOs) ΓÇö to be handled by a fresh iteration.
+

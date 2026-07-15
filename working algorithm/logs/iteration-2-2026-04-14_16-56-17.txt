@@ -1,0 +1,20 @@
+﻿
+
+Task #84 is complete. The iteration is finished.
+
+```xml
+<task-complete>
+  <task-id>84</task-id>
+  <description>[FE] ╨а╤Г╤В╨╕╤А╨░╨╜╨╡: /wagons/new тЖТ WagonCreationPage (╨╜╨╛╨▓╨░ ╤Б╤В╤А╨░╨╜╨╕╤Ж╨░)</description>
+  <tests>PASSED</tests>
+  <visual>N/A</visual>
+  <committed>YES</committed>
+  <commit-message>feat(compositions): [FE] ╨а╤Г╤В╨╕╤А╨░╨╜╨╡: /wagons/new тЖТ WagonCreationPage (╨╜╨╛╨▓╨░ ╤Б╤В╤А╨░╨╜╨╕╤Ж╨░)</commit-message>
+</task-complete>
+```
+
+```xml
+<status>CONTINUE</status>
+<next-task>85</next-task>
+```
+

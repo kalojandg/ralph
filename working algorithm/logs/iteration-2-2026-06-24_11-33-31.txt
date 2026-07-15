@@ -1,0 +1,15 @@
+﻿Task #257 complete. Per the Ralph Wiggum algorithm ΓÇö one task per iteration, then stop.
+
+<task-complete>
+**Task #257** ΓÇö [WAGON-OCC 2/8][BE] RailRun reporting partial `railrun.seat-map-detail` query handler + gateway registration
+
+- Added `GetSeatMapDetailQuery` + handler delegating to the task-256 repository (`GetSeatMapDetailAsync`).
+- Wired `RailRunReportingPartialGateway`: new `SeatMapDetailPartialId` constant, `FiltersJson` ΓåÆ `trainNumber` parsing, single travel date from `DateFromYmd`, missing-date guard, and a 13-column per-seat-segment tabular payload builder.
+- Added 3 gateway tests (constant, missing-date ΓåÆ `PartialDatesInvalid`, happy path).
+- **437 tests pass**, build clean, gitnexus `detect_changes` = low risk / scope confined. Committed `0f196a71a`; tasks.json `#257.passes` ΓåÆ true; activity.md logged.
+</task-complete>
+
+<status>CONTINUE</status>
+
+Stopping here ΓÇö the next task (#258, the SYS-OPS-COMP-04 catalog report) is for a fresh iteration with a clean context.
+

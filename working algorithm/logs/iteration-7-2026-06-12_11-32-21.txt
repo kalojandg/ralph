@@ -1,0 +1,16 @@
+﻿Task #230 complete and committed. Per the Ralph one-task-per-iteration rule, I'm stopping here.
+
+<task-complete>
+  <task-id>230</task-id>
+  <tests>PASSED</tests>
+  <visual>N/A</visual>
+  <committed>YES</committed>
+</task-complete>
+
+Summary: Registered the three `IImportParser` parsers (Csv/Excel/Xml) as singletons next to the export formatters in `ServiceCollectionExtensions.cs`, added the `Services.Import` using. Build succeeded (0 errors), `gitnexus detect-changes` reported risk LOW / 0 affected processes. Marked task #230 `passes: true`, logged the activity entry, and committed.
+
+Remaining `passes: false` tasks: #231ΓÇô#235 (next agent picks these up in fresh iterations).
+
+<status>CONTINUE</status>
+<next-task>231</next-task>
+

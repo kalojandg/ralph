@@ -1,0 +1,38 @@
+﻿Task #224 complete. One task this iteration, per the Ralph algorithm.
+
+## Iteration Summary
+
+**Task Worked On:** #224 ΓÇö [Nomenclature IMPORT 1/12] Shared import infra + reverse header resolution
+
+**TDD Phase Completed:** RECON ΓåÆ RED ΓåÆ GREEN ΓåÆ DONE
+
+**Tests Status:**
+- Unit/integration: PASSED (197/197, full suite, no regressions)
+- E2E: N/A (backend infra ΓÇö pure records + helper, no UI flow)
+- Linter/build: PASSED (dotnet build, 0 errors)
+
+**What changed:**
+- New `Features/Shared/Import/`: `ImportAction`, `ImportRowOutcome`, `ImportResult` (+`FromOutcomes`), `ImportTable`
+- `ExportColumnLabels.ResolveKey` ΓÇö lazily-built reverse lookup (Bg + En labels + raw key, case-insensitive, trimmed)
+- `InternalsVisibleTo` added to `NomenclatureService.Application.csproj` (mirrors PricingService convention)
+
+**Verification:** gitnexus detect-changes flagged 16 export flows as "critical" ΓÇö a false positive from line-shift attribution; `Translate`'s body is unchanged and all export tests pass.
+
+**Git committed:** YES ΓÇö `feat(nomenclature): shared import infra + reverse header resolution (IMPORT 1/12)`
+
+```xml
+<task-complete>
+  <task-id>224</task-id>
+  <tests>PASSED</tests>
+  <visual>N/A</visual>
+  <committed>YES</committed>
+</task-complete>
+```
+
+```xml
+<status>CONTINUE</status>
+<next-task>225</next-task>
+```
+
+Stopping here ΓÇö the next task (#225, IMPORT 2/12) is for a fresh agent with clean context.
+

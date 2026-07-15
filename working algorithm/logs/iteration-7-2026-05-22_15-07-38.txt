@@ -1,0 +1,10 @@
+﻿Every single task in `tasks.json` has `"passes": true`. There are no remaining tasks to work on.
+
+```xml
+<promise>COMPLETE</promise>
+<total-tasks>all</total-tasks>
+<all-passed>true</all-passed>
+```
+
+All tasks in `tasks.json` are already marked as complete (`"passes": true`). There is no task with `"passes": false` to pick up this iteration.
+

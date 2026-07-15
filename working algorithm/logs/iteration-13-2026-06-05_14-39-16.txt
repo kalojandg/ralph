@@ -1,0 +1,23 @@
+﻿Task #201 is complete.
+
+**Summary:** Built the global Composition Action History page ΓÇö an accordion list where each row's header is a human sentence (via `buildCompositionHistoryHeader`), expandable to a formatted ╨ƒ╤Ç╨╡╨┤╨╕/╨í╨╗╨╡╨┤ diff with raw JSON behind a toggle, plus filters (composition, **wagon**, event type, operation, level, date, user, search) and a TableΓçäTimeline toggle. The wagon filter derives options from loaded rows so you switch wagons by changing it; `compositionId` is read from the URL. REDΓåÆGREENΓåÆDONE: 16/16 targeted tests, type-check clean, eslint clean on changed files. Full `test:run` has 43 pre-existing failures in unrelated suites (i18n key-passthrough mismatches in wagonGrid renderers) ΓÇö none reference this work. Committed as `9f7a1181` (CLAUDE.md left unstaged), `passes: true` set, activity logged.
+
+<task-complete>
+  <task-id>201</task-id>
+  <repo>Transport-Admin-App</repo>
+  <commit>9f7a1181</commit>
+  <files>
+    src/app/features/compositions/pages/CompositionsHistoryPage.tsx (new),
+    src/app/features/compositions/pages/CompositionsHistoryPage.test.tsx (new),
+    src/app/features/audit/index.ts (export AuditLogJsonViewer),
+    src/app/features/compositions/index.ts (export CompositionsHistoryPage),
+    src/app/features/compositions/utils/compositionHistory.utils.ts (+test, prior untracked),
+    src/app/features/compositions/components/CompositionHistoryDiff.tsx (prior untracked)
+  </files>
+  <tests>16/16 targeted green; type-check clean; eslint clean on changed files</tests>
+  <deferred>i18n keys (task #203); export button; backend list projection may need DetailsJson</deferred>
+</task-complete>
+
+<status>CONTINUE</status>
+<next-task>202</next-task>
+

@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude mcp add playwright npx @playwright/mcp@latest)"
+    ]
+  }
+}

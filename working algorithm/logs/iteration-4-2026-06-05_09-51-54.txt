@@ -1,0 +1,14 @@
+﻿Task #193 complete ΓÇö RED ΓåÆ GREEN ΓåÆ DONE, committed, and logged.
+
+**What changed (Transport-OSDM-Src):**
+- `UpdateComposition.cs` ΓåÆ `composition_updated` (both paths); captures old values before mutation, success details now nest `old`/`new`.
+- `CloneCompositionForPeriod.cs` ΓåÆ one `composition_cloned` event **per created composition** sharing one `correlationId`, each with `sourceCompositionId`; failure path matches.
+- `SaveCompositionWagons.cs` ΓåÆ all three emissions ΓåÆ `composition_updated` with shared `correlationId`; success details add `old`/`new` carriage-set diff.
+
+**Verification:** RED showed 6 expected failures ΓåÆ GREEN 53/53 audit, full suite 286/286, no regressions. `detect_changes` confirmed scope = 3 handlers + tests, risk low. Task marked `passes: true`, activity logged, committed as `717e3863d`.
+
+<task-complete>Task #193 ΓÇö Phase A granular audit for UpdateComposition, SaveCompositionWagons, CloneCompositionForPeriod</task-complete>
+<status>CONTINUE</status>
+
+(Note: a hook flagged the GitNexus index as stale ΓÇö `npx gitnexus analyze` would refresh it, but that's outside this task's scope. Next incomplete task is #194, carriage handlers.)
+

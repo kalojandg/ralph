@@ -1,0 +1,34 @@
+@echo off
+REM TDD Ralph Wiggum - Full run with 70 iterations
+
+echo.
+echo ====================================================
+echo    Ralph Wiggum TDD - Compositions Module
+echo    Test-Driven Development + Visual Feedback
+echo    Model: Claude Opus 4.8
+echo ====================================================
+echo.
+echo Starting with 70 iterations...
+echo.
+echo TDD Workflow: RED - GREEN - VISUAL - REFACTOR - DONE
+echo Visual Testing: cursor-ide-browser MCP screenshots
+echo Backend: localStorage mock (no real API)
+echo.
+echo Press Ctrl+C to stop at any time
+echo.
+pause
+echo.
+
+powershell.exe -ExecutionPolicy Bypass -NoProfile -File "%~dp0ralph.ps1" 70
+
+echo.
+echo ====================================================
+echo              Execution Complete
+echo ====================================================
+echo.
+echo Check results:
+echo   - Activity log: %~dp0activity.md
+echo   - Tasks status: %~dp0tasks.json
+echo   - Iteration logs: %~dp0logs\
+echo.
+pause

@@ -1,0 +1,14 @@
+﻿Committed (`007d05435`). Task 259 done.
+
+<task-complete>
+  <task-id>259</task-id>
+  <tests>PASSED</tests>
+  <visual>N/A</visual>
+  <committed>YES</committed>
+</task-complete>
+
+<status>CONTINUE</status>
+<next-task>260</next-task>
+
+Task 259 complete: added `WagonOccupancyMatrixXlsxBuilder` (one sheet per wagon, seats├ùstations matrix with Γ£ô/╨æ/empty indicators and per-wagon occupancy %) and routed `SYS-OPS-COMP-04` xlsx exports to it in `ExportReportByCodeCommand`. Full `ReportingService.Application.Tests` green at 182/182 (+7 new). Stopping here ΓÇö task 260 belongs to the next iteration.
+

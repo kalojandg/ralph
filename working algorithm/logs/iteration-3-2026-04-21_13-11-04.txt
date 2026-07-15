@@ -1,0 +1,4 @@
+﻿Already handled тАФ the 4 test failures in that run were all pre-existing (DateRangePicker, ElementPalette, OsdmGrid.drop, OpenSaloonLayout.osdm), none related to my changes. My `wallCells.test.ts` passed 12/12.
+
+Task #98 is committed and complete. Ready for the next iteration to pick up **Task #99**.
+

@@ -1,0 +1,36 @@
+﻿Task #240 is complete and committed. There are more tasks with `passes: false` (next is #241), so this iteration ends here per the Ralph one-task-per-iteration rule.
+
+## Iteration Summary
+
+**Task Worked On:** #240 ΓÇö [RBAC 5/12][FE] MainLayout ΓÇö gate Nomenclatures menu item and Compositions menu section by ResourceCodes.Nomenclatures / ResourceCodes.Composition at ReadOnly (┬ºF2)
+
+**TDD Phase Completed:** RECON ΓåÆ RED ΓåÆ GREEN ΓåÆ DONE
+
+**Tests Status:**
+- Unit/component (Vitest): PASSED (2/2 in MainLayout.test.tsx)
+- E2E: N/A (covered by dedicated RBAC E2E task ┬ºF7; not required for this task's DONE step)
+- Linter: PASSED
+- TypeScript: PASSED
+
+**What changed:**
+- `MainLayout.tsx`: added `canSeeNomenclatures` / `canSeeCompositions`; made `bottomMenuItems` conditional; wrapped the Compositions title + Collapse in `{canSeeCompositions && (...)}`.
+- `MainLayout.test.tsx` (new): permission-gated rendering tests.
+
+**Verification:** All steps completed, task marked `passes: true`, git committed (`1e161f8c`), logged in activity.md.
+
+```xml
+<task-complete>
+  <task-id>240</task-id>
+  <tests>PASSED</tests>
+  <visual>N/A</visual>
+  <committed>YES</committed>
+</task-complete>
+```
+
+```xml
+<status>CONTINUE</status>
+<next-task>241</next-task>
+```
+
+Stopping here ΓÇö task #241 will be handled by the next iteration with clean context.
+
