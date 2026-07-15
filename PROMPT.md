@@ -9,7 +9,7 @@
 3. **C:/Users/kaloyan.georgiev/Projects/Admin-App/docs/composition/PRD.json** - Requirements и TDD methodology
 4. **C:/Users/kaloyan.georgiev/Projects/Admin-App/docs/composition/designs/** - UI mockups за visual testing
 
-> 📌 **Feedback:** Ако най-долу в prompt-а има секция **"Feedback (steering for THIS iteration)"** — това са актуални насоки на ниво итерация (от `feedback.md`), инжектирани от харнеса. Имат **приоритет** над общите инструкции при конфликт. Ако секцията липсва — няма активен feedback.
+> 📌 **Feedback & Acceptance Criteria:** Секцията **"Feedback & Acceptance Criteria (FINAL WORD for THIS iteration)"** (ако присъства) е **най-отдолу** в prompt-а и е **последната дума** — от `feedback.md`. Тя **дефинира кога ТАЗИ итерация е приключена** и има **най-висок приоритет**. При конфликт с която и да е инструкция по-горе — печели тя. Ако липсва — няма активен feedback, важат стандартните Success Criteria.
 
 **Working directories по repo** (source of truth: `ralph/ralph reference/project reference/repos.json` → `repos.<repo>.location`):
 - `frontend` → `C:\Users\kaloyan.georgiev\Projects\Admin-App`

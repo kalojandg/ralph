@@ -108,13 +108,13 @@ ralph.ps1 реагира на exit кода → пуска нов агент с 
 
 ### Текущо състояние: WIRE-НАТ на ниво итерация ✅
 
-Feedback се инжектира в prompt-а на **ВСЯКА итерация** (не per-task). Реализация в `ralph-iteration.ps1`, веднага след зареждане на `PROMPT.md` (преди prerequisite/user-steps → prominent, близо до върха).
+Feedback се инжектира в prompt-а на **ВСЯКА итерация** (не per-task). Реализация в `ralph-iteration.ps1` — **като ПОСЛЕДНА секция** (след PROMPT.md, prerequisite, user-steps И task-specific steps). Причина: **recency** — последната дума задава **acceptance criteria** (кога итерацията е приключена) и печели при конфликт.
 
 **Механика:**
 1. Чете `feedback.md` с `-Encoding UTF8`.
 2. Маха HTML коментарите (`<!-- ... -->`) и trim-ва.
-3. Ако е останал реален текст → добавя секция `--- Feedback (steering for THIS iteration) ---` с този текст.
-4. Ако е празно (само коментар/whitespace) → **не инжектира нищо** (в конзолата: „no active feedback").
+3. Ако е останал реален текст → добавя най-отдолу секция `--- Feedback & Acceptance Criteria (FINAL WORD for THIS iteration) ---` + ред „highest priority, defines when done" + текста.
+4. Ако е празно (само коментар/whitespace) → **не инжектира нищо** (важат стандартните Success Criteria от PROMPT.md).
 
 **Config (реално ползван):**
 ```json
@@ -128,12 +128,12 @@ Feedback се инжектира в prompt-а на **ВСЯКА итерация
 **Ред на сглобяване на prompt-а сега:**
 ```
 PROMPT.md
-  + [Feedback]              ← НОВО, ако има активен текст
   + prerequisite-steps.md
   + user-steps.md
   + [task-specific hooks]   ← per-task, от task-steps.json
+  + [Feedback & Acceptance Criteria]  ← ПОСЛЕДЕН, ако има активен текст (recency = финална дума)
 ```
-`PROMPT.md` също уведомява агента, че тази секция има **приоритет** при конфликт.
+`PROMPT.md` също уведомява агента, че тази секция е **последната дума** и дефинира кога итерацията е приключена.
 
 ### Как се ползва
 

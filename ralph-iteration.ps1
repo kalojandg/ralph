@@ -64,29 +64,6 @@ if (Test-Path $promptFile) {
     exit 1
 }
 
-# === Iteration-level feedback (feedback.md) ===
-# Injected into EVERY iteration's prompt (NOT per-task; task-scoped steps go in task-steps.json).
-# The human (or a prior agent) writes short steering notes; stale notes should be deleted.
-# HTML comments are stripped; if nothing real remains, injection is skipped.
-# ASCII-only here (PS 5.1 parses no-BOM .ps1 as ANSI); Cyrillic content comes from the file (UTF8).
-$feedbackFile = "feedback.md"
-$feedbackEnabled = $true
-if ($config -and $config.feedback) {
-    if ($config.feedback.feedback_file) { $feedbackFile = $config.feedback.feedback_file }
-    if ($config.feedback.PSObject.Properties['enabled']) { $feedbackEnabled = $config.feedback.enabled }
-}
-if ($feedbackEnabled -and (Test-Path $feedbackFile)) {
-    $fbRaw = Get-Content $feedbackFile -Raw -Encoding UTF8
-    $fbStripped = ($fbRaw -replace '(?s)<!--.*?-->', '').Trim()
-    if ($fbStripped.Length -gt 0) {
-        $promptText += "`n`n--- Feedback (steering for THIS iteration) ---`n`n"
-        $promptText += $fbStripped
-        Write-Host "[+] Injected iteration feedback ($($fbStripped.Length) chars)" -ForegroundColor Green
-    } else {
-        Write-Host "[i] feedback.md has no active feedback - nothing injected" -ForegroundColor DarkGray
-    }
-}
-
 # Get prerequisite file from config (appended BEFORE user-steps — read after task selection, before coding)
 $prereqFile = "prerequisite-steps.md"
 if ($config -and $config.prerequisite_steps -and $config.prerequisite_steps.steps_file) {
@@ -157,6 +134,30 @@ if ($currentTask -and (Test-Path $taskStepsFile)) {
         }
     } catch {
         Write-Host "[!] Could not parse ${taskStepsFile}: $_" -ForegroundColor Yellow
+    }
+}
+
+# === Iteration-level feedback (feedback.md) — LAST so it has the final word ===
+# Injected at the very END of the prompt (recency) so it can set/override the ACCEPTANCE
+# CRITERIA: what "done" means for THIS iteration. NOT per-task (task-scoped steps go in
+# task-steps.json). HTML comments stripped; skipped if nothing real remains.
+# ASCII-only here (PS 5.1 parses no-BOM .ps1 as ANSI); Cyrillic content comes from the file (UTF8).
+$feedbackFile = "feedback.md"
+$feedbackEnabled = $true
+if ($config -and $config.feedback) {
+    if ($config.feedback.feedback_file) { $feedbackFile = $config.feedback.feedback_file }
+    if ($config.feedback.PSObject.Properties['enabled']) { $feedbackEnabled = $config.feedback.enabled }
+}
+if ($feedbackEnabled -and (Test-Path $feedbackFile)) {
+    $fbRaw = Get-Content $feedbackFile -Raw -Encoding UTF8
+    $fbStripped = ($fbRaw -replace '(?s)<!--.*?-->', '').Trim()
+    if ($fbStripped.Length -gt 0) {
+        $promptText += "`n`n--- Feedback & Acceptance Criteria (FINAL WORD for THIS iteration) ---`n`n"
+        $promptText += "Highest priority. Defines when THIS iteration is DONE. If it conflicts with anything above, THIS wins.`n`n"
+        $promptText += $fbStripped
+        Write-Host "[+] Injected iteration feedback ($($fbStripped.Length) chars) [LAST]" -ForegroundColor Green
+    } else {
+        Write-Host "[i] feedback.md has no active feedback - nothing injected" -ForegroundColor DarkGray
     }
 }
 
