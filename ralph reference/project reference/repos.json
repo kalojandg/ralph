@@ -1,65 +1,32 @@
 {
-  "_comment": "Repo mapping — single source of truth за 'кое репо къде е на диска и кой архитектурен reference да прочета'. Алгоритъмът: таск има поле `repo` → намери го тук → cd в `location` + прочети `reference` (в тази папка) преди да пишеш код. Позволява едновременна работа по няколко репота.",
+  "_comment": "Repo mapping — single source of truth за 'кое репо къде е на диска и кой архитектурен reference да прочета'. Алгоритъмът: таск има поле `repo` → намери го тук → cd в `location` + прочети `reference` (в тази папка) преди да пишеш код.",
   "_reference_base": "Всички `reference` пътища са спрямо тази папка (ralph/ralph reference/project reference/).",
-  "_worktree_fields": "gitRoot = коренът на git репото (оттам се прави `git worktree add`). workSubdir = относителен път ВЪТРЕ в репото до работната директория (празен = коренът). mainBranch = integration branch, от който тръгват task branches и в който orchestrator-ът merge-ва. ЗАБЕЛЕЖКА: backend и database споделят ЕДИН gitRoot (OSDM-Src) — worktree на OSDM-Src носи и двете.",
+  "_worktree_fields": "gitRoot = коренът на git репото (оттам се прави `git worktree add`). workSubdir = относителен път ВЪТРЕ в репото до работната директория (празен = коренът). mainBranch = integration branch, от който тръгват task branches и в който orchestrator-ът merge-ва.",
   "_verify_field": "verify = POST-MERGE VERIFICATION GATE (swarm). Масив от команди, които оркестраторът пуска в `location` СЛЕД всеки merge на таск от това репо (integration branch-ът е вече merged). Всички зелени -> passes:true. Червено/timeout -> merge-ът се ВРЪЩА (reset --hard) и таскът отива на информиран retry с изхода като контекст. Липсва/празен -> няма gate за репото. Подреди бързите команди първи (fail fast). ВАЖНО: командите НЕ трябва да оставят untracked файлове (иначе следващите merges се skip-ват като dirty).",
-  "version": 3,
+  "version": 4,
+  "project": "shared-inventory (DnD party inventory PWA)",
 
   "repos": {
     "frontend": {
-      "location": "C:\\Users\\kaloyan.georgiev\\Projects\\Admin-App",
-      "gitRoot": "C:\\Users\\kaloyan.georgiev\\Projects\\Admin-App",
+      "location": "D:\\Downloads\\monk\\shared-inventory",
+      "gitRoot": "D:\\Downloads\\monk\\shared-inventory",
       "workSubdir": "",
-      "mainBranch": "devdev",
-      "reference": "admin-app-frontend-structure.md",
-      "description": "React 19 + TypeScript + Vite Admin-App. Folder structure, routing, API layer, React Query hooks, MUI, i18n, testing patterns.",
-      "verify": ["npm run type-check", "npm run test:run"],
+      "mainBranch": "main",
+      "reference": "shared-inventory-structure.md",
+      "description": "Vanilla JS PWA (без bundler): single-page инвентар + куестове за DnD партито. Firebase/Firestore през CDN imports, SortableJS за drag&drop, service worker. Playwright e2e срещу fixture страници, Vitest unit (след bootstrap таск 3).",
+      "verify": ["npm ci --no-audit --no-fund", "npm run --if-present test:unit", "npm test"],
       "commands": {
-        "test": "npm run test:run",
-        "test_changed": "npx vitest run --changed",
-        "e2e": "npm run e2e",
-        "lint": "npx eslint <changed-files>",
-        "typecheck": "npm run type-check",
-        "dev": "npm run dev"
-      }
-    },
-
-    "backend": {
-      "location": "C:\\Users\\kaloyan.georgiev\\Projects\\OSDM-Src\\DotNetServices\\RailRunService",
-      "gitRoot": "C:\\Users\\kaloyan.georgiev\\Projects\\OSDM-Src",
-      "workSubdir": "DotNetServices\\RailRunService",
-      "mainBranch": "devdev",
-      "reference": "railrun-backend-structure.md",
-      "description": ".NET 8 Clean Architecture, CQRS, Aggregate Repositories + IUnitOfWork, DTO location rules, Validation.",
-      "verify": ["dotnet build", "dotnet test"],
-      "commands": {
-        "build": "dotnet build",
-        "test": "dotnet test <Changed>.Tests --filter <TestClass>",
-        "run": "dotnet run --project RailRunService.API"
-      }
-    },
-
-    "database": {
-      "location": "C:\\Users\\kaloyan.georgiev\\Projects\\OSDM-Src\\SQLProjects\\RailRunServiceSQL",
-      "gitRoot": "C:\\Users\\kaloyan.georgiev\\Projects\\OSDM-Src",
-      "workSubdir": "SQLProjects\\RailRunServiceSQL",
-      "mainBranch": "devdev",
-      "reference": "railrun-database-guide.md",
-      "description": "SQL Server schema (WagonTypes/CoachLayouts/SeatDefinitions), seed data, idempotent post-deployment migrations, grid coordinate system.",
-      "verify": ["dotnet build -c Release --no-incremental"],
-      "commands": {
-        "build": "dotnet build -c Release --no-incremental",
-        "publish": "SqlPackage /Action:Publish /SourceFile:bin/Release/RailRunServiceDb.dacpac /TargetConnectionString:\"Server=localhost,14430;Database=RailRunServiceDB;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;Encrypt=True\""
+        "test_unit": "npm run test:unit   (vitest run — single run, НЕ watch; съществува след таск 3)",
+        "e2e": "npm test   (Playwright, сам вдига http-server на порт 45279 — НЕ пускай от агент, гейтът го пуска)",
+        "serve": "npm run serve   (http-server на 45279 — НЕ пускай от агент)"
       }
     }
   },
 
   "fallback": {
-    "_comment": "Ако таск няма `repo` поле — изведи от описанието: UI компонент/страница/React тест → frontend; endpoint/command/query/DTO/C# → backend; seed data/миграция/SQL → database.",
+    "_comment": "Проектът има само едно репо. Таск без `repo` поле отива в 'frontend' (и default-ът на оркестратора е същият).",
     "rules": [
-      { "if_description_matches": "UI, компонент, страница, React, .tsx", "repo": "frontend" },
-      { "if_description_matches": "endpoint, command, query, DTO, handler, C#, .cs", "repo": "backend" },
-      { "if_description_matches": "seed, миграция, SQL, schema, .sql", "repo": "database" }
+      { "if_description_matches": "*", "repo": "frontend" }
     ]
   }
 }

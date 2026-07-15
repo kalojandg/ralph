@@ -2,7 +2,7 @@
   "prompt_file": "PROMPT.md",
   "claude_args": [
     "--output-format", "text",
-    "--model", "claude-opus-4-8",
+    "--model", "claude-fable-5",
     "--dangerously-skip-permissions"
   ],
   "prerequisite_steps": {
@@ -40,21 +40,11 @@
     "save_iterations": true
   },
   "tdd": {
+    "_comment": "ИНФОРМАТИВЕН блок (харнесът не го чете — командите живеят в repos.json). Проект: shared-inventory.",
     "enabled": true,
     "test_commands": {
-      "unit": "npm run test:run",
-      "e2e": "npm run e2e",
-      "lint": "npm run lint",
-      "typecheck": "npm run type-check"
-    },
-    "visual_testing": {
-      "mcp_server": "cursor-ide-browser",
-      "dev_server": "npm run dev",
-      "designs_folder": "docs/composition/designs"
-    },
-    "mock_backend": {
-      "type": "localStorage",
-      "storage_key": "bdz_mockups"
+      "unit": "npm run test:unit",
+      "e2e": "npm test (само verify gate-ът!)"
     }
   }
 }

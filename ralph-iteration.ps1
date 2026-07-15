@@ -12,11 +12,13 @@ param(
 
 $isParallel = $taskId -gt 0
 
-# Setup paths — ralph lives in C:\Users\kaloyan.georgiev\Projects\ralph\, project is C:\Users\kaloyan.georgiev\Projects\
+# Setup paths — ralph lives next to the project repos; canonical (solo) mode agents start
+# in $projectRoot and navigate to the task's repo via repos.json. Parallel mode overrides
+# the working dir with the task's worktree (-workDir).
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $scriptDir
 
-$bdzProject = "C:\Users\kaloyan.georgiev\Projects"
+$projectRoot = "D:\Downloads\monk\shared-inventory"
 $tasksFile = Join-Path $scriptDir "tasks.json"
 
 # Load config
@@ -29,7 +31,7 @@ if (Test-Path $configFile) {
 }
 
 # Get model from config or use default
-$model = "claude-opus-4-8"
+$model = "claude-fable-5"
 if ($config -and $config.claude_args) {
     $modelIndex = [array]::IndexOf($config.claude_args, "--model")
     if ($modelIndex -ge 0 -and $modelIndex -lt $config.claude_args.Count - 1) {
@@ -251,7 +253,7 @@ $outputFile = Join-Path $env:TEMP "ralph-output-$iterationNumber.txt"
 
 # Working directory: canonical mode = project root (Claude navigates to repos via prerequisite);
 # parallel mode = the agent's isolated worktree (sub)dir.
-$agentWorkDir = if ($isParallel -and $workDir) { $workDir } else { $bdzProject }
+$agentWorkDir = if ($isParallel -and $workDir) { $workDir } else { $projectRoot }
 Write-Host "[i] Working dir: $agentWorkDir" -ForegroundColor Cyan
 
 # Start claude in background and monitor

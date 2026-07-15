@@ -3,26 +3,10 @@
   "_key_format": "Ключът е string: '8' = целия таск #8; '8.8' = само стъпка 8.8. Стойността е масив от hook обекти.",
   "_hook_fields": {
     "at": "Кога/къде да се изпълни спрямо steps на таска. Примери: 'before-<stepId>', 'after-<stepId>', 'before-DONE', 'after-DONE', 'start', 'end'.",
-    "phase": "(по избор) TDD фаза за четимост: RECON|RED|GREEN|VISUAL|REFACTOR|DONE.",
+    "phase": "(по избор) фаза за четимост: RECON|IMPLEMENT|REFACTOR|DONE.",
     "action": "Какво точно да направи агентът. Императивно, конкретно.",
     "blocking": "(по избор, default true) Ако true — таскът НЕ е готов докато този hook не мине успешно."
   },
 
-  "hooks": {
-    "8": [
-      {
-        "at": "before-DONE",
-        "phase": "VISUAL",
-        "action": "ПРИМЕР — замени/изтрий. Стартирай dev server (ако не върви), навигирай с Playwright/cursor-ide-browser MCP до съответната страница, направи screenshot (fullPage) и сравни с дизайна преди да маркираш DONE.",
-        "blocking": true
-      }
-    ],
-    "8.8": [
-      {
-        "at": "after-this-step",
-        "action": "ПРИМЕР — замени/изтрий. Преди да продължиш към стъпка 8.9: направи screenshot с Playwright MCP и провери X, чак тогава продължи.",
-        "blocking": true
-      }
-    ]
-  }
+  "hooks": {}
 }
