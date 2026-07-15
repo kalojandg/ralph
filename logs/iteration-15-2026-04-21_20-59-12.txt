@@ -1,9 +1,0 @@
-﻿The test run had failures, but as established during Task #110 verification, these are 4 pre-existing test failures unrelated to our changes:
-
-1. **DateRangePicker.test.tsx** тАФ MUI calendar grid role issue
-2. **ElementPalette.test.tsx** тАФ width '100%' vs '200px'
-3. **OsdmGrid.drop.test.tsx** тАФ backgroundColor empty
-4. **OpenSaloonLayout.osdm.test.tsx** тАФ label 'Entry/Exit' vs 'Door'
-
-All 5 new integration tests from Task #110 pass. The exit code 1 is expected due to these pre-existing failures. Task #110 is complete.
-

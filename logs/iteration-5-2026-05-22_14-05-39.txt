@@ -1,4 +1,0 @@
-﻿The background Vitest task failure is expected ΓÇö those were pre-existing test failures in unrelated files (clone integration tests needing a live backend, AmenityRenderer label test, ReportsPage form tests). None were introduced by this task's changes.
-
-Task #180 is complete and committed. The iteration is done ΓÇö next task is #182 (to be handled by a new agent in a new iteration).
-

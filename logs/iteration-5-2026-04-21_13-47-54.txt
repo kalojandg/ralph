@@ -1,4 +1,0 @@
-﻿Acknowledged тАФ both background tasks have reported in. As I noted, the test suite's 4 failures and the lint's 1 error were all pre-existing/already fixed before commit. Task #100 is complete and committed (`acd95aa`).
-
-Iteration is over. Next task: **#101**.
-
