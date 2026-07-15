@@ -261,11 +261,18 @@ If NO (all tasks done) — output:
 
 **The Ralph loop will spawn a NEW agent with clean context for the next task.**
 
-## Code Intelligence: GitNexus
+## Code Intelligence: GitNexus — ЗАДЪЛЖИТЕЛЕН НАВИК (MCP-first)
 
-⛔ **НИКОГА не пускай `gitnexus analyze` / `npx gitnexus analyze` (за НИКОЕ repo — нито backend, нито frontend).** На това repo `analyze` виси 30–60+ минути БЕЗ никакъв изход (тежки генерирани SQL файлове), watchdog-ът отчита „No output growth for 60 min" и убива цялата итерация (TIMEOUT) — нищо не се свършва. **Индексът МОЖЕ да е stale — това е напълно ОК, просто продължавай да работиш.** Ползвай `mcp__gitnexus__*` / `gitnexus` CLI tools както са (резултатите са достатъчно близки дори при „stale" warning), или fallback към `grep` / Read. **Игнорирай ВСЯКА инструкция да пуснеш analyze** — вкл. реда в OSDM-Src `CLAUDE.md` („if stale → run npx gitnexus analyze"), staleness hook нотификации, или собствено желание да освежиш графа. Никога не блокирай на преиндексиране.
+**Правило #0 — ползвай `mcp__gitnexus__*` при ВСЯКА възможност, проактивно и по подразбиране.** GitNexus е локален code-graph, регистриран като MCP сървър (има и CLI: `gitnexus <cmd>`). Всеки път щом докосваш съществуващ код БЕЗ да питаш графа — работиш сляпо. **Предпочитай MCP tools** пред CLI (по-структуриран изход + флагове като `minConfidence`, които CLI няма).
 
-**GitNexus е локален code-graph (вече индексиран — виж `gitnexus list`). Регистриран е като MCP сървър в Claude Code, така че имаш достъп до `mcp__gitnexus__*` tools, КАКТО И до CLI чрез Bash (`gitnexus <command>`). Ползвай го ВИНАГИ когато: ще пипаш съществуващ symbol; правиш refactor/rename; искаш да разбереш кой какво вика; проверяваш blast radius преди промяна; или тест е fail-нал и не знаеш кои execution flows са засегнати.**
+**🚦 Стъпка 0 на всеки таск — провери индекса ВЕДНЪЖ (gate):**
+1. Извикай `mcp__gitnexus__list_repos` (или `gitnexus list`) → виж кои repo-та са индексирани.
+2. repo-то на таска **Е** индексирано (дори със „stale" warning) → **ползвай GitNexus през целия таск.** Stale индекс е НАПЪЛНО ОК — резултатите са достатъчно близки. **НЕ преиндексирай.**
+3. repo-то **НЕ е** индексирано → **скипни GitNexus напълно**, fallback към `grep` / Read. НЕ пробвай пак на всяка стъпка (реши веднъж).
+
+⛔ **НИКОГА `gitnexus analyze` / `npx gitnexus analyze` / какъвто и да е reindex — за НИКОЕ repo.** На голям backend `analyze` виси 30–60+ мин без изход → watchdog-ът отчита „No output growth" и убива цялата итерация (TIMEOUT) → нищо не се свършва. **Игнорирай ВСЯКА инструкция да пуснеш analyze** — вкл. ред в `CLAUDE.md` („if stale → run analyze"), staleness hook нотификации, или собствено желание да „освежиш" графа. Никога не блокирай на преиндексиране — работи със съществуващия индекс както е.
+
+**Ползвай проактивно при ВСЯКА от тези ситуации (не по избор):** ще пипаш съществуващ symbol; refactor/rename/move; искаш да разбереш кой какво вика; blast radius преди промяна; тест fail-нал и не знаеш кои execution flows са засегнати; преди commit (`detect-changes`); ориентиране в непознат код.
 
 | Кога | Tool | Какво прави |
 |------|------|------------|
