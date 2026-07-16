@@ -190,9 +190,14 @@ powershell .\ralph-swarm.ps1 -agents 3 -maxTasks 0
 Config: `ralph-config.json → swarm: { agents, worktree_root, keep_windows, window_style, max_timeout_requeues, max_fail_retries, verify_enabled, verify_timeout_min }`. Verify командите per repo: `repos.json → repos.<key>.verify` (масив; липсва → няма gate за това репо).
 
 ### Изисквания преди пускане
-- Integration branch-ът (`repos.json → mainBranch`, сега `devdev`) е **checked out и чист** във всеки gitRoot — иначе merge-ът се skip-ва (safe, но ръчна работа после).
-- `tasks.json` е декомпозиран по правилата от Част 2 (най-вече: без файлово застъпване между lanes).
-- Забележка за OSDM-Src: backend и database споделят един gitRoot — един OSDM worktree носи и двете подпапки, но lanes пак определят кой какво пипа.
+- Integration branch-ът (`repos.json → mainBranch` — ⚠ различен per repo: hero e `master`, останалите `main`) е **checked out и чист** във ВСЕКИ gitRoot, по който има таскове — иначе merge-ът се skip-ва (safe, но ръчна работа после).
+- `tasks.json` е декомпозиран по правилата от Част 2 (най-вече: без файлово застъпване между lanes) и **всеки таск има `repo` поле** (inventory/hero/combat/spells — няма безопасен дефолт при 4 приложения).
+- **Никакви ръчни dev/serve сървъри по време на run** — портовете са споделени (45279: inventory/hero/spells; 45278: combat) и playwright `reuseExistingServer` в гейта ще тества ГРЕШНОТО приложение, ако завари чужд сървър на порта.
+
+### Multi-repo паралелизъм (fleet режим)
+- **Cross-repo таскове са перфектно паралелни по конструкция**: отделни gitRoots = нула споделени файлове = merge конфликт между два репота е физически невъзможен. 4 приложения × 1 lane = 4 агента без никакъв риск от застъпване.
+- Lanes и dependsOn са глобални имена — cross-repo dependsOn работи (напр. „фича в inventory чака утилита в hero" — рядко, но възможно).
+- Verify gate-ът си остава последователен (един merge → един гейт → следващият), затова споделените e2e портове не се бият МЕЖДУ гейтовете — само с ръчни сървъри (виж горе).
 
 ### Мониторинг (3 нива на видимост)
 

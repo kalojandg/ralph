@@ -1,32 +1,73 @@
 {
-  "_comment": "Repo mapping — single source of truth за 'кое репо къде е на диска и кой архитектурен reference да прочета'. Алгоритъмът: таск има поле `repo` → намери го тук → cd в `location` + прочети `reference` (в тази папка) преди да пишеш код.",
+  "_comment": "Repo mapping — single source of truth за 'кое репо къде е на диска и кой архитектурен reference да прочета'. Алгоритъмът: таск има поле `repo` → намери го тук → cd в `location` + прочети `reference` (в тази папка) преди да пишеш код. MULTI-REPO SETUP: 4 независими DnD приложения — cross-repo паралелизмът е безопасен по конструкция (отделни gitRoots, никакви споделени файлове).",
+  "_repo_field_required": "⚠ Полето `repo` е ЗАДЪЛЖИТЕЛНО за всеки таск. Дефолтът на оркестратора е 'frontend', който ВЕЧЕ НЕ СЪЩЕСТВУВА — таск без repo ще бъде skip-нат шумно ('repo not found'). Това е нарочно: при 4 приложения тихо погрешно рутиране е по-лошо от шумен провал.",
   "_reference_base": "Всички `reference` пътища са спрямо тази папка (ralph/ralph reference/project reference/).",
-  "_worktree_fields": "gitRoot = коренът на git репото (оттам се прави `git worktree add`). workSubdir = относителен път ВЪТРЕ в репото до работната директория (празен = коренът). mainBranch = integration branch, от който тръгват task branches и в който orchestrator-ът merge-ва.",
-  "_verify_field": "verify = POST-MERGE VERIFICATION GATE (swarm). Масив от команди, които оркестраторът пуска в `location` СЛЕД всеки merge на таск от това репо (integration branch-ът е вече merged). Всички зелени -> passes:true. Червено/timeout -> merge-ът се ВРЪЩА (reset --hard) и таскът отива на информиран retry с изхода като контекст. Липсва/празен -> няма gate за репото. Подреди бързите команди първи (fail fast). ВАЖНО: командите НЕ трябва да оставят untracked файлове (иначе следващите merges се skip-ват като dirty).",
-  "version": 4,
-  "project": "shared-inventory (DnD party inventory PWA)",
+  "_worktree_fields": "gitRoot = коренът на git репото (оттам се прави `git worktree add`). workSubdir = относителен път ВЪТРЕ в репото до работната директория (празен = коренът). mainBranch = integration branch — ⚠ РАЗЛИЧЕН per repo: hero-sheet e 'master', останалите 'main'.",
+  "_verify_field": "verify = POST-MERGE VERIFICATION GATE (swarm). Масив от команди в `location` СЛЕД всеки merge. Зелено → passes:true. Червено/timeout → reset --hard + информиран retry. Липсва/празен → няма gate. Бързите команди първи. Командите НЕ трябва да оставят untracked файлове. ⚠ ПОРТ 45279 е СПОДЕЛЕН от inventory/hero (и spells baseURL) — гейтовете са последователни (ок), но НЕ оставяй ръчен 'npm run serve' да върви по време на swarm run (reuseExistingServer ще тества ГРЕШНОТО приложение).",
+  "version": 5,
+  "project": "DnD apps fleet: shared-inventory, hero-sheet, monk_combat_app, spell_app",
 
   "repos": {
-    "frontend": {
+    "inventory": {
       "location": "D:\\Downloads\\monk\\shared-inventory",
       "gitRoot": "D:\\Downloads\\monk\\shared-inventory",
       "workSubdir": "",
       "mainBranch": "main",
       "reference": "shared-inventory-structure.md",
-      "description": "Vanilla JS PWA (без bundler): single-page инвентар + куестове за DnD партито. Firebase/Firestore през CDN imports, SortableJS за drag&drop, service worker. Playwright e2e срещу fixture страници, Vitest unit (след bootstrap таск 3).",
+      "description": "Party инвентар + куестове PWA. Firebase/Firestore през CDN (жив прод!), SortableJS. МОДУЛЕН след рефактора: modules/{firebase,state,gold,items,quests,ui}.js + app.js фасада. Vitest unit + Playwright e2e (fixtures, не пипат Firestore).",
       "verify": ["npm ci --no-audit --no-fund", "npm run --if-present test:unit", "npm test"],
       "commands": {
-        "test_unit": "npm run test:unit   (vitest run — single run, НЕ watch; съществува след таск 3)",
-        "e2e": "npm test   (Playwright, сам вдига http-server на порт 45279 — НЕ пускай от агент, гейтът го пуска)",
-        "serve": "npm run serve   (http-server на 45279 — НЕ пускай от агент)"
+        "test_unit": "npm run test:unit   (vitest run)",
+        "e2e": "npm test   (Playwright, http-server на 45279 — САМО гейтът)",
+        "serve": "npm run serve   (45279 — НЕ от агент)"
+      }
+    },
+
+    "hero": {
+      "location": "D:\\Downloads\\monk\\hero-sheet",
+      "gitRoot": "D:\\Downloads\\monk\\hero-sheet",
+      "workSubdir": "",
+      "mainBranch": "master",
+      "reference": "hero-sheet-structure.md",
+      "description": "Generic hero character sheet PWA. Модулен (app.js оркестратор + modules/ + tabs/ партиали). localStorage персистенция, без backend. 8 Playwright e2e спека.",
+      "verify": ["npm ci --no-audit --no-fund", "npm run --if-present test:unit", "npm test"],
+      "commands": {
+        "e2e": "npm test   (Playwright, 45279 — САМО гейтът)",
+        "serve": "npm run serve   (45279 — НЕ от агент)"
+      }
+    },
+
+    "combat": {
+      "location": "D:\\Downloads\\monk\\monk_combat_app",
+      "gitRoot": "D:\\Downloads\\monk\\monk_combat_app",
+      "workSubdir": "",
+      "mainBranch": "main",
+      "reference": "monk-combat-structure.md",
+      "description": "Monk/Cleric character sheet v3 — НАЙ-ГОЛЯМОТО приложение, app.js монолит ~2468 реда + частични modules/. localStorage (multiclass st.monkLevel/clericLevel). Данни в *.json файлове. Playwright e2e + critical-path subset.",
+      "verify": ["npm ci --no-audit --no-fund", "npm run --if-present test:unit", "npm test"],
+      "commands": {
+        "e2e": "npm test   (Playwright, 45278 — САМО гейтът)",
+        "e2e_critical": "npm run test:critical   (по-бърз subset)",
+        "serve": "npm run serve   (45278 — НЕ от агент)"
+      }
+    },
+
+    "spells": {
+      "location": "D:\\Downloads\\monk\\spell_app",
+      "gitRoot": "D:\\Downloads\\monk\\spell_app",
+      "workSubdir": "",
+      "mainBranch": "main",
+      "reference": "spell-app-structure.md",
+      "description": "D&D Spellbook PoC. Модулен js/ (api, state, caster, slots, spells, details). localStorage + външен spells API. ⚠ npm test е СЧУПЕН (playwright сочи несъществуващи test/e2e и serve script) → verify БЕЗ e2e докато таск не оправи тестовата инфраструктура.",
+      "verify": ["npm ci --no-audit --no-fund", "npm run --if-present test:unit"],
+      "commands": {
+        "dev": "npm run dev   (live-server на 3000 — НЕ от агент)"
       }
     }
   },
 
   "fallback": {
-    "_comment": "Проектът има само едно репо. Таск без `repo` поле отива в 'frontend' (и default-ът на оркестратора е същият).",
-    "rules": [
-      { "if_description_matches": "*", "repo": "frontend" }
-    ]
+    "_comment": "НЯМА безопасен дефолт при 4 приложения. Всеки таск ЗАДЪЛЖИТЕЛНО декларира repo: inventory | hero | combat | spells. Таск без repo → шумен skip.",
+    "rules": []
   }
 }

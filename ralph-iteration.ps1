@@ -18,7 +18,7 @@ $isParallel = $taskId -gt 0
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $scriptDir
 
-$projectRoot = "D:\Downloads\monk\shared-inventory"
+$projectRoot = "D:\Downloads\monk"   # parent of all app repos; canonical agents cd into the task's repo via repos.json
 $tasksFile = Join-Path $scriptDir "tasks.json"
 
 # Load config

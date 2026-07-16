@@ -42,10 +42,10 @@
     "save_iterations": true
   },
   "tdd": {
-    "_comment": "ИНФОРМАТИВЕН блок (харнесът не го чете — командите живеят в repos.json). Проект: shared-inventory.",
+    "_comment": "ИНФОРМАТИВЕН блок (харнесът не го чете — командите живеят в repos.json per repo). Проект: DnD apps fleet (inventory/hero/combat/spells).",
     "enabled": true,
     "test_commands": {
-      "unit": "npm run test:unit",
+      "unit": "per repo: repos.json -> commands",
       "e2e": "npm test (само verify gate-ът!)"
     }
   }
