@@ -253,17 +253,30 @@ function Start-AgentForTask($task, $slot) {
     $branchName = "ralph/task-$($task.id)"
     $wtPath = Join-Path $worktreeRoot "$rKey-task-$($task.id)"
 
-    # clean leftovers from previous sessions, then (re)create branch off the integration branch
-    if (Test-Path $wtPath) {
-        & git -C $gitRoot worktree remove --force $wtPath 2>$null | Out-Null
-        Remove-Item -Recurse -Force $wtPath -ErrorAction SilentlyContinue
-    }
-    & git -C $gitRoot worktree prune 2>$null | Out-Null
-    & git -C $gitRoot branch -D $branchName 2>$null | Out-Null
-    & git -C $gitRoot worktree add -b $branchName $wtPath $baseBranch 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "[!] Task #$($task.id): 'git worktree add' failed (gitRoot=$gitRoot, base=$baseBranch)" -ForegroundColor Yellow
-        return $null
+    # CONTINUATION RETRY: when a retry context exists AND the predecessor's worktree+branch
+    # are still on disk, REUSE them as-is - the new agent FIXES/COMPLETES the previous work
+    # instead of regenerating everything from scratch. Clean spawn only for first attempts
+    # or when the leftovers are incomplete (missing branch/worktree).
+    $retryCtx = Join-Path $retryDir "task-$($task.id).md"
+    $branchOk = $false
+    & git -C $gitRoot rev-parse --verify --quiet $branchName 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) { $branchOk = $true }
+    $resume = (Test-Path $retryCtx) -and (Test-Path $wtPath) -and $branchOk
+    if ($resume) {
+        Write-Host "[i] Task #$($task.id): CONTINUATION retry - reusing predecessor's worktree/branch (fix, don't regenerate)" -ForegroundColor Yellow
+    } else {
+        # clean leftovers from previous sessions, then (re)create branch off the integration branch
+        if (Test-Path $wtPath) {
+            & git -C $gitRoot worktree remove --force $wtPath 2>$null | Out-Null
+            Remove-Item -Recurse -Force $wtPath -ErrorAction SilentlyContinue
+        }
+        & git -C $gitRoot worktree prune 2>$null | Out-Null
+        & git -C $gitRoot branch -D $branchName 2>$null | Out-Null
+        & git -C $gitRoot worktree add -b $branchName $wtPath $baseBranch 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[!] Task #$($task.id): 'git worktree add' failed (gitRoot=$gitRoot, base=$baseBranch)" -ForegroundColor Yellow
+            return $null
+        }
     }
 
     $workSub = ""
@@ -272,8 +285,11 @@ function Start-AgentForTask($task, $slot) {
     if ($workSub) { $agentDir = Join-Path $wtPath $workSub }
 
     # untracked env files do not travel with worktrees - copy them from the main checkout
-    Get-ChildItem -Path $r.location -Filter ".env*" -File -Force -ErrorAction SilentlyContinue |
-        Copy-Item -Destination $agentDir -Force -ErrorAction SilentlyContinue
+    # (skip on continuation - they are already there from the previous attempt)
+    if (-not $resume) {
+        Get-ChildItem -Path $r.location -Filter ".env*" -File -Force -ErrorAction SilentlyContinue |
+            Copy-Item -Destination $agentDir -Force -ErrorAction SilentlyContinue
+    }
 
     $resFile = Join-Path $resultsDir "task-$($task.id).json"
     Remove-Item $resFile -Force -ErrorAction SilentlyContinue
@@ -293,11 +309,12 @@ function Start-AgentForTask($task, $slot) {
         "-agentSlot", "$slot"
     )
     # failure context from previous attempt(s) -> the retry is informed, not blind
-    $retryCtx = Join-Path $retryDir "task-$($task.id).md"
     if (Test-Path $retryCtx) {
         $argList += @("-retryFile", "`"$retryCtx`"")
         Write-Host "[i] Task #$($task.id): injecting retry context from previous failed attempt(s)" -ForegroundColor Yellow
     }
+    # continuation mode -> the agent is told to FIX the inherited worktree, not start over
+    if ($resume) { $argList += @("-retryMode", "continue") }
     $proc = Start-Process powershell.exe -ArgumentList ($argList -join ' ') -PassThru -WindowStyle $agentWindows
     Write-Host "[>] SLOT $slot -> task #$($task.id) [$rKey / lane '$(Get-LaneKey $task)'] branch $branchName (pid $($proc.Id))" -ForegroundColor Green
 
@@ -375,8 +392,7 @@ function Complete-Agent($info) {
                     # (checkout was clean pre-merge, so a hard reset is safe), then send the
                     # task through the informed-retry path with the verify report as context.
                     & git -C $info.gitRoot reset --hard $preMergeSha 2>&1 | Out-Null
-                    Write-Host "[X] Task #$($t.id): VERIFY GATE RED - merge undone (reset to $preMergeSha)" -ForegroundColor Red
-                    & git -C $info.gitRoot worktree remove --force $info.wtPath 2>$null | Out-Null
+                    Write-Host "[X] Task #$($t.id): VERIFY GATE RED - merge undone (reset to $preMergeSha), worktree preserved for continuation" -ForegroundColor Red
                     $n = $script:failCounts[$t.id]; if (-not $n) { $n = 0 }
                     if ($n -lt $maxFailRetries) {
                         $script:failCounts[$t.id] = $n + 1
@@ -411,8 +427,8 @@ function Complete-Agent($info) {
         $exitCode = $null
         try { $exitCode = $info.proc.ExitCode } catch {}
         if ($exitCode -eq 2) {
-            Write-Host "[~] Task #$($t.id): QUOTA hit (agent waited for reset) - RE-QUEUED" -ForegroundColor Yellow
-            & git -C $info.gitRoot worktree remove --force $info.wtPath 2>$null | Out-Null
+            Write-Host "[~] Task #$($t.id): QUOTA hit (agent waited for reset) - RE-QUEUED (worktree preserved, will continue)" -ForegroundColor Yellow
+            Save-RetryContext $t.id "resume" "QUOTA interrupt - the agent waited for reset and exited. Work in the worktree is PRESERVED (committed and/or uncommitted). Continue from where the previous attempt stopped."
             Release-Claim $t.id
             return "quota_requeue"
         }
@@ -421,7 +437,7 @@ function Complete-Agent($info) {
         # fault - do not touch its retry budget or failedIds; signal the main loop to abort
         # the entire run so a human can fix billing/model and re-run.
         if ($exitCode -eq 4) {
-            & git -C $info.gitRoot worktree remove --force $info.wtPath 2>$null | Out-Null
+            Save-RetryContext $t.id "resume" "FATAL ENV interrupt (credits/auth) - not the task's fault. Work in the worktree is PRESERVED; continue from where the previous attempt stopped after the environment is fixed."
             Release-Claim $t.id
             return "fatal_env"
         }
@@ -430,15 +446,15 @@ function Complete-Agent($info) {
         # most STOCHASTIC failure mode (stuck dev server, network stall, wedged prompt) -
         # a blind re-run with a fresh worktree usually clears them. Re-queue up to budget.
         if ($exitCode -eq 3) {
-            & git -C $info.gitRoot worktree remove --force $info.wtPath 2>$null | Out-Null
             $n = $script:timeoutCounts[$t.id]; if (-not $n) { $n = 0 }
             if ($n -lt $maxTimeoutRequeues) {
                 $script:timeoutCounts[$t.id] = $n + 1
-                Write-Host "[~] Task #$($t.id): TIMEOUT/STALE kill - RE-QUEUED with fresh worktree ($($n + 1)/$maxTimeoutRequeues)" -ForegroundColor Yellow
+                Save-RetryContext $t.id "resume" "TIMEOUT/STALE - the previous agent was killed by the watchdog mid-work. Work in the worktree is PRESERVED but may be mid-edit; run git status/diff, sanity-check the last touched files, then continue."
+                Write-Host "[~] Task #$($t.id): TIMEOUT/STALE kill - RE-QUEUED, worktree preserved ($($n + 1)/$maxTimeoutRequeues)" -ForegroundColor Yellow
                 Release-Claim $t.id
                 return "timeout_requeue"
             }
-            Write-Host "[X] Task #$($t.id): timed out again after $maxTimeoutRequeues re-queue(s) - FAILED for this session. Branch kept: $($info.branch)" -ForegroundColor Red
+            Write-Host "[X] Task #$($t.id): timed out again after $maxTimeoutRequeues re-queue(s) - FAILED for this session. Worktree + branch kept: $($info.branch)" -ForegroundColor Red
             Release-Claim $t.id
             return "failed"
         }
@@ -455,16 +471,15 @@ function Complete-Agent($info) {
         if ($runtimeSec -lt 60) { $script:fastFails++ } else { $script:fastFails = 0 }
         $why = "no result file"
         if ($result) { $why = "status=$($result.status): $($result.summary)" }
-        & git -C $info.gitRoot worktree remove --force $info.wtPath 2>$null | Out-Null
         $n = $script:failCounts[$t.id]; if (-not $n) { $n = 0 }
         if ($n -lt $maxFailRetries) {
             $script:failCounts[$t.id] = $n + 1
             Save-RetryContext $t.id ($n + 1) $why
-            Write-Host "[~] Task #$($t.id): FAILED ($why) - RETRY $($n + 1)/$maxFailRetries with failure context injected" -ForegroundColor Yellow
+            Write-Host "[~] Task #$($t.id): FAILED ($why) - RETRY $($n + 1)/$maxFailRetries, worktree preserved for continuation" -ForegroundColor Yellow
             Release-Claim $t.id
             return "fail_requeue"
         }
-        Write-Host "[X] Task #$($t.id): FAILED ($why) - retry budget ($maxFailRetries) exhausted. Branch kept: $($info.branch)" -ForegroundColor Red
+        Write-Host "[X] Task #$($t.id): FAILED ($why) - retry budget ($maxFailRetries) exhausted. Worktree + branch kept: $($info.branch)" -ForegroundColor Red
     }
 
     Release-Claim $t.id

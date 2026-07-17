@@ -7,7 +7,8 @@ param(
     [string]$branch = "",      # git branch the worktree is on (informational, for the prompt)
     [string]$resultFile = "",  # where the agent must write its result JSON (instead of tasks.json/activity.md)
     [int]$agentSlot = 0,       # 1-based slot number -> port offsets, labels
-    [string]$retryFile = ""    # failure context from previous attempt(s) - injected so the retry is informed
+    [string]$retryFile = "",   # failure context from previous attempt(s) - injected so the retry is informed
+    [string]$retryMode = ""    # "continue" = worktree contains the predecessor's work; fix it, don't regenerate
 )
 
 $isParallel = $taskId -gt 0
@@ -207,9 +208,13 @@ if ($retryFile -and (Test-Path $retryFile)) {
     if ($retryRaw.Length -gt 8000) { $retryRaw = $retryRaw.Substring($retryRaw.Length - 8000) }
     if ($retryRaw.Length -gt 0) {
         $promptText += "`n`n--- PREVIOUS ATTEMPTS FAILED (harness retry context) ---`n`n"
-        $promptText += "This task was attempted before and FAILED. The report below is from the harness. Read it BEFORE starting: diagnose why the previous attempt failed and take a DIFFERENT approach where the log shows the old one dead-ends. Do NOT blindly repeat the same steps. Your worktree is FRESH - nothing from the failed attempts survives except this report.`n`n"
+        if ($retryMode -eq "continue") {
+            $promptText += "CONTINUATION MODE: your worktree CONTAINS the previous attempt's work - its branch with any commits, plus possibly uncommitted changes. Do NOT start from scratch and do NOT blindly rewrite what is there. FIRST run: git status; git log --oneline -10; git diff HEAD - and read the report below. Identify what the predecessor built, KEEP everything that is correct, FIX exactly what the report says failed, complete any missing steps, re-verify, then commit the fix (a new commit on the current branch is fine) and write the result file. The report may span several attempts - the LAST one is the current state of the worktree.`n`n"
+        } else {
+            $promptText += "This task was attempted before and FAILED. The report below is from the harness. Read it BEFORE starting: diagnose why the previous attempt failed and take a DIFFERENT approach where the log shows the old one dead-ends. Do NOT blindly repeat the same steps. Your worktree is FRESH - nothing from the failed attempts survives except this report.`n`n"
+        }
         $promptText += $retryRaw
-        Write-Host "[+] Injected retry context ($($retryRaw.Length) chars)" -ForegroundColor Yellow
+        Write-Host "[+] Injected retry context ($($retryRaw.Length) chars, mode=$(if ($retryMode) { $retryMode } else { 'fresh' }))" -ForegroundColor Yellow
     }
 }
 
