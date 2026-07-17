@@ -1,642 +1,466 @@
 ﻿[
     {
-        "id":  1,
+        "id":  30,
+        "category":  "feature",
+        "repo":  "combat",
+        "lane":  "flavor",
+        "files":  [
+                      "modules/flavor.js",
+                      "tabs/flavor.html",
+                      "styles.css",
+                      "index.html",
+                      "app.js",
+                      "test/e2e/flavor-ui.spec.js"
+                  ],
+        "verify":  [
+                       "npm test -- flavor-ui critical-path"
+                   ],
+        "description":  "feat: add consolidated Flavor tab with registry-driven line generator for all 17 flavor types",
+        "specRef":  "monk-combat-structure.md (файлова карта, червени линии)",
+        "notes":  "ADDITIVE таск — старите табове (One-Liners/Excuses/Insults) НЕ се пипат, техните спекове остават зелени. Новият таб дублира функционалността им времено; премахването е в таскове 31-33. ДИЗАЙН ИЗИСКВАНЕ ОТ ПОТРЕБИТЕЛЯ: големи, ясно видими бутони (НЕ мижави като в Names таба) и голяма текстова зона. Клик на бутон = зачисти зоната + покажи случайна реплика от този тип + маркирай бутона active. Повторен клик на същия бутон = нова реплика от същия тип.",
+        "steps":  [
+                      {
+                          "id":  "30.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети tabs/liners.html, tabs/excuses.html, tabs/insults.html, modules/one-liners.js, modules/excuses.js, modules/insults.js и трите JSON-а (one-liners.json ключове: crit_miss, miss_attack, crit_attack, suffer_crit, combat_tease, magic, \u0027Q\u0026A\u0027, social, magic_cocktails; excuses.json: life_wisdom, game_cheating, excuses, storytime, slipaway; insults.json + dark-jokes.json + tasha-jokes.json — виж как modules/insults.js ги чете, вкл. структурата на масивите). Виж и как tabs-navigation.spec.js чака window.__tabsLoaded."
+                      },
+                      {
+                          "id":  "30.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Създай modules/flavor.js (IIFE, window.attachFlavor — същия стил като другите модули): const FLAVOR_TYPES = масив от {id, label, group, url, key} за ВСИЧКИТЕ 17 типа — 9 one-liner (\u0027One-Liners\u0027 група), 5 excuses (\u0027Excuses\u0027), 3 insults (\u0027Insults \u0026 Jokes\u0027: Insult от insults.json, Dark Joke от dark-jokes.json, Tasha от tasha-jokes.json — извади точната им read логика от modules/insults.js). Lazy JSON cache PER URL (Map url-\u003edata). Клик handler: зачисти #flavorOutput, покажи случайна реплика от типа (trim, \u0027(empty)\u0027 fallback, \u0027(failed to load X)\u0027 при грешка), премести .active класа върху натиснатия бутон."
+                      },
+                      {
+                          "id":  "30.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Създай tabs/flavor.html: заглавие \u0027Flavor\u0027, три секции с section-title (One-Liners / Excuses / Insults \u0026 Jokes), във всяка — grid с бутони (по един за всеки тип, data-flavor=\u0027\u003cid\u003e\u0027, ЧЕТИМ label). НАЙ-ОТГОРЕ (преди секциите, always visible): голяма readonly textarea #flavorOutput. Никакви per-type полета."
+                      },
+                      {
+                          "id":  "30.4",
+                          "phase":  "IMPLEMENT",
+                          "action":  "styles.css — добави (НЕ променяй съществуващи правила): .flavor-btn { min-height: 48px; font-size: 1rem; font-weight: 600; padding: 10px 16px; border-radius: 8px; cursor: pointer; } с ясен hover и .active състояние (accent цвят от съществуващата палитра); .flavor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }; #flavorOutput { width: 100%; min-height: 200px; font-size: 1.15rem; line-height: 1.5; padding: 14px; } — голяма и четима зона."
+                      },
+                      {
+                          "id":  "30.5",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Закачи таба: index.html — нов \u003cbutton class=\u0027tab-btn\u0027 data-tab=\u0027flavor\u0027\u003eFlavor\u003c/button\u003e в .tab-nav (сложи го на мястото на One-Liners в реда) + \u003cdiv id=\u0027tab-flavor\u0027 class=\u0027tab hidden\u0027\u003e; app.js — \u0027flavor\u0027: \u0027tabs/flavor.html\u0027 в tabMap на loadTabs() + attachFlavor() call при另 attach извикванията (ред ~2447, същия guard стил: if typeof window.attachFlavor === \u0027function\u0027)."
+                      },
+                      {
+                          "id":  "30.6",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Създай test/e2e/flavor-ui.spec.js (по шаблона на one-liners-ui.spec.js: goto \u0027/\u0027, localStorage.clear, чакай window.__tabsLoaded, клик на button[data-tab=\u0027flavor\u0027]): (а) табът се отваря и #flavorOutput е видим и празен; (б) 17-те бутона са видими (изброй ги по data-flavor); (в) клик на бутон -\u003e #flavorOutput получава непразен текст и бутонът има .active; (г) клик на ДРУГ тип -\u003e зоната се e зачистила и напълнила с нов текст, .active се е преместил; (д) повторен клик на същия бутон продължава да работи; (е) по един клик-тест за ВСЕКИ от 17-те типа (loop както в one-liners-ui.spec.js)."
+                      },
+                      {
+                          "id":  "30.7",
+                          "phase":  "DONE",
+                          "action":  "Провери: старите три таба са НЕПИПНАТИ (git diff не съдържа tabs/liners.html, tabs/excuses.html, tabs/insults.html, modules/one-liners.js, modules/excuses.js, modules/insults.js). Commit."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  31,
         "category":  "refactor",
-        "repo":  "frontend",
-        "lane":  "bootstrap",
+        "repo":  "combat",
+        "lane":  "flavor",
         "files":  [
                       "index.html",
+                      "app.js",
+                      "modules/one-liners.js",
+                      "tabs/liners.html",
+                      "test/e2e/one-liners-ui.spec.js",
+                      "test/e2e/tabs-navigation.spec.js",
+                      "test/e2e/data-loading.spec.js"
+                  ],
+        "verify":  [
+                       "npm test -- flavor-ui tabs-navigation data-loading critical-path"
+                   ],
+        "description":  "refactor: remove legacy One-Liners tab superseded by Flavor tab",
+        "specRef":  "monk-combat-structure.md",
+        "notes":  "Flavor табът (таск 30) вече покрива 9-те one-liner типа. ВНИМАНИЕ: attachOneLiners съществува на ДВЕ места — modules/one-liners.js И копие в app.js (~ред 1219-1266). Махат се ДВЕТЕ. Спековете се оправят в СЪЩИЯ commit, иначе verify gate-ът ще е червен.",
+        "steps":  [
+                      {
+                          "id":  "31.1",
+                          "phase":  "RECON",
+                          "action":  "Намери всички референции: grep за \u0027liners\u0027, \u0027attachOneLiners\u0027, \u0027btnCritMiss\u0027, \u0027olCritMiss\u0027, \u0027one-liners\u0027 в index.html, app.js, modules/, test/e2e/. Провери дали tabs-navigation.spec.js и data-loading.spec.js кликат/четат liners таба."
+                      },
+                      {
+                          "id":  "31.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Премахни: tab бутона data-tab=\u0027liners\u0027 и div#tab-liners от index.html; \u0027liners\u0027 записа от tabMap в app.js; attachOneLiners() извикването; ДУБЛИРАНАТА дефиниция на loadOneLiners/attachOneLiners в app.js (~1219-1266); файла modules/one-liners.js и \u003cscript\u003e тага му (ако има); файла tabs/liners.html. one-liners.json ОСТАВА (Flavor го ползва)."
+                      },
+                      {
+                          "id":  "31.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Тестове: изтрий test/e2e/one-liners-ui.spec.js (покритието е в flavor-ui.spec.js от таск 30); в tabs-navigation.spec.js замени/премахни всяка проверка за data-tab=\u0027liners\u0027 (ако проверява всички табове — обнови списъка: -liners, +flavor ако още не е); в data-loading.spec.js — ако тества one-liners.json през стария таб, пренасочи проверката през Flavor таба (данните пак се зареждат)."
+                      },
+                      {
+                          "id":  "31.4",
+                          "phase":  "DONE",
+                          "action":  "grep за \u0027olCritMiss|btnCritMiss|attachOneLiners|tabs/liners\u0027 връща 0 резултата извън git историята. Commit."
+                      }
+                  ],
+        "passes":  false
+    },
+    {
+        "id":  32,
+        "category":  "refactor",
+        "repo":  "combat",
+        "lane":  "flavor",
+        "files":  [
+                      "index.html",
+                      "app.js",
+                      "modules/excuses.js",
+                      "tabs/excuses.html",
+                      "test/e2e/excuses-ui.spec.js",
+                      "test/e2e/tabs-navigation.spec.js",
+                      "test/e2e/data-loading.spec.js"
+                  ],
+        "verify":  [
+                       "npm test -- flavor-ui tabs-navigation data-loading critical-path"
+                   ],
+        "description":  "refactor: remove legacy Excuses tab superseded by Flavor tab",
+        "specRef":  "monk-combat-structure.md",
+        "notes":  "Огледален на таск 31. attachExcuses също е ДУБЛИРАН: modules/excuses.js И копие в app.js (~ред 1268-1300+). Махат се двете. excuses.json остава (Flavor го ползва).",
+        "steps":  [
+                      {
+                          "id":  "32.1",
+                          "phase":  "RECON",
+                          "action":  "grep за \u0027excuses\u0027, \u0027attachExcuses\u0027, \u0027btnExLifeWisdom\u0027, \u0027exLifeWisdom\u0027 в index.html, app.js, modules/, test/e2e/."
+                      },
+                      {
+                          "id":  "32.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Премахни: tab бутона data-tab=\u0027excuses\u0027 + div#tab-excuses от index.html; \u0027excuses\u0027 от tabMap; attachExcuses() извикването; дублираната дефиниция в app.js; modules/excuses.js (+script таг ако има); tabs/excuses.html."
+                      },
+                      {
+                          "id":  "32.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Тестове: изтрий test/e2e/excuses-ui.spec.js; почисти excuses референциите в tabs-navigation.spec.js и data-loading.spec.js (пренасочи data проверката през Flavor)."
+                      },
+                      {
+                          "id":  "32.4",
+                          "phase":  "DONE",
+                          "action":  "grep за \u0027exLifeWisdom|btnEx|attachExcuses|tabs/excuses\u0027 -\u003e 0 резултата в кода. Commit."
+                      }
+                  ],
+        "passes":  false
+    },
+    {
+        "id":  33,
+        "category":  "refactor",
+        "repo":  "combat",
+        "lane":  "flavor",
+        "files":  [
+                      "index.html",
+                      "app.js",
+                      "modules/insults.js",
+                      "tabs/insults.html",
+                      "test/e2e/insults.spec.js",
+                      "test/e2e/tabs-navigation.spec.js",
+                      "test/e2e/data-loading.spec.js"
+                  ],
+        "verify":  [
+                       "npm test -- flavor-ui tabs-navigation data-loading critical-path"
+                   ],
+        "description":  "refactor: remove legacy Insults tab superseded by Flavor tab",
+        "specRef":  "monk-combat-structure.md",
+        "notes":  "Insults табът има 3 генератора (Insult, Dark Joke, Tasha) — и трите вече са във Flavor (таск 30). modules/insults.js съдържа голям КОМЕНТИРАН AI/bot блок — маха се целият файл; закоментираният код е в git историята, ако потрябва. insults.json, dark-jokes.json, tasha-jokes.json ОСТАВАТ (Flavor ги ползва).",
+        "steps":  [
+                      {
+                          "id":  "33.1",
+                          "phase":  "RECON",
+                          "action":  "grep за \u0027insults\u0027, \u0027attachInsults\u0027, \u0027btnGenerateInsult\u0027, \u0027darkJoke\u0027, \u0027tasha\u0027 в index.html, app.js, modules/, test/e2e/, styles.css. Провери дали app.js има дублирана insults логика (за разлика от one-liners/excuses може да я няма — увери се)."
+                      },
+                      {
+                          "id":  "33.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Премахни: tab бутона data-tab=\u0027insults\u0027 + div#tab-insults от index.html; \u0027insults\u0027 от tabMap; attachInsults() извикването (+ дубликат в app.js ако съществува); modules/insults.js (+script таг); tabs/insults.html. В styles.css премахни .insult-*/.dark-joke-*/.tasha-* класовете САМО ако grep потвърди, че никой друг не ги ползва (Flavor има собствени класове)."
+                      },
+                      {
+                          "id":  "33.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Тестове: изтрий test/e2e/insults.spec.js; почисти insults референциите в tabs-navigation.spec.js и data-loading.spec.js (data проверките за трите json-а минават през Flavor)."
+                      },
+                      {
+                          "id":  "33.4",
+                          "phase":  "DONE",
+                          "action":  "grep за \u0027attachInsults|btnGenerateInsult|tabs/insults\u0027 -\u003e 0 в кода. Commit."
+                      }
+                  ],
+        "passes":  false
+    },
+    {
+        "id":  34,
+        "category":  "polish",
+        "repo":  "combat",
+        "lane":  "flavor",
+        "files":  [
+                      "test/e2e/tabs-navigation.spec.js",
+                      "test/e2e/data-loading.spec.js",
+                      "test/e2e/flavor-ui.spec.js",
+                      "BEHAVIOR_DOCUMENTATION.md",
+                      "TEST_CASES.md",
+                      "index.html",
+                      "app.js",
                       "styles.css"
                   ],
-        "description":  "refactor: extract inline CSS from index.html into styles.css",
-        "specRef":  "shared-inventory-structure.md §1, §3",
-        "notes":  "Чисто механичен таск — умишлено първи: валидира целия pipeline (worktree -\u003e merge -\u003e verify gate) с тривиална промяна. НУЛА промени по правилата/селекторите.",
+        "description":  "chore: final sweep after Flavor consolidation - navigation spec, docs and dead code check",
+        "specRef":  "monk-combat-structure.md",
+        "notes":  "Финализация: увери се, че нищо от трите стари таба не е останало, навигацията е консистентна и документацията отразява новия таб. НЕ добавяй нова функционалност.",
         "steps":  [
                       {
-                          "id":  "1.1",
+                          "id":  "34.1",
                           "phase":  "RECON",
-                          "action":  "Прочети index.html. Идентифицирай \u003cstyle\u003e блока в \u003chead\u003e (започва ~ред 11)."
+                          "action":  "Пусни целия suite (npm е забранен за e2e — само прегледай спековете статично). grep из целия проект (без node_modules, playwright-report, git) за остатъци: \u0027liners\u0027, \u0027attachOneLiners\u0027, \u0027attachExcuses\u0027, \u0027attachInsults\u0027, \u0027btnCritMiss\u0027, \u0027btnExLifeWisdom\u0027, \u0027btnGenerateInsult\u0027, \u0027olCritMiss\u0027, \u0027exLifeWisdom\u0027."
                       },
                       {
-                          "id":  "1.2",
+                          "id":  "34.2",
                           "phase":  "IMPLEMENT",
-                          "action":  "Създай styles.css с ТОЧНОТО съдържание на \u003cstyle\u003e блока (без \u003cstyle\u003e таговете), без \u0027подобрения\u0027, без преформатиране."
+                          "action":  "Провери tabs-navigation.spec.js: има тест \u0027Can click Flavor tab\u0027 + че списъкът табове съвпада 1:1 с реалния tab-nav (Stats, PC Characteristics, Resurrection, Inventory, Shenanigans, Flavor, Familiars, Skills, Session Notes, Names). data-loading.spec.js покрива петте json-а на Flavor (one-liners, excuses, insults, dark-jokes, tasha-jokes) през новия таб."
                       },
                       {
-                          "id":  "1.3",
+                          "id":  "34.3",
                           "phase":  "IMPLEMENT",
-                          "action":  "В index.html замени целия \u003cstyle\u003e...\u003c/style\u003e блок с \u003clink rel=\"stylesheet\" href=\"./styles.css\"\u003e. Нищо друго в index.html не се пипа."
+                          "action":  "Обнови BEHAVIOR_DOCUMENTATION.md и TEST_CASES.md: премахни/замени секциите за One-Liners/Excuses/Insults табовете с една \u0027Flavor tab\u0027 секция (17 типа, клик = clear + random line + active бутон, източници: петте json файла)."
                       },
                       {
-                          "id":  "1.4",
+                          "id":  "34.4",
                           "phase":  "DONE",
-                          "action":  "Провери: index.html вече няма \u003cstyle\u003e блок; styles.css съдържа всички правила; git diff показва САМО изваждането + link реда. Commit."
+                          "action":  "Изчисти намерените в 34.1 остатъци (мъртви CSS класове, коментари, script тагове). git status чист след commit. Commit."
                       }
                   ],
-        "passes":  true
+        "passes":  false
     },
     {
-        "id":  2,
+        "id":  40,
+        "category":  "feature",
+        "repo":  "combat",
+        "lane":  "generators",
+        "dependsOn":  [
+                          34
+                      ],
+        "files":  [
+                      "modules/namegen.js",
+                      "tabs/namegen.html",
+                      "styles.css",
+                      "index.html",
+                      "app.js",
+                      "test/e2e/namegen-ui.spec.js"
+                  ],
+        "verify":  [
+                       "npm test -- namegen-ui critical-path"
+                   ],
+        "description":  "feat: add consolidated Name Gen tab with per-type save routing for aliases, familiars and NPC names",
+        "specRef":  "monk-combat-structure.md",
+        "notes":  "ADDITIVE — старите Shenanigans/Familiars/Names табове НЕ се пипат (махат се в 41-43). КЛЮЧОВОТО ИЗИСКВАНЕ: Save-ът РУТИРА към правилното хранилище според активния тип — st.aliases (+window.save) за Alias, СЪЩИЯ localStorage ключ (FAM_LS_KEY от modules/familiars.js) за Familiar, st.npcNames (+window.save) за NPC. НИКАКВА промяна на схемите/ключовете — записаните данни на живия персонаж трябва да се виждат 1:1 в новия таб. Стилът преизползва .flavor-btn/.flavor-grid от таск 30 (големи, ясни бутони).",
+        "steps":  [
+                      {
+                          "id":  "40.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети tabs/shenanigans.html, tabs/familiars.html, tabs/npc-names.html и modules/aliases.js (184 реда — st.aliases store + aliasLog render + modal; намери и откъде btnGetName тегли фалшивото име — handler-ът е в aliases.js или app.js), modules/familiars.js (147 — FAM_LS_KEY localStorage, 7 групи от familiars.json, famModal), modules/npc-names.js (177 — st.npcNames, раса+пол radios, npc-names.json, npcNameModal). Запиши си ТОЧНИТЕ формати на записите във всяко хранилище (полета на rec обектите в трите render функции)."
+                      },
+                      {
+                          "id":  "40.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Създай tabs/namegen.html: заглавие \u0027Name Gen\u0027; 3 големи type бутона (data-gentype=\u0027alias|familiar|npc\u0027, клас .flavor-btn): Alias / Familiar / NPC; ЕДНА output зона (input#genOutput readonly, голяма — както #flavorOutput стила); бутони Generate и Save (Save disabled без генерирано име); под-UI контейнери, видими САМО за активния тип: за npc — расовите и половите radios (същите values като сега), за familiar — 7-те групови бутона (data-famcat, при familiar Generate се замества от клик на група, както е сега); таблица-контейнер #genLog (показва лога на АКТИВНИЯ тип); трите модала за контекст при Save (същите текстове като сегашните: alias \u0027На кого си се представил така?\u0027, familiar \u0027На кого/какво е това име?\u0027, npc \u0027Who is this?\u0027)."
+                      },
+                      {
+                          "id":  "40.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Създай modules/namegen.js (IIFE, window.attachNamegen): registry {alias, familiar, npc} с per-type: generate функция (преизползвай генераторната логика от съответния модул — копирай я, старите модули се махат в 41-43), store адаптер (get/set КЪМ СЪЩИТЕ хранилища: st.aliases + window.save(); FAM_LS_KEY localStorage; st.npcNames + window.save()), render на лога в #genLog (същите колони/действия като сегашните таблици, вкл. изтриване на запис), модал flow за Save. СМЯНА НА ТИП: зачиства #genOutput, Save-\u003edisabled, показва правилния под-UI и правилната таблица. Generate/група: пълни #genOutput, Save-\u003eenabled."
+                      },
+                      {
+                          "id":  "40.4",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Закачи: index.html — \u003cbutton class=\u0027tab-btn\u0027 data-tab=\u0027namegen\u0027\u003eName Gen\u003c/button\u003e + div#tab-namegen; app.js — \u0027namegen\u0027 в tabMap + attachNamegen() guard call. styles.css — само каквото липсва (преизползвай .flavor-btn/.flavor-grid/#flavorOutput стиловете; за #genOutput копирай размерите на #flavorOutput)."
+                      },
+                      {
+                          "id":  "40.5",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Създай test/e2e/namegen-ui.spec.js (шаблон: чакай window.__tabsLoaded, клик data-tab=\u0027namegen\u0027): (а) 3-те type бутона видими, зоната празна, Save disabled; (б) alias: Generate пълни зоната, Save отваря модала, потвърждение добавя ред в #genLog И записът е в window.st.aliases (page.evaluate); (в) familiar: групите се показват, клик на група пълни зоната, Save+модал добавя ред И в localStorage под СЪЩИЯ ключ; (г) npc: radios видими, Generate по раса/пол, Save записва в window.st.npcNames; (д) смяна на тип: зоната се чисти, Save се disable-ва, таблицата се сменя; (е) изтриване на ред от лога работи за всеки тип."
+                      },
+                      {
+                          "id":  "40.6",
+                          "phase":  "DONE",
+                          "action":  "Провери: старите три таба са НЕПИПНАТИ (git diff без tabs/shenanigans.html, tabs/familiars.html, tabs/npc-names.html, modules/aliases.js, modules/familiars.js, modules/npc-names.js). Commit."
+                      }
+                  ],
+        "passes":  false
+    },
+    {
+        "id":  41,
         "category":  "refactor",
-        "repo":  "frontend",
-        "lane":  "bootstrap",
+        "repo":  "combat",
+        "lane":  "generators",
         "files":  [
                       "index.html",
-                      "app.js"
-                  ],
-        "description":  "refactor: extract inline module script from index.html into app.js verbatim with named exports",
-        "specRef":  "shared-inventory-structure.md §2, §3, §7",
-        "notes":  "VERBATIM extraction — нула логически промени. Единствените добавки: export статменти в края. Малкият inline classic script за service worker регистрацията ОСТАВА в index.html. CDN import-ите ОСТАВАТ както са.",
-        "steps":  [
-                      {
-                          "id":  "2.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети index.html и structure reference §2 (инвентар на кода). Идентифицирай \u003cscript type=\"module\"\u003e блока (~ред 323 до затварящия \u003c/script\u003e преди \u003c/body\u003e)."
-                      },
-                      {
-                          "id":  "2.2",
-                          "phase":  "IMPLEMENT",
-                          "action":  "Създай app.js с ТОЧНОТО съдържание на module script блока (без script таговете), verbatim — включително firebaseConfig, коментарите и подредбата на регионите."
-                      },
-                      {
-                          "id":  "2.3",
-                          "phase":  "IMPLEMENT",
-                          "action":  "В КРАЯ на app.js добави: export { spendGold, renderGold, coinInputs, clearCoinInputs, renderItems, renderQuests, saveItems, saveQuests, initSortable, esc, syncMsg, BADGE, NEXT_STATUS }; и export const getState = () =\u003e ({ gold, items, quests }); и export function setState(s) { if (s.gold !== undefined) gold = s.gold; if (s.items !== undefined) items = s.items; if (s.quests !== undefined) quests = s.quests; } — НИЩО ДРУГО не се добавя."
-                      },
-                      {
-                          "id":  "2.4",
-                          "phase":  "IMPLEMENT",
-                          "action":  "В index.html замени module script блока с \u003cscript type=\"module\" src=\"./app.js\"\u003e\u003c/script\u003e. Service worker inline скриптът и SortableJS \u003cscript src\u003e тагът остават непокътнати."
-                      },
-                      {
-                          "id":  "2.5",
-                          "phase":  "DONE",
-                          "action":  "Провери: git diff на index.html показва САМО замяната на блока със src reference; app.js е идентичен на стария блок + export-ите накрая; window.* assignments са на място (onclick handler-ите в HTML разчитат на тях). Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  3,
-        "category":  "setup",
-        "repo":  "frontend",
-        "lane":  "bootstrap",
-        "dependsOn":  [
-                          2
-                      ],
-        "files":  [
-                      "package.json",
-                      "package-lock.json",
-                      "vitest.config.js",
-                      "test/mocks/**",
-                      "test/helpers/**",
-                      "test/unit/smoke.spec.js"
-                  ],
-        "description":  "chore: add vitest unit test infrastructure with firebase CDN mocks and bootApp helper",
-        "specRef":  "shared-inventory-structure.md §5, §6",
-        "notes":  "Инфраструктурата, която всички тестови таскове (10-14) КОНСУМИРАТ. Контрактите в §5 (мокове) и §6 (bootApp) са ЗАДЪЛЖИТЕЛНИ — тестовите таскове са писани срещу тях. app.js и index.html НЕ се пипат.",
-        "steps":  [
-                      {
-                          "id":  "3.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети structure reference §5 и §6 (точните контракти) и app.js (какво import-ва, какви глобали ползва: Sortable, confirm, alert)."
-                      },
-                      {
-                          "id":  "3.2",
-                          "phase":  "IMPLEMENT",
-                          "action":  "npm i -D vitest jsdom (само тези две). Добави script \"test:unit\": \"vitest run\" в package.json. НЕ пипай съществуващите scripts."
-                      },
-                      {
-                          "id":  "3.3",
-                          "phase":  "IMPLEMENT",
-                          "action":  "Създай vitest.config.js: environment \u0027jsdom\u0027, include \u0027test/unit/**/*.spec.js\u0027, resolve.alias мапващ двата CDN URL-а (\u0027https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js\u0027 и \u0027https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js\u0027) към ./test/mocks/firebase-app.js и ./test/mocks/firebase-firestore.js."
-                      },
-                      {
-                          "id":  "3.4",
-                          "phase":  "IMPLEMENT",
-                          "action":  "Създай test/mocks/firebase-app.js и test/mocks/firebase-firestore.js ТОЧНО по контракта от §5: doc() връща string token \u0027col/id\u0027, calls обект записва setDoc/updateDoc/deleteDoc извиквания, onSnapshot регистрира callback, __emit(token, data) вика callbacks със snap {exists, data}, __reset() чисти всичко."
-                      },
-                      {
-                          "id":  "3.5",
-                          "phase":  "IMPLEMENT",
-                          "action":  "Създай test/helpers/dom.js с export async function bootApp(...) ТОЧНО по контракта от §6: зарежда body markup от index.html без script таговете, стъбва Sortable/confirm/alert, vi.resetModules + __reset, import app.js, __emit за трите дока, връща {fs}."
-                      },
-                      {
-                          "id":  "3.6",
-                          "phase":  "IMPLEMENT",
-                          "action":  "Създай test/unit/smoke.spec.js: (а) bootApp() без данни -\u003e #dispGP показва 0, #invBody има empty state ред, #questBody има empty state ред; (б) bootApp({items:[{name:\u0027Меч\u0027}]}) -\u003e ред с \u0027Меч\u0027 в таблицата; (в) app.js export-ва spendGold, getState, setState (typeof проверки)."
-                      },
-                      {
-                          "id":  "3.7",
-                          "phase":  "DONE",
-                          "action":  "npm run test:unit -\u003e зелен. Провери, че package-lock.json е commit-нат, а node_modules НЕ е. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  10,
-        "category":  "testing",
-        "repo":  "frontend",
-        "lane":  "tests-gold",
-        "dependsOn":  [
-                          2,
-                          3
-                      ],
-        "files":  [
-                      "test/unit/gold.spec.js"
-                  ],
-        "description":  "test: characterization tests for gold treasury (spendGold borrow-down, gain/spend handlers, input clamping)",
-        "specRef":  "shared-inventory-structure.md §2 (GOLD), §4, §6",
-        "notes":  "ХАРАКТЕРИЗАЦИЯ: тестовете документират ТЕКУЩОТО поведение и минават срещу непроменен app.js. app.js НЕ се пипа. Ползвай bootApp() от test/helpers/dom.js и fs.calls за Firestore assertions.",
-        "steps":  [
-                      {
-                          "id":  "10.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети GOLD региона на app.js (spendGold, renderGold, coinInputs, clearCoinInputs, handleGain, handleSpend) и §4 от reference-а."
-                      },
-                      {
-                          "id":  "10.2",
-                          "phase":  "IMPLEMENT",
-                          "action":  "Тествай spendGold като чиста функция (direct import): точна сума без borrow; borrow cp\u003c-sp, sp\u003c-gp, gp\u003c-pp; верижен borrow (плащаш 1cp само с 1pp); недостиг -\u003e null; float стойности (toCp ползва floor); нулев cost; cost с липсващи полета (default 0)."
-                      },
-                      {
-                          "id":  "10.3",
-                          "phase":  "IMPLEMENT",
-                          "action":  "Тествай през DOM с bootApp({gold:{pp:1,gp:2,sp:3,cp:4}}): renderGold показва стойностите в #dispPP/GP/SP/CP; window.handleGain събира input стойностите, чисти inputs, вика setDoc с token \u0027inventory/gold\u0027 и новата сума (fs.calls.setDoc); coinInputs клампва отрицателни-\u003e0, floats-\u003efloor, празно-\u003e0."
-                      },
-                      {
-                          "id":  "10.4",
-                          "phase":  "IMPLEMENT",
-                          "action":  "Тествай window.handleSpend: успешен spend (setDoc с borrow-down резултата, #goldError без \u0027visible\u0027 клас); недостиг (#goldError получава \u0027visible\u0027, gold НЕ се променя, setDoc НЕ се вика); повторен успешен spend маха \u0027visible\u0027 класа."
-                      },
-                      {
-                          "id":  "10.5",
-                          "phase":  "DONE",
-                          "action":  "npm run test:unit -\u003e целият suite зелен. app.js untouched (git diff чист извън test/unit/gold.spec.js). Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  11,
-        "category":  "testing",
-        "repo":  "frontend",
-        "lane":  "tests-items",
-        "dependsOn":  [
-                          2,
-                          3
-                      ],
-        "files":  [
-                      "test/unit/items.spec.js"
-                  ],
-        "description":  "test: characterization tests for inventory items (render, totals, escaping, save/edit/delete, accordion)",
-        "specRef":  "shared-inventory-structure.md §2 (ITEMS), §4, §6",
-        "notes":  "ХАРАКТЕРИЗАЦИЯ: app.js НЕ се пипа. bootApp() + fs.calls. confirm() се стъбва per-test при delete сценариите.",
-        "steps":  [
-                      {
-                          "id":  "11.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети ITEMS региона на app.js (renderItems, item modal функциите, saveItem, deleteItem, saveItems) и §4."
-                      },
-                      {
-                          "id":  "11.2",
-                          "phase":  "IMPLEMENT",
-                          "action":  "renderItems: празен списък -\u003e empty state ред + празен footer; списък -\u003e редове с name/qty/weight/value/carrier (default \u0027Party\u0027); footer = сума weight*qty с toFixed(1) + сума value*qty с toFixed(2); esc() escape-ва \u003cscript\u003e тагове и кавички в name/note (провери, че innerHTML НЕ съдържа суров таг)."
-                      },
-                      {
-                          "id":  "11.3",
-                          "phase":  "IMPLEMENT",
-                          "action":  "saveItem през DOM: попълни модал полетата, window.saveItem() -\u003e нов item НАЙ-ОТГОРЕ (unshift), setDoc \u0027inventory/items\u0027 с {list}; празно име -\u003e НЕ записва; редакция (openItemModal(idx) + saveItem) -\u003e старият се маха, редактираният е най-отгоре."
-                      },
-                      {
-                          "id":  "11.4",
-                          "phase":  "IMPLEMENT",
-                          "action":  "deleteItem: confirm=true -\u003e маха item-а + setDoc; confirm=false -\u003e нищо не се променя. Snapshot echo: докато saveItems е in-flight (флаг saving), __emit на \u0027inventory/items\u0027 НЕ презаписва списъка (виж §4)."
-                      },
-                      {
-                          "id":  "11.5",
-                          "phase":  "IMPLEMENT",
-                          "action":  "Акордеон: клик на ред -\u003e \u0027item-expanded\u0027 клас; втори клик -\u003e маха се; клик на друг ред -\u003e само той е expanded; клик върху бутон/drag-handle НЕ toggle-ва; expanded state оцелява re-render (renderItems пак)."
-                      },
-                      {
-                          "id":  "11.6",
-                          "phase":  "DONE",
-                          "action":  "npm run test:unit -\u003e целият suite зелен. app.js untouched. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  12,
-        "category":  "testing",
-        "repo":  "frontend",
-        "lane":  "tests-quests",
-        "dependsOn":  [
-                          2,
-                          3
-                      ],
-        "files":  [
-                      "test/unit/quests.spec.js"
-                  ],
-        "description":  "test: characterization tests for quests (render, status badges, cycleStatus, save/edit/delete, accordion)",
-        "specRef":  "shared-inventory-structure.md §2 (QUESTS), §4, §6",
-        "notes":  "ХАРАКТЕРИЗАЦИЯ: app.js НЕ се пипа. bootApp() + fs.calls.",
-        "steps":  [
-                      {
-                          "id":  "12.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети QUESTS региона на app.js (BADGE, NEXT_STATUS, renderQuests, quest modal, saveQuest, cycleStatus, deleteQuest, saveQuests) и §4."
-                      },
-                      {
-                          "id":  "12.2",
-                          "phase":  "IMPLEMENT",
-                          "action":  "renderQuests: празно -\u003e empty state; куест -\u003e име, badge клас по статус (BADGE map: Активен-\u003ebadge-active, Изпълнен-\u003ebadge-done, Провален-\u003ebadge-failed, Паузиран-\u003ebadge-paused), giver/reward с \u0027—\u0027 fallback, desc се показва само ако има."
-                      },
-                      {
-                          "id":  "12.3",
-                          "phase":  "IMPLEMENT",
-                          "action":  "NEXT_STATUS цикъл: direct import assert на map-а (Активен-\u003eИзпълнен-\u003eПаузиран-\u003eАктивен; Провален-\u003eАктивен). window.cycleStatus(i): сменя статуса по map-а И мести куеста НАЙ-ОТГОРЕ (unshift), вика setDoc \u0027quests/items\u0027."
-                      },
-                      {
-                          "id":  "12.4",
-                          "phase":  "IMPLEMENT",
-                          "action":  "saveQuest: нов куест най-отгоре + setDoc; празно име -\u003e не записва; редакция -\u003e старият се маха, новият най-отгоре. deleteQuest с confirm true/false. Echo guard: __emit при savingQuests in-flight не презаписва (§4)."
-                      },
-                      {
-                          "id":  "12.5",
-                          "phase":  "IMPLEMENT",
-                          "action":  "Куест акордеон: същото поведение като items (един expanded, бутоните не toggle-ват, оцелява re-render), но върху \u0027quest-expanded\u0027 класа."
-                      },
-                      {
-                          "id":  "12.6",
-                          "phase":  "DONE",
-                          "action":  "npm run test:unit -\u003e целият suite зелен. app.js untouched. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  13,
-        "category":  "testing",
-        "repo":  "frontend",
-        "lane":  "tests-sync",
-        "dependsOn":  [
-                          2,
-                          3
-                      ],
-        "files":  [
-                      "test/unit/sync.spec.js"
-                  ],
-        "description":  "test: characterization tests for firestore snapshots, export bundle and import flow",
-        "specRef":  "shared-inventory-structure.md §2 (LISTENERS, EXPORT/IMPORT), §4, §5, §6",
-        "notes":  "ХАРАКТЕРИЗАЦИЯ: app.js НЕ се пипа. Snapshot поведението се тества през __emit от мока. За exportData: стъбни URL.createObjectURL/revokeObjectURL и HTMLAnchorElement.prototype.click, хвани Blob съдържанието.",
-        "steps":  [
-                      {
-                          "id":  "13.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети LISTENERS и EXPORT/IMPORT регионите на app.js и мок контракта §5."
-                      },
-                      {
-                          "id":  "13.2",
-                          "phase":  "IMPLEMENT",
-                          "action":  "Snapshots: __emit(\u0027inventory/gold\u0027, null) -\u003e нули; __emit с данни -\u003e renderGold ги показва; __emit(\u0027quests/items\u0027, {...}) -\u003e #syncStatus става \u0027Live sync ✓\u0027 и window.__appReady === true; items/quests __emit с null -\u003e празни списъци (empty state)."
-                      },
-                      {
-                          "id":  "13.3",
-                          "phase":  "IMPLEMENT",
-                          "action":  "exportData: bundle-ът е {version:1, exportedAt ISO string, gold, items, quests} (парсни Blob-а); download името започва с \u0027shared-inventory-\u0027."
-                      },
-                      {
-                          "id":  "13.4",
-                          "phase":  "IMPLEMENT",
-                          "action":  "importData: валиден bundle + confirm=true -\u003e setDoc за \u0027inventory/gold\u0027, \u0027inventory/items\u0027 ({list}), \u0027quests/items\u0027 ({list}) — само за наличните ключове (bundle само с items -\u003e само 1 setDoc); confirm=false -\u003e нула setDoc; невалиден JSON -\u003e alert, нула setDoc; file input value се чисти след всеки опит."
-                      },
-                      {
-                          "id":  "13.5",
-                          "phase":  "DONE",
-                          "action":  "npm run test:unit -\u003e целият suite зелен. app.js untouched. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  14,
-        "category":  "testing",
-        "repo":  "frontend",
-        "lane":  "tests-ui",
-        "dependsOn":  [
-                          2,
-                          3
-                      ],
-        "files":  [
-                      "test/unit/ui.spec.js"
-                  ],
-        "description":  "test: characterization tests for tabs, modals, esc helper and sortable wiring",
-        "specRef":  "shared-inventory-structure.md §2 (DND, TABS/MODALS, HELPERS), §6",
-        "notes":  "ХАРАКТЕРИЗАЦИЯ: app.js НЕ се пипа. Sortable стъбът от bootApp пази opts -\u003e тестът вика ръчно opts.onEnd за reorder сценария.",
-        "steps":  [
-                      {
-                          "id":  "14.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети DND/TABS/MODALS/HELPERS регионите на app.js и Sortable стъба в test/helpers/dom.js."
-                      },
-                      {
-                          "id":  "14.2",
-                          "phase":  "IMPLEMENT",
-                          "action":  "Табове: клик на data-tab=\u0027quests\u0027 бутона -\u003e той е .active, инвентарният НЕ е; #tab-quests има .active, #tab-inventory няма; обратен клик връща."
-                      },
-                      {
-                          "id":  "14.3",
-                          "phase":  "IMPLEMENT",
-                          "action":  "Модали: openItemModal() -\u003e #itemModal има .open + полетата са reset-нати (defaults от §2); клик върху backdrop (e.target == модала) затваря; клик ВЪТРЕ в modal-card НЕ затваря; същото за questModal."
-                      },
-                      {
-                          "id":  "14.4",
-                          "phase":  "IMPLEMENT",
-                          "action":  "esc(): \u0027\u0026\u0027-\u003e\u0027\u0026amp;\u0027, \u0027\u003c\u0027-\u003e\u0027\u0026lt;\u0027, \u0027\u003e\u0027-\u003e\u0027\u0026gt;\u0027, \u0027\"\u0027-\u003e\u0027\u0026quot;\u0027; не пипа други знаци; работи с не-string input (String() cast)."
-                      },
-                      {
-                          "id":  "14.5",
-                          "phase":  "IMPLEMENT",
-                          "action":  "initSortable: повторно викане destroy-ва предишния instance (стъбът брои destroy извикванията); симулиран onEnd({oldIndex, newIndex}) размества масива и вика saveFn (setDoc call в fs.calls)."
-                      },
-                      {
-                          "id":  "14.6",
-                          "phase":  "DONE",
-                          "action":  "npm run test:unit -\u003e целият suite зелен. app.js untouched. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  20,
-        "category":  "refactor",
-        "repo":  "frontend",
-        "lane":  "refactor",
-        "dependsOn":  [
-                          10,
-                          11,
-                          12,
-                          13,
-                          14
-                      ],
-        "files":  [
                       "app.js",
-                      "modules/**"
+                      "modules/aliases.js",
+                      "tabs/shenanigans.html",
+                      "test/e2e/shenanigans-ui.spec.js",
+                      "test/e2e/crud-aliases-familiars.spec.js",
+                      "test/e2e/tabs-navigation.spec.js"
                   ],
-        "description":  "refactor: extract firebase init and doc refs into modules/firebase.js",
-        "specRef":  "shared-inventory-structure.md §3, §7",
-        "notes":  "ИНВАРИАНТ за цялата refactor lane: тестовете от test/unit/ НЕ се редактират и остават зелени — app.js е фасада, която re-export-ва всичко. Кодът се МЕСТИ verbatim, не се пренаписва. Vitest alias-ите продължават да прихващат CDN import-ите и през modules/firebase.js.",
+        "verify":  [
+                       "npm test -- namegen-ui tabs-navigation critical-path"
+                   ],
+        "description":  "refactor: remove legacy Shenanigans tab superseded by Name Gen tab",
+        "specRef":  "monk-combat-structure.md",
+        "notes":  "Name Gen (таск 40) вече покрива alias генерирането и лога върху СЪЩИЯ st.aliases store — записаните алиаси на персонажа се виждат в новия таб без миграция. Спековете се оправят в СЪЩИЯ commit.",
         "steps":  [
                       {
-                          "id":  "20.1",
+                          "id":  "41.1",
                           "phase":  "RECON",
-                          "action":  "Прочети §7 (целевата структура) и CONFIG/INIT регионите на app.js. Пусни npm run test:unit за baseline (зелен)."
+                          "action":  "grep за \u0027shenanigans\u0027, \u0027attachShenanigans\u0027, \u0027attachAliasLog\u0027, \u0027btnGetName\u0027, \u0027btnSaveAlias\u0027, \u0027aliasLog\u0027, \u0027aliasModal\u0027 в index.html, app.js, modules/, test/e2e/. Провери дали app.js съдържа shenanigans/alias логика извън modules/aliases.js (генераторът на фалшиви имена)."
                       },
                       {
-                          "id":  "20.2",
-                          "phase":  "REFACTOR",
-                          "action":  "Създай modules/firebase.js: премести verbatim firebaseConfig, initializeApp/getFirestore извикванията, db, GOLD_DOC/ITEMS_DOC/QUESTS_DOC. Re-export-ни от него и ползваните firestore функции (setDoc, onSnapshot, doc и т.н.). CDN import URL-ите остават байт по байт същите."
+                          "id":  "41.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Премахни: tab бутона data-tab=\u0027shenanigans\u0027 + div#tab-shenanigans; \u0027shenanigans\u0027 от tabMap; attachShenanigans()/attachAliasLog() извикванията + евентуални дубликати/генераторен код в app.js; modules/aliases.js (+script таг); tabs/shenanigans.html. st.aliases НЕ се пипа (жива данна, Name Gen я ползва)."
                       },
                       {
-                          "id":  "20.3",
-                          "phase":  "REFACTOR",
-                          "action":  "app.js: замени CONFIG/INIT региона с import { db, GOLD_DOC, ITEMS_DOC, QUESTS_DOC, setDoc, onSnapshot, ... } from \u0027./modules/firebase.js\u0027. PLAYERS остава в app.js."
+                          "id":  "41.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Тестове: изтрий test/e2e/shenanigans-ui.spec.js; в crud-aliases-familiars.spec.js пренапиши alias частта през Name Gen таба (или я премахни, ако namegen-ui.spec.js вече покрива същите assertions — избягвай дублаж); почисти shenanigans от tabs-navigation.spec.js."
                       },
                       {
-                          "id":  "20.4",
+                          "id":  "41.4",
                           "phase":  "DONE",
-                          "action":  "npm run test:unit -\u003e зелен БЕЗ редакция на тестове. index.html не е пипан. Commit."
+                          "action":  "grep за \u0027attachShenanigans|attachAliasLog|btnSaveAlias|tabs/shenanigans\u0027 -\u003e 0 в кода. Commit."
                       }
                   ],
-        "passes":  true
+        "passes":  false
     },
     {
-        "id":  21,
+        "id":  42,
         "category":  "refactor",
-        "repo":  "frontend",
-        "lane":  "refactor",
+        "repo":  "combat",
+        "lane":  "generators",
         "files":  [
+                      "index.html",
                       "app.js",
-                      "modules/**"
+                      "modules/familiars.js",
+                      "tabs/familiars.html",
+                      "test/e2e/crud-aliases-familiars.spec.js",
+                      "test/e2e/tabs-navigation.spec.js",
+                      "test/e2e/data-loading.spec.js"
                   ],
-        "description":  "refactor: extract mutable app state into modules/state.js",
-        "specRef":  "shared-inventory-structure.md §7",
-        "notes":  "НАЙ-РИСКОВИЯТ таск в lane-а. Голите let променливи стават полета на export const state = {...}; всички четения/писания в app.js се пренасочват към state.x. getState/setState фасадата в app.js запазва ТОЧНО старата сигнатура (тестовете я ползват).",
+        "verify":  [
+                       "npm test -- namegen-ui tabs-navigation data-loading critical-path"
+                   ],
+        "description":  "refactor: remove legacy Familiars tab superseded by Name Gen tab",
+        "specRef":  "monk-combat-structure.md",
+        "notes":  "Name Gen чете/пише СЪЩИЯ localStorage ключ (FAM_LS_KEY) — записаните фамилиари остават видими. familiars.json ОСТАВА (Name Gen го ползва за групите).",
         "steps":  [
                       {
-                          "id":  "21.1",
+                          "id":  "42.1",
                           "phase":  "RECON",
-                          "action":  "Изброй ВСИЧКИ места в app.js, които четат/пишат gold, items, quests, editingItemIdx, editingQuestIdx, expandedItemIdx, expandedQuestIdx, saving, savingQuests (вкл. в onSnapshot callbacks и saveItems/saveQuests флаговете)."
+                          "action":  "grep за \u0027familiars\u0027, \u0027attachFamiliars\u0027, \u0027btnFamSave\u0027, \u0027famNameOutput\u0027, \u0027fam-btn\u0027, \u0027famLog\u0027, \u0027famModal\u0027, \u0027FAM_LS_KEY\u0027 в index.html, app.js, modules/, styles.css, test/e2e/."
                       },
                       {
-                          "id":  "21.2",
-                          "phase":  "REFACTOR",
-                          "action":  "Създай modules/state.js: export const state = { gold: {pp:0,gp:0,sp:0,cp:0}, items: [], quests: [], editingItemIdx: null, editingQuestIdx: null, expandedItemIdx: null, expandedQuestIdx: null, saving: false, savingQuests: false }."
+                          "id":  "42.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Премахни: tab бутона data-tab=\u0027familiars\u0027 + div#tab-familiars; \u0027familiars\u0027 от tabMap; attachFamiliars() извикването (+дубликати ако има); modules/familiars.js (+script таг); tabs/familiars.html. Изчисти .fam-btn/.fam-groups стиловете от styles.css ако никой друг не ги ползва."
                       },
                       {
-                          "id":  "21.3",
-                          "phase":  "REFACTOR",
-                          "action":  "В app.js: махни let декларациите, import { state }, замени ВСЯКА употреба с state.x (замяната е механична, но проверявай всяко място — пропуснато писане в стар local = тихо счупване)."
+                          "id":  "42.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Тестове: премахни/пренапиши familiar частта на crud-aliases-familiars.spec.js през Name Gen (без дублаж с namegen-ui.spec.js; ако и alias, и familiar частите са покрити — изтрий целия спек файл); почисти familiars от tabs-navigation.spec.js; data-loading.spec.js — familiars.json проверката минава през Name Gen."
                       },
                       {
-                          "id":  "21.4",
-                          "phase":  "REFACTOR",
-                          "action":  "getState/setState в app.js стават делегати към state обекта СЪС СЪЩАТА сигнатура: getState() връща {gold: state.gold, items: state.items, quests: state.quests}; setState пише в state полетата."
-                      },
-                      {
-                          "id":  "21.5",
+                          "id":  "42.4",
                           "phase":  "DONE",
-                          "action":  "npm run test:unit -\u003e целият suite зелен БЕЗ редакция на тестове. Commit."
+                          "action":  "grep за \u0027attachFamiliars|btnFamSave|tabs/familiars\u0027 -\u003e 0 в кода. Commit."
                       }
                   ],
-        "passes":  true
+        "passes":  false
     },
     {
-        "id":  22,
+        "id":  43,
         "category":  "refactor",
-        "repo":  "frontend",
-        "lane":  "refactor",
+        "repo":  "combat",
+        "lane":  "generators",
         "files":  [
+                      "index.html",
                       "app.js",
-                      "modules/**"
+                      "modules/npc-names.js",
+                      "tabs/npc-names.html",
+                      "test/e2e/npc-names.spec.js",
+                      "test/e2e/tabs-navigation.spec.js",
+                      "test/e2e/data-loading.spec.js"
                   ],
-        "description":  "refactor: extract pure gold logic into modules/gold.js",
-        "specRef":  "shared-inventory-structure.md §7",
-        "notes":  "Местят се САМО чистите функции: spendGold, coinInputs, clearCoinInputs, renderGold. handleGain/handleSpend ОСТАВАТ в app.js (зависят от syncMsg, който се мести чак в таск 23) — така се избягва import цикъл app.js \u003c-\u003e modules.",
+        "verify":  [
+                       "npm test -- namegen-ui tabs-navigation data-loading critical-path"
+                   ],
+        "description":  "refactor: remove legacy NPC Names tab superseded by Name Gen tab",
+        "specRef":  "monk-combat-structure.md",
+        "notes":  "Name Gen пише в СЪЩИЯ st.npcNames store. npc-names.json ОСТАВА. След този таск \u0027Name Gen\u0027 е единственият таб за имена — ако искаш, преименувай label-а на \u0027Names\u0027 в 44 (вече няма колизия).",
         "steps":  [
                       {
-                          "id":  "22.1",
+                          "id":  "43.1",
                           "phase":  "RECON",
-                          "action":  "Baseline: npm run test:unit зелен. Прегледай GOLD региона и зависимостите му (state, syncMsg, setDoc/GOLD_DOC)."
+                          "action":  "grep за \u0027npc-names\u0027, \u0027npcNames\u0027, \u0027attachNpcNames\u0027, \u0027btnGenerateName\u0027, \u0027btnSaveName\u0027, \u0027npcRace\u0027, \u0027npcGender\u0027, \u0027npcNamesLog\u0027, \u0027npcNameModal\u0027 в index.html, app.js, modules/, styles.css, test/e2e/."
                       },
                       {
-                          "id":  "22.2",
-                          "phase":  "REFACTOR",
-                          "action":  "Създай modules/gold.js: премести verbatim spendGold, renderGold, coinInputs, clearCoinInputs. renderGold ползва state -\u003e import { state } from \u0027./state.js\u0027."
+                          "id":  "43.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Премахни: tab бутона data-tab=\u0027npc-names\u0027 + div#tab-npc-names; \u0027npc-names\u0027 от tabMap; attachNpcNames() извикването (+дубликати); modules/npc-names.js (+script таг); tabs/npc-names.html. Изчисти .npc-options/.npc-fieldset стиловете ако Name Gen не ги преизползва (провери — 40 може да ги е взел за под-UI-то)."
                       },
                       {
-                          "id":  "22.3",
-                          "phase":  "REFACTOR",
-                          "action":  "app.js: import { spendGold, renderGold, coinInputs, clearCoinInputs } from \u0027./modules/gold.js\u0027 и re-export същите (export { ... } from \u0027./modules/gold.js\u0027). handleGain/handleSpend продължават да ги ползват, но вече през import-а."
+                          "id":  "43.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Тестове: изтрий test/e2e/npc-names.spec.js (покритието е в namegen-ui.spec.js); почисти npc-names от tabs-navigation.spec.js; data-loading.spec.js — npc-names.json през Name Gen."
                       },
                       {
-                          "id":  "22.4",
+                          "id":  "43.4",
                           "phase":  "DONE",
-                          "action":  "npm run test:unit -\u003e зелен без редакция на тестове. Commit."
+                          "action":  "grep за \u0027attachNpcNames|btnGenerateName|tabs/npc-names\u0027 -\u003e 0 в кода. Commit."
                       }
                   ],
-        "passes":  true
+        "passes":  false
     },
     {
-        "id":  23,
-        "category":  "refactor",
-        "repo":  "frontend",
-        "lane":  "refactor",
+        "id":  44,
+        "category":  "polish",
+        "repo":  "combat",
+        "lane":  "generators",
         "files":  [
+                      "test/e2e/tabs-navigation.spec.js",
+                      "test/e2e/data-loading.spec.js",
+                      "test/e2e/namegen-ui.spec.js",
+                      "test/e2e/import-export.spec.js",
+                      "BEHAVIOR_DOCUMENTATION.md",
+                      "TEST_CASES.md",
+                      "index.html",
                       "app.js",
-                      "modules/**"
+                      "styles.css",
+                      "tabs/namegen.html"
                   ],
-        "description":  "refactor: extract leaf ui helpers and inventory items logic into modules/ui.js and modules/items.js",
-        "specRef":  "shared-inventory-structure.md §7",
-        "notes":  "Двустъпков: ПЪРВО leaf helpers (esc, syncMsg, initSortable) отиват в modules/ui.js — те нямат зависимости към items/quests и така се чупи потенциалният import цикъл. ЧАК ТОГАВА items логиката отива в modules/items.js, който import-ва ui.js/state.js/firebase.js.",
+        "description":  "chore: final sweep after Name Gen consolidation - rename label, navigation spec, bundle check and docs",
+        "specRef":  "monk-combat-structure.md",
+        "notes":  "Финализация на втората консолидация. Крайният tab-nav: Stats, PC Characteristics, Resurrection, Inventory, Flavor, Skills, Session Notes, Names. Провери и bundle-а (import/export носи st.aliases и st.npcNames — familiar логът е localStorage ИЗВЪН bundle-а, това е СЪЩЕСТВУВАЩО поведение, не го \u0027оправяй\u0027).",
         "steps":  [
                       {
-                          "id":  "23.1",
+                          "id":  "44.1",
                           "phase":  "RECON",
-                          "action":  "Baseline зелен. Начертай зависимостите на ITEMS региона: state, ITEMS_DOC/setDoc, esc, initSortable, syncMsg."
+                          "action":  "grep из проекта (без node_modules/playwright-report/.git) за остатъци: \u0027shenanigans\u0027, \u0027attachAliasLog\u0027, \u0027attachFamiliars\u0027, \u0027attachNpcNames\u0027, \u0027fakeNameOutput\u0027, \u0027famNameOutput\u0027, \u0027npcNameOutput\u0027. Прегледай import-export.spec.js — уверя се, че bundle тестовете още минават концептуално (st.aliases/st.npcNames са си в st)."
                       },
                       {
-                          "id":  "23.2",
-                          "phase":  "REFACTOR",
-                          "action":  "Създай modules/ui.js с verbatim преместени esc, syncMsg, initSortable. app.js ги import-ва и re-export-ва (export { esc, syncMsg, initSortable } from \u0027./modules/ui.js\u0027)."
+                          "id":  "44.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Преименувай label-а на таба от \u0027Name Gen\u0027 на \u0027Names\u0027 (data-tab=\u0027namegen\u0027 ОСТАВА — спековете го ползват; сменя се само текстът на бутона). Обнови namegen-ui.spec.js ако assert-ва текста на бутона."
                       },
                       {
-                          "id":  "23.3",
-                          "phase":  "REFACTOR",
-                          "action":  "Създай modules/items.js: премести renderItems, saveItems и телата на openItemModal/closeItemModal/saveItem/deleteItem като export функции; import от ./state.js, ./firebase.js, ./ui.js. PLAYERS populate-ът на iCarrier остава в app.js."
+                          "id":  "44.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "tabs-navigation.spec.js: финалният списък табове съвпада 1:1 с реалния tab-nav (Stats, PC Characteristics, Resurrection, Inventory, Flavor, Skills, Session Notes, Names). data-loading.spec.js: всичките json-и (5-те flavor + familiars + npc-names) се покриват през двата нови таба. Обнови BEHAVIOR_DOCUMENTATION.md и TEST_CASES.md със секция \u0027Name Gen / Names tab\u0027 (3 типа, save routing към трите хранилища, per-type под-UI и модали)."
                       },
                       {
-                          "id":  "23.4",
-                          "phase":  "REFACTOR",
-                          "action":  "app.js: import от modules/items.js, запази window.* wiring-а (window.saveItem = saveItem и т.н.) и re-export-ни renderItems/saveItems (фасада)."
-                      },
-                      {
-                          "id":  "23.5",
+                          "id":  "44.4",
                           "phase":  "DONE",
-                          "action":  "npm run test:unit -\u003e зелен без редакция на тестове. Commit."
+                          "action":  "Изчисти намерените остатъци (мъртви стилове, коментари). git status чист след commit. Commit."
                       }
                   ],
-        "passes":  true
-    },
-    {
-        "id":  24,
-        "category":  "refactor",
-        "repo":  "frontend",
-        "lane":  "refactor",
-        "files":  [
-                      "app.js",
-                      "modules/**"
-                  ],
-        "description":  "refactor: extract quests logic into modules/quests.js",
-        "specRef":  "shared-inventory-structure.md §7",
-        "notes":  "Огледален на таск 23: BADGE, NEXT_STATUS, renderQuests, saveQuests + modal/save/cycle/delete телата -\u003e modules/quests.js. modules/ui.js вече съществува (от 23).",
-        "steps":  [
-                      {
-                          "id":  "24.1",
-                          "phase":  "RECON",
-                          "action":  "Baseline зелен. Прегледай QUESTS региона и зависимостите (state, firebase, ui)."
-                      },
-                      {
-                          "id":  "24.2",
-                          "phase":  "REFACTOR",
-                          "action":  "Създай modules/quests.js: премести verbatim BADGE, NEXT_STATUS, renderQuests, saveQuests и телата на openQuestModal/closeQuestModal/saveQuest/cycleStatus/deleteQuest като export функции."
-                      },
-                      {
-                          "id":  "24.3",
-                          "phase":  "REFACTOR",
-                          "action":  "app.js: import, window.* wiring, re-export (BADGE, NEXT_STATUS, renderQuests, saveQuests — тестовете ги import-ват от app.js)."
-                      },
-                      {
-                          "id":  "24.4",
-                          "phase":  "DONE",
-                          "action":  "npm run test:unit -\u003e зелен без редакция на тестове. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  25,
-        "category":  "refactor",
-        "repo":  "frontend",
-        "lane":  "refactor",
-        "files":  [
-                      "app.js",
-                      "modules/**"
-                  ],
-        "description":  "refactor: move gold handlers, tabs and modal backdrop wiring into their modules",
-        "specRef":  "shared-inventory-structure.md §7",
-        "notes":  "Довършва разпределението: handleGain/handleSpend отиват в modules/gold.js (syncMsg вече е в ui.js -\u003e няма цикъл); tabs wiring-ът и modal backdrop логиката стават export функции initTabs()/initModalBackdrops() в modules/ui.js, които app.js вика при boot на същото място в реда на изпълнение.",
-        "steps":  [
-                      {
-                          "id":  "25.1",
-                          "phase":  "RECON",
-                          "action":  "Baseline зелен. Прегледай какво е останало в app.js: handleGain/handleSpend, TABS/MODALS wiring, PLAYERS populate, onSnapshot-ите, export/import, PWA."
-                      },
-                      {
-                          "id":  "25.2",
-                          "phase":  "REFACTOR",
-                          "action":  "Премести handleGain/handleSpend в modules/gold.js (import syncMsg от ./ui.js, setDoc/GOLD_DOC от ./firebase.js, state от ./state.js). app.js: window.handleGain = handleGain wiring + re-export."
-                      },
-                      {
-                          "id":  "25.3",
-                          "phase":  "REFACTOR",
-                          "action":  "Премести tab-btn wiring-а в export function initTabs() и backdrop логиката в export function initModalBackdrops() в modules/ui.js. app.js ги вика на мястото, където беше wiring-ът (редът на top-level изпълнение се запазва)."
-                      },
-                      {
-                          "id":  "25.4",
-                          "phase":  "DONE",
-                          "action":  "npm run test:unit -\u003e зелен без редакция на тестове. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  26,
-        "category":  "refactor",
-        "repo":  "frontend",
-        "lane":  "refactor",
-        "files":  [
-                      "app.js",
-                      "modules/**",
-                      "README.md"
-                  ],
-        "description":  "refactor: finalize app.js as thin orchestrator facade and document module structure in README",
-        "specRef":  "shared-inventory-structure.md §7",
-        "notes":  "Финализация на фазата. app.js остава: imports, window.* assignments, PLAYERS populate, 3-те onSnapshot wiring-а, exportData/importData, PWA install, фасадните re-exports. НУЛА мъртъв код.",
-        "steps":  [
-                      {
-                          "id":  "26.1",
-                          "phase":  "RECON",
-                          "action":  "Baseline зелен. Прегледай какво е останало в app.js след таскове 20-25."
-                      },
-                      {
-                          "id":  "26.2",
-                          "phase":  "REFACTOR",
-                          "action":  "Изчисти остатъци: дублиран/мъртъв код, неизползвани import-и. Провери, че ВСИЧКИ стари export-и на app.js още съществуват (фасадата е пълна): spendGold, renderGold, coinInputs, clearCoinInputs, renderItems, renderQuests, saveItems, saveQuests, initSortable, esc, syncMsg, BADGE, NEXT_STATUS, getState, setState."
-                      },
-                      {
-                          "id":  "26.3",
-                          "phase":  "REFACTOR",
-                          "action":  "README.md: кратка секция \u0027Structure\u0027 — файловете и модулите (какво къде живее), как се пускат unit тестовете и e2e, бележка че CDN imports са умишлени (no bundler)."
-                      },
-                      {
-                          "id":  "26.4",
-                          "phase":  "DONE",
-                          "action":  "npm run test:unit -\u003e целият suite зелен. git status чист след commit. Commit."
-                      }
-                  ],
-        "passes":  true
+        "passes":  false
     }
 ]

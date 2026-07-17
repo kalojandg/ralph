@@ -7,10 +7,16 @@
 
 ```
 monk_combat_app/
-├── index.html
-├── app.js              ← МОНОЛИТ ~2468 реда (частично разбит) — пипай хирургично, малки таскове
-├── modules/            ← aliases, excuses, familiars, insults, inventory, newchar, npc-names, ... (частично извлечени)
-├── tabs/               ← HTML партиали
+├── index.html          ← скелет + tab-nav; табовете се зареждат динамично (loadTabs -> fetch tabs/*.html)
+├── app.js              ← ЯДРОТО ~2468 реда: state (st.*), derived values, tab loading, оркестрация.
+│                          Приложението Е модулно (разделено под характеризационни тестове от 1 app.js
+│                          + 1 html по ~3000 реда) — но ядрото остава голямо: пипай хирургично, малки таскове.
+│                          ⚠ ЧАСТ от модулната логика има ИСТОРИЧЕСКИ ДУБЛИКАТИ в app.js (напр.
+│                          attachOneLiners/attachExcuses са и в modules/, и копирани в app.js ~ред 1219+) —
+│                          при премахване/промяна удряй ДВЕТЕ места.
+├── modules/            ← фича модули (IIFE, window.attachX): aliases, excuses, familiars, insults,
+│                          inventory, newchar, npc-names, one-liners, pcchar, quests, spells-mark
+├── tabs/               ← HTML партиали per tab (fetch-ват се от loadTabs)
 ├── styles.css, manifest.json, service-worker.js
 ├── *.json данни        ← cleric-features, familiars, excuses, insults, npc-names, one-liners, shenanigans,
 │                          skills-and-features, dark-jokes, tasha-jokes — данните са в JSON файлове, не в кода
@@ -38,7 +44,7 @@ npm run serve           # http-server на 45278 — НЕ пускай от аг
 
 ## Червени линии
 
-1. app.js е монолит с крехка история — таск, който го пипа = МАЛЪК обхват, един регион, след прочит на BEHAVIOR_DOCUMENTATION.md за областта.
+1. app.js е голямо споделено ядро — таск, който го пипа = МАЛЪК обхват, един регион, след прочит на BEHAVIOR_DOCUMENTATION.md за областта. Внимавай за историческите дубликати (modules/ vs копия в app.js).
 2. `test/e2e/**` не се пипат освен ако таскът е за тях. TEST_CASES.md описва очакваното поведение — при съмнение той печели.
 3. localStorage схемата на героя е жив контракт (реални персонажи) — миграция само като изрична стъпка.
 4. Не commit-вай runtime боклук: playwright-report/, test-results/, tmpclaude-*, logs/ (има заварени такива в репото — не ги умножавай).

@@ -34,6 +34,26 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task 30 — feat: add consolidated Flavor tab with registry-driven line generator for all 17 flavor types
+
+**Repo:** combat (monk_combat_app) · **Branch:** ralph/task-30 · **Commit:** 36fad8f
+
+### What was done
+- **modules/flavor.js** (new): IIFE + `window.attachFlavor`, following the existing module style. `FLAVOR_TYPES` registry of all 17 types as `{id, label, group, url, key}` — 9 One-Liners (`one-liners.json`, keys incl. `Q&A`/`magic_cocktails`), 5 Excuses (`excuses.json`), 3 Insults & Jokes (`insults.json` / `dark-jokes.json` / `tasha-jokes.json`, flat arrays → `key: null`, read logic lifted from modules/insults.js). Lazy cache is a `Map<url, data>`, so the 9 one-liner types share a single fetch. Click handler clears `#flavorOutput`, picks a random line (trim, `(empty)` fallback, `(failed to load <url>)` on error) and moves `.active` onto the pressed button.
+- **tabs/flavor.html** (new): 'Flavor' title, large readonly `#flavorOutput` textarea always visible at the top, then three `section-title` sections (One-Liners / Excuses / Insults & Jokes), each a `.flavor-grid` of `.flavor-btn[data-flavor]` buttons with readable labels. No per-type fields.
+- **styles.css**: additive only — `.flavor-btn` (min-height 48px, 1rem/600, hover + accent `.active`), `.flavor-grid` (auto-fill minmax(170px, 1fr)), `#flavorOutput` (min-height 200px, 1.15rem). Per the user's design requirement: big, clearly visible buttons and a large text area.
+- **index.html / app.js**: `Flavor` tab-btn placed before One-Liners, `#tab-flavor` div, `modules/flavor.js` script before app.js; `'flavor': 'tabs/flavor.html'` in `tabMap` and a guarded `attachFlavor()` call alongside the other attaches.
+- **test/e2e/flavor-ui.spec.js** (new): one click-test per type (22 tests total), looped in the one-liners-ui.spec.js shape, plus tab-opens-empty/readonly, all-17-visible, switching-type-moves-.active, and repeat-click-varies.
+
+### Verification
+- `npx playwright test flavor-ui critical-path` → **46/46 passed (1.1m)**.
+- Old tabs untouched: `git status --porcelain` clean for tabs/liners.html, tabs/excuses.html, tabs/insults.html, modules/one-liners.js, modules/excuses.js, modules/insults.js (additive task — their specs stay green; removal is tasks 31-33).
+- No runtime artifacts committed; no stray http-server left on 45278.
+
+### Note on the previous failed attempt
+The earlier attempt failed the verify gate on critical-path → 'Long rest fully restores HP, Ki, and HD', a stale test unrelated to task 30 (it set `xp = 6500` expecting level 5, but the app stores level in `st.level`). Base commit **9dcae14** has since fixed that test by setting `st.level`/`monkLevel`/`clericLevel` directly, so the blocker no longer exists — the gate is green on this branch. The prior attempt's secondary worry (full `npm test` exceeding the gate timeout) did not apply: the gate runs this task's own `verify` (28→46 tests, ~1 min), not the whole suite.
+
+
 ## Task #26 — refactor: finalize app.js as thin orchestrator facade and document module structure in README
 
 **Date:** 2026-07-15
@@ -324,6 +344,7 @@
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
 
 
 

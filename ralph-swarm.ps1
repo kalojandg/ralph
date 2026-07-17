@@ -177,8 +177,13 @@ function Invoke-VerifyGate($task) {
     if ($task.PSObject.Properties['repo'] -and $task.repo) { $rKey = $task.repo }
     $r = $reposMap.repos.$rKey
     if (-not $r) { return $null }
-    if (-not ($r.PSObject.Properties['verify'] -and $r.verify)) { return $null }
-    foreach ($cmd in @($r.verify)) {
+    # Per-task override: a task may carry its own `verify` array (targeted spec subset for
+    # cheap merges); tasks without it use the repo-wide gate. Empty task array = no gate.
+    $cmds = $null
+    if ($task.PSObject.Properties['verify'] -and $null -ne $task.verify) { $cmds = @($task.verify) }
+    elseif ($r.PSObject.Properties['verify'] -and $r.verify) { $cmds = @($r.verify) }
+    if (-not $cmds -or $cmds.Count -eq 0) { return $null }
+    foreach ($cmd in $cmds) {
         Write-Host "[v] Task #$($task.id): verify gate ($rKey): $cmd" -ForegroundColor Cyan
         $job = Start-Job -ScriptBlock {
             param($dir, $c)

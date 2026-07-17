@@ -33,7 +33,7 @@
     "max_timeout_requeues": 2,
     "max_fail_retries": 2,
     "verify_enabled": true,
-    "verify_timeout_min": 20,
+    "verify_timeout_min": 45,
     "_comment": "agents = паралелни слота (2-3 старт, 5-6 практичен таван). worktree_root празно = <parent>\\.ralph-worktrees. keep_windows = агентските конзоли остават отворени след края. max_timeout_requeues = колко пъти watchdog-убит таск (timeout/stale) се пуска наново с чист worktree. max_fail_retries = колко пъти реално провалил се таск се retry-ва с инжектиран failure контекст (retry/task-<id>.md). verify_enabled/verify_timeout_min = post-merge verification gate: след всеки merge пуска 'verify' командите на репото (repos.json) върху integration branch-а; червено -> merge-ът се връща + информиран retry. Виж ralph reference/parallel-swarm-reference.md"
   },
   "logging": {
