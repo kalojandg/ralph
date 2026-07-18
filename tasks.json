@@ -462,5 +462,53 @@
                       }
                   ],
         "passes":  true
+    },
+    {
+        "id":  50,
+        "category":  "bugfix",
+        "repo":  "combat",
+        "lane":  "bugfix",
+        "files":  [
+                      "modules/namegen.js",
+                      "app.js",
+                      "test/e2e/namegen-ui.spec.js",
+                      "test/e2e/import-export.spec.js"
+                  ],
+        "description":  "fix: unify familiar records into st.familiars so export/import round-trips them like aliases and npc names",
+        "specRef":  "monk-combat-structure.md",
+        "notes":  "БЪГ ОТ ПРОД (открит от потребителя): запис във всяка от трите Names таблици -\u003e export -\u003e изтриване -\u003e import връща alias и npc, но НЕ и familiar. Причина: familiar записите живеят в отделен localStorage[\u0027familiars_v1\u0027] ИЗВЪН st, а bundle-ът пакетира само st. Скелетът st.familiars ВЕЧЕ съществува (defaultState ~ред 129, buildBundle ~1111, applyBundle ~751) — но никой не пише в него. ФИКС = унификация върху st.familiars + ЕДНОКРАТНА МИГРАЦИЯ на живите данни (потребителят има РЕАЛНИ записани фамилиари — загубата им е недопустима). Бонус: st се cloud sync-ва -\u003e фамилиарите стават cross-device като останалите.",
+        "steps":  [
+                      {
+                          "id":  "50.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети modules/namegen.js (familiar store adapter-а с FAM_LS_KEY=\u0027familiars_v1\u0027, rec формат {name, cat, note, ts}), app.js bundle логиката (buildBundle/applyBundle/defaultState/load) и мъртвата функция stripTransientState (~ред 141, дефинирана, НИКОГА не викана — тя деструктурира familiars, потвърди с grep, че няма call site)."
+                      },
+                      {
+                          "id":  "50.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "В modules/namegen.js смени familiar store adapter-а: get() чете window.st.familiars (масив, default []), set(arr) пише window.st.familiars = arr и вика window.save() — ИДЕНТИЧНО на alias/npc adapter-ите. Форматът на записите {name, cat, note, ts} НЕ се променя."
+                      },
+                      {
+                          "id":  "50.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "ЕДНОКРАТНА МИГРАЦИЯ в attachNamegen() (или при load): ако localStorage[\u0027familiars_v1\u0027] съдържа непразен масив И st.familiars е празен -\u003e премести записите в st.familiars, извикай window.save(), и ЧАК СЛЕД успешния save изтрий стария ключ localStorage.removeItem(\u0027familiars_v1\u0027). Ако и двете имат данни (не би трябвало) — обедини без дубликати по ts. Невалиден JSON в стария ключ -\u003e игнорирай и не трий (защитно)."
+                      },
+                      {
+                          "id":  "50.4",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Изтрий мъртвата stripTransientState от app.js (потвърдено без call sites в 50.1) — тя подвежда, че familiars са transient."
+                      },
+                      {
+                          "id":  "50.5",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Тестове: (а) в import-export.spec.js — нов тест \u0027familiar записите round-trip-ват през bundle\u0027: запиши familiar през Names таба, buildBundle -\u003e bundle.state.familiars съдържа записа; localStorage.clear + reload; applyBundle -\u003e записът е обратно в st.familiars И се вижда като ред в Names таба (familiar тип); (б) в namegen-ui.spec.js — нов тест за миграцията: seed-ни localStorage[\u0027familiars_v1\u0027] със запис ПРЕДИ page load, reload -\u003e записът се вижда в таблицата, st.familiars го съдържа, старият ключ е изтрит; (в) съществуващите alias/npc round-trip тестове остават непипнати и зелени."
+                      },
+                      {
+                          "id":  "50.6",
+                          "phase":  "DONE",
+                          "action":  "Пусни целите namegen-ui и import-export спекове локално НЕ (e2e е за гейта) — само провери статично, че промените са консистентни, commit. Гейтът (пълен suite) е финалната проверка."
+                      }
+                  ],
+        "passes":  false
     }
 ]
