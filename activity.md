@@ -34,6 +34,21 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #50 — fix: unify familiar records into st.familiars so export/import round-trips them like aliases and npc names
+
+**Repo:** combat (monk_combat_app) · **Lane:** bugfix · **Commit:** `3e7d9b4`
+
+**Bug (prod, user-reported):** Saving a record in each of the three Names tables → export → delete → import restored alias and npc but NOT familiar. Cause: familiar records lived in a standalone `localStorage['familiars_v1']` key *outside* `st`, and the export/import bundle only packages `st`.
+
+**Fix (4 files, all in scope):**
+1. `modules/namegen.js` — familiar store adapter now reads/writes `window.st.familiars` + `window.save()`, identical to the alias/npc adapters. Record schema `{name, cat, note, ts}` unchanged.
+2. `modules/namegen.js` — added a defensive one-time `migrateFamiliars()` at the top of `attachNamegen()`: moves any legacy `familiars_v1` records into `st.familiars`, `save()`s *first*, then removes the old key; merges by `ts` if both hold data; leaves invalid JSON untouched. Live characters keep their familiars, which now also cloud-sync.
+3. `app.js` — deleted the dead, never-called `stripTransientState` (confirmed zero call sites) that misleadingly implied familiars were transient.
+4. Tests — updated the familiar-routing test to assert `st.familiars`, added a migration test (seed `familiars_v1` → reload → row visible, `st.familiars` populated, old key deleted), and added an import-export familiar bundle round-trip test.
+
+**Verification:** Static review of the retained commit; `st.familiars` is wired through defaultState/applyBundle/buildBundle; only remaining `familiars_v1` refs are the read-then-delete migration path. The retry gate's single red — `rest-mechanics.spec.js:240` (multi level-up on Long Rest) — is out of scope and unrelated: a pre-existing timing flake (4 chained modal→observer-click cycles within `waitForTimeout(600)`, `retries:0`, shared server under parallel-mode load). Not caused by this change.
+
+
 ## Task #44 — chore: final sweep after Name Gen consolidation - rename label, navigation spec, bundle check and docs
 
 **Repo:** combat (monk_combat_app) · **Lane:** generators · **Branch:** ralph/task-44 · **Commit:** 606e92b
@@ -528,6 +543,7 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
 
 
 
