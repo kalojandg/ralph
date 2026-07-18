@@ -208,10 +208,16 @@ if ($retryFile -and (Test-Path $retryFile)) {
     if ($retryRaw.Length -gt 8000) { $retryRaw = $retryRaw.Substring($retryRaw.Length - 8000) }
     if ($retryRaw.Length -gt 0) {
         $promptText += "`n`n--- PREVIOUS ATTEMPTS FAILED (harness retry context) ---`n`n"
-        if ($retryMode -eq "continue") {
+        if ($retryMode -eq "continue" -or $retryMode -eq "escalate" -or $retryMode -eq "conflict") {
             $promptText += "CONTINUATION MODE: your worktree CONTAINS the previous attempt's work - its branch with any commits, plus possibly uncommitted changes. Do NOT start from scratch and do NOT blindly rewrite what is there. FIRST run: git status; git log --oneline -10; git diff HEAD - and read the report below. Identify what the predecessor built, KEEP everything that is correct, FIX exactly what the report says failed, complete any missing steps, re-verify, then commit the fix (a new commit on the current branch is fine) and write the result file. The report may span several attempts - the LAST one is the current state of the worktree.`n`n"
         } else {
             $promptText += "This task was attempted before and FAILED. The report below is from the harness. Read it BEFORE starting: diagnose why the previous attempt failed and take a DIFFERENT approach where the log shows the old one dead-ends. Do NOT blindly repeat the same steps. Your worktree is FRESH - nothing from the failed attempts survives except this report.`n`n"
+        }
+        if ($retryMode -eq "escalate") {
+            $promptText += "SCOPE ESCALATION (OVERRIDES the PARALLEL MODE scope rule): the disciplined in-scope attempts have exhausted their budget. Gate failures are now YOUR problem regardless of the task's 'files' boundary. Fix whatever the gate log proves is broken - INCLUDING files outside your 'files' list (other specs, neighboring code). Judge carefully which side is wrong: a failing foreign test may be STALE (then modernize the test), or it may be CORRECT and catching a real bug in your changes (then fix your code). Be surgical: minimal edits, only what the gate evidence justifies, and LIST every out-of-scope file you touched in the result summary. Still forbidden: git push, switching branches, touching the main checkout, running e2e/servers.`n`n"
+        }
+        if ($retryMode -eq "conflict") {
+            $promptText += "MERGE CONFLICT RESOLUTION MODE: the orchestrator could not merge your branch into the integration branch (conflicting files are listed in the report below). EXCEPTION to the git rules for THIS attempt: you MAY run 'git merge <integration-branch>' (the mainBranch of your repo per repos.json) on your CURRENT branch inside YOUR worktree, resolve the conflicts preserving the intent of BOTH sides (the integrated code advanced while your branch lived - do not blindly discard either side), commit the merge, re-run the repo's unit tests, then write the result file. Still forbidden: git push, checkout/switch to other branches, rebase, touching the main checkout.`n`n"
         }
         $promptText += $retryRaw
         Write-Host "[+] Injected retry context ($($retryRaw.Length) chars, mode=$(if ($retryMode) { $retryMode } else { 'fresh' }))" -ForegroundColor Yellow

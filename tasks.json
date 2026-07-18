@@ -99,7 +99,7 @@
                           "action":  "grep за \u0027olCritMiss|btnCritMiss|attachOneLiners|tabs/liners\u0027 връща 0 резултата извън git историята. Commit."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  32,
@@ -143,7 +143,7 @@
                           "action":  "grep за \u0027exLifeWisdom|btnEx|attachExcuses|tabs/excuses\u0027 -\u003e 0 резултата в кода. Commit."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  33,
@@ -187,7 +187,7 @@
                           "action":  "grep за \u0027attachInsults|btnGenerateInsult|tabs/insults\u0027 -\u003e 0 в кода. Commit."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  34,
@@ -229,7 +229,7 @@
                           "action":  "Изчисти намерените в 34.1 остатъци (мъртви CSS класове, коментари, script тагове). git status чист след commit. Commit."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  40,
@@ -285,7 +285,7 @@
                           "action":  "Провери: старите три таба са НЕПИПНАТИ (git diff без tabs/shenanigans.html, tabs/familiars.html, tabs/npc-names.html, modules/aliases.js, modules/familiars.js, modules/npc-names.js). Commit."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  41,
@@ -329,7 +329,7 @@
                           "action":  "grep за \u0027attachShenanigans|attachAliasLog|btnSaveAlias|tabs/shenanigans\u0027 -\u003e 0 в кода. Commit."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  42,
@@ -373,7 +373,7 @@
                           "action":  "grep за \u0027attachFamiliars|btnFamSave|tabs/familiars\u0027 -\u003e 0 в кода. Commit."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  43,
@@ -417,7 +417,7 @@
                           "action":  "grep за \u0027attachNpcNames|btnGenerateName|tabs/npc-names\u0027 -\u003e 0 в кода. Commit."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  44,
@@ -461,6 +461,6 @@
                           "action":  "Изчисти намерените остатъци (мъртви стилове, коментари). git status чист след commit. Commit."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     }
 ]

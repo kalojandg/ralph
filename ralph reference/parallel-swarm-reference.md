@@ -16,7 +16,7 @@
 | Кой избира таскове? | **Само оркестраторът** (single writer). Агентът получава фиксиран `-taskId` |
 | Кой пише tasks.json/activity.md? | **Само оркестраторът.** Агентите пишат `results/task-<id>.json` |
 | Как влиза в главния клон? | Оркестраторът merge-ва завършените branch-ове **последователно** (`--no-ff`) в integration branch-а |
-| Конфликт при merge? | `merge --abort`, branch-ът се пази за ръчен resolve, таскът остава `passes:false` |
+| Конфликт при merge? | **Автоматичен resolve retry**: конфликтните файлове отиват в retry контекста, таскът се re-queue-ва в conflict режим — агентът merge-ва integration branch-а В СОБСТВЕНОТО си worktree и разрешава (бюджетирано, дял от `max_fail_retries`). Чак след изчерпан бюджет → branch за ръчен resolve. |
 | Retry при провал? | ✅ Bounded (x`max_fail_retries`, default 4) и **CONTINUATION**: worktree-то и branch-ът на провалилия се опит СЕ ПАЗЯТ; следващият агент ги наследява + failure контекста и ПОПРАВЯ/ДОВЪРШВА, не преражда от нулата. Виж §1 „Retry поведение". |
 | Кой пази integration branch-а зелен? | **Post-merge verify gate**: след всеки merge оркестраторът пуска `verify` командите на репото (repos.json); червено → merge-ът се връща (`reset --hard`) + информиран retry. Следващият merge стъпва само върху ВЕРИФИЦИРАНО зелен branch. |
 
@@ -109,6 +109,10 @@ repos.json                 ← + gitRoot / workSubdir / mainBranch (worktree т�
 - **Quota (exit 2) / Timeout (exit 3) / Fatal env (exit 4):** пишат "resume" бележка в retry контекста („работата е запазена, продължи откъдето спря") — прекъснатата работа, вкл. некомитнати промени, се наследява.
 - **Истински провал / verify RED:** причината (status/summary, verify отчет) + последните ~60 реда от лога отиват в `retry/task-<id>.md`; контекстът се инжектира СЛЕД parallel-mode секцията, ПРЕДИ feedback. При continuation агентът вижда и кода на предшественика директно в worktree-то — контекст + диффът на живо.
 - **Fresh spawn** става само при: първи опит, липсващ branch/worktree (напр. изчистени ръчно), или липсващ retry контекст.
+- **РЕЖИМНА СТЪЛБИЦА на continuation retry-тата** (`-retryMode`):
+  - `continue` (опити 1..`escalate_after`): поправка В РАМКИТЕ на `files` границата;
+  - `escalate` (след `escalate_after` изчерпани fail retry-та, config default 2): **scope-ът е вдигнат за гейт-доказани провали** — агентът може хирургично да поправя out-of-scope файлове (чужди спекове/съседен код), с изрична преценка „остарял тест ИЛИ прав тест, хванал мой бъг", и изброява всеки out-of-scope файл в result summary. Решава патърна „агентът вижда фикса, дисциплината го спира, бюджетът гори" (#33/#34);
+  - `conflict` (след неуспешен merge): мандат по изключение за `git merge <mainBranch>` в собственото worktree + resolve на изброените конфликтни файлове + merge commit. Останалите git забрани важат винаги (push/checkout/rebase/главния checkout).
 - **Per-task verify override:** таск може да носи собствен `verify` масив в tasks.json — той ПЕЧЕЛИ над repo-wide гейта за неговия merge. Употреба: прицелен subset вместо пълния suite (напр. `["npm test -- flavor-ui critical-path"]` — playwright филтрира по подниз от пътя на спека), без `npm ci` когато таскът не пипа package.json. Финалният таск на всяка lane остава БЕЗ override → пълният repo гейт хваща каквото subset-ите са изпуснали. Празен масив `[]` = без гейт за таска (внимавай). Правило при авторството: във филтъра слагай само спекове, които ГАРАНТИРАНО съществуват след таска (изтрит спек във филтъра → playwright error → фалшиво червено).
 - **Verify gate провал → същият информиран retry.** Ако merge-ът мине, но `verify` командите на репото са червени на integration branch-а, merge-ът се връща и таскът се retry-ва с verify отчета (команда, exit код, последните ~60 реда изход) като контекст — споделя бюджета `max_fail_retries`.
 - Няколко провала се **акумулират** в същия файл (в prompt-а влизат последните ~8000 знака — най-новото печели).

@@ -78,6 +78,15 @@ if ($config -and $config.swarm) {
     if ($config.swarm.PSObject.Properties['verify_timeout_min']) { $verifyTimeoutMin = [int]$config.swarm.verify_timeout_min }
 }
 
+# Scope escalation: after this many consumed fail-retries, the next attempt gets
+# -retryMode escalate - the files boundary is LIFTED for gate-diagnosed failures, so the
+# agent may surgically fix out-of-scope tests/code instead of stalling until a human steps
+# in (the #33/#34 pattern: agent sees the fix, discipline forbids it, budget burns).
+$escalateAfter = 2
+if ($config -and $config.swarm -and $config.swarm.PSObject.Properties['escalate_after']) {
+    $escalateAfter = [int]$config.swarm.escalate_after
+}
+
 $tasksFile  = Join-Path $scriptDir "tasks.json"
 $reposFile  = Join-Path $scriptDir "ralph reference\project reference\repos.json"
 $claimsDir  = Join-Path $scriptDir "claims"
@@ -313,8 +322,23 @@ function Start-AgentForTask($task, $slot) {
         $argList += @("-retryFile", "`"$retryCtx`"")
         Write-Host "[i] Task #$($task.id): injecting retry context from previous failed attempt(s)" -ForegroundColor Yellow
     }
-    # continuation mode -> the agent is told to FIX the inherited worktree, not start over
-    if ($resume) { $argList += @("-retryMode", "continue") }
+    # continuation mode -> the agent is told to FIX the inherited worktree, not start over.
+    # Mode ladder: conflict (merge-main mandate) > escalate (scope lifted after
+    # escalate_after consumed retries) > continue (in-scope fix).
+    if ($resume) {
+        $mode = "continue"
+        $fc = $script:failCounts[$task.id]; if (-not $fc) { $fc = 0 }
+        if ($script:conflictPending.ContainsKey($task.id)) {
+            $mode = "conflict"
+            $script:conflictPending.Remove($task.id)
+        } elseif ($fc -ge $escalateAfter) {
+            $mode = "escalate"
+        }
+        $argList += @("-retryMode", $mode)
+        if ($mode -ne "continue") {
+            Write-Host "[i] Task #$($task.id): retry mode = $mode" -ForegroundColor Yellow
+        }
+    }
     $proc = Start-Process powershell.exe -ArgumentList ($argList -join ' ') -PassThru -WindowStyle $agentWindows
     Write-Host "[>] SLOT $slot -> task #$($task.id) [$rKey / lane '$(Get-LaneKey $task)'] branch $branchName (pid $($proc.Id))" -ForegroundColor Green
 
@@ -379,8 +403,21 @@ function Complete-Agent($info) {
             $preMergeSha = (& git -C $info.gitRoot rev-parse HEAD 2>$null)
             & git -C $info.gitRoot merge --no-ff $info.branch -m "ralph: merge task #$($t.id) - $desc" 2>&1 | Out-Null
             if ($LASTEXITCODE -ne 0) {
+                # Capture the conflicting files BEFORE aborting, then send the task back for
+                # IN-WORKTREE resolution: the agent is permitted (exception) to merge the
+                # integration branch into its own branch and resolve, budgeted like a fail.
+                $confFiles = ((& git -C $info.gitRoot diff --name-only --diff-filter=U 2>$null) -join "`n")
                 & git -C $info.gitRoot merge --abort 2>$null | Out-Null
-                Write-Host "[X] Task #$($t.id): MERGE CONFLICT - aborted. Branch kept for manual resolve: $($info.branch)" -ForegroundColor Red
+                $n = $script:failCounts[$t.id]; if (-not $n) { $n = 0 }
+                if ($n -lt $maxFailRetries) {
+                    $script:failCounts[$t.id] = $n + 1
+                    $script:conflictPending[$t.id] = $true
+                    Save-RetryContext $t.id ($n + 1) ("MERGE CONFLICT: your branch conflicts with the integration branch '$($info.baseBranch)'. Conflicting files:`n$confFiles`n`nResolve IN YOUR WORKTREE: you are PERMITTED (exception to the git rules) to run 'git merge $($info.baseBranch)' on your current branch, resolve the conflicts preserving BOTH sides' intent, commit the merge, re-run the repo's unit tests, then write the result file.")
+                    Write-Host "[~] Task #$($t.id): MERGE CONFLICT - RE-QUEUED for in-worktree resolution ($($n + 1)/$maxFailRetries)" -ForegroundColor Yellow
+                    Release-Claim $t.id
+                    return "conflict_requeue"
+                }
+                Write-Host "[X] Task #$($t.id): MERGE CONFLICT - retry budget exhausted. Branch kept for manual resolve: $($info.branch)" -ForegroundColor Red
                 $outcome = "merge_conflict"
             } else {
                 # ---- post-merge verification gate (semantic-conflict catcher) ----
@@ -493,7 +530,8 @@ $script:timeoutCounts = @{}   # taskId -> watchdog-kill re-queues used this sess
 $script:failCounts    = @{}   # taskId -> informed retries used this session
 $script:fastFails     = 0     # consecutive instant (<60s) agent deaths -> environment problem guard
 $script:fatalEnv      = $false # exit 4 seen (credits/auth) -> abort the whole run immediately
-$stats = @{ merged = 0; conflicts = 0; skipped = 0; failed = 0; requeued = 0; timeoutRequeues = 0; failRetries = 0; verifyReverts = 0 }
+$script:conflictPending = @{} # taskId -> next spawn is a conflict-resolution retry (merge main in-worktree)
+$stats = @{ merged = 0; conflicts = 0; skipped = 0; failed = 0; requeued = 0; timeoutRequeues = 0; failRetries = 0; verifyReverts = 0; conflictRequeues = 0 }
 $freeSlots = New-Object System.Collections.ArrayList
 1..$agents | ForEach-Object { [void]$freeSlots.Add($_) }
 $launchedTotal = 0
@@ -553,6 +591,7 @@ while ($true) {
                 "timeout_requeue" { $stats.timeoutRequeues++ } # watchdog kill - fresh blind re-run
                 "fail_requeue"    { $stats.failRetries++ }     # informed retry (failure context injected)
                 "verify_requeue"  { $stats.verifyReverts++ }   # merge undone by verify gate - informed retry
+                "conflict_requeue" { $stats.conflictRequeues++ } # in-worktree conflict resolution retry
                 "fatal_env"       { $script:fatalEnv = $true } # credits/auth dead - abort below, task NOT failed
                 default           { $stats.failed++;   $failedIds += $id }
             }
@@ -600,6 +639,7 @@ Write-Host "Quota re-queues  : $($stats.requeued)"  -ForegroundColor $(if ($stat
 Write-Host "Timeout re-queues: $($stats.timeoutRequeues)" -ForegroundColor $(if ($stats.timeoutRequeues) { 'Yellow' } else { 'Gray' })
 Write-Host "Fail retries     : $($stats.failRetries)"     -ForegroundColor $(if ($stats.failRetries)     { 'Yellow' } else { 'Gray' })
 Write-Host "Verify reverts   : $($stats.verifyReverts)"   -ForegroundColor $(if ($stats.verifyReverts)   { 'Yellow' } else { 'Gray' })
+Write-Host "Conflict re-queues: $($stats.conflictRequeues)" -ForegroundColor $(if ($stats.conflictRequeues) { 'Yellow' } else { 'Gray' })
 Write-Host ""
 Write-Host "Conflict/skipped branches are kept as ralph/task-<id> for manual resolve." -ForegroundColor Gray
 Write-Host "Stale worktrees (if any): git worktree list  (in each gitRoot)" -ForegroundColor Gray

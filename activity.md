@@ -34,6 +34,190 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #44 — chore: final sweep after Name Gen consolidation - rename label, navigation spec, bundle check and docs
+
+**Repo:** combat (monk_combat_app) · **Lane:** generators · **Branch:** ralph/task-44 · **Commit:** 606e92b
+
+### What changed
+- **index.html:** renamed the `data-tab="namegen"` button label from `Name Gen` to `Names` and moved it to the end of `.tab-nav`; final order is Stats, PC Characteristics, Resurrection, Inventory, Flavor, Skills, Session Notes, Names. `data-tab="namegen"` unchanged (specs depend on it).
+- **styles.css:** removed dead rules for the removed tabs — `#tab-shenanigans input[readonly]`, `#tab-shenanigans .one-liner-box(+button)`, `#btnGetName`, `#btnSaveAlias`, and the `#tab-npc-names .one-liner-box` responsive block. `.alias-table` kept (still used by the Names log).
+- **test/e2e/import-export.spec.js:** the round-trip fixture no longer clicks the removed Shenanigans/Familiars tabs; it now generates+saves an alias and a familiar through the Names tab (`#genGenerate`, `#genTypeButtons`, `#genFamGroups`, `#genAlias*`/`#genFam*` modals). Bundle round-trip assertions unchanged (st.aliases still in bundle; familiar log stays in `familiars_v1` outside the bundle — existing behavior).
+- **test/e2e/tabs-navigation.spec.js:** reordered the `All tabs are clickable` list so `namegen` is last (1:1 with the real nav) and added two tests — the button label reads `Names`, and the Names tab opens with `#genOutput` + the type buttons.
+- **BEHAVIOR_DOCUMENTATION.md / TEST_CASES.md:** replaced the separate Shenanigans / Familiar Names / NPC sections with one `Names (Name Gen)` section documenting the 3 generators, save routing (alias→st.aliases, familiar→localStorage['familiars_v1'], npc→st.npcNames), per-type sub-UI and the 3 Save modals; updated the JSON-files list (shenanigans/familiars/npc-names now feed the Names tab) and the TOC/summary counts.
+
+### Verify
+- Residue grep (attach*/btn*/data-tab of the 6 removed tabs, fakeNameOutput/famNameOutput/npcNameOutput) → 0 hits in code.
+- data-loading.spec.js already covers all five flavor JSONs + familiars + npc-names through the two new tabs (no change needed).
+- styles.css brace balance verified (290/290). app.js namegen wiring intact (tabMap + attachNamegen guard).
+- Repo is e2e-only (no `test:unit`); Playwright e2e intentionally left to the post-merge verify gate.
+- Scope: only the 6 touched files, all within task #44's `files` list.
+
+
+## Task #43 — refactor: remove legacy NPC Names tab superseded by Name Gen tab
+
+**Repo:** combat (monk_combat_app) · **Branch:** ralph/task-43 · **Commit:** b0c8091
+
+### What
+Removed the legacy standalone NPC Names tab now that the consolidated **Name Gen** tab covers NPC name generation writing to the same `st.npcNames` store.
+
+### Changes
+- **index.html:** removed `data-tab="npc-names"` button, `#tab-npc-names` div, and `<script src="modules/npc-names.js">`.
+- **app.js:** removed `'npc-names'` from `tabMap`, the `attachNpcNames()` boot call, and the now-dead `window.renderNpcNamesUI?.()` hook in `save()`. Kept `st.npcNames` default + normalization (lines ~131/782/1117) — Name Gen persists there.
+- **Deleted:** `modules/npc-names.js`, `tabs/npc-names.html`, `test/e2e/npc-names.spec.js` (coverage now via namegen-ui.spec.js).
+- **test/e2e/tabs-navigation.spec.js:** removed `'npc-names'` from the clickable-tabs list (now 1:1 with the 8 real tab-nav buttons).
+- **test/e2e/data-loading.spec.js:** added a `Data Loading - NPC Names (npc-names.json via Name Gen)` describe block verifying npc-names.json loads and produces varied names through the NPC type of Name Gen.
+- **styles.css:** untouched — not in the task `files` scope, and `.npc-options`/`.npc-fieldset` are reused by Name Gen's NPC sub-UI.
+
+### Verify
+- `grep` for `attachNpcNames|btnGenerateName|tabs/npc-names|renderNpcNamesUI` → 0 hits in code (only the retained `npc-names.json` fetch in modules/namegen.js remains).
+- `node --check` clean on app.js and the edited specs.
+- Combat repo has no unit infrastructure; e2e (`npm test`) is left to the post-merge verify gate on port 45278.
+
+
+## Task #42 — refactor: remove legacy Familiars tab superseded by Name Gen tab
+
+**Repo:** combat (monk_combat_app) · **Lane:** generators · **Commit:** f571298
+
+### What
+Removed the legacy Familiars tab now that Name Gen (task 40) covers familiar generation over the same store.
+
+- **index.html:** removed `<button data-tab="familiars">`, `<div id="tab-familiars">`, and `<script src="modules/familiars.js">`.
+- **app.js:** removed `'familiars'` from `tabMap`, the `attachFamiliars()` boot call, both `renderFamTable()` call sites (in `save()` and after import), and the entire historical duplicate of the familiars block (`loadFamiliars`, `famPickRandom`, `FAM_LS_KEY`/records helpers, modal, `renderFamTable`, `attachFamiliars`, and the private `escapeHtml` used only by it). The legacy `st.familiars` bundle field (import/export migration) was left untouched — separate live contract, not the tab.
+- **modules/familiars.js, tabs/familiars.html:** deleted.
+- **styles.css:** untouched — `.fam-btn`/`.fam-groups` are reused by the Name Gen tab.
+
+### Tests
+- Deleted `test/e2e/crud-aliases-familiars.spec.js` (only tested the removed tab; namegen-ui.spec.js already covers familiar generate/save/delete via the same FAM_LS_KEY store).
+- `tabs-navigation.spec.js`: removed `familiars` from the tab list and the Familiars smoke test.
+- `data-loading.spec.js`: routed the familiars.json checks through Name Gen (Familiar type + group buttons → #genOutput); also routed the stale Shenanigans block (task-41 leftover referencing the removed shenanigans tab) through Name Gen's alias generator so the data-loading gate is green.
+
+### Verify
+- `node --check` clean on app.js, data-loading.spec.js, tabs-navigation.spec.js.
+- e2e not run from agent (shared port 45278 / orchestrator post-merge gate).
+- DONE grep: `attachFamiliars`, `tabs/familiars`, `renderFamTable` gone from app code; `btnFamSave` remains only in import-export.spec.js / BEHAVIOR_DOCUMENTATION.md, which are outside task 42's boundary and assigned to task 44's final sweep.
+
+
+## Task #41 - refactor: remove legacy Shenanigans tab superseded by Name Gen tab
+
+**Repo:** combat (monk_combat_app) · **Lane:** generators · **Status:** done
+
+**What:** Retry of the Shenanigans-tab removal. Predecessor commit `888aa3f` already removed the tab (button, `#tab-shenanigans`, `modules/aliases.js`, `tabs/shenanigans.html`, all alias/shenanigans wiring in `app.js`, `shenanigans-ui.spec.js`, and the Aliases describe in `crud-aliases-familiars.spec.js`) — that work is correct and kept. The verify gate (`namegen-ui tabs-navigation critical-path`) had 1 red: `tabs-navigation.spec.js › Familiars tab shows fam groups and log`.
+
+**Diagnosis:** Task 40's Name Gen tab reuses the `.fam-groups` / `.fam-btn` classes (`<div id="genFamGroups" class="fam-groups hidden">`). `loadTabs()` injects every tab into the DOM at boot, so the Familiars test's unscoped `page.locator('.fam-groups')` matched 2 elements → Playwright strict-mode violation, and `.fam-btn.first()` resolved to Name Gen's hidden button (Name Gen loads before Familiars in tabMap order) → not visible.
+
+**Fix (within #41 files boundary):**
+- `test/e2e/tabs-navigation.spec.js` — scoped the Familiars smoke-test class selectors to `#tab-familiars .fam-groups` / `#tab-familiars .fam-btn`.
+- `test/e2e/crud-aliases-familiars.spec.js` — defensively scoped the identical `.fam-btn[data-famcat=...]` click selectors to `#tab-familiars` (same latent collision; unique-id locators like `#famNameOutput`/`#famLog`/`.alias-del` are Familiars-only and left untouched — Name Gen uses `.gen-del`).
+
+**Verify:** `node --check` clean on both specs and `app.js`. e2e not run locally (shared ports; post-merge gate owns it). Committed as `e04697f`.
+
+**Out of scope (not touched):** `tabs/namegen.html` / `modules/namegen.js` own the reused classes but are outside #41's `files` list; the fix lives correctly in the test layer.
+
+
+## Task #40 — feat: add consolidated Name Gen tab with per-type save routing for aliases, familiars and NPC names
+
+**Repo:** combat (monk_combat_app) · **Lane:** generators · **Branch:** ralph/task-40 · **Commit:** 094d691
+
+**What:** New ADDITIVE 'Name Gen' tab consolidating Alias / Familiar / NPC generators into one registry-driven module with a single output zone, Generate/Save buttons and per-type Save modals. Save routes to the CORRECT store based on active type — st.aliases (+window.save), localStorage['familiars_v1'] (FAM_LS_KEY), st.npcNames (+window.save) — reusing the exact record schemas from the old modules so live-character data is visible 1:1. Type switch clears the output, disables Save and swaps the log table; Familiar generates via its 7 group buttons (Generate hidden), NPC via race/gender radios (distinct name attrs to avoid cross-tab radio collision; toblin hides gender).
+
+**Files:** modules/namegen.js (new), tabs/namegen.html (new), test/e2e/namegen-ui.spec.js (new), index.html (tab button + div + script), app.js (tabMap + attachNamegen guard), styles.css (#genOutput sizing, reuses .flavor-btn/.flavor-grid).
+
+**Red lines respected:** old shenanigans/familiars/npc-names tabs & modules NOT touched (removed later in 41-43); no persistence schema/key changes; no runtime artifacts committed.
+
+**Verify:** node --check on namegen.js + app.js green. e2e (npm test -- namegen-ui critical-path) left to the post-merge gate (shared port 45278).
+
+
+## [2026-07-18 07:35] - Task #34: chore: final sweep after Flavor consolidation - navigation spec, docs and dead code check
+
+**Repo:** combat (monk_combat_app) · **Lane:** flavor · **Branch:** ralph/task-34 · **Commit:** 7ffac26
+
+**Status:** ✅ Complete
+
+**Problem:** Task 34's in-scope work was already done, but the verify gate kept bouncing the task on `attack-bonuses.spec.js:111` ("Attack bonuses update on level up"). Root cause: predecessor agents edited SIX e2e specs OUTSIDE task 34's `files` scope — they removed the `beforeEach` pollers (present on `main`) that auto-click cardMonk to dismiss the multiclass level-up modal, and replaced attack-bonuses' poller with a fragile explicit 4-click loop that went red under full-suite load. The multiclass modal was introduced by a separate task (`ebf0b41`), not the flavor work, so `main`'s pollers are the correct handling.
+
+**What was done:**
+- Reverted the six out-of-scope specs to `main` (`git checkout main --`): attack-bonuses, derived-values, import-export, npc-names, proficiency-toggles, skills-features — restoring the working level-up-modal pollers and the data-driven npc name pools. Branch diff vs main is now ONLY the four in-scope files.
+- 34.1 RECON: project grep for `attachOneLiners|attachExcuses|attachInsults|btnCritMiss|btnExLifeWisdom|btnGenerateInsult|olCritMiss|exLifeWisdom|tabs/liners|tabs/excuses|tabs/insults` → 0 code matches (only legit Flavor section labels + `*.json` data-source references remain).
+- 34.2: `tabs-navigation.spec.js` has 'Can click Flavor tab' and an 'All tabs are clickable' list 1:1 with index.html (stats, pcchar, resurrection, inventory, shenanigans, flavor, familiars, skills, sessionNotes, npc-names — quests commented out at index.html:117). `data-loading.spec.js` covers all 5 Flavor JSONs (one-liners, excuses, insults, dark-jokes, tasha-jokes) via correct `data-flavor` ids verified against modules/flavor.js.
+- 34.3: `BEHAVIOR_DOCUMENTATION.md` §5.5 collapsed to a single Flavor tab section (17 types / clear+random+active / 5 JSON sources) with sections renumbered; `TEST_CASES.md` §16 FLAVOR TAB added (main had no separate old-tab sections). No stale One-Liners/Excuses/Insults UI sections remain (§15 headers are data-file references, valid).
+- 34.4: `index.html`/`app.js`/`styles.css` byte-identical to main → no in-scope dead code; `.one-liner-box` kept (shared class still used by #tab-npc-names and #tab-shenanigans).
+
+**Verification:**
+- Static review of specs only — e2e is forbidden by task step 34.1 ("npm е забранен за e2e — само прегледай спековете статично") and shared-port policy.
+- Branch diff vs main = exactly the 4 in-scope files (BEHAVIOR_DOCUMENTATION.md, TEST_CASES.md, test/e2e/data-loading.spec.js, test/e2e/tabs-navigation.spec.js).
+- Sole gate blocker `attack-bonuses.spec.js` restored to its green `main` version (poller-based modal dismissal).
+
+**Files modified:**
+- BEHAVIOR_DOCUMENTATION.md
+- TEST_CASES.md
+- test/e2e/data-loading.spec.js
+- test/e2e/tabs-navigation.spec.js
+- (reverted to main, out-of-scope cleanup) test/e2e/{attack-bonuses,derived-values,import-export,npc-names,proficiency-toggles,skills-features}.spec.js
+
+**Git commit:** `7ffac26` — `chore: final sweep after Flavor consolidation - navigation spec, docs and dead code check`
+
+---
+
+
+## Task 33 — refactor: remove legacy Insults tab superseded by Flavor tab
+
+**Repo:** combat (monk_combat_app) · **Lane:** flavor · **Branch:** ralph/task-33 · **Commit:** 706ece6
+
+### What
+Removed the legacy Insults tab whose three generators (Insult, Dark Joke, Tasha's Joke) are all already provided by the consolidated Flavor tab (task 30).
+
+### Changes
+- **index.html:** removed `<button data-tab="insults">`, `<div id="tab-insults">`, and `<script src="modules/insults.js">`.
+- **app.js:** removed `'insults': 'tabs/insults.html'` from `tabMap`, the `window.renderInsultsUI?.()` call in `save()`, and the `attachInsults()` guard call in boot.
+- **styles.css:** deleted the entire `.insult-*` / `.dark-joke-*` / `.tasha-*` block including the `insultAppear` / `insultSpin` keyframes (lines 1382–1671). Confirmed via grep that the Flavor tab uses its own `.flavor-*` classes and none of these.
+- **Deleted files:** `modules/insults.js` (incl. the large commented-out AI/bot block — preserved in git history), `tabs/insults.html`, `test/e2e/insults.spec.js`.
+- **Specs:** `tabs-navigation.spec.js` and `data-loading.spec.js` already contained no insults references (removed during tasks 31/32), so no edits were required.
+
+### Kept (live data contract)
+`insults.json`, `dark-jokes.json`, `tasha-jokes.json` — still consumed by the Flavor tab.
+
+### Verify
+- grep for `attachInsults` / `btnGenerateInsult` / `tabs/insults` / `renderInsultsUI` / `data-tab="insults"` → 0 hits in code (only legitimate Flavor `data-flavor="dark-joke"|"tasha"` and json-url references remain).
+- No unit infrastructure in this repo → unit step skipped. e2e (`flavor-ui`, `tabs-navigation`, `data-loading`, `critical-path`) left to the post-merge verify gate.
+
+
+## Task 32 — refactor: remove legacy Excuses tab superseded by Flavor tab
+
+**Repo:** combat (monk_combat_app) · **Branch:** ralph/task-32 · **Commit:** 845dfc8
+
+### What changed
+- **index.html:** removed `<button data-tab="excuses">`, `<div id="tab-excuses">` and `<script src="modules/excuses.js">`.
+- **app.js:** removed the `'excuses': 'tabs/excuses.html'` tabMap entry, the historically duplicated `loadExcuses`/`attachExcuses` block (~1220-1258), and the `attachExcuses()` guard call. `pickRandom` helper kept (still used by Shenanigans).
+- **Deleted:** `modules/excuses.js`, `tabs/excuses.html`, `test/e2e/excuses-ui.spec.js`.
+- **test/e2e/tabs-navigation.spec.js:** dropped `excuses` from the all-tabs list; rewrote the "Excuses tab shows all categories" smoke test to assert the 5 excuses `data-flavor` buttons in the Flavor tab.
+- **test/e2e/data-loading.spec.js:** redirected the `Data Loading - Excuses` describe and the `Excuses generate different results` variety test through the Flavor tab (`#flavorOutput` + `[data-flavor]` buttons).
+- **Kept:** `excuses.json` (Flavor tab data source).
+
+### Verification
+- `grep` for `exLifeWisdom|btnExLifeWisdom|attachExcuses|tabs/excuses|data-tab="excuses"|tab-excuses|modules/excuses` → 0 matches in code.
+- Remaining `excuses` mentions are only the JSON data file, the Flavor registry/tab, the redirected specs, and BEHAVIOR_DOCUMENTATION.md (out of scope, task 34).
+- `node --check` passes for app.js, modules/flavor.js and both modified specs.
+- No unit infrastructure in combat → unit step skipped per repos.json; e2e reserved for the post-merge verify gate.
+
+
+## Task 31 — refactor: remove legacy One-Liners tab superseded by Flavor tab
+
+**Repo:** combat (monk_combat_app) · **Branch:** ralph/task-31 · **Commit:** 9ca2195
+
+### What changed
+- **index.html** — removed the `data-tab="liners"` button, the `#tab-liners` div, and the `modules/one-liners.js` script tag.
+- **app.js** — removed the `'liners'` tabMap entry, the `attachOneLiners()` boot call, and the whole legacy One-Liners block (`__ol_cache`/`OL_URL`/`loadOneLiners`/`attachOneLiners`). **Kept `pickRandom`** (still used by Shenanigans).
+- **Deleted** `modules/one-liners.js`, `tabs/liners.html`, `test/e2e/one-liners-ui.spec.js`. `one-liners.json` stays (Flavor reads it).
+- **test/e2e/tabs-navigation.spec.js** — swapped `liners`→`flavor` in the clickable-tabs list; rewrote the One-Liners smoke check to assert the 9 one-liner buttons in `#tab-flavor`; added multiclass level-up modal clicks (2× Monk for the 1→3 Long Rest) in the Stats-persist test.
+- **test/e2e/data-loading.spec.js** — redirected the 9 One-Liners data checks + the variety test through the Flavor tab (`#tab-flavor [data-flavor=...]` → `#flavorOutput`); added 4× Monk modal clicks for the 1→5 Long Rest.
+
+### Root cause of the previous failure (fixed)
+The recurring red test `data-loading › skills-and-features.json loads for Level 5` was NOT a level-up problem. Its `text=Extra Attack` locator resolved to **two** elements — the accordion `<summary>[Monk] Lv 5 — Extra Attack</summary>` AND the hidden level-up modal's `#monkFeatureLabel` ("Extra Attack, Stunning Strike") — a Playwright **strict-mode violation**. Since the multiclass modal is created once and kept (hidden) in the DOM, this only bites tests that trigger a level-up. Fix: scope the assertion to `#featuresAccordion details.feat summary` with `hasText`.
+
+### Verify
+`npx playwright test flavor-ui tabs-navigation data-loading critical-path` → **88 passed** (server auto-managed by Playwright on 45278, torn down after). Step 31.4 grep (`olCritMiss|btnCritMiss|attachOneLiners|tabs/liners`) returns 0 code matches. `node --check` clean. All edits within task 31's `files` scope.
+
+
 ## Task 30 — feat: add consolidated Flavor tab with registry-driven line generator for all 17 flavor types
 
 **Repo:** combat (monk_combat_app) · **Branch:** ralph/task-30 · **Commit:** 36fad8f
@@ -344,6 +528,15 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
+
+
+
+
 
 
 
