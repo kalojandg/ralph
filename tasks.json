@@ -1,164 +1,170 @@
-[
+﻿[
     {
-        "id": 60,
-        "category": "feature",
-        "repo": "combat",
-        "lane": "tts",
-        "files": [
-            "modules/tts.js",
-            "index.html",
-            "test/e2e/tts-core.spec.js"
-        ],
-        "verify": [
-            "npm test -- tts-core"
-        ],
-        "description": "feat(tts): add on-demand Google Cloud TTS module with SSML mocking delivery and speechSynthesis fallback",
-        "specRef": "monk-combat-structure.md (файлова карта; команди/портове; червени линии 1 и 4)",
-        "notes": "ЦЕЛ: гласът на Пийс — мъж, монк, юан-ти, подигравателен тон. Вграденият speechSynthesis вече беше пробван и ОТХВЪРЛЕН от потребителя: на Android има само женски български глас, а сваленият питч го прави хриплив (питчът мести височина, но не и форманти). Затова минаваме на Google Cloud TTS.\n\n=== АРХИТЕКТУРНИ РЕШЕНИЯ НА ПОТРЕБИТЕЛЯ (не ги предоговаряй) ===\n1. ON-DEMAND, не предварително генериране. Апката е чист CSS/vanilla JS без фреймуърк и бъндълът НЕ трябва да расте. Никакви .mp3 файлове в репото.\n2. БЕЗ КЕШ. Изрично изискване — нищо не се пази на устройството. Всеки клик = нова заявка, пусни, изхвърли. НЕ добавяй IndexedDB/localStorage/Cache API за аудио.\n3. API КЛЮЧЪТ СЕ КОМИТВА хардкоднат най-отгоре в модула, точно както firebaseConfig в shared-inventory/modules/firebase.js. Потребителят знае, че не е секюър, и е приел риска (репото е за лично ползване). НЕ измисляй .env, прокси или build стъпка.\n   РЕАЛНИЯТ КЛЮЧ (потребителят го предостави изрично за комитване; ограничен е по HTTP referrer и само за Cloud Text-to-Speech API):\n   apiKey: 'AIzaSyDsnq5iBTVDL7eC9K9TAGSG0CEYhsOt-hY'\n   Сложи го директно в TTS_CONFIG. НЕ го слагай никъде другаде — нито в тестове, нито в документация, нито в коментари.\n\n=== GOOGLE CLOUD TTS REST КОНТРАКТ (ПРОВЕРЕН ЕМПИРИЧНО СРЕЩУ ЖИВОТО API — НЕ ГО ПРЕДОГОВАРЯЙ) ===\nPOST https://texttospeech.googleapis.com/v1/text:synthesize?key=<API_KEY>\nbody: { input: { ssml: '<speak>...</speak>' }, voice: { languageCode: 'bg-BG', name: 'bg-BG-Chirp3-HD-Sadaltager' }, audioConfig: { audioEncoding: 'MP3', speakingRate: 0.85 } }\nresponse: { audioContent: '<base64 mp3>' }\n\nГЛАСЪТ Е ИЗБРАН И ЗАКОВАН ОТ ПОТРЕБИТЕЛЯ след прослушване:\n  bg-BG -> 'bg-BG-Chirp3-HD-Sadaltager' (MALE)\n  en-US -> 'en-US-Chirp3-HD-Sadaltager' (MALE)  ← същият глас, за tasha-jokes.json\nПодавай ВИНАГИ voice.name (не ssmlGender) — иначе Google връща друг глас.\n\n⛔ ПРОВЕРЕНИ ОГРАНИЧЕНИЯ НА CHIRP3-HD ГЛАСОВЕТЕ (всяко от тях е тествано с реална заявка):\n  1. audioConfig.pitch НЕ СЕ ПОДДЪРЖА -> HTTP 400 'This voice does not support pitch parameters at this time.'\n     НЕ слагай pitch в audioConfig. НЕ го слагай и в TTS_CONFIG. Това би счупило ВСЯКА заявка.\n     Дълбочината идва от самия глас — той вече е мъжки, не се коригира с параметри.\n  2. input.prompt (стилови инструкции на човешки език) НЕ СЕ ПОДДЪРЖА -> HTTP 400 'Prompt is only supported for Gemini TTS.'\n     Това е друг бекенд (Gemini TTS). НЕ го ползвай тук.\n  3. audioConfig.speakingRate РАБОТИ (0.25..4.0, 1.0 = нормално). Ползвай ~0.85 за провлачения тон.\n  4. input.ssml РАБОТИ — <break> и <prosody rate> се приемат. Върху това стъпва подигравателният тайминг.\n     ⚠ prosody pitch=\"-2st\" се приема синтактично, но е НЕИЗВЕСТНО дали се чува (питчът не се поддържа).\n     Не разчитай на него — носещият ефект да е от <break> паузите и от rate.\n  5. audioEncoding 'MP3' РАБОТИ — отговорът е готов за <audio>, не се налага WAV обработка.\n  6. Лимитът е 5000 байта на заявка. ПРОВЕРЕНО върху реалните данни: най-дългата от 1157 реплики е 344 байта (7% от лимита), със SSML таговете най-лошият случай е ~863 байта (17%). НЕ строй механизъм за разделяне по размер — няма реплика, която да го изисква. Една реплика = една заявка.\n\n=== SSML (голямото предимство пред speechSynthesis) ===\nGoogle Cloud TTS ПОДДЪРЖА SSML — за разлика от браузърния speechSynthesis, където <break> се чете като текст. Ползвай истински тагове за подигравателната интонация:\n  - <break time=\"350ms\"/> след пунктуация — драматичните паузи носят подигравката\n  - <prosody rate=\"85%\" pitch=\"-2st\"> на последната част — провлачен, снизходителен финал\n⚠ Текстът ЗАДЪЛЖИТЕЛНО се XML-escape-ва преди вграждане в SSML: & -> &amp;, < -> &lt;, > -> &gt;, \" -> &quot;, ' -> &apos;. Репликите съдържат кавички и апострофи (напр. \"Tasha's Joke\") — неескейпнат апостроф чупи заявката.\n\n=== ЕЗИК ===\nКирилица (/[Ѐ-ӿ]/) -> languageCode 'bg-BG' + name 'bg-BG-Chirp3-HD-Sadaltager'; иначе -> 'en-US' + name 'en-US-Chirp3-HD-Sadaltager'. tasha-jokes.json е на английски, останалите JSON-и са на български. Дръж двойката {languageCode, name} в TTS_CONFIG.voices като { 'bg-BG': '...', 'en-US': '...' }.\n\n=== ВЪЗПРОИЗВЕЖДАНЕ ===\nbase64 -> Uint8Array.from(atob(b64), c => c.charCodeAt(0)) -> new Blob([bytes], {type:'audio/mpeg'}) -> URL.createObjectURL -> new Audio(url).play().\n⚠ ЗАДЪЛЖИТЕЛНО URL.revokeObjectURL() в 'ended' И в 'error' И при stop() — без това тече памет, а изискването е нулево задържане.\n\n=== FALLBACK (не оставяй тишина) ===\nПри липсващ/placeholder ключ, мрежова грешка, non-2xx отговор или липсващ audioContent -> падни към window.speechSynthesis със същия текст. Апката трябва да проговаря дори без ключ и офлайн.\n\n=== ПУБЛИЧЕН API НА МОДУЛА ===\nIIFE в стила на другите modules/ (виж modules/flavor.js). Изложи window.MonkTTS = { speak(text, {onstart, onend}), stop(), isSpeaking(), isSupported() }.\nonend се вика ВИНАГИ — и при успех, и при грешка, и при прекъсване — за да може UI-ът да се върне в покой.\n\n=== ТЕСТОВЕ ===\n⛔ Тестовете НИКОГА не викат реалното API. Стъбвай window.fetch в page.evaluate и връщай фиксиран малък base64 mp3. Проверявай ФОРМАТА на заявката (url съдържа texttospeech.googleapis.com, method POST, body.voice.ssmlGender==='MALE', body.audioConfig.audioEncoding==='MP3', body.input.ssml съдържа <break), не звука.",
-        "steps": [
-            {
-                "id": "60.1",
-                "phase": "RECON",
-                "action": "Прочети C:/Users/kaloyan.georgiev/Projects/shared-inventory/modules/firebase.js (редове 1-26) — това е ЕТАЛОНЪТ за това как се комитва конфиг с ключ: обикновен const обект най-отгоре на модула, с коментар-заглавие. Прочети modules/flavor.js (IIFE стил, 'use strict', window.attachX експорт най-отдолу). Прочети index.html редове 155-166 — реда на <script> таговете. Прочети test/e2e/flavor-ui.spec.js редове 27-42 — beforeEach патърна (goto '/', localStorage.clear, reload, waitForFunction window.__tabsLoaded, клик на таб)."
-            },
-            {
-                "id": "60.2",
-                "phase": "IMPLEMENT",
-                "action": "RED — създай test/e2e/tts-core.spec.js ПЪРВО, преди модула. Стъбвай window.fetch чрез page.addInitScript, за да е активен още при зареждане. Тестове: (а) window.MonkTTS съществува и има speak/stop/isSpeaking/isSupported; (б) speak('Не мърдай!') прави POST към url, съдържащ 'texttospeech.googleapis.com/v1/text:synthesize', с body.voice.languageCode==='bg-BG' и body.voice.ssmlGender==='MALE'; (в) латински текст дава body.voice.languageCode==='en-US'; (г) body.input.ssml започва с '<speak>' и съдържа поне един '<break'; (д) текст с апостроф и амперсанд ('Tasha\\'s & co') излиза XML-escape-нат в ssml-а (&apos; / &amp;), без сурови символи; (е) body.audioConfig.audioEncoding==='MP3', body.audioConfig.speakingRate е под 1, и КЛЮЧЪТ 'pitch' ИЗОБЩО ГО НЯМА в audioConfig (Chirp3-HD връща 400 при pitch — този тест е регресионната защита срещу връщането му); (е2) body.voice.name==='bg-BG-Chirp3-HD-Sadaltager' за кирилица и 'en-US-Chirp3-HD-Sadaltager' за латиница, и body.input НЕ съдържа ключ 'prompt'; (ж) при fetch, който отговаря с 403, speak НЕ хвърля и onend се вика (fallback пътят); (з) speak('') не прави заявка изобщо. Пусни ги и се увери, че са ЧЕРВЕНИ по правилната причина (MonkTTS не съществува)."
-            },
-            {
-                "id": "60.3",
-                "phase": "IMPLEMENT",
-                "action": "GREEN — създай modules/tts.js. Структура: (1) най-отгоре секция '// ─── CONFIG ───' с const TTS_CONFIG = { apiKey: '<ключът от notes>', voices: { 'bg-BG': 'bg-BG-Chirp3-HD-Sadaltager', 'en-US': 'en-US-Chirp3-HD-Sadaltager' }, speakingRate: 0.85, breakMs: 350 } и коментар, че ключът се комитва нарочно (лично репо) и се ограничава по HTTP referrer — виж TTS-SETUP.md. ⛔ БЕЗ поле pitch — Chirp3-HD го отхвърля с 400. (2) detectLang(text) по кирилица. (3) escapeXml(s). (4) buildSsml(text) — режи по пунктуация (.!?… силна; ,;: само ако парчето е >=18 знака) и вмъквай <break time=\"<breakMs>ms\"/> между парчетата; обвий последното парче в <prosody rate=\"80%\"> за провлачения финал (БЕЗ pitch атрибут — питчът не се поддържа от този глас); целият низ в <speak>...</speak>. (5) synthesize(text) -> fetch POST с горния body, върни Blob. (6) speak(text, opts) -> synthesize -> objectURL -> Audio.play(); при ГРЕШКА или placeholder ключ -> fallbackSpeak(text, opts) през speechSynthesis. (7) stop() -> pause + revokeObjectURL + speechSynthesis.cancel(). (8) revokeObjectURL в ended/error/stop. (9) window.MonkTTS = {...} накрая. Никакъв кеш."
-            },
-            {
-                "id": "60.4",
-                "phase": "IMPLEMENT",
-                "action": "Добави <script src=\"modules/tts.js\"></script> в index.html в блока 'Module scripts (load before app.js)', ПРЕДИ modules/flavor.js (флейвър модулът ще го ползва в таск 70). Не пипай нищо друго в index.html."
-            },
-            {
-                "id": "60.5",
-                "phase": "DONE",
-                "action": "Пусни 'npm test -- tts-core' — зелено. Провери с git diff, че НЕ си пипал app.js, другите modules/*, другите спекове и че никъде няма истински API ключ (само placeholder-а). Commit."
-            }
-        ],
-        "passes": false
+        "id":  60,
+        "category":  "feature",
+        "repo":  "combat",
+        "lane":  "tts",
+        "files":  [
+                      "modules/tts.js",
+                      "index.html",
+                      "test/e2e/tts-core.spec.js"
+                  ],
+        "verify":  [
+                       "npm test -- tts-core"
+                   ],
+        "description":  "feat(tts): add on-demand Google Cloud TTS module with SSML mocking delivery and speechSynthesis fallback",
+        "specRef":  "monk-combat-structure.md (файлова карта; команди/портове; червени линии 1 и 4)",
+        "notes":  "ЦЕЛ: гласът на Пийс — мъж, монк, юан-ти, подигравателен тон. Вграденият speechSynthesis вече беше пробван и ОТХВЪРЛЕН от потребителя: на Android има само женски български глас, а сваленият питч го прави хриплив (питчът мести височина, но не и форманти). Затова минаваме на Google Cloud TTS.\n\n=== АРХИТЕКТУРНИ РЕШЕНИЯ НА ПОТРЕБИТЕЛЯ (не ги предоговаряй) ===\n1. ON-DEMAND, не предварително генериране. Апката е чист CSS/vanilla JS без фреймуърк и бъндълът НЕ трябва да расте. Никакви .mp3 файлове в репото.\n2. БЕЗ КЕШ. Изрично изискване — нищо не се пази на устройството. Всеки клик = нова заявка, пусни, изхвърли. НЕ добавяй IndexedDB/localStorage/Cache API за аудио.\n3. API КЛЮЧЪТ СЕ КОМИТВА хардкоднат най-отгоре в модула, точно както firebaseConfig в shared-inventory/modules/firebase.js. Потребителят знае, че не е секюър, и е приел риска (репото е за лично ползване). НЕ измисляй .env, прокси или build стъпка.\n   РЕАЛНИЯТ КЛЮЧ (потребителят го предостави изрично за комитване; ограничен е по HTTP referrer и само за Cloud Text-to-Speech API):\n   apiKey: \u0027AIzaSyDsnq5iBTVDL7eC9K9TAGSG0CEYhsOt-hY\u0027\n   Сложи го директно в TTS_CONFIG. НЕ го слагай никъде другаде — нито в тестове, нито в документация, нито в коментари.\n\n=== GOOGLE CLOUD TTS REST КОНТРАКТ (ПРОВЕРЕН ЕМПИРИЧНО СРЕЩУ ЖИВОТО API — НЕ ГО ПРЕДОГОВАРЯЙ) ===\nPOST https://texttospeech.googleapis.com/v1/text:synthesize?key=\u003cAPI_KEY\u003e\nbody: { input: { ssml: \u0027\u003cspeak\u003e...\u003c/speak\u003e\u0027 }, voice: { languageCode: \u0027bg-BG\u0027, name: \u0027bg-BG-Chirp3-HD-Sadaltager\u0027 }, audioConfig: { audioEncoding: \u0027MP3\u0027, speakingRate: 0.85 } }\nresponse: { audioContent: \u0027\u003cbase64 mp3\u003e\u0027 }\n\nГЛАСЪТ Е ИЗБРАН И ЗАКОВАН ОТ ПОТРЕБИТЕЛЯ след прослушване:\n  bg-BG -\u003e \u0027bg-BG-Chirp3-HD-Sadaltager\u0027 (MALE)\n  en-US -\u003e \u0027en-US-Chirp3-HD-Sadaltager\u0027 (MALE)  ← същият глас, за tasha-jokes.json\nПодавай ВИНАГИ voice.name (не ssmlGender) — иначе Google връща друг глас.\n\n⛔ ПРОВЕРЕНИ ОГРАНИЧЕНИЯ НА CHIRP3-HD ГЛАСОВЕТЕ (всяко от тях е тествано с реална заявка):\n  1. audioConfig.pitch НЕ СЕ ПОДДЪРЖА -\u003e HTTP 400 \u0027This voice does not support pitch parameters at this time.\u0027\n     НЕ слагай pitch в audioConfig. НЕ го слагай и в TTS_CONFIG. Това би счупило ВСЯКА заявка.\n     Дълбочината идва от самия глас — той вече е мъжки, не се коригира с параметри.\n  2. input.prompt (стилови инструкции на човешки език) НЕ СЕ ПОДДЪРЖА -\u003e HTTP 400 \u0027Prompt is only supported for Gemini TTS.\u0027\n     Това е друг бекенд (Gemini TTS). НЕ го ползвай тук.\n  3. audioConfig.speakingRate РАБОТИ (0.25..4.0, 1.0 = нормално). Ползвай ~0.85 за провлачения тон.\n  4. input.ssml РАБОТИ — \u003cbreak\u003e и \u003cprosody rate\u003e се приемат. Върху това стъпва подигравателният тайминг.\n     ⚠ prosody pitch=\"-2st\" се приема синтактично, но е НЕИЗВЕСТНО дали се чува (питчът не се поддържа).\n     Не разчитай на него — носещият ефект да е от \u003cbreak\u003e паузите и от rate.\n  5. audioEncoding \u0027MP3\u0027 РАБОТИ — отговорът е готов за \u003caudio\u003e, не се налага WAV обработка.\n  6. Лимитът е 5000 байта на заявка. ПРОВЕРЕНО върху реалните данни: най-дългата от 1157 реплики е 344 байта (7% от лимита), със SSML таговете най-лошият случай е ~863 байта (17%). НЕ строй механизъм за разделяне по размер — няма реплика, която да го изисква. Една реплика = една заявка.\n\n=== SSML (голямото предимство пред speechSynthesis) ===\nGoogle Cloud TTS ПОДДЪРЖА SSML — за разлика от браузърния speechSynthesis, където \u003cbreak\u003e се чете като текст. Ползвай истински тагове за подигравателната интонация:\n  - \u003cbreak time=\"350ms\"/\u003e след пунктуация — драматичните паузи носят подигравката\n  - \u003cprosody rate=\"85%\" pitch=\"-2st\"\u003e на последната част — провлачен, снизходителен финал\n⚠ Текстът ЗАДЪЛЖИТЕЛНО се XML-escape-ва преди вграждане в SSML: \u0026 -\u003e \u0026amp;, \u003c -\u003e \u0026lt;, \u003e -\u003e \u0026gt;, \" -\u003e \u0026quot;, \u0027 -\u003e \u0026apos;. Репликите съдържат кавички и апострофи (напр. \"Tasha\u0027s Joke\") — неескейпнат апостроф чупи заявката.\n\n=== ЕЗИК ===\nКирилица (/[Ѐ-ӿ]/) -\u003e languageCode \u0027bg-BG\u0027 + name \u0027bg-BG-Chirp3-HD-Sadaltager\u0027; иначе -\u003e \u0027en-US\u0027 + name \u0027en-US-Chirp3-HD-Sadaltager\u0027. tasha-jokes.json е на английски, останалите JSON-и са на български. Дръж двойката {languageCode, name} в TTS_CONFIG.voices като { \u0027bg-BG\u0027: \u0027...\u0027, \u0027en-US\u0027: \u0027...\u0027 }.\n\n=== ВЪЗПРОИЗВЕЖДАНЕ ===\nbase64 -\u003e Uint8Array.from(atob(b64), c =\u003e c.charCodeAt(0)) -\u003e new Blob([bytes], {type:\u0027audio/mpeg\u0027}) -\u003e URL.createObjectURL -\u003e new Audio(url).play().\n⚠ ЗАДЪЛЖИТЕЛНО URL.revokeObjectURL() в \u0027ended\u0027 И в \u0027error\u0027 И при stop() — без това тече памет, а изискването е нулево задържане.\n\n=== FALLBACK (не оставяй тишина) ===\nПри липсващ/placeholder ключ, мрежова грешка, non-2xx отговор или липсващ audioContent -\u003e падни към window.speechSynthesis със същия текст. Апката трябва да проговаря дори без ключ и офлайн.\n\n=== ПУБЛИЧЕН API НА МОДУЛА ===\nIIFE в стила на другите modules/ (виж modules/flavor.js). Изложи window.MonkTTS = { speak(text, {onstart, onend}), stop(), isSpeaking(), isSupported() }.\nonend се вика ВИНАГИ — и при успех, и при грешка, и при прекъсване — за да може UI-ът да се върне в покой.\n\n=== ТЕСТОВЕ ===\n⛔ Тестовете НИКОГА не викат реалното API. Стъбвай window.fetch в page.evaluate и връщай фиксиран малък base64 mp3. Проверявай ФОРМАТА на заявката (url съдържа texttospeech.googleapis.com, method POST, body.voice.ssmlGender===\u0027MALE\u0027, body.audioConfig.audioEncoding===\u0027MP3\u0027, body.input.ssml съдържа \u003cbreak), не звука.",
+        "steps":  [
+                      {
+                          "id":  "60.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети C:/Users/kaloyan.georgiev/Projects/shared-inventory/modules/firebase.js (редове 1-26) — това е ЕТАЛОНЪТ за това как се комитва конфиг с ключ: обикновен const обект най-отгоре на модула, с коментар-заглавие. Прочети modules/flavor.js (IIFE стил, \u0027use strict\u0027, window.attachX експорт най-отдолу). Прочети index.html редове 155-166 — реда на \u003cscript\u003e таговете. Прочети test/e2e/flavor-ui.spec.js редове 27-42 — beforeEach патърна (goto \u0027/\u0027, localStorage.clear, reload, waitForFunction window.__tabsLoaded, клик на таб)."
+                      },
+                      {
+                          "id":  "60.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "RED — създай test/e2e/tts-core.spec.js ПЪРВО, преди модула. Стъбвай window.fetch чрез page.addInitScript, за да е активен още при зареждане. Тестове: (а) window.MonkTTS съществува и има speak/stop/isSpeaking/isSupported; (б) speak(\u0027Не мърдай!\u0027) прави POST към url, съдържащ \u0027texttospeech.googleapis.com/v1/text:synthesize\u0027, с body.voice.languageCode===\u0027bg-BG\u0027 и body.voice.ssmlGender===\u0027MALE\u0027; (в) латински текст дава body.voice.languageCode===\u0027en-US\u0027; (г) body.input.ssml започва с \u0027\u003cspeak\u003e\u0027 и съдържа поне един \u0027\u003cbreak\u0027; (д) текст с апостроф и амперсанд (\u0027Tasha\\\u0027s \u0026 co\u0027) излиза XML-escape-нат в ssml-а (\u0026apos; / \u0026amp;), без сурови символи; (е) body.audioConfig.audioEncoding===\u0027MP3\u0027, body.audioConfig.speakingRate е под 1, и КЛЮЧЪТ \u0027pitch\u0027 ИЗОБЩО ГО НЯМА в audioConfig (Chirp3-HD връща 400 при pitch — този тест е регресионната защита срещу връщането му); (е2) body.voice.name===\u0027bg-BG-Chirp3-HD-Sadaltager\u0027 за кирилица и \u0027en-US-Chirp3-HD-Sadaltager\u0027 за латиница, и body.input НЕ съдържа ключ \u0027prompt\u0027; (ж) при fetch, който отговаря с 403, speak НЕ хвърля и onend се вика (fallback пътят); (з) speak(\u0027\u0027) не прави заявка изобщо. Пусни ги и се увери, че са ЧЕРВЕНИ по правилната причина (MonkTTS не съществува)."
+                      },
+                      {
+                          "id":  "60.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "GREEN — създай modules/tts.js. Структура: (1) най-отгоре секция \u0027// ─── CONFIG ───\u0027 с const TTS_CONFIG = { apiKey: \u0027\u003cключът от notes\u003e\u0027, voices: { \u0027bg-BG\u0027: \u0027bg-BG-Chirp3-HD-Sadaltager\u0027, \u0027en-US\u0027: \u0027en-US-Chirp3-HD-Sadaltager\u0027 }, speakingRate: 0.85, breakMs: 350 } и коментар, че ключът се комитва нарочно (лично репо) и се ограничава по HTTP referrer — виж TTS-SETUP.md. ⛔ БЕЗ поле pitch — Chirp3-HD го отхвърля с 400. (2) detectLang(text) по кирилица. (3) escapeXml(s). (4) buildSsml(text) — режи по пунктуация (.!?… силна; ,;: само ако парчето е \u003e=18 знака) и вмъквай \u003cbreak time=\"\u003cbreakMs\u003ems\"/\u003e между парчетата; обвий последното парче в \u003cprosody rate=\"80%\"\u003e за провлачения финал (БЕЗ pitch атрибут — питчът не се поддържа от този глас); целият низ в \u003cspeak\u003e...\u003c/speak\u003e. (5) synthesize(text) -\u003e fetch POST с горния body, върни Blob. (6) speak(text, opts) -\u003e synthesize -\u003e objectURL -\u003e Audio.play(); при ГРЕШКА или placeholder ключ -\u003e fallbackSpeak(text, opts) през speechSynthesis. (7) stop() -\u003e pause + revokeObjectURL + speechSynthesis.cancel(). (8) revokeObjectURL в ended/error/stop. (9) window.MonkTTS = {...} накрая. Никакъв кеш."
+                      },
+                      {
+                          "id":  "60.4",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Добави \u003cscript src=\"modules/tts.js\"\u003e\u003c/script\u003e в index.html в блока \u0027Module scripts (load before app.js)\u0027, ПРЕДИ modules/flavor.js (флейвър модулът ще го ползва в таск 70). Не пипай нищо друго в index.html."
+                      },
+                      {
+                          "id":  "60.5",
+                          "phase":  "DONE",
+                          "action":  "Пусни \u0027npm test -- tts-core\u0027 — зелено. Провери с git diff, че НЕ си пипал app.js, другите modules/*, другите спекове и че никъде няма истински API ключ (само placeholder-а). Commit."
+                      }
+                  ],
+        "passes":  true
     },
     {
-        "id": 70,
-        "category": "feature",
-        "repo": "combat",
-        "lane": "tts",
-        "dependsOn": [60],
-        "files": [
-            "tabs/flavor.html",
-            "modules/flavor.js",
-            "styles.css",
-            "test/e2e/flavor-tts.spec.js"
-        ],
-        "verify": [
-            "npm test -- flavor-tts flavor-ui"
-        ],
-        "description": "feat(flavor): add Speak button that voices the current flavor line through MonkTTS",
-        "specRef": "monk-combat-structure.md (файлова карта; червени линии 1 и 2)",
-        "notes": "Закача бутон '🔊 Произнеси' във Flavor таба, който произнася каквото стои в #flavorOutput.\n\n=== БЕЗ НАСТРОЙКИ ===\nПотребителят ИЗРИЧНО отказа падащи менюта за глас/тон: 'не искам настройки, не искам селекция — това са шеги, произнесени от мъж, монк, юан-ти, това е фиксирано'. НЕ добавяй <select>, слайдери или panel. Само бутонът.\n\n=== ПОВЕДЕНИЕ ===\n- Toggle: в покой показва '🔊 Произнеси'; докато говори — '⏹ Спри' + клас .speaking. Клик по време на говорене спира.\n- Празен #flavorOutput -> клик не прави нищо (без заявка).\n- Клик върху флейвър бутон (нова реплика) -> спира текущата реч и връща бутона в покой. Закачи го в showLine() в modules/flavor.js, най-отгоре преди setOutput('').\n- Ако window.MonkTTS липсва или !isSupported() -> бутонът е disabled с title обяснение.\n- speak() трябва да се вика СИНХРОННО в click handler-а (Android/iOS искат възпроизвеждането в user gesture — виж таск 80 за втвърдяването).\n\n=== ЧЕРВЕНИ ЛИНИИ ===\n1. НЕ пипай app.js — attachFlavor() вече се вика от него (ред ~2029); просто добави закачането на бутона ВЪТРЕ в window.attachFlavor.\n2. НЕ пипай test/e2e/flavor-ui.spec.js. Той твърди, че '#tab-flavor .flavor-btn' са ТОЧНО 17 — затова новият бутон НЕ трябва да носи класа .flavor-btn. Ползвай .flavor-speak. Ако този тест почервенее, значи си сложил грешен клас.\n3. В styles.css само ДОБАВЯЙ правила в секцията '/* ===== Flavor tab ===== */'; не променяй съществуващи.\n\n=== СТИЛ ===\n.flavor-speak: min-height 48px (тъч таргет за таблет/телефон), същата визуална фамилия като .flavor-btn (var(--pill2)/var(--border)/var(--text)); .flavor-speak.speaking ползва var(--accent); :disabled с opacity.",
-        "steps": [
-            {
-                "id": "70.1",
-                "phase": "RECON",
-                "action": "Прочети modules/flavor.js целия (FLAVOR_TYPES registry, showLine, setActive, window.attachFlavor). Прочети tabs/flavor.html. Прочети styles.css секцията '/* ===== Flavor tab ===== */' (около ред 1703) за имената на CSS променливите. Прочети test/e2e/flavor-ui.spec.js ред 48 — твърдението за 17 бутона, което НЕ бива да чупиш."
-            },
-            {
-                "id": "70.2",
-                "phase": "IMPLEMENT",
-                "action": "RED — създай test/e2e/flavor-tts.spec.js. Стъбвай fetch през addInitScript (както в tts-core.spec.js) + стъбвай HTMLMediaElement.prototype.play да резолвва веднага, за да не зависи от истинско аудио в headless. Тестове: (а) #btnSpeakFlavor е видим и НЕ е с клас .flavor-btn; (б) '#tab-flavor .flavor-btn' са все още точно 17; (в) клик при празен output не прави fetch; (г) след клик на флейвър бутон и после на Произнеси — прави се точно една TTS заявка и body.input.ssml съдържа текста от #flavorOutput (escape-нат); (д) по време на говорене бутонът показва 'Спри' и има .speaking; (е) клик върху друг флейвър бутон връща надписа на 'Произнеси' и маха .speaking."
-            },
-            {
-                "id": "70.3",
-                "phase": "IMPLEMENT",
-                "action": "GREEN — tabs/flavor.html: веднага след <textarea id=\"flavorOutput\"> добави <div class=\"flavor-actions\"><button type=\"button\" id=\"btnSpeakFlavor\" class=\"flavor-speak\">🔊 Произнеси</button><span id=\"flavorTtsNote\" class=\"flavor-tts-note hidden\"></span></div>. modules/flavor.js: добави attachSpeak() (toggle логика, guard за липсващ MonkTTS, resetSpeakBtn helper) и я извикай накрая на window.attachFlavor; в showLine() най-отгоре добави stopSpeaking(). styles.css: добави .flavor-actions/.flavor-speak/.flavor-speak.speaking/.flavor-speak:disabled/.flavor-tts-note в flavor секцията."
-            },
-            {
-                "id": "70.4",
-                "phase": "DONE",
-                "action": "Пусни 'npm test -- flavor-tts flavor-ui' — и двата зелени. Провери с git diff, че app.js и test/e2e/flavor-ui.spec.js са НЕПИПНАТИ. Commit."
-            }
-        ],
-        "passes": false
+        "id":  70,
+        "category":  "feature",
+        "repo":  "combat",
+        "lane":  "tts",
+        "dependsOn":  [
+                          60
+                      ],
+        "files":  [
+                      "tabs/flavor.html",
+                      "modules/flavor.js",
+                      "styles.css",
+                      "test/e2e/flavor-tts.spec.js"
+                  ],
+        "verify":  [
+                       "npm test -- flavor-tts flavor-ui"
+                   ],
+        "description":  "feat(flavor): add Speak button that voices the current flavor line through MonkTTS",
+        "specRef":  "monk-combat-structure.md (файлова карта; червени линии 1 и 2)",
+        "notes":  "Закача бутон \u0027🔊 Произнеси\u0027 във Flavor таба, който произнася каквото стои в #flavorOutput.\n\n=== БЕЗ НАСТРОЙКИ ===\nПотребителят ИЗРИЧНО отказа падащи менюта за глас/тон: \u0027не искам настройки, не искам селекция — това са шеги, произнесени от мъж, монк, юан-ти, това е фиксирано\u0027. НЕ добавяй \u003cselect\u003e, слайдери или panel. Само бутонът.\n\n=== ПОВЕДЕНИЕ ===\n- Toggle: в покой показва \u0027🔊 Произнеси\u0027; докато говори — \u0027⏹ Спри\u0027 + клас .speaking. Клик по време на говорене спира.\n- Празен #flavorOutput -\u003e клик не прави нищо (без заявка).\n- Клик върху флейвър бутон (нова реплика) -\u003e спира текущата реч и връща бутона в покой. Закачи го в showLine() в modules/flavor.js, най-отгоре преди setOutput(\u0027\u0027).\n- Ако window.MonkTTS липсва или !isSupported() -\u003e бутонът е disabled с title обяснение.\n- speak() трябва да се вика СИНХРОННО в click handler-а (Android/iOS искат възпроизвеждането в user gesture — виж таск 80 за втвърдяването).\n\n=== ЧЕРВЕНИ ЛИНИИ ===\n1. НЕ пипай app.js — attachFlavor() вече се вика от него (ред ~2029); просто добави закачането на бутона ВЪТРЕ в window.attachFlavor.\n2. НЕ пипай test/e2e/flavor-ui.spec.js. Той твърди, че \u0027#tab-flavor .flavor-btn\u0027 са ТОЧНО 17 — затова новият бутон НЕ трябва да носи класа .flavor-btn. Ползвай .flavor-speak. Ако този тест почервенее, значи си сложил грешен клас.\n3. В styles.css само ДОБАВЯЙ правила в секцията \u0027/* ===== Flavor tab ===== */\u0027; не променяй съществуващи.\n\n=== СТИЛ ===\n.flavor-speak: min-height 48px (тъч таргет за таблет/телефон), същата визуална фамилия като .flavor-btn (var(--pill2)/var(--border)/var(--text)); .flavor-speak.speaking ползва var(--accent); :disabled с opacity.",
+        "steps":  [
+                      {
+                          "id":  "70.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети modules/flavor.js целия (FLAVOR_TYPES registry, showLine, setActive, window.attachFlavor). Прочети tabs/flavor.html. Прочети styles.css секцията \u0027/* ===== Flavor tab ===== */\u0027 (около ред 1703) за имената на CSS променливите. Прочети test/e2e/flavor-ui.spec.js ред 48 — твърдението за 17 бутона, което НЕ бива да чупиш."
+                      },
+                      {
+                          "id":  "70.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "RED — създай test/e2e/flavor-tts.spec.js. Стъбвай fetch през addInitScript (както в tts-core.spec.js) + стъбвай HTMLMediaElement.prototype.play да резолвва веднага, за да не зависи от истинско аудио в headless. Тестове: (а) #btnSpeakFlavor е видим и НЕ е с клас .flavor-btn; (б) \u0027#tab-flavor .flavor-btn\u0027 са все още точно 17; (в) клик при празен output не прави fetch; (г) след клик на флейвър бутон и после на Произнеси — прави се точно една TTS заявка и body.input.ssml съдържа текста от #flavorOutput (escape-нат); (д) по време на говорене бутонът показва \u0027Спри\u0027 и има .speaking; (е) клик върху друг флейвър бутон връща надписа на \u0027Произнеси\u0027 и маха .speaking."
+                      },
+                      {
+                          "id":  "70.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "GREEN — tabs/flavor.html: веднага след \u003ctextarea id=\"flavorOutput\"\u003e добави \u003cdiv class=\"flavor-actions\"\u003e\u003cbutton type=\"button\" id=\"btnSpeakFlavor\" class=\"flavor-speak\"\u003e🔊 Произнеси\u003c/button\u003e\u003cspan id=\"flavorTtsNote\" class=\"flavor-tts-note hidden\"\u003e\u003c/span\u003e\u003c/div\u003e. modules/flavor.js: добави attachSpeak() (toggle логика, guard за липсващ MonkTTS, resetSpeakBtn helper) и я извикай накрая на window.attachFlavor; в showLine() най-отгоре добави stopSpeaking(). styles.css: добави .flavor-actions/.flavor-speak/.flavor-speak.speaking/.flavor-speak:disabled/.flavor-tts-note в flavor секцията."
+                      },
+                      {
+                          "id":  "70.4",
+                          "phase":  "DONE",
+                          "action":  "Пусни \u0027npm test -- flavor-tts flavor-ui\u0027 — и двата зелени. Провери с git diff, че app.js и test/e2e/flavor-ui.spec.js са НЕПИПНАТИ. Commit."
+                      }
+                  ],
+        "passes":  true
     },
     {
-        "id": 80,
-        "category": "feature",
-        "repo": "combat",
-        "lane": "tts",
-        "dependsOn": [70],
-        "files": [
-            "modules/tts.js",
-            "modules/flavor.js",
-            "tabs/flavor.html",
-            "styles.css",
-            "test/e2e/tts-core.spec.js",
-            "test/e2e/flavor-tts.spec.js"
-        ],
-        "verify": [
-            "npm test -- tts-core flavor-tts flavor-ui critical-path"
-        ],
-        "description": "fix(tts): harden mobile playback with autoplay priming, request aborts and visible error state",
-        "specRef": "monk-combat-structure.md (команди/портове; червени линии)",
-        "notes": "Целевите устройства са Samsung таблет (Android) и телефон с OxygenOS. Този таск оправя трите неща, които на десктоп не личат, а на телефон чупят фичата.\n\n=== 1. AUTOPLAY POLICY (най-важното) ===\nНа Android/iOS new Audio().play() трябва да тръгне в рамките на user gesture. Тук fetch-ът е АСИНХРОНЕН — докато отговорът дойде, gesture прозорецът може да е затворен и play() се отхвърля с NotAllowedError, което на десктоп НЕ се възпроизвежда.\nРешение (priming): при click-а, СИНХРОННО, преди fetch-а, вземи един дълготраен <audio> елемент и извикай .play() върху него (или .load()), докато е още празен/тих; когато blob-ът пристигне, само смени .src и пусни пак. Един и същ елемент се преизползва — НЕ създавай нов Audio на всяка реплика.\nТест: стъбвай play() да отхвърля с NotAllowedError при ПЪРВО извикване и провери, че UI-ът не увисва в състояние 'Спри' и че onend се вика.\n\n=== 2. ABORT НА ЗАЯВКИ В ПОЛЕТ ===\nБърза смяна на реплики трябва да отменя предишната заявка, иначе закъснял отговор пуска стара реплика върху новата. Добави AbortController в MonkTTS.synthesize; stop() го abort-ва. AbortError НЕ се логва като грешка и НЕ пада към speechSynthesis (било е нарочно прекъсване).\nТест: две speak() последователно -> първият fetch е получил signal, който е aborted; чува се само вторият.\n\n=== 3. ВИДИМО СЪСТОЯНИЕ ПРИ ГРЕШКА ===\n#flavorTtsNote (добавен в таск 70) досега стои скрит. Показвай в него кратко съобщение, когато TTS-ът не е успял и се е паднало към вградения глас — напр. 'Няма връзка с TTS — чете вграденият глас.' или 'Липсва API ключ — чете вграденият глас.' (различавай placeholder ключ от мрежова грешка). При успех бележката се скрива. На телефон няма конзола — това е единствената диагностика.\nТест: fetch отговаря с 403 -> бележката е видима и съдържа текст; успешен fetch -> бележката е скрита.\n\n=== ЧЕРВЕНИ ЛИНИИ ===\nНЕ пипай app.js. НЕ пипай test/e2e/flavor-ui.spec.js. Разширявай СОБСТВЕНИТЕ спекове (tts-core, flavor-tts), не пренаписвай минаващите в тях тестове.",
-        "steps": [
-            {
-                "id": "80.1",
-                "phase": "RECON",
-                "action": "Прочети modules/tts.js и modules/flavor.js както са след таск 70. Прочети test/e2e/tts-core.spec.js и test/e2e/flavor-tts.spec.js, за да разшириш, а не да пренапишеш."
-            },
-            {
-                "id": "80.2",
-                "phase": "IMPLEMENT",
-                "action": "RED — добави новите тестове в двата спека: (а) priming — play() отхвърля с NotAllowedError, UI-ът се възстановява, onend се вика; (б) abort — втори speak() отменя първия fetch (провери signal.aborted) и не пуска старото аудио; (в) бележка при 403 -> #flavorTtsNote е видим и непразен; (г) бележка при успешен fetch -> #flavorTtsNote е скрит; (д) при placeholder ключ съобщението е различно от мрежовата грешка. Червени по правилната причина."
-            },
-            {
-                "id": "80.3",
-                "phase": "IMPLEMENT",
-                "action": "GREEN — в modules/tts.js: единичен преизползван <audio> елемент + priming в speak(); AbortController per заявка, abort в stop(), AbortError се игнорира тихо; изложи причината за fallback в onend (напр. onend('no-key' | 'network' | null)). В modules/flavor.js: показвай/скривай #flavorTtsNote според причината. styles.css: стил на .flavor-tts-note (var(--muted), по-малък шрифт) — само добавяне."
-            },
-            {
-                "id": "80.4",
-                "phase": "DONE",
-                "action": "Пусни 'npm test -- tts-core flavor-tts flavor-ui critical-path' — зелено. git diff: app.js и flavor-ui.spec.js непипнати. Commit."
-            }
-        ],
-        "passes": false
+        "id":  80,
+        "category":  "feature",
+        "repo":  "combat",
+        "lane":  "tts",
+        "dependsOn":  [
+                          70
+                      ],
+        "files":  [
+                      "modules/tts.js",
+                      "modules/flavor.js",
+                      "tabs/flavor.html",
+                      "styles.css",
+                      "test/e2e/tts-core.spec.js",
+                      "test/e2e/flavor-tts.spec.js"
+                  ],
+        "verify":  [
+                       "npm test -- tts-core flavor-tts flavor-ui critical-path"
+                   ],
+        "description":  "fix(tts): harden mobile playback with autoplay priming, request aborts and visible error state",
+        "specRef":  "monk-combat-structure.md (команди/портове; червени линии)",
+        "notes":  "Целевите устройства са Samsung таблет (Android) и телефон с OxygenOS. Този таск оправя трите неща, които на десктоп не личат, а на телефон чупят фичата.\n\n=== 1. AUTOPLAY POLICY (най-важното) ===\nНа Android/iOS new Audio().play() трябва да тръгне в рамките на user gesture. Тук fetch-ът е АСИНХРОНЕН — докато отговорът дойде, gesture прозорецът може да е затворен и play() се отхвърля с NotAllowedError, което на десктоп НЕ се възпроизвежда.\nРешение (priming): при click-а, СИНХРОННО, преди fetch-а, вземи един дълготраен \u003caudio\u003e елемент и извикай .play() върху него (или .load()), докато е още празен/тих; когато blob-ът пристигне, само смени .src и пусни пак. Един и същ елемент се преизползва — НЕ създавай нов Audio на всяка реплика.\nТест: стъбвай play() да отхвърля с NotAllowedError при ПЪРВО извикване и провери, че UI-ът не увисва в състояние \u0027Спри\u0027 и че onend се вика.\n\n=== 2. ABORT НА ЗАЯВКИ В ПОЛЕТ ===\nБърза смяна на реплики трябва да отменя предишната заявка, иначе закъснял отговор пуска стара реплика върху новата. Добави AbortController в MonkTTS.synthesize; stop() го abort-ва. AbortError НЕ се логва като грешка и НЕ пада към speechSynthesis (било е нарочно прекъсване).\nТест: две speak() последователно -\u003e първият fetch е получил signal, който е aborted; чува се само вторият.\n\n=== 3. ВИДИМО СЪСТОЯНИЕ ПРИ ГРЕШКА ===\n#flavorTtsNote (добавен в таск 70) досега стои скрит. Показвай в него кратко съобщение, когато TTS-ът не е успял и се е паднало към вградения глас — напр. \u0027Няма връзка с TTS — чете вграденият глас.\u0027 или \u0027Липсва API ключ — чете вграденият глас.\u0027 (различавай placeholder ключ от мрежова грешка). При успех бележката се скрива. На телефон няма конзола — това е единствената диагностика.\nТест: fetch отговаря с 403 -\u003e бележката е видима и съдържа текст; успешен fetch -\u003e бележката е скрита.\n\n=== ЧЕРВЕНИ ЛИНИИ ===\nНЕ пипай app.js. НЕ пипай test/e2e/flavor-ui.spec.js. Разширявай СОБСТВЕНИТЕ спекове (tts-core, flavor-tts), не пренаписвай минаващите в тях тестове.",
+        "steps":  [
+                      {
+                          "id":  "80.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети modules/tts.js и modules/flavor.js както са след таск 70. Прочети test/e2e/tts-core.spec.js и test/e2e/flavor-tts.spec.js, за да разшириш, а не да пренапишеш."
+                      },
+                      {
+                          "id":  "80.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "RED — добави новите тестове в двата спека: (а) priming — play() отхвърля с NotAllowedError, UI-ът се възстановява, onend се вика; (б) abort — втори speak() отменя първия fetch (провери signal.aborted) и не пуска старото аудио; (в) бележка при 403 -\u003e #flavorTtsNote е видим и непразен; (г) бележка при успешен fetch -\u003e #flavorTtsNote е скрит; (д) при placeholder ключ съобщението е различно от мрежовата грешка. Червени по правилната причина."
+                      },
+                      {
+                          "id":  "80.3",
+                          "phase":  "IMPLEMENT",
+                          "action":  "GREEN — в modules/tts.js: единичен преизползван \u003caudio\u003e елемент + priming в speak(); AbortController per заявка, abort в stop(), AbortError се игнорира тихо; изложи причината за fallback в onend (напр. onend(\u0027no-key\u0027 | \u0027network\u0027 | null)). В modules/flavor.js: показвай/скривай #flavorTtsNote според причината. styles.css: стил на .flavor-tts-note (var(--muted), по-малък шрифт) — само добавяне."
+                      },
+                      {
+                          "id":  "80.4",
+                          "phase":  "DONE",
+                          "action":  "Пусни \u0027npm test -- tts-core flavor-tts flavor-ui critical-path\u0027 — зелено. git diff: app.js и flavor-ui.spec.js непипнати. Commit."
+                      }
+                  ],
+        "passes":  true
     },
     {
-        "id": 90,
-        "category": "docs",
-        "repo": "combat",
-        "lane": "tts",
-        "dependsOn": [80],
-        "files": [
-            "TTS-SETUP.md"
-        ],
-        "description": "docs: add Google Cloud TTS setup guide with voice audition and API key restriction steps",
-        "specRef": "monk-combat-structure.md (червена линия 4 — не commit-вай runtime боклук)",
-        "notes": "Последният таск в lane-а — БЕЗ verify override, за да мине ПЪЛНИЯТ гейт на репото като задна мрежа.\n\nДокументът е за потребителя (пише на български) и трябва да го преведе от нула до работещ глас. Съдържание:\n\n1. СЪЗДАВАНЕ НА КЛЮЧ: Google Cloud console -> нов проект -> enable 'Cloud Text-to-Speech API' -> Credentials -> Create API key. Отбележи честно, че Google изисква закачен billing account, за да разреши API-то ИЗОБЩО — това е условие за включване, а не разход (виж т.4).\n\n2. ОГРАНИЧАВАНЕ НА КЛЮЧА (важно, защото ключът се комитва): в настройките на ключа -> Application restrictions -> HTTP referrers -> добави домейна на GitHub Pages и http://localhost:45278/* за локална работа; Application restrictions -> Restrict key -> само 'Cloud Text-to-Speech API'. Така изтекъл ключ е почти безполезен извън тези домейни.\n\n3. ИЗБРАНИЯТ ГЛАС: bg-BG-Chirp3-HD-Sadaltager (MALE) и en-US-Chirp3-HD-Sadaltager (MALE) — избрани от потребителя след прослушване. Български има 31 гласа, от които 16 мъжки. Смяна на гласа = едно поле в TTS_CONFIG.voices. За пълния списък:\n   curl -H \"Referer: http://localhost:45278/\" \"https://texttospeech.googleapis.com/v1/voices?languageCode=bg-BG&key=API_KEY\"\n   ⚠ Referer хедърът е задължителен — ключът е ограничен по HTTP referrer и без него връща 403.\n   Прослушване през браузър: Google Cloud console -> Speech -> Text-to-Speech -> Synthesise (не иска ключ).\n\n3б. ОГРАНИЧЕНИЯ НА CHIRP3-HD (проверени срещу живото API — документирай ги, за да не се въвеждат наново):\n   - audioConfig.pitch -> 400 'This voice does not support pitch parameters'. Дълбочината идва от самия глас.\n   - input.prompt (стил с думи) -> 400 'Prompt is only supported for Gemini TTS'. Това е друг бекенд.\n   - speakingRate, SSML (<break>, <prosody rate>) и MP3 РАБОТЯТ.\n\n4. ЦЕНА: безплатният слой е 1 000 000 знака/месец за Neural2/WaveNet (4 000 000 за Standard, 100 000 за Studio). Целият корпус реплики е ~72 700 знака, тоест дори всичките 1157 реплики са ~7% от една месечна квота. Практически неизчерпаем при това ползване. Ако искаш твърд стоп — quota limit на самото API (budget alert само известява, не спира). Отбележи, че тарифите се менят и да се сверят на страницата с цените.\n\n5. НАСТРОЙКИ: ключът вече е попълнен в TTS_CONFIG (таск 60). Обясни какво значат останалите полета: voices = закованите гласове per език, speakingRate 0.25..4.0 (0.85 = провлачено), breakMs = дължината на драматичните паузи между парчетата. Изрично отбележи, че поле pitch НЯМА и не бива да се добавя.\n   ⚠ НЕ пиши реалния ключ в документа — примерите ползват API_KEY плейсхолдър.\n   Отбележи, че в списъка с разрешени referrer-и ТРЯБВА да стои и http://localhost:45278/* — иначе локалното пускане (npm run serve) получава 403 и апката мълчи на компа.\n\n6. КАК СЕ ДЪРЖИ БЕЗ КЛЮЧ: пада към вградения speechSynthesis и показва бележка под бутона. Апката не се чупи.\n\n⚠ НЕ commit-вай истински ключ в документа — примерите ползват API_KEY плейсхолдър.",
-        "steps": [
-            {
-                "id": "90.1",
-                "phase": "RECON",
-                "action": "Прочети modules/tts.js (TTS_CONFIG блока) както е след таск 80, за да опишеш ТОЧНИТЕ имена на настройките и placeholder-а."
-            },
-            {
-                "id": "90.2",
-                "phase": "IMPLEMENT",
-                "action": "Създай TTS-SETUP.md в корена на репото с шестте секции от notes. Пиши на български, кратко и стъпка по стъпка. Никакви измислени имена на гласове — потребителят ги открива с curl командата от секция 3."
-            },
-            {
-                "id": "90.3",
-                "phase": "DONE",
-                "action": "Пусни ПЪЛНИЯ 'npm test' (без филтър) — цялата апка трябва да е зелена след трите предходни таска. Commit."
-            }
-        ],
-        "passes": false
+        "id":  90,
+        "category":  "docs",
+        "repo":  "combat",
+        "lane":  "tts",
+        "dependsOn":  [
+                          80
+                      ],
+        "files":  [
+                      "TTS-SETUP.md"
+                  ],
+        "description":  "docs: add Google Cloud TTS setup guide with voice audition and API key restriction steps",
+        "specRef":  "monk-combat-structure.md (червена линия 4 — не commit-вай runtime боклук)",
+        "notes":  "Последният таск в lane-а — БЕЗ verify override, за да мине ПЪЛНИЯТ гейт на репото като задна мрежа.\n\nДокументът е за потребителя (пише на български) и трябва да го преведе от нула до работещ глас. Съдържание:\n\n1. СЪЗДАВАНЕ НА КЛЮЧ: Google Cloud console -\u003e нов проект -\u003e enable \u0027Cloud Text-to-Speech API\u0027 -\u003e Credentials -\u003e Create API key. Отбележи честно, че Google изисква закачен billing account, за да разреши API-то ИЗОБЩО — това е условие за включване, а не разход (виж т.4).\n\n2. ОГРАНИЧАВАНЕ НА КЛЮЧА (важно, защото ключът се комитва): в настройките на ключа -\u003e Application restrictions -\u003e HTTP referrers -\u003e добави домейна на GitHub Pages и http://localhost:45278/* за локална работа; Application restrictions -\u003e Restrict key -\u003e само \u0027Cloud Text-to-Speech API\u0027. Така изтекъл ключ е почти безполезен извън тези домейни.\n\n3. ИЗБРАНИЯТ ГЛАС: bg-BG-Chirp3-HD-Sadaltager (MALE) и en-US-Chirp3-HD-Sadaltager (MALE) — избрани от потребителя след прослушване. Български има 31 гласа, от които 16 мъжки. Смяна на гласа = едно поле в TTS_CONFIG.voices. За пълния списък:\n   curl -H \"Referer: http://localhost:45278/\" \"https://texttospeech.googleapis.com/v1/voices?languageCode=bg-BG\u0026key=API_KEY\"\n   ⚠ Referer хедърът е задължителен — ключът е ограничен по HTTP referrer и без него връща 403.\n   Прослушване през браузър: Google Cloud console -\u003e Speech -\u003e Text-to-Speech -\u003e Synthesise (не иска ключ).\n\n3б. ОГРАНИЧЕНИЯ НА CHIRP3-HD (проверени срещу живото API — документирай ги, за да не се въвеждат наново):\n   - audioConfig.pitch -\u003e 400 \u0027This voice does not support pitch parameters\u0027. Дълбочината идва от самия глас.\n   - input.prompt (стил с думи) -\u003e 400 \u0027Prompt is only supported for Gemini TTS\u0027. Това е друг бекенд.\n   - speakingRate, SSML (\u003cbreak\u003e, \u003cprosody rate\u003e) и MP3 РАБОТЯТ.\n\n4. ЦЕНА: безплатният слой е 1 000 000 знака/месец за Neural2/WaveNet (4 000 000 за Standard, 100 000 за Studio). Целият корпус реплики е ~72 700 знака, тоест дори всичките 1157 реплики са ~7% от една месечна квота. Практически неизчерпаем при това ползване. Ако искаш твърд стоп — quota limit на самото API (budget alert само известява, не спира). Отбележи, че тарифите се менят и да се сверят на страницата с цените.\n\n5. НАСТРОЙКИ: ключът вече е попълнен в TTS_CONFIG (таск 60). Обясни какво значат останалите полета: voices = закованите гласове per език, speakingRate 0.25..4.0 (0.85 = провлачено), breakMs = дължината на драматичните паузи между парчетата. Изрично отбележи, че поле pitch НЯМА и не бива да се добавя.\n   ⚠ НЕ пиши реалния ключ в документа — примерите ползват API_KEY плейсхолдър.\n   Отбележи, че в списъка с разрешени referrer-и ТРЯБВА да стои и http://localhost:45278/* — иначе локалното пускане (npm run serve) получава 403 и апката мълчи на компа.\n\n6. КАК СЕ ДЪРЖИ БЕЗ КЛЮЧ: пада към вградения speechSynthesis и показва бележка под бутона. Апката не се чупи.\n\n⚠ НЕ commit-вай истински ключ в документа — примерите ползват API_KEY плейсхолдър.",
+        "steps":  [
+                      {
+                          "id":  "90.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети modules/tts.js (TTS_CONFIG блока) както е след таск 80, за да опишеш ТОЧНИТЕ имена на настройките и placeholder-а."
+                      },
+                      {
+                          "id":  "90.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Създай TTS-SETUP.md в корена на репото с шестте секции от notes. Пиши на български, кратко и стъпка по стъпка. Никакви измислени имена на гласове — потребителят ги открива с curl командата от секция 3."
+                      },
+                      {
+                          "id":  "90.3",
+                          "phase":  "DONE",
+                          "action":  "Пусни ПЪЛНИЯ \u0027npm test\u0027 (без филтър) — цялата апка трябва да е зелена след трите предходни таска. Commit."
+                      }
+                  ],
+        "passes":  true
     }
 ]

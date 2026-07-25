@@ -34,6 +34,72 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task 90 — docs: add Google Cloud TTS setup guide with voice audition and API key restriction steps
+
+- **Repo:** combat (monk_combat_app) · **Lane:** tts · **Branch:** ralph/task-90 · **Commit:** 88ea67e
+- **Files:** `TTS-SETUP.md` (new)
+- **Какво:** Създаден е потребителски setup гайд на български, който води от нула до работещ глас за бутона „🔊 Произнеси". Шест секции: (1) създаване на ключ + честна бележка за задължителния billing account; (2) заключване на ключа по HTTP referrers (GitHub Pages + `http://localhost:45278/*`) и restrict само до Cloud Text-to-Speech API; (3) избраните гласове `bg-BG-Chirp3-HD-Sadaltager` / `en-US-Chirp3-HD-Sadaltager` + curl команда със задължителен `Referer` хедър за списъка гласове, плюс проверените Chirp3-HD ограничения (pitch/prompt дават 400); (4) безплатен слой и цена (~7% от квотата за целия корпус); (5) точните `TTS_CONFIG` полета (apiKey/voices/speakingRate/breakMs, изрично БЕЗ pitch); (6) поведение без ключ — fallback към speechSynthesis + бележка под бутона.
+- **Червени линии:** истинският API ключ НЕ е в документа (само `API_KEY` плейсхолдър — grep потвърди 0 съвпадения за `AIzaSy`); пипнат е само `TTS-SETUP.md`, никакъв код/тест/runtime боклук.
+- **Verify:** docs-only — няма unit инфраструктура за markdown; пълният `npm test` гейт на репото е задната мрежа след merge (без verify override, нарочно).
+
+
+## Task 80 — fix(tts): harden mobile playback with autoplay priming, request aborts and visible error state
+
+**Repo:** combat (monk_combat_app) · **Branch:** ralph/task-80 · **Commit:** aeba79e
+
+### Какво е направено
+1. **Autoplay priming** — `modules/tts.js` вече ползва ЕДИН преизползван `<audio>` елемент (`getAudioEl()`), който се `play()`-ва синхронно още в user-gesture-а преди async fetch-а. При NotAllowedError от play() UI-ът се възстановява (onend се вика, `speaking=false`), вместо да увисне в 'Спри'.
+2. **Abort на заявки в полет** — `AbortController` per заявка; `synthesize(text, signal)` подава signal-а на fetch; `stop()` го abort-ва. AbortError се игнорира тихо — без лог, без fallback към speechSynthesis. Добавена и ръчна `signal.aborted` проверка след await (за стъбове, които игнорират signal-а).
+3. **Видимо състояние при грешка** — `onend(reason)` с reason `'no-key' | 'network' | null`. `modules/flavor.js` показва `#flavorTtsNote` с различно съобщение при липсващ ключ vs мрежова грешка, и го скрива при успех / при нова реплика.
+4. **API ключ seam** — `activeKey()` чете `window.__ttsApiKeyOverride` ако е зададен (само за тест на no-key пътя), иначе комитнатия ключ. Прод поведението непроменено.
+
+### Тестове
+- `test/e2e/tts-core.spec.js`: +записване на AbortSignal-ите, +test (и) priming/NotAllowedError, +test (й) втори speak abort-ва първия в полет.
+- `test/e2e/flavor-tts.spec.js`: +test (ж) 403 → бележката видима, +test (з) успех → бележката скрита, +test (и) no-key → различно съобщение от network.
+- `npm test -- tts-core flavor-tts flavor-ui critical-path` → **66 passed**.
+
+### Червени линии
+app.js и test/e2e/flavor-ui.spec.js НЕ са пипани. styles.css и tabs/flavor.html не се наложи да се променят (`.flavor-tts-note` и note елементът вече дойдоха с таск 70). Само добавяне в собствените спекове, без пренаписване на минаващи тестове.
+
+
+## Task 70 — feat(flavor): add Speak button that voices the current flavor line through MonkTTS
+
+**Repo:** combat (monk_combat_app) · **Lane:** tts · **Commit:** f7d7c34
+
+### What changed
+- **tabs/flavor.html**: added `<div class="flavor-actions">` right after `#flavorOutput` with `#btnSpeakFlavor.flavor-speak` (label '🔊 Произнеси') and a hidden `#flavorTtsNote` span (for task 80).
+- **modules/flavor.js**: added `attachSpeak()` (toggle click handler — reads trimmed `#flavorOutput`, no-op on empty, syncing button to '⏹ Спри' + `.speaking` while talking, calls `MonkTTS.speak(text, {onend: resetSpeakBtn})` synchronously in the gesture; disables the button with a title when MonkTTS is missing/unsupported), `resetSpeakBtn()`/`stopSpeaking()` helpers, called `attachSpeak()` at the end of `window.attachFlavor`, and prepended `stopSpeaking()` to `showLine()` so a new line resets the button.
+- **styles.css**: added `.flavor-actions`, `.flavor-speak` (48px touch target, pill family), `.flavor-speak:hover`, `.flavor-speak.speaking` (var(--accent)), `.flavor-speak:disabled`, `.flavor-tts-note` in the Flavor section — additive only.
+- **test/e2e/flavor-tts.spec.js** (new): stubs fetch + inert `Audio` + speechSynthesis via addInitScript. 6 tests: button exists & is not `.flavor-btn`; still exactly 17 `.flavor-btn`; empty output makes no request; flavor+speak makes exactly one TTS request with XML-escaped text in ssml; speaking shows 'Спри' + `.speaking`; clicking another flavor button returns to 'Произнеси'.
+
+### Red lines respected
+- app.js NOT touched (attachFlavor already invoked from it).
+- test/e2e/flavor-ui.spec.js NOT touched; new button uses `.flavor-speak`, so the '17 .flavor-btn' assertion stays green.
+- styles.css changes are additions only, inside the Flavor section.
+
+### Verify
+`npm test -- flavor-tts flavor-ui` → **27 passed**.
+
+
+## Task 60 — feat(tts): add on-demand Google Cloud TTS module with SSML mocking delivery and speechSynthesis fallback
+
+**Repo:** combat (monk_combat_app) · **Lane:** tts · **Commit:** 0ec2400 · **Tests:** `npm test -- tts-core` → 9 passed
+
+### What
+- **modules/tts.js** — new `window.MonkTTS = { speak, stop, isSpeaking, isSupported }` IIFE. On-demand only, no cache, no .mp3 in repo.
+  - `TTS_CONFIG` at top with the committed (HTTP-referrer-restricted) API key, per the firebase.js precedent. **No `pitch` field** — Chirp3-HD returns HTTP 400 for pitch; a test guards its absence.
+  - `detectLang` (Cyrillic → `bg-BG`, else `en-US`), voices locked to `bg-BG-Chirp3-HD-Sadaltager` / `en-US-Chirp3-HD-Sadaltager` (MALE).
+  - `escapeXml` + `buildSsml`: splits on strong punctuation (weak only if piece ≥18 chars), inserts `<break time="350ms"/>` drama pauses, wraps the final piece in `<prosody rate="80%">` for the drawl (no pitch attr).
+  - `synthesize`: POST to `texttospeech.googleapis.com/v1/text:synthesize` with `input.ssml`, `voice.{languageCode,name,ssmlGender:MALE}`, `audioConfig.{audioEncoding:MP3, speakingRate:0.85}` (no `prompt`). base64 → Blob → objectURL → Audio.play().
+  - Always revokes the object URL on ended/error/stop; `onend` always fires. Fallback to `speechSynthesis` on placeholder key, non-2xx, missing audioContent, or network error.
+- **index.html** — added `<script src="modules/tts.js"></script>` before `modules/flavor.js` in the module block.
+- **test/e2e/tts-core.spec.js** — 9 tests. Stubs `window.fetch` (records TTS calls, returns tiny base64) and `speechSynthesis` (deterministic onend in headless) via `addInitScript`. Asserts request FORMAT only: endpoint/method, bg/en languageCode, MALE, voice.name, SSML `<speak>`+`<break>`, `&apos;`/`&amp;` escaping, MP3 + speakingRate<1, absence of `pitch` and `prompt`, 403→fallback (onend fires, no throw), and empty text → no request.
+
+### Notes
+- Only touched the task's `files` (index.html, modules/tts.js, test/e2e/tts-core.spec.js). app.js and other modules/specs untouched. Real key lives only in modules/tts.js.
+- **Env fix:** a stray `http-server` from the MAIN checkout (`C:\Users\kaloyan.georgiev\Projects\monk_combat_app`) was listening on 45278; Playwright's `reuseExistingServer` reused it and served an index without tts.js (404), failing all tests against the wrong app. Stopped that stray PID so Playwright booted its own server from the worktree; all 9 tests then passed.
+
+
 ## Task #50 — fix: unify familiar records into st.familiars so export/import round-trips them like aliases and npc names
 
 **Repo:** combat (monk_combat_app) · **Lane:** bugfix · **Commit:** `3e7d9b4`
@@ -543,6 +609,10 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
 
 
 
