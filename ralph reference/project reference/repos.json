@@ -9,8 +9,8 @@
 
   "repos": {
     "inventory": {
-      "location": "C:\\Users\\kaloyan.georgiev\\Projects\\shared-inventory",
-      "gitRoot": "C:\\Users\\kaloyan.georgiev\\Projects\\shared-inventory",
+      "location": "D:\\Downloads\\monk\\shared-inventory",
+      "gitRoot": "D:\\Downloads\\monk\\shared-inventory",
       "workSubdir": "",
       "mainBranch": "main",
       "reference": "shared-inventory-structure.md",
@@ -38,8 +38,8 @@
     },
 
     "combat": {
-      "location": "C:\\Users\\kaloyan.georgiev\\Projects\\monk_combat_app",
-      "gitRoot": "C:\\Users\\kaloyan.georgiev\\Projects\\monk_combat_app",
+      "location": "D:\\Downloads\\monk\\monk_combat_app",
+      "gitRoot": "D:\\Downloads\\monk\\monk_combat_app",
       "workSubdir": "",
       "mainBranch": "main",
       "reference": "monk-combat-structure.md",
