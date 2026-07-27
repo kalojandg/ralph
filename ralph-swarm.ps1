@@ -87,6 +87,24 @@ if ($config -and $config.swarm -and $config.swarm.PSObject.Properties['escalate_
     $escalateAfter = [int]$config.swarm.escalate_after
 }
 
+# Finishing step (runs ONLY on ALL TASKS COMPLETE - i.e. every merge passed the gate):
+# finish_docs -> spawn one docs agent per touched repo to refresh the structure reference
+# and the repo's own docs; finish_push -> git push every touched repo + the ralph repo.
+# Full-success only: partially failed boards stay local for human review.
+$finishDocs = $true
+$finishPush = $true
+if ($config -and $config.swarm) {
+    if ($config.swarm.PSObject.Properties['finish_docs']) { $finishDocs = [bool]$config.swarm.finish_docs }
+    if ($config.swarm.PSObject.Properties['finish_push']) { $finishPush = [bool]$config.swarm.finish_push }
+}
+$agentModel = "claude-opus-4-8"
+if ($config -and $config.claude_args) {
+    $mi = [array]::IndexOf($config.claude_args, "--model")
+    if ($mi -ge 0 -and $mi -lt $config.claude_args.Count - 1) { $agentModel = $config.claude_args[$mi + 1] }
+}
+$useApiKeyCfg = $false
+if ($config -and $config.PSObject.Properties['use_api_key']) { $useApiKeyCfg = [bool]$config.use_api_key }
+
 $tasksFile  = Join-Path $scriptDir "tasks.json"
 $reposFile  = Join-Path $scriptDir "ralph reference\project reference\repos.json"
 $claimsDir  = Join-Path $scriptDir "claims"
@@ -215,6 +233,113 @@ function Invoke-VerifyGate($task) {
     }
     Write-Host "[v] Task #$($task.id): verify gate GREEN" -ForegroundColor Green
     return $null
+}
+
+# FINISHING STEP - runs only when every task on the board is passes:true (all merges
+# survived the gate, so the integration branches are verified green = safe to publish).
+# 1) finish_docs: one docs agent per touched repo refreshes the ralph structure reference
+#    and the repo's own docs (README/behavior docs) to match what the board changed.
+# 2) finish_push: git push each touched repo + the ralph repo itself (board/activity/refs).
+# Failures here are WARNINGS - the board result is already safe locally.
+function Invoke-FinishingStep {
+    $t = Read-Tasks
+    $repoKeys = @($t | ForEach-Object { $_.repo } | Where-Object { $_ } | Select-Object -Unique)
+    if ($repoKeys.Count -eq 0) { return }
+    Write-Host ""
+    Write-Host "==================== FINISHING STEP ====================" -ForegroundColor Cyan
+
+    if ($finishDocs) {
+        $taskList = ($t | ForEach-Object { "#$($_.id) [$($_.repo)] $($_.description)" }) -join "`n"
+        foreach ($k in $repoKeys) {
+            $r = $reposMap.repos.$k
+            if (-not $r) { continue }
+            $refPath = Join-Path (Join-Path $scriptDir "ralph reference\project reference") $r.reference
+            $prompt = @"
+You are the FINISHING agent after a completed Ralph board. Every task below is merged into
+'$($r.mainBranch)' and the verify gate kept it green. Your job is DOCUMENTATION ONLY.
+
+Completed board:
+$taskList
+
+Working repo: $($r.location) (you are IN it; the integration branch is checked out and clean).
+
+Do, in this order:
+1. Inspect what changed: git log --oneline -30 and the diffs of the ralph merge commits.
+2. Update the architecture reference file at:
+   $refPath
+   so it matches the NEW reality: file map, modules/tabs/services inventory, persistence
+   model, test state (spec list/counts), red lines. Keep its existing structure and language
+   (Bulgarian) - update stale facts, add new sections only where the board introduced
+   something new. Do NOT rewrite style.
+3. Update this repo's own human docs IF the board changed behavior they describe
+   (README, BEHAVIOR_DOCUMENTATION.md, TEST_CASES.md or equivalents). Skip if untouched.
+4. Commit doc changes IN EACH repo you edited (the ralph repo for the reference file, this
+   repo for its docs) with message: "docs: refresh after ralph board (tasks $(($t | ForEach-Object { $_.id }) -join ','))".
+5. STRICT limits: touch ONLY documentation files. NO code, NO tests, NO configs, NO git push
+   (the orchestrator pushes), NO servers/e2e. If nothing is stale, say so and commit nothing.
+"@
+            $tempP = Join-Path $env:TEMP "ralph-finishing-$k.txt"
+            $prompt | Out-File $tempP -Encoding UTF8
+            Write-Host "[f] Docs agent for repo '$k' (timeout 25 min)..." -ForegroundColor Cyan
+            $job = Start-Job -ScriptBlock {
+                param($dir, $pf, $model, $useKey)
+                Set-Location $dir
+                if (-not $useKey) { Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue }
+                & claude -p "@$pf" --model $model --dangerously-skip-permissions 2>&1 | Out-String
+            } -ArgumentList $r.location, $tempP, $agentModel, $useApiKeyCfg
+            $done = Wait-Job $job -Timeout 1500
+            if (-not $done) {
+                Stop-Job $job -ErrorAction SilentlyContinue
+                Write-Host "[!] Docs agent for '$k' timed out - skipping (docs can be refreshed manually)" -ForegroundColor Yellow
+            } else {
+                $out = (Receive-Job $job | Out-String)
+                $ts = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
+                $out | Out-File (Join-Path $scriptDir "logs\finishing-$k-$ts.txt") -Encoding UTF8
+                Write-Host "[f] Docs agent for '$k' done (log: logs\finishing-$k-$ts.txt)" -ForegroundColor Green
+            }
+            Remove-Job $job -Force -ErrorAction SilentlyContinue
+            Remove-Item $tempP -ErrorAction SilentlyContinue
+        }
+    }
+
+    if ($finishPush) {
+        # The orchestrator edits tasks.json/activity.md WITHOUT committing (single-writer,
+        # in-place). Commit the ralph repo state (board + activity + any doc/reference
+        # leftovers) so the push actually carries something. Runtime dirs are gitignored.
+        $ralphDirty = @(& git -C $scriptDir status --porcelain 2>$null).Count
+        if ($ralphDirty -gt 0) {
+            & git -C $scriptDir add -A 2>&1 | Out-Null
+            $idList = ($t | ForEach-Object { $_.id }) -join ','
+            & git -C $scriptDir commit -m "ralph: board complete (tasks $idList) - state and docs sync" 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "[f] Ralph repo state committed (tasks.json, activity.md, references)" -ForegroundColor Green
+            } else {
+                Write-Host "[!] Ralph repo commit failed - its push may carry nothing new" -ForegroundColor Yellow
+            }
+        }
+
+        $pushRoots = @{}
+        foreach ($k in $repoKeys) {
+            $r = $reposMap.repos.$k
+            if ($r) { $pushRoots[$r.gitRoot] = $k }
+        }
+        $pushRoots[$scriptDir] = "ralph"
+        foreach ($root in $pushRoots.Keys) {
+            $remotes = @(& git -C $root remote 2>$null)
+            if ($remotes.Count -eq 0) {
+                Write-Host "[!] Push skipped for '$($pushRoots[$root])' - no git remote configured" -ForegroundColor Yellow
+                continue
+            }
+            $pushOut = (& git -C $root push 2>&1 | Out-String)
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "[f] Pushed '$($pushRoots[$root])' ($root)" -ForegroundColor Green
+            } else {
+                $tail = $pushOut.Trim(); if ($tail.Length -gt 200) { $tail = $tail.Substring(0, 200) }
+                Write-Host "[!] Push FAILED for '$($pushRoots[$root])': $tail" -ForegroundColor Yellow
+            }
+        }
+    }
+    Write-Host "========================================================" -ForegroundColor Cyan
 }
 
 # Eligible = for each lane, the FIRST pending task in array order (lane preserves order),
@@ -541,7 +666,9 @@ while ($true) {
     $pendingCount = @($tasks | Where-Object { $_.passes -eq $false }).Count
 
     if ($pendingCount -eq 0 -and $running.Count -eq 0) {
-        Write-Host ""; Write-Host "[+] ALL TASKS COMPLETE!" -ForegroundColor Green; break
+        Write-Host ""; Write-Host "[+] ALL TASKS COMPLETE!" -ForegroundColor Green
+        Invoke-FinishingStep
+        break
     }
 
     # fill free slots (unless maxTasks budget is exhausted)

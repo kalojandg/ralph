@@ -72,7 +72,17 @@ repos.json                 ← + gitRoot / workSubdir / mainBranch (worktree т�
                               (-retryFile) — до max_fail_retries пъти (default 2);
                               след изчерпване → failed за сесията
 7. Слотът се освобождава → следващият eligible таск стартира (rolling pipeline)
-8. Всички passes:true → SWARM SUMMARY → exit
+8. Всички passes:true → **FINISHING STEP** → SWARM SUMMARY → exit
+     Finishing step (САМО при пълен успех — всеки merge е минал гейта, публикуването е безопасно):
+       finish_docs → по един docs агент per докоснато репо: обновява structure reference-а
+                     (в ralph репото) + собствените docs на репото (README/BEHAVIOR/TEST_CASES)
+                     спрямо какво board-ът промени; commit-ва САМО документация; timeout 25 мин;
+                     лог в logs/finishing-<repo>-*.txt
+       finish_push → ПЪРВО commit на ralph репото (оркестраторът пише tasks.json/activity.md
+                     БЕЗ да комитва — иначе push-ът му е празен; runtime директориите са gitignored),
+                     ПОСЛЕ git push на всяко докоснато репо + ralph репото
+     Провал тук = WARNING, не проваля run-а (резултатът е безопасен локално).
+     При частично провален board (изход "no eligible") finishing step НЕ се изпълнява.
 ```
 
 ### Защо оркестраторът е single writer
