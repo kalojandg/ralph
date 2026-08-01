@@ -34,6 +34,91 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task 450 — test(maps): add e2e fixture and accordion spec for the Maps tab
+
+**Repo:** inventory · **Lane:** maps · **Commit:** b59c69a
+
+Final task of the maps lane. Added two new files (both explicitly permitted by §9, existing e2e/fixtures untouched):
+
+- `test/fixtures/maps-fixture.html` — standalone HTML mirroring `quests-fixture.html`: base table/button styles + the `.map-short`/`.map-details`/`tr.map-expanded` rules copied 1:1 from `styles.css`, a `#mapTable`/`#mapBody` table, and an inline script with 2 maps (map 1 has multi-line short + details for the ellipsis clamp) rendered via a `renderMaps`-mirroring accordion (exactly one expanded row, button/.drag-handle clicks don't toggle). No image in the fixture (not shown in the table by design).
+- `test/e2e/maps-accordion.spec.js` — mirrors `quests-accordion.spec.js`: FIXTURE `/test/fixtures/maps-fixture.html`, waits for `#mapBody tr[data-idx]`, 6 tests (details overflow hidden, starts collapsed, click expands, re-click collapses, only one expanded at a time, edit button doesn't expand).
+
+Reviewed tasks 410-440 output: `styles.css` map rules and `modules/maps.js` renderMaps were already correct/complete, so no touch-ups required in the shared-ownership files. Agent did not run `npm test` (port 45279 is the gate's); regression `npm run test:unit` green — 122/122 across 11 files. Full Playwright suite incl. the new spec runs at the merge gate.
+
+
+### Task #440 — feat(maps): add fullscreen map viewer with wheel zoom, drag pan and pinch zoom
+
+**Repo:** inventory · **Lane:** maps · **Branch:** ralph/task-440 · **Commit:** 37c0f69
+
+**What:** Implemented the final interactive piece of the Maps feature — a reusable fullscreen image viewer for the party's tablet/phone.
+
+- `modules/viewer.js` (new): pure geometry `clampScale(s)` → [1,8] and `zoomAt(view, factor, cx, cy)` (keeps the point under the cursor fixed, transform-origin 0 0). Thin DOM/event layer on **Pointer Events** (one path for mouse + fingers): wheel zoom toward the cursor (preventDefault), single-pointer drag pan, two-pointer pinch (zoomAt around the midpoint), dblclick → reset, Esc / backdrop click / ✕ button → close. `#mapViewer` overlay is created once on first `openViewer` and reused via display toggle.
+- `modules/maps.js`: import `openViewer`; wire a one-time click listener on the static `#mPreview` → `openViewer(pendingImage || preview.src)`.
+- `app.js`: facade re-export `{ zoomAt, clampScale, openViewer, closeViewer }` from viewer.js.
+- `styles.css`: `#mapViewer` overlay (fixed, inset 0, z-index 200 above modals, touch-action:none), `#mapViewer img { transform-origin:0 0 }`, and the ✕ close button.
+- `test/unit/viewer.spec.js` (new): geometry (zoomAt exact + fixed-point invariant + clamp + reversible round-trip) and overlay lifecycle (create-once, show/hide, Esc, backdrop click, dblclick reset).
+
+**Verify:** `npm run test:unit` → 11 files, 122 tests, all green (new viewer spec + existing 410–430 maps specs + baseline). No e2e/serve run (port 45279 belongs to the gate). Scope limited to the 5 owned files.
+
+
+## Task 430 — feat(maps): add map dialog with file upload, clipboard paste, required descriptions and Firestore persistence
+
+**Repo:** inventory · **Lane:** maps · **Branch:** ralph/task-430 · **Commit:** 08d9f64
+
+### What
+Implemented the Maps modal (task 3 of the maps lane), the DM's upload/paste/persist dialog.
+
+- **index.html:** added `#mapModal` (mirrors questModal) — `#mShort` (Кратко описание *), `#mDetails` (Детайли *), `#mFile` file input (`accept="image/*"`, `onchange=handleMapFile`) + Ctrl+V hint, `#mPreview` image, `#mMapError` (gold-error pattern), Отказ/Запази buttons.
+- **styles.css:** `.map-preview` (max 200px, zoom-in cursor, radius), `.map-preview.hidden`, `.field-hint`.
+- **modules/ui.js:** `initModalBackdrops` array now `['itemModal','questModal','mapModal']` (only change).
+- **modules/maps.js:** module `pendingImage`; `processImageBlob` pipeline (blobToDataUrl → compress only when `needsCompression` → second pass 1200/0.6 → error, save blocked); `handleMapFile`/`handleMapPaste` (paste guarded to open modal only, document-level listener); `openMapModal(idx)` (edit lazy-loads image via `getDoc(mapImageDoc(id))`); `saveMap` (required both descriptions with focus; `crypto.randomUUID()`; `setDoc(mapImageDoc(id), {image})` only when a new image is staged; unshift meta {id,shortDesc,details,createdAt}; `saveMapsIndex`); `deleteMap` (confirm → `deleteDoc` + splice + index rewrite).
+- **app.js:** import + `window.` wiring for closeMapModal/saveMap/handleMapFile (open/edit/delete already present).
+- **test/unit/maps-modal.spec.js:** 13 characterization tests; partial `vi.mock('../../modules/image.js')` keeping blobToDataUrl/needsCompression/MAX_IMAGE_BYTES real and mocking `compressImage`; `beforeEach` resets the persistent mock.
+
+### Verify
+`npm run test:unit` → **109/109 green** (10 files, incl. new 13 + all pre-existing). No e2e/serve run (port 45279 is the gate's). Scope limited to the task's `files` list.
+
+### Notes
+- Compression is applied only above the base64 threshold — small images keep original quality (per user requirement).
+- The mocked `compressImage` survives `vi.resetModules`, so its call count + resolved value are reset per test to avoid cross-test leakage.
+- Firestore `maps` security rules remain a manual owner step (not agent scope).
+
+
+## Task 420 — feat(maps): add Maps tab with realtime table, ellipsis descriptions and accordion expand
+
+**Repo:** inventory (shared-inventory) · **Lane:** maps · **Branch:** ralph/task-420 · **Commit:** 4305256
+
+**What:** Second task of the maps lane — the read/list UI on top of task 410's data layer.
+- `index.html`: added `<button data-tab="maps">Карти</button>` to the nav and a `#tab-maps` section with a `+ Добави карта` control (`onclick="openMapModal()"`) and `#mapTable`/`#mapBody` (columns ☰ | Карта | Детайли | actions). No image column by design — screenshots live in separate `maps/<id>` docs and are not pulled when listing.
+- `styles.css`: `.map-short`/`.map-details` ellipsis clamp (mirrors `.quest-desc`/`.quest-note-cell`) and `tr.map-expanded` expansion (details `white-space: pre-wrap`).
+- `modules/maps.js` (new): `renderMaps()` (empty state „Няма качени карти.", rows with escaped shortDesc in `<strong>` + `div.map-details`, ✏/🗑 actions, quest-pattern accordion with exactly one expanded row that survives re-render via `state.expandedMapIdx`, `initSortable('mapBody', …, saveMapsIndex)`), `saveMapsIndex()` (`state.savingMaps` flag + `setDoc(MAPS_INDEX_DOC, {list})` + syncMsg), and `openMapModal`/`editMap`/`deleteMap` stubs for task 430.
+- `app.js`: `onSnapshot(MAPS_INDEX_DOC, …)` with `savingMaps` echo guard, `window.openMapModal/editMap/deleteMap`, facade re-export `{ renderMaps, saveMapsIndex }`, and `maps` added to `getState`/`setState`.
+- `test/helpers/dom.js`: `bootApp` extended additively with `maps = null` → emits `maps/index` (default `null` keeps all existing specs green).
+- `test/unit/maps.spec.js` (new): render (2 rows, strong/`.map-details`), empty state, `esc()` (`<img>` escaped), accordion (expand/collapse, single-expanded, button-in-row doesn't toggle, survives re-render), and the `savingMaps` snapshot echo guard.
+
+**Verify:** `npm run test:unit` → 9 files, 96 tests passing, 0 errors (the 6 pre-existing specs stay green; boot now emits `maps/index` null → `renderMaps()` on the static `#mapBody`).
+
+**Notes:** The accordion "button doesn't toggle" test strips the inline `onclick` before clicking — jsdom compiles inline handlers in its own realm so globals like `editMap` don't resolve there (works in a real browser); this is why the repo's other specs never `.click()` inline-`onclick` buttons. No serve/e2e run from the agent (port 45279 belongs to the gate).
+
+
+## Task 410 — feat(maps): add maps data layer with index and image doc refs, image fit helpers and mock data store
+
+**Repo:** inventory (shared-inventory) · **Lane:** maps · **Branch:** ralph/task-410 · **Commit:** 193703a
+
+**What:** Laid the pure data foundation for the Maps tab (lane maps, tasks 410–450). No UI yet — only the data layer, image helpers and the additive mock store extension.
+
+**Changes (6 files, all in scope):**
+- `modules/image.js` (new): `MAX_IMAGE_BYTES = 900000`, `needsCompression(len)` (threshold on data URL length, base64 ~33% inflate vs 1MiB Firestore cap), `blobToDataUrl(blob)` (FileReader Promise, jsdom-safe), pure `fitDimensions(w, h, maxDim=1600)` (aspect-preserving, never upscales, Math.round), and a thin `compressImage(blob, {maxDim, quality})` canvas wrapper (createImageBitmap + Image fallback; body untested per spec — no canvas in jsdom).
+- `modules/firebase.js`: added `MAPS_INDEX_DOC = doc(db,'maps','index')` and `mapImageDoc(id)` exports. firebaseConfig untouched, CDN imports intact.
+- `modules/state.js`: added `maps: []`, `editingMapIdx`, `expandedMapIdx`, `savingMaps`.
+- `test/mocks/firebase-firestore.js`: ADDITIVE store (`Map` token→data); `setDoc` now also writes to it; `getDoc(token)` returns `{ exists: () => store.has(token), data: () => store.get(token) }`; new `__setDocData(token, data)` seeder (no calls entry); `__reset()` also clears the store. Existing exports/behavior toward old specs unchanged — an unseeded token still reads `exists:false`.
+- `test/unit/image.spec.js` + `test/unit/firestore-mock.spec.js` (new): written RED first (image.js missing / __setDocData missing), then GREEN.
+
+**TDD:** RED verified for the right reasons (unresolved import + missing export), then implemented to green.
+
+**Verify:** `npm run test:unit` → 88 tests / 8 files, all green (6 pre-existing suites remain green, 2 new). e2e/serve/gitnexus not run (agent scope). Firestore security rules for the `maps` collection remain a manual owner step (per plan).
+
+
 ## Task 90 — docs: add Google Cloud TTS setup guide with voice audition and API key restriction steps
 
 - **Repo:** combat (monk_combat_app) · **Lane:** tts · **Branch:** ralph/task-90 · **Commit:** 88ea67e
@@ -609,6 +694,11 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
 
 
 
