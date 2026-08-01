@@ -1,309 +1,309 @@
-[
-  {
-    "id": 410,
-    "category": "feature",
-    "repo": "inventory",
-    "lane": "maps",
-    "files": [
-      "modules/firebase.js",
-      "modules/image.js",
-      "modules/state.js",
-      "test/mocks/firebase-firestore.js",
-      "test/unit/image.spec.js",
-      "test/unit/firestore-mock.spec.js"
-    ],
-    "verify": [
-      "npm run test:unit"
-    ],
-    "description": "feat(maps): add maps data layer with index and image doc refs, image fit helpers and mock data store",
-    "specRef": "shared-inventory-structure.md §9 + maps-feature-plan.md (в корена на репото)",
-    "tddWorkflow": true,
-    "notes": "ЦЕЛ НА ФИЧАТА (5 таска, lane maps): таб „Карти“ — ДМ-ът качва карти (скрийншоти) от лаптоп/браузър, партито ги гледа на Android таблет. Този таск слага САМО данновия фундамент.\n\n=== ДАННОВ МОДЕЛ (РЕШЕН ОТ ПОТРЕБИТЕЛЯ — НЕ ГО ПРЕДОГОВАРЯЙ) ===\nКолекция 'maps', два вида документи:\n1. maps/index → { list: [ { id, shortDesc, details, createdAt } ] } — САМО метаданни, редът в list = ред на показване (същият патърн като ITEMS_DOC {list}).\n2. maps/<uuid> → { image: '<data URL>' } — по ЕДИН документ на карта, само снимката. Разделено е нарочно: (а) Firestore лимит 1MB/док; (б) snapshot на индекса НЕ тегли всички снимки при всяка промяна (таблетът е на мобилна връзка).\nid = crypto.randomUUID() (няма как да колидира с 'index').\nБЕЗ Firebase Storage (иска Blaze план — отхвърлено). БЕЗ нов npm пакет.\n\n=== КОМПРЕСИЯ САМО ПРИ НУЖДА (изискване на потребителя — качеството не се разваля излишно) ===\nПрагът е върху BASE64 РАЗМЕРА, не върху файла: base64 надува с ~33%, а Firestore лимитът е 1MiB/док. modules/image.js изнася: export const MAX_IMAGE_BYTES = 900000; export function needsCompression(dataUrlLength) { return dataUrlLength > MAX_IMAGE_BYTES; } (чиста, тестима); export function blobToDataUrl(blob) — FileReader.readAsDataURL, връща Promise<string> (работи в jsdom). Решението КОГА да се компресира е на consumer-а (таск 430) — image.js само дава инструментите.\n\nСхема във Firestore НЕ се създава предварително — Firestore е schema-less, доковете възникват при първия setDoc. Security rules за колекция 'maps' са РЪЧНА стъпка на собственика в конзолата (виж maps-feature-plan.md) — НЕ е работа на агент.\n\n=== РАЗРЕШЕНИЕ ===\nЧервена линия §3.1 („не създавай нови колекции“) е АМЕНДИРАНА от §9 за ТОЧНО тази колекция 'maps'. Всичко останало от §3 важи с пълна сила: firebaseConfig НЕ се пипа, CDN imports остават, НИКАКЪВ тест срещу реален Firestore, npm test/serve НЕ се пускат от агент (порт 45279 е на гейта).\n\n=== МОКЪТ СЕ РАЗШИРЯВА САМО АДИТИВНО ===\ntest/mocks/firebase-firestore.js: добави вътрешен store (Map token→data); setDoc ОСВЕН в calls записва и в store-а; getDoc(token) връща { exists: () => store.has(token), data: () => store.get(token) }; нов export __setDocData(token, data) за seed-ване от тестове; __reset() чисти и store-а. ПОВЕДЕНИЕТО НА СЪЩЕСТВУВАЩИТЕ ЕКСПОРТИ КЪМ СТАРИТЕ ТЕСТОВЕ НЕ СЕ ПРОМЕНЯ — getDoc за незасят token дава exists:false, точно както днес. Всички 6 съществуващи unit спека остават зелени.",
-    "steps": [
-      {
-        "id": "410.1",
-        "phase": "RECON",
-        "action": "Прочети maps-feature-plan.md (корена на репото), shared-inventory-structure.md §5 (контракта на мока) и §9, modules/firebase.js (26 реда), modules/state.js, test/mocks/firebase-firestore.js. Виж test/unit/gold.spec.js как консумира bootApp/мока."
-      },
-      {
-        "id": "410.2",
-        "phase": "RED",
-        "action": "Създай test/unit/image.spec.js за fitDimensions(w, h, maxDim=1600): (а) landscape 4000x2000 → 1600x800; (б) portrait 1000x3200 → 500x1600; (в) по-малка от maxDim (800x600) НЕ се upscale-ва → 800x600; (г) резултатът е цели числа (Math.round); (д) needsCompression(899000)===false, needsCompression(900001)===true, MAX_IMAGE_BYTES===900000; (е) blobToDataUrl(new Blob(['abc'])) резолвва с низ, започващ с 'data:'. Създай test/unit/firestore-mock.spec.js: (а) setDoc('maps/abc', {image:'x'}) → getDoc('maps/abc') дава exists()===true и data().image==='x'; (б) незасят token → exists()===false; (в) __setDocData seed-ва без запис в calls.setDoc; (г) __reset() чисти store-а. Пусни npm run test:unit — новите спекове ЧЕРВЕНИ по правилната причина (модулът/експортите липсват), старите зелени."
-      },
-      {
-        "id": "410.3",
-        "phase": "GREEN",
-        "action": "Създай modules/image.js: export const MAX_IMAGE_BYTES = 900000; export function needsCompression(dataUrlLength); export function blobToDataUrl(blob) — FileReader.readAsDataURL в Promise; export function fitDimensions(w, h, maxDim = 1600) — чиста математика, връща {w, h}; export async function compressImage(blob, {maxDim = 1600, quality = 0.72} = {}) — createImageBitmap(blob) (fallback: new Image + objectURL), canvas fitDimensions размер, drawImage, canvas.toDataURL('image/jpeg', quality), връща data URL низа. compressImage е ТЪНКА обвивка — jsdom няма canvas, тя се тества само през мокване в следващите таскове, НЕ пиши unit тест за тялото ѝ. Разшири test/mocks/firebase-firestore.js по контракта от notes. В modules/firebase.js добави и export-ни: const MAPS_INDEX_DOC = doc(db, 'maps', 'index'); function mapImageDoc(id) { return doc(db, 'maps', id); }. В modules/state.js добави: maps: [], editingMapIdx: null, expandedMapIdx: null, savingMaps: false."
-      },
-      {
-        "id": "410.4",
-        "phase": "DONE",
-        "action": "npm run test:unit — ВСИЧКИ спекове зелени (новите 2 + старите 6). Никакви други файлове не са пипнати. Commit с description-а дословно."
-      }
-    ],
-    "passes": true
-  },
-  {
-    "id": 420,
-    "category": "feature",
-    "repo": "inventory",
-    "lane": "maps",
-    "files": [
-      "index.html",
-      "styles.css",
-      "app.js",
-      "modules/maps.js",
-      "test/helpers/dom.js",
-      "test/unit/maps.spec.js"
-    ],
-    "verify": [
-      "npm run test:unit"
-    ],
-    "description": "feat(maps): add Maps tab with realtime table, ellipsis descriptions and accordion expand",
-    "specRef": "shared-inventory-structure.md §9 + maps-feature-plan.md; modules/quests.js е ЕТАЛОНЪТ",
-    "tddWorkflow": true,
-    "notes": "Табът показва САМО двете описания (кратко + детайли) с елипсис, както другите табове — НИКАКВА снимка в реда (снимките са в отделни докове и не се теглят при списване). Акордеонът е копие на quest патърна: точно един expanded ред, клик върху бутон/.drag-handle НЕ toggle-ва, expanded оцелява re-render през state.expandedMapIdx. Drag&drop с initSortable — редът се пази в maps/index.\n\nbootApp (test/helpers/dom.js) се разширява АДИТИВНО: нов параметър maps = null, след квестовете __emit('maps/index', maps === null ? null : { list: maps }). Дефолтът null пази всички стари тестове зелени — НЕ пипай нищо друго в helper-а.\n\nБутонът „+ Добави карта“ вика openMapModal() — в ТОЗИ таск openMapModal е минимален stub export (истинският модал идва в таск 430); дефинирай го в modules/maps.js, за да не гърми onclick.\n\nUI текстовете на български, както другите табове (таб „Карти“, empty state „Няма качени карти.“).",
-    "steps": [
-      {
-        "id": "420.1",
-        "phase": "RECON",
-        "action": "Прочети modules/quests.js (renderQuests + акордеона, редове 15-58), modules/items.js (по диагонал), index.html (nav реда 23-26, tab-quests блока 75-97), styles.css (.quest-desc/.quest-note-cell/.quest-expanded правилата), test/unit/quests.spec.js (как се тества render + акордеон през bootApp), test/helpers/dom.js."
-      },
-      {
-        "id": "420.2",
-        "phase": "RED",
-        "action": "Създай test/unit/maps.spec.js (bootApp с новия maps параметър): (а) __emit с 2 карти → 2 реда в #mapBody, shortDesc в <strong>, details в .map-details div; (б) empty state при maps:[] → ред с клас empty и текст „Няма качени карти.“; (в) esc() — shortDesc '<img>' излиза екраниран (няма img елемент в реда); (г) акордеон: клик на ред 1 → class map-expanded; клик на ред 0 → ред 1 губи класа, ред 0 го има; клик на expanded реда → колапс; (д) клик върху бутон в реда НЕ expand-ва; (е) при state.savingMaps=true входящ __emit('maps/index',...) се ИГНОРИРА (echo guard). Пусни — ЧЕРВЕНИ по правилната причина."
-      },
-      {
-        "id": "420.3",
-        "phase": "GREEN",
-        "action": "index.html: в <nav class=\"tab-nav\"> добави <button class=\"tab-btn\" data-tab=\"maps\">Карти</button>; след tab-quests добави <div id=\"tab-maps\" class=\"tab\"> с .controls бутон „+ Добави карта“ (onclick=\"openMapModal()\") и .tbl-wrap таблица id=mapTable: колони ☰ | Карта | Детайли | (действия), tbody id=mapBody. styles.css: .map-short и .map-details по образеца на .quest-desc/.quest-note-cell (-webkit-line-clamp:2, overflow:hidden, word-break), tr.map-expanded ги разгъва (display:block, overflow:visible, white-space:pre-wrap за details). initTabs() е generic (data-tab) — НЕ пипай ui.js."
-      },
-      {
-        "id": "420.4",
-        "phase": "GREEN",
-        "action": "Създай modules/maps.js по образеца на quests.js: import state, MAPS_INDEX_DOC + setDoc от firebase.js, esc/syncMsg/initSortable от ui.js. export function renderMaps() — empty state / редове (data-idx, drag-handle, strong shortDesc + div.map-details, actions ✏ editMap(i) / 🗑 deleteMap(i)) / акордеон wiring / initSortable('mapBody', state.maps, saveMapsIndex). export async function saveMapsIndex() — state.savingMaps флаг, setDoc(MAPS_INDEX_DOC, { list: state.maps }), syncMsg както saveQuests. export function openMapModal() {} — stub за таск 430. Разшири bootApp (dom.js) с maps параметъра по notes. app.js: import-ни renderMaps/saveMapsIndex/openMapModal + window.openMapModal; добави onSnapshot(MAPS_INDEX_DOC, snap => { if (state.savingMaps) return; state.maps = snap.exists() ? (snap.data().list || []) : []; renderMaps(); }); facade re-export { renderMaps, saveMapsIndex } и добави maps в getState/setState."
-      },
-      {
-        "id": "420.5",
-        "phase": "DONE",
-        "action": "npm run test:unit — всичко зелено (вкл. старите спекове, които boot-ват app.js — новият onSnapshot не бива да ги чупи: bootApp вече emit-ва maps/index null → state.maps=[] → renderMaps() върху наличния #mapBody от index.html markup-а). Commit с description-а дословно."
-      }
-    ],
-    "passes": true
-  },
-  {
-    "id": 430,
-    "category": "feature",
-    "repo": "inventory",
-    "lane": "maps",
-    "files": [
-      "index.html",
-      "styles.css",
-      "app.js",
-      "modules/maps.js",
-      "modules/ui.js",
-      "test/unit/maps-modal.spec.js"
-    ],
-    "verify": [
-      "npm run test:unit"
-    ],
-    "description": "feat(maps): add map dialog with file upload, clipboard paste, required descriptions and Firestore persistence",
-    "specRef": "shared-inventory-structure.md §9 + maps-feature-plan.md; modules/items.js модалът е ЕТАЛОНЪТ",
-    "tddWorkflow": true,
-    "notes": "ДВАТА ВХОДА (изискване на потребителя, качването е от лаптоп/браузър): (1) <input type=\"file\" accept=\"image/*\"> и (2) Ctrl+V — ДМ-ът прави скрийншот (Win+Shift+S) и пейства направо в отворения диалог. Paste: 'paste' listener на document, АКТИВЕН САМО докато mapModal е отворен (проверка classList.contains('open')); от e.clipboardData.items вземи първия item с type startsWith 'image/' → getAsFile().\n\nPIPELINE (компресия САМО при нужда — изискване на потребителя, качеството не се пипа излишно): blob (от файл или paste) → dataUrl = await blobToDataUrl(blob); АКО needsCompression(dataUrl.length) → dataUrl = await compressImage(blob); ако СЛЕД компресията пак needsCompression → втори опит compressImage(blob, {maxDim: 1200, quality: 0.6}); ако и той е над лимита → грешка в #mMapError („Снимката е твърде голяма и след компресия“), pendingImage остава null, save блокиран. Резултатът → preview <img id=\"mPreview\"> и модулна променлива pendingImage до save. В unit тестовете се мок-ва САМО compressImage с ЧАСТИЧЕН мок: vi.mock('../../modules/image.js', async (importOriginal) => ({ ...(await importOriginal()), compressImage: vi.fn(async () => 'data:image/jpeg;base64,FAKE') })) — blobToDataUrl/needsCompression/MAX_IMAGE_BYTES остават реалните (FileReader работи в jsdom); тествай ЧЕ и КОГА compressImage е извикана, не самата компресия.\n\nВАЛИДАЦИЯ (и двете описания ЗАДЪЛЖИТЕЛНИ — изрично изискване): shortDesc празно → блок + focus; details празно → блок + focus; нова карта без снимка → блок + съобщение в #mMapError. При редакция снимката е опционална (не е пипната → НЕ се праща setDoc към image дока).\n\nSAVE (нова): id = crypto.randomUUID(); await setDoc(mapImageDoc(id), { image: pendingImage }); после unshift на { id, shortDesc, details, createdAt: new Date().toISOString() } в state.maps + saveMapsIndex(). РЕДАКЦИЯ: splice на стария индекс + unshift (редактираното отива НАЙ-ОТГОРЕ — патърнът на saveItem/saveQuest); ако pendingImage е сменена → setDoc към СЪЩИЯ mapImageDoc(id). EDIT ОТВАРЯНЕ: попълни полетата от метаданните и зареди снимката ЛЕНИВО с getDoc(mapImageDoc(id)) → preview (докато чака: placeholder текст).\n\nDELETE: confirm() (както deleteItem), после deleteDoc(mapImageDoc(id)) + splice от state.maps + saveMapsIndex().\n\nmodules/ui.js: в initModalBackdrops масивът става ['itemModal','questModal','mapModal'] — ЕДИНСТВЕНАТА промяна там.\n\nЧервени линии: никакъв реален Firestore в тестове; export/import bundle-ът (v1) НЕ се пипа — картите нарочно НЕ влизат в него (снимките биха издули JSON-а).",
-    "steps": [
-      {
-        "id": "430.1",
-        "phase": "RECON",
-        "action": "Прочети modules/items.js (openItemModal/saveItem/deleteItem — целия модален жизнен цикъл), index.html itemModal блока (редове 99-129), modules/ui.js initModalBackdrops, test/unit/items.spec.js (как се тестват модал + calls към мока), test/mocks/firebase-firestore.js (вкл. __setDocData от таск 410)."
-      },
-      {
-        "id": "430.2",
-        "phase": "RED",
-        "action": "Създай test/unit/maps-modal.spec.js с vi.mock на modules/image.js (compressImage: vi.fn(async () => 'data:image/jpeg;base64,FAKE')). Тестове: (а) openMapModal() отваря #mapModal (class open), полетата празни; (б) saveMap без shortDesc → НЯМА setDoc calls, фокус на #mShort; (в) без details → блок; (г) нова карта без снимка → блок + #mMapError видим; (д) handleMapFile с МАЛЪК blob (напр. new Blob(['x'.repeat(1000)])) → compressImage НЕ е извикана, #mPreview.src е оригиналният data URL (качеството се пази); (д2) handleMapFile с ГОЛЯМ blob (new Blob(['x'.repeat(1200000)]) — data URL-ът му надхвърля MAX_IMAGE_BYTES) → compressImage ИЗВИКАНА, #mPreview.src === 'data:image/jpeg;base64,FAKE'; (д3) при голям blob И compressImage мокната да връща пак над-лимитен низ → #mMapError видим, saveMap блокиран; (е) handleMapPaste с fake event { clipboardData: { items: [{ type: 'image/png', getAsFile: () => blob }] } } при отворен модал → същият pipeline; при ЗАТВОРЕН модал → игнор; (ж) успешен saveMap → calls.setDoc има запис с token 'maps/<id>' и data.image==='data:image/jpeg;base64,FAKE' И запис с token 'maps/index' чийто data.list[0] е {id, shortDesc, details, createdAt}; модалът затворен; (з) редакция БЕЗ смяна на снимка → само 1 setDoc (към maps/index), редактираният елемент е unshift-нат отгоре; (и) deleteMap с confirm true → calls.deleteDoc има 'maps/<id>' и индексът е пренаписан; с confirm false → нищо. Пусни — ЧЕРВЕНИ по правилната причина."
-      },
-      {
-        "id": "430.3",
-        "phase": "GREEN",
-        "action": "index.html: добави mapModal по образеца на questModal — title id=mapModalTitle, поле „Кратко описание *“ <input id=\"mShort\" placeholder=\"Зоната на изток, в джунглата…\">, поле „Детайли *“ <textarea id=\"mDetails\" placeholder=\"Селището на дървесните елфи…\">, поле „Снимка *“ с <input type=\"file\" id=\"mFile\" accept=\"image/*\" onchange=\"handleMapFile(event)\"> + hint див „…или Ctrl+V скрийншот направо тук“, <img id=\"mPreview\" class=\"map-preview hidden\">, error див id=mMapError (по образеца на goldError), бутони Отказ/Запази (closeMapModal/saveMap). styles.css: .map-preview (max-width:100%, max-height:200px, cursor:zoom-in, border-radius)."
-      },
-      {
-        "id": "430.4",
-        "phase": "GREEN",
-        "action": "modules/maps.js: имплементирай openMapModal(idx=null) (edit: попълва полета + getDoc(mapImageDoc(id)) → pendingImage=null, preview от дока; new: чисти всичко), closeMapModal, editMap(i), handleMapFile(e), handleMapPaste(e) (гуардът по notes), saveMap() и deleteMap(i) по контракта от notes, saveMapsIndex остава от таск 420. Общ вътрешен async processImageBlob(blob) имплементира pipeline-а от notes (blobToDataUrl → условна компресия → втори опит → грешка) — handleMapFile и handleMapPaste само го викат. document.addEventListener('paste', handleMapPaste) — веднъж, при module init. ui.js: добави 'mapModal' в initModalBackdrops. app.js: window.closeMapModal/saveMap/deleteMap/editMap/handleMapFile + facade re-exports. import { blobToDataUrl, needsCompression, compressImage } from './image.js' в maps.js (за да работи частичният vi.mock)."
-      },
-      {
-        "id": "430.5",
-        "phase": "DONE",
-        "action": "npm run test:unit — всичко зелено. Ръчна проверка НЕ се прави (без serve от агент — порт 45279). Commit с description-а дословно."
-      }
-    ],
-    "passes": true
-  },
-  {
-    "id": 440,
-    "category": "feature",
-    "repo": "inventory",
-    "lane": "maps",
-    "files": [
-      "styles.css",
-      "modules/viewer.js",
-      "modules/maps.js",
-      "app.js",
-      "test/unit/viewer.spec.js"
-    ],
-    "verify": [
-      "npm run test:unit"
-    ],
-    "description": "feat(maps): add fullscreen map viewer with wheel zoom, drag pan and pinch zoom",
-    "specRef": "shared-inventory-structure.md §9 + maps-feature-plan.md",
-    "tddWorkflow": true,
-    "notes": "Прегледът е ОСНОВНО на Android таблет/телефон — pinch zoom е задължителен. Ползвай POINTER EVENTS (pointerdown/move/up/cancel + Map на активните пойнтери), НЕ touch events — един код за мишка и пръсти. wheel zoom към курсора за лаптопа, dblclick → reset, Esc/бутон ✕/клик на фона → затваряне. touch-action:none на overlay-а (иначе браузърът краде жестовете), preventDefault на wheel.\n\nАРХИТЕКТУРА ЗА ТЕСТИМОСТ: цялата геометрия е ЧИСТИ функции с unit тестове; DOM/event кодът е тънък. export function zoomAt(view, factor, cx, cy) → { scale, tx, ty }: newScale = clampScale(view.scale * factor); k = newScale / view.scale; tx' = cx - (cx - view.tx) * k; ty' = cy - (cy - view.ty) * k (точката под курсора остава на място). export function clampScale(s) → [1, 8]. Пинчът се свежда до zoomAt с factor = dist1/dist0 и център средата между двата пръста.\n\nОverlay-ят (#mapViewer) се създава ЕДНОКРАТНО при първото openViewer и се преизползва (display toggle). Прилагане: img.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`; transform-origin: 0 0.\n\nВръзка: клик на #mPreview в модала → openViewer(pendingImage или заредения data URL). Спекът на потребителя: „като се отвори за едит, да може да се види картата — с клик да се отвори на голям екран, да се зуумва“.",
-    "steps": [
-      {
-        "id": "440.1",
-        "phase": "RECON",
-        "action": "Прочети modules/maps.js след таск 430 (къде живее pendingImage/preview data URL-ът), styles.css (модалните стилове), test/unit/ui.spec.js (как се тестват DOM-only модули)."
-      },
-      {
-        "id": "440.2",
-        "phase": "RED",
-        "action": "Създай test/unit/viewer.spec.js. Чиста математика: (а) zoomAt({scale:1,tx:0,ty:0}, 2, 100, 100) → {scale:2, tx:-100, ty:-100}; (б) инвариант — след zoomAt точката (cx,cy) показва същата точка от снимката: за произволни view/cx/cy провери (cx - tx')/scale' === (cx - tx)/scale; (в) clampScale(0.5)===1, clampScale(20)===8, zoomAt при scale 1 с factor 0.5 не пада под 1; (г) поредица zoom in + огледален zoom out връща изходния view (в рамките на floating point). DOM: (д) openViewer('data:...') → #mapViewer в document, видим, img.src сетнат; (е) повторен openViewer НЕ дублира overlay-а; (ж) closeViewer / Esc keydown / клик на фона (target === overlay) → скрит; (з) dblclick → transform reset (scale 1). Пусни — ЧЕРВЕНИ."
-      },
-      {
-        "id": "440.3",
-        "phase": "GREEN",
-        "action": "Създай modules/viewer.js: export { zoomAt, clampScale, openViewer, closeViewer }. Вътрешно view state {scale, tx, ty}; wheel (deltaY<0 → factor 1.15, иначе 1/1.15, cx/cy от e.clientX/Y относно overlay-а); pan: pointerdown записва пойнтера в Map + setPointerCapture, pointermove с 1 активен пойнтер мести tx/ty; pinch: 2 активни пойнтера → zoomAt(view, distNew/distOld, midX, midY); pointerup/cancel чисти. dblclick reset {scale:1,tx:0,ty:0}. Esc listener само докато е отворен. styles.css: #mapViewer { position:fixed; inset:0; background:rgba(0,0,0,.92); z-index над модалите; display:flex; touch-action:none; } + img { transform-origin:0 0; } + бутон ✕ горе-дясно."
-      },
-      {
-        "id": "440.4",
-        "phase": "GREEN",
-        "action": "modules/maps.js: click listener на #mPreview → openViewer(текущия data URL) (в openMapModal wiring-а или при module init — но елементът е статичен в index.html, така че веднъж при init). app.js: facade re-export { zoomAt, clampScale, openViewer, closeViewer } from './modules/viewer.js'."
-      },
-      {
-        "id": "440.5",
-        "phase": "DONE",
-        "action": "npm run test:unit — всичко зелено. Commit с description-а дословно."
-      }
-    ],
-    "passes": true
-  },
-  {
-    "id": 450,
-    "category": "e2e",
-    "repo": "inventory",
-    "lane": "maps",
-    "files": [
-      "test/fixtures/maps-fixture.html",
-      "test/e2e/maps-accordion.spec.js",
-      "styles.css",
-      "modules/maps.js"
-    ],
-    "description": "test(maps): add e2e fixture and accordion spec for the Maps tab",
-    "specRef": "test/e2e/quests-accordion.spec.js + test/fixtures/quests-fixture.html са ЕТАЛОНЪТ — огледален превод към maps",
-    "notes": "Червена линия §3.5 („test/e2e/ и fixtures не се пипат“) важи за СЪЩЕСТВУВАЩИТЕ файлове — НОВИТЕ maps-* файлове тук са изрично позволени (§9). Съществуващите спекове/фикстури НЕ се редактират.\n\nФикстурата е STANDALONE HTML (както quests-fixture.html): инлайн копие на map стиловете (взети 1:1 от styles.css — .map-short/.map-details/tr.map-expanded + табличните базови стилове) + инлайн скрипт, който рендерира 2 карти и репликира акордеон логиката на renderMaps: карта 0 с кратки описания, карта 1 с ДЪЛГИ (3+ реда, за да има какво да клампва елипсисът). Снимка НЕ участва във фикстурата (тя не се показва в таблицата по дизайн).\n\nСпекът копира структурата на quests-accordion.spec.js: (а) .map-details има overflow hidden; (б) редът стартира без map-expanded; (в) клик expand-ва; (г) повторен клик колапсира; (д) само един expanded — вторият клик колапсира първия; (е) клик на edit бутон НЕ expand-ва.\n\n⚠ АГЕНТЪТ НЕ ПУСКА npm test (порт 45279 е на гейта)! Пиши спека КОНСЕРВАТИВНО по образеца — гейтът ще го пусне след merge. Пусни само npm run test:unit за регресия.\n\nТова е ФИНАЛНИЯТ таск на lane-а — БЕЗ verify override, пълният гейт (npm ci + test:unit + npm test/Playwright, вкл. новия спек) е задната мрежа. Ако при писането забележиш дребен пропуск от таскове 410-440 (стил, липсващ клас), поправи го ТУК — затова styles.css и modules/maps.js са в ownership-а.",
-    "steps": [
-      {
-        "id": "450.1",
-        "action": "Прочети test/fixtures/quests-fixture.html ИЗЦЯЛО и test/e2e/quests-accordion.spec.js ИЗЦЯЛО. Прочети styles.css map правилата (от таскове 420/430/440) и renderMaps в modules/maps.js — фикстурата трябва да репликира СЪЩИТЕ класове и структура на реда."
-      },
-      {
-        "id": "450.2",
-        "action": "Създай test/fixtures/maps-fixture.html по образеца: инлайн CSS (базовите табличен/бутонни стилове от quests-fixture + map класовете 1:1 от styles.css), таблица mapTable/mapBody, инлайн скрипт с data масив от 2 карти (карта 1 с многоредови shortDesc/details) и рендер + акордеон логика, огледални на renderMaps."
-      },
-      {
-        "id": "450.3",
-        "action": "Създай test/e2e/maps-accordion.spec.js по образеца на quests-accordion.spec.js (FIXTURE = '/test/fixtures/maps-fixture.html', waitForSelector '#mapBody tr[data-idx]', 6-те теста от notes)."
-      },
-      {
-        "id": "450.4",
-        "action": "npm run test:unit за регресия (e2e ще го пусне гейтът). Провери с git diff, че НИТО един съществуващ файл в test/e2e/ и test/fixtures/ не е променен. Commit с description-а дословно."
-      }
-    ],
-    "passes": true
-  },
-  {
-    "id": 460,
-    "category": "feature",
-    "repo": "inventory",
-    "lane": "maps",
-    "files": [
-      "index.html",
-      "styles.css",
-      "test/unit/maps.spec.js"
-    ],
-    "verify": [
-      "npm run test:unit"
-    ],
-    "description": "feat(maps): add static world map link above the add button",
-    "specRef": "shared-inventory-structure.md §9 + maps-feature-plan.md („Допълнения“)",
-    "tddWorkflow": true,
-    "notes": "Изискване на потребителя: НАД бутона „+ Добави карта“ в таб „Карти“ да стои СТАТИЧЕН външен линк към пълната карта на света:\nhref (ТОЧНО този URL): https://totalwarwarhammer.fandom.com/wiki/Map:Immortal_Empires_Factions\nЕтикет: „🗺 Immortal Empires Factions — пълната карта“. target=\"_blank\" + rel=\"noopener\" (външен сайт, приложението е PWA — да не подменя таба).\nЧисто статичен markup — НИКАКЪВ JS, никакъв Firestore. Не пипай нищо друго в tab-maps блока.",
-    "steps": [
-      {
-        "id": "460.1",
-        "phase": "RECON",
-        "action": "Прочети index.html блока #tab-maps (controls + таблицата) и styles.css правилата за .controls, за да вградиш линка в същия визуален език (btn-ghost стилистика или muted link)."
-      },
-      {
-        "id": "460.2",
-        "phase": "RED",
-        "action": "В test/unit/maps.spec.js добави describe за линка: след bootApp() (а) document.querySelector('#tab-maps a.map-world-link') съществува; (б) href е ТОЧНО https://totalwarwarhammer.fandom.com/wiki/Map:Immortal_Empires_Factions; (в) target === '_blank' и rel съдържа 'noopener'; (г) линкът стои ПРЕДИ .controls бутона в DOM реда (compareDocumentPosition). Пусни — ЧЕРВЕНИ."
-      },
-      {
-        "id": "460.3",
-        "phase": "GREEN",
-        "action": "index.html: в #tab-maps, над div.controls, добави <div class=\"map-world-row\"><a class=\"map-world-link\" href=\"...\" target=\"_blank\" rel=\"noopener\">🗺 Immortal Empires Factions — пълната карта</a></div>. styles.css: .map-world-row { text-align:right; margin-bottom:6px; } .map-world-link { color: var(--muted); font-size:0.85rem; } + hover подчертаване — дискретно, да не се бие с бутона."
-      },
-      {
-        "id": "460.4",
-        "phase": "DONE",
-        "action": "npm run test:unit — всичко зелено. Commit с description-а дословно."
-      }
-    ],
-    "passes": false
-  },
-  {
-    "id": 470,
-    "category": "feature",
-    "repo": "inventory",
-    "lane": "maps",
-    "files": [
-      "modules/maps.js",
-      "modules/viewer.js",
-      "app.js",
-      "styles.css",
-      "test/unit/maps.spec.js",
-      "test/unit/maps-modal.spec.js",
-      "test/unit/viewer.spec.js"
-    ],
-    "description": "feat(maps): add per-row preview button and viewer zoom buttons",
-    "specRef": "shared-inventory-structure.md §9 + maps-feature-plan.md („Допълнения“); modules/maps.js renderMaps + modules/viewer.js са отправната точка",
-    "tddWorkflow": true,
-    "notes": "ДВЕ СВЪРЗАНИ ДОБАВКИ (изискване на потребителя — преглед на картата БЕЗ да се влиза в едит, пести място в таблицата):\n\n1. ПРЕВЮ БУТОН НА ВСЕКИ РЕД: в renderMaps() добави бутон 🔍 в .tbl-actions, ПЪРВИ преди ✏ и 🗑: <button class=\"btn-ghost btn-sm\" onclick=\"previewMap(${i})\">🔍</button>. Нова export async function previewMap(i): m = state.maps[i]; syncMsg('Зареждане…', 'saving'); snap = await getDoc(mapImageDoc(m.id)); ако snap.exists() и има .image → openViewer(image) + syncMsg('● live', 'saved'); иначе syncMsg('Няма снимка за тази карта', ''). НЕ отваря модала, НЕ пипа state.editingMapIdx. Всяко натискане тегли наново (без кеш — както решенията при едит preview-то). app.js: window.previewMap + facade re-export.\n\n2. ЛУПИЧКИ +/− ВЪВ VIEWER-А: видими zoom бутони (изискване „с лупичките за + и -“ — на таблет wheel няма, а pinch не е очевиден за всички). В ensureOverlay() добави два бутона: class viewer-zoom viewer-zoom-in (текст ➕) и viewer-zoom viewer-zoom-out (текст ➖), aria-label „Приближи“/„Отдалечи“. Клик → view = zoomAt(view, 1.4 | 1/1.4, cx, cy) с център СРЕДАТА на overlay-а (getBoundingClientRect().width/2, height/2; в jsdom rect е 0x0 → центърът е (0,0), тестът пак работи през transform-а) + applyTransform(). Клампването в [1,8] идва от zoomAt — на минимум/максимум кликът просто не мърда скейла. styles.css: .viewer-zoom — фиксирани долу-център (flex ред, gap), едри touch таргети (min 44px), полупрозрачен фон като .viewer-close.\n\nЧЕРВЕНИ ЛИНИИ: test/e2e/ и test/fixtures/ НЕ се пипат (maps-fixture-ът НЕ получава 🔍 бутона — e2e спекът за акордеона търси edit бутона в .tbl-actions по индекс САМО във фикстурата, тя е standalone и остава вярна на себе си). Никакъв реален Firestore. Това е ФИНАЛНИЯТ таск — БЕЗ verify override, пълният гейт е задната мрежа.",
-    "steps": [
-      {
-        "id": "470.1",
-        "phase": "RECON",
-        "action": "Прочети modules/maps.js (renderMaps, openMapModal lazy getDoc патърна, ред 141-149), modules/viewer.js (ensureOverlay, zoomAt, applyTransform), test/unit/viewer.spec.js и test/unit/maps-modal.spec.js (как seed-ват снимка с __setDocData и как проверяват #mapViewer)."
-      },
-      {
-        "id": "470.2",
-        "phase": "RED",
-        "action": "test/unit/maps.spec.js: (а) при 2 карти всеки ред има бутон 🔍 в .tbl-actions, ПРЕДИ ✏; (б) клик на 🔍 НЕ expand-ва реда (уловено от съществуващия guard e.target.closest('button')— тестът го доказва). test/unit/maps-modal.spec.js (или нов describe в maps.spec.js): (в) __setDocData('maps/<id>', {image:'data:image/png;base64,AAA'}) → await previewMap(0) → #mapViewer е видим (display flex) и img.src е точно този data URL, а #mapModal НЯМА class open; (г) previewMap за карта БЕЗ image док → viewer-ът НЕ се отваря, #sync съдържа „Няма снимка“. test/unit/viewer.spec.js: (д) след openViewer overlay-ът има .viewer-zoom-in и .viewer-zoom-out бутони; (е) клик на ➕ → transform scale расте (парсни от style.transform); клик на ➖ след това → връща се; (ж) на scale 1 клик на ➖ оставя scale 1 (кламп); (з) многократни ➕ не надхвърлят scale 8. Пусни — ЧЕРВЕНИ по правилната причина."
-      },
-      {
-        "id": "470.3",
-        "phase": "GREEN",
-        "action": "modules/viewer.js: бутоните в ensureOverlay() по notes (клик листенъри → zoomAt към центъра + applyTransform; stopPropagation, за да не удари backdrop close). modules/maps.js: 🔍 бутонът в renderMaps() + export async function previewMap(i) по notes. app.js: window.previewMap = previewMap + facade re-export { previewMap }. styles.css: .viewer-zoom стиловете."
-      },
-      {
-        "id": "470.4",
-        "phase": "DONE",
-        "action": "npm run test:unit — всичко зелено (вкл. старите viewer/maps спекове). git diff — увери се, че test/e2e/ и test/fixtures/ са НЕПИПНАТИ. Commit с description-а дословно."
-      }
-    ],
-    "passes": false
-  }
+﻿[
+    {
+        "id":  410,
+        "category":  "feature",
+        "repo":  "inventory",
+        "lane":  "maps",
+        "files":  [
+                      "modules/firebase.js",
+                      "modules/image.js",
+                      "modules/state.js",
+                      "test/mocks/firebase-firestore.js",
+                      "test/unit/image.spec.js",
+                      "test/unit/firestore-mock.spec.js"
+                  ],
+        "verify":  [
+                       "npm run test:unit"
+                   ],
+        "description":  "feat(maps): add maps data layer with index and image doc refs, image fit helpers and mock data store",
+        "specRef":  "shared-inventory-structure.md §9 + maps-feature-plan.md (в корена на репото)",
+        "tddWorkflow":  true,
+        "notes":  "ЦЕЛ НА ФИЧАТА (5 таска, lane maps): таб „Карти“ — ДМ-ът качва карти (скрийншоти) от лаптоп/браузър, партито ги гледа на Android таблет. Този таск слага САМО данновия фундамент.\n\n=== ДАННОВ МОДЕЛ (РЕШЕН ОТ ПОТРЕБИТЕЛЯ — НЕ ГО ПРЕДОГОВАРЯЙ) ===\nКолекция \u0027maps\u0027, два вида документи:\n1. maps/index → { list: [ { id, shortDesc, details, createdAt } ] } — САМО метаданни, редът в list = ред на показване (същият патърн като ITEMS_DOC {list}).\n2. maps/\u003cuuid\u003e → { image: \u0027\u003cdata URL\u003e\u0027 } — по ЕДИН документ на карта, само снимката. Разделено е нарочно: (а) Firestore лимит 1MB/док; (б) snapshot на индекса НЕ тегли всички снимки при всяка промяна (таблетът е на мобилна връзка).\nid = crypto.randomUUID() (няма как да колидира с \u0027index\u0027).\nБЕЗ Firebase Storage (иска Blaze план — отхвърлено). БЕЗ нов npm пакет.\n\n=== КОМПРЕСИЯ САМО ПРИ НУЖДА (изискване на потребителя — качеството не се разваля излишно) ===\nПрагът е върху BASE64 РАЗМЕРА, не върху файла: base64 надува с ~33%, а Firestore лимитът е 1MiB/док. modules/image.js изнася: export const MAX_IMAGE_BYTES = 900000; export function needsCompression(dataUrlLength) { return dataUrlLength \u003e MAX_IMAGE_BYTES; } (чиста, тестима); export function blobToDataUrl(blob) — FileReader.readAsDataURL, връща Promise\u003cstring\u003e (работи в jsdom). Решението КОГА да се компресира е на consumer-а (таск 430) — image.js само дава инструментите.\n\nСхема във Firestore НЕ се създава предварително — Firestore е schema-less, доковете възникват при първия setDoc. Security rules за колекция \u0027maps\u0027 са РЪЧНА стъпка на собственика в конзолата (виж maps-feature-plan.md) — НЕ е работа на агент.\n\n=== РАЗРЕШЕНИЕ ===\nЧервена линия §3.1 („не създавай нови колекции“) е АМЕНДИРАНА от §9 за ТОЧНО тази колекция \u0027maps\u0027. Всичко останало от §3 важи с пълна сила: firebaseConfig НЕ се пипа, CDN imports остават, НИКАКЪВ тест срещу реален Firestore, npm test/serve НЕ се пускат от агент (порт 45279 е на гейта).\n\n=== МОКЪТ СЕ РАЗШИРЯВА САМО АДИТИВНО ===\ntest/mocks/firebase-firestore.js: добави вътрешен store (Map token→data); setDoc ОСВЕН в calls записва и в store-а; getDoc(token) връща { exists: () =\u003e store.has(token), data: () =\u003e store.get(token) }; нов export __setDocData(token, data) за seed-ване от тестове; __reset() чисти и store-а. ПОВЕДЕНИЕТО НА СЪЩЕСТВУВАЩИТЕ ЕКСПОРТИ КЪМ СТАРИТЕ ТЕСТОВЕ НЕ СЕ ПРОМЕНЯ — getDoc за незасят token дава exists:false, точно както днес. Всички 6 съществуващи unit спека остават зелени.",
+        "steps":  [
+                      {
+                          "id":  "410.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети maps-feature-plan.md (корена на репото), shared-inventory-structure.md §5 (контракта на мока) и §9, modules/firebase.js (26 реда), modules/state.js, test/mocks/firebase-firestore.js. Виж test/unit/gold.spec.js как консумира bootApp/мока."
+                      },
+                      {
+                          "id":  "410.2",
+                          "phase":  "RED",
+                          "action":  "Създай test/unit/image.spec.js за fitDimensions(w, h, maxDim=1600): (а) landscape 4000x2000 → 1600x800; (б) portrait 1000x3200 → 500x1600; (в) по-малка от maxDim (800x600) НЕ се upscale-ва → 800x600; (г) резултатът е цели числа (Math.round); (д) needsCompression(899000)===false, needsCompression(900001)===true, MAX_IMAGE_BYTES===900000; (е) blobToDataUrl(new Blob([\u0027abc\u0027])) резолвва с низ, започващ с \u0027data:\u0027. Създай test/unit/firestore-mock.spec.js: (а) setDoc(\u0027maps/abc\u0027, {image:\u0027x\u0027}) → getDoc(\u0027maps/abc\u0027) дава exists()===true и data().image===\u0027x\u0027; (б) незасят token → exists()===false; (в) __setDocData seed-ва без запис в calls.setDoc; (г) __reset() чисти store-а. Пусни npm run test:unit — новите спекове ЧЕРВЕНИ по правилната причина (модулът/експортите липсват), старите зелени."
+                      },
+                      {
+                          "id":  "410.3",
+                          "phase":  "GREEN",
+                          "action":  "Създай modules/image.js: export const MAX_IMAGE_BYTES = 900000; export function needsCompression(dataUrlLength); export function blobToDataUrl(blob) — FileReader.readAsDataURL в Promise; export function fitDimensions(w, h, maxDim = 1600) — чиста математика, връща {w, h}; export async function compressImage(blob, {maxDim = 1600, quality = 0.72} = {}) — createImageBitmap(blob) (fallback: new Image + objectURL), canvas fitDimensions размер, drawImage, canvas.toDataURL(\u0027image/jpeg\u0027, quality), връща data URL низа. compressImage е ТЪНКА обвивка — jsdom няма canvas, тя се тества само през мокване в следващите таскове, НЕ пиши unit тест за тялото ѝ. Разшири test/mocks/firebase-firestore.js по контракта от notes. В modules/firebase.js добави и export-ни: const MAPS_INDEX_DOC = doc(db, \u0027maps\u0027, \u0027index\u0027); function mapImageDoc(id) { return doc(db, \u0027maps\u0027, id); }. В modules/state.js добави: maps: [], editingMapIdx: null, expandedMapIdx: null, savingMaps: false."
+                      },
+                      {
+                          "id":  "410.4",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit — ВСИЧКИ спекове зелени (новите 2 + старите 6). Никакви други файлове не са пипнати. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  420,
+        "category":  "feature",
+        "repo":  "inventory",
+        "lane":  "maps",
+        "files":  [
+                      "index.html",
+                      "styles.css",
+                      "app.js",
+                      "modules/maps.js",
+                      "test/helpers/dom.js",
+                      "test/unit/maps.spec.js"
+                  ],
+        "verify":  [
+                       "npm run test:unit"
+                   ],
+        "description":  "feat(maps): add Maps tab with realtime table, ellipsis descriptions and accordion expand",
+        "specRef":  "shared-inventory-structure.md §9 + maps-feature-plan.md; modules/quests.js е ЕТАЛОНЪТ",
+        "tddWorkflow":  true,
+        "notes":  "Табът показва САМО двете описания (кратко + детайли) с елипсис, както другите табове — НИКАКВА снимка в реда (снимките са в отделни докове и не се теглят при списване). Акордеонът е копие на quest патърна: точно един expanded ред, клик върху бутон/.drag-handle НЕ toggle-ва, expanded оцелява re-render през state.expandedMapIdx. Drag\u0026drop с initSortable — редът се пази в maps/index.\n\nbootApp (test/helpers/dom.js) се разширява АДИТИВНО: нов параметър maps = null, след квестовете __emit(\u0027maps/index\u0027, maps === null ? null : { list: maps }). Дефолтът null пази всички стари тестове зелени — НЕ пипай нищо друго в helper-а.\n\nБутонът „+ Добави карта“ вика openMapModal() — в ТОЗИ таск openMapModal е минимален stub export (истинският модал идва в таск 430); дефинирай го в modules/maps.js, за да не гърми onclick.\n\nUI текстовете на български, както другите табове (таб „Карти“, empty state „Няма качени карти.“).",
+        "steps":  [
+                      {
+                          "id":  "420.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети modules/quests.js (renderQuests + акордеона, редове 15-58), modules/items.js (по диагонал), index.html (nav реда 23-26, tab-quests блока 75-97), styles.css (.quest-desc/.quest-note-cell/.quest-expanded правилата), test/unit/quests.spec.js (как се тества render + акордеон през bootApp), test/helpers/dom.js."
+                      },
+                      {
+                          "id":  "420.2",
+                          "phase":  "RED",
+                          "action":  "Създай test/unit/maps.spec.js (bootApp с новия maps параметър): (а) __emit с 2 карти → 2 реда в #mapBody, shortDesc в \u003cstrong\u003e, details в .map-details div; (б) empty state при maps:[] → ред с клас empty и текст „Няма качени карти.“; (в) esc() — shortDesc \u0027\u003cimg\u003e\u0027 излиза екраниран (няма img елемент в реда); (г) акордеон: клик на ред 1 → class map-expanded; клик на ред 0 → ред 1 губи класа, ред 0 го има; клик на expanded реда → колапс; (д) клик върху бутон в реда НЕ expand-ва; (е) при state.savingMaps=true входящ __emit(\u0027maps/index\u0027,...) се ИГНОРИРА (echo guard). Пусни — ЧЕРВЕНИ по правилната причина."
+                      },
+                      {
+                          "id":  "420.3",
+                          "phase":  "GREEN",
+                          "action":  "index.html: в \u003cnav class=\"tab-nav\"\u003e добави \u003cbutton class=\"tab-btn\" data-tab=\"maps\"\u003eКарти\u003c/button\u003e; след tab-quests добави \u003cdiv id=\"tab-maps\" class=\"tab\"\u003e с .controls бутон „+ Добави карта“ (onclick=\"openMapModal()\") и .tbl-wrap таблица id=mapTable: колони ☰ | Карта | Детайли | (действия), tbody id=mapBody. styles.css: .map-short и .map-details по образеца на .quest-desc/.quest-note-cell (-webkit-line-clamp:2, overflow:hidden, word-break), tr.map-expanded ги разгъва (display:block, overflow:visible, white-space:pre-wrap за details). initTabs() е generic (data-tab) — НЕ пипай ui.js."
+                      },
+                      {
+                          "id":  "420.4",
+                          "phase":  "GREEN",
+                          "action":  "Създай modules/maps.js по образеца на quests.js: import state, MAPS_INDEX_DOC + setDoc от firebase.js, esc/syncMsg/initSortable от ui.js. export function renderMaps() — empty state / редове (data-idx, drag-handle, strong shortDesc + div.map-details, actions ✏ editMap(i) / 🗑 deleteMap(i)) / акордеон wiring / initSortable(\u0027mapBody\u0027, state.maps, saveMapsIndex). export async function saveMapsIndex() — state.savingMaps флаг, setDoc(MAPS_INDEX_DOC, { list: state.maps }), syncMsg както saveQuests. export function openMapModal() {} — stub за таск 430. Разшири bootApp (dom.js) с maps параметъра по notes. app.js: import-ни renderMaps/saveMapsIndex/openMapModal + window.openMapModal; добави onSnapshot(MAPS_INDEX_DOC, snap =\u003e { if (state.savingMaps) return; state.maps = snap.exists() ? (snap.data().list || []) : []; renderMaps(); }); facade re-export { renderMaps, saveMapsIndex } и добави maps в getState/setState."
+                      },
+                      {
+                          "id":  "420.5",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit — всичко зелено (вкл. старите спекове, които boot-ват app.js — новият onSnapshot не бива да ги чупи: bootApp вече emit-ва maps/index null → state.maps=[] → renderMaps() върху наличния #mapBody от index.html markup-а). Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  430,
+        "category":  "feature",
+        "repo":  "inventory",
+        "lane":  "maps",
+        "files":  [
+                      "index.html",
+                      "styles.css",
+                      "app.js",
+                      "modules/maps.js",
+                      "modules/ui.js",
+                      "test/unit/maps-modal.spec.js"
+                  ],
+        "verify":  [
+                       "npm run test:unit"
+                   ],
+        "description":  "feat(maps): add map dialog with file upload, clipboard paste, required descriptions and Firestore persistence",
+        "specRef":  "shared-inventory-structure.md §9 + maps-feature-plan.md; modules/items.js модалът е ЕТАЛОНЪТ",
+        "tddWorkflow":  true,
+        "notes":  "ДВАТА ВХОДА (изискване на потребителя, качването е от лаптоп/браузър): (1) \u003cinput type=\"file\" accept=\"image/*\"\u003e и (2) Ctrl+V — ДМ-ът прави скрийншот (Win+Shift+S) и пейства направо в отворения диалог. Paste: \u0027paste\u0027 listener на document, АКТИВЕН САМО докато mapModal е отворен (проверка classList.contains(\u0027open\u0027)); от e.clipboardData.items вземи първия item с type startsWith \u0027image/\u0027 → getAsFile().\n\nPIPELINE (компресия САМО при нужда — изискване на потребителя, качеството не се пипа излишно): blob (от файл или paste) → dataUrl = await blobToDataUrl(blob); АКО needsCompression(dataUrl.length) → dataUrl = await compressImage(blob); ако СЛЕД компресията пак needsCompression → втори опит compressImage(blob, {maxDim: 1200, quality: 0.6}); ако и той е над лимита → грешка в #mMapError („Снимката е твърде голяма и след компресия“), pendingImage остава null, save блокиран. Резултатът → preview \u003cimg id=\"mPreview\"\u003e и модулна променлива pendingImage до save. В unit тестовете се мок-ва САМО compressImage с ЧАСТИЧЕН мок: vi.mock(\u0027../../modules/image.js\u0027, async (importOriginal) =\u003e ({ ...(await importOriginal()), compressImage: vi.fn(async () =\u003e \u0027data:image/jpeg;base64,FAKE\u0027) })) — blobToDataUrl/needsCompression/MAX_IMAGE_BYTES остават реалните (FileReader работи в jsdom); тествай ЧЕ и КОГА compressImage е извикана, не самата компресия.\n\nВАЛИДАЦИЯ (и двете описания ЗАДЪЛЖИТЕЛНИ — изрично изискване): shortDesc празно → блок + focus; details празно → блок + focus; нова карта без снимка → блок + съобщение в #mMapError. При редакция снимката е опционална (не е пипната → НЕ се праща setDoc към image дока).\n\nSAVE (нова): id = crypto.randomUUID(); await setDoc(mapImageDoc(id), { image: pendingImage }); после unshift на { id, shortDesc, details, createdAt: new Date().toISOString() } в state.maps + saveMapsIndex(). РЕДАКЦИЯ: splice на стария индекс + unshift (редактираното отива НАЙ-ОТГОРЕ — патърнът на saveItem/saveQuest); ако pendingImage е сменена → setDoc към СЪЩИЯ mapImageDoc(id). EDIT ОТВАРЯНЕ: попълни полетата от метаданните и зареди снимката ЛЕНИВО с getDoc(mapImageDoc(id)) → preview (докато чака: placeholder текст).\n\nDELETE: confirm() (както deleteItem), после deleteDoc(mapImageDoc(id)) + splice от state.maps + saveMapsIndex().\n\nmodules/ui.js: в initModalBackdrops масивът става [\u0027itemModal\u0027,\u0027questModal\u0027,\u0027mapModal\u0027] — ЕДИНСТВЕНАТА промяна там.\n\nЧервени линии: никакъв реален Firestore в тестове; export/import bundle-ът (v1) НЕ се пипа — картите нарочно НЕ влизат в него (снимките биха издули JSON-а).",
+        "steps":  [
+                      {
+                          "id":  "430.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети modules/items.js (openItemModal/saveItem/deleteItem — целия модален жизнен цикъл), index.html itemModal блока (редове 99-129), modules/ui.js initModalBackdrops, test/unit/items.spec.js (как се тестват модал + calls към мока), test/mocks/firebase-firestore.js (вкл. __setDocData от таск 410)."
+                      },
+                      {
+                          "id":  "430.2",
+                          "phase":  "RED",
+                          "action":  "Създай test/unit/maps-modal.spec.js с vi.mock на modules/image.js (compressImage: vi.fn(async () =\u003e \u0027data:image/jpeg;base64,FAKE\u0027)). Тестове: (а) openMapModal() отваря #mapModal (class open), полетата празни; (б) saveMap без shortDesc → НЯМА setDoc calls, фокус на #mShort; (в) без details → блок; (г) нова карта без снимка → блок + #mMapError видим; (д) handleMapFile с МАЛЪК blob (напр. new Blob([\u0027x\u0027.repeat(1000)])) → compressImage НЕ е извикана, #mPreview.src е оригиналният data URL (качеството се пази); (д2) handleMapFile с ГОЛЯМ blob (new Blob([\u0027x\u0027.repeat(1200000)]) — data URL-ът му надхвърля MAX_IMAGE_BYTES) → compressImage ИЗВИКАНА, #mPreview.src === \u0027data:image/jpeg;base64,FAKE\u0027; (д3) при голям blob И compressImage мокната да връща пак над-лимитен низ → #mMapError видим, saveMap блокиран; (е) handleMapPaste с fake event { clipboardData: { items: [{ type: \u0027image/png\u0027, getAsFile: () =\u003e blob }] } } при отворен модал → същият pipeline; при ЗАТВОРЕН модал → игнор; (ж) успешен saveMap → calls.setDoc има запис с token \u0027maps/\u003cid\u003e\u0027 и data.image===\u0027data:image/jpeg;base64,FAKE\u0027 И запис с token \u0027maps/index\u0027 чийто data.list[0] е {id, shortDesc, details, createdAt}; модалът затворен; (з) редакция БЕЗ смяна на снимка → само 1 setDoc (към maps/index), редактираният елемент е unshift-нат отгоре; (и) deleteMap с confirm true → calls.deleteDoc има \u0027maps/\u003cid\u003e\u0027 и индексът е пренаписан; с confirm false → нищо. Пусни — ЧЕРВЕНИ по правилната причина."
+                      },
+                      {
+                          "id":  "430.3",
+                          "phase":  "GREEN",
+                          "action":  "index.html: добави mapModal по образеца на questModal — title id=mapModalTitle, поле „Кратко описание *“ \u003cinput id=\"mShort\" placeholder=\"Зоната на изток, в джунглата…\"\u003e, поле „Детайли *“ \u003ctextarea id=\"mDetails\" placeholder=\"Селището на дървесните елфи…\"\u003e, поле „Снимка *“ с \u003cinput type=\"file\" id=\"mFile\" accept=\"image/*\" onchange=\"handleMapFile(event)\"\u003e + hint див „…или Ctrl+V скрийншот направо тук“, \u003cimg id=\"mPreview\" class=\"map-preview hidden\"\u003e, error див id=mMapError (по образеца на goldError), бутони Отказ/Запази (closeMapModal/saveMap). styles.css: .map-preview (max-width:100%, max-height:200px, cursor:zoom-in, border-radius)."
+                      },
+                      {
+                          "id":  "430.4",
+                          "phase":  "GREEN",
+                          "action":  "modules/maps.js: имплементирай openMapModal(idx=null) (edit: попълва полета + getDoc(mapImageDoc(id)) → pendingImage=null, preview от дока; new: чисти всичко), closeMapModal, editMap(i), handleMapFile(e), handleMapPaste(e) (гуардът по notes), saveMap() и deleteMap(i) по контракта от notes, saveMapsIndex остава от таск 420. Общ вътрешен async processImageBlob(blob) имплементира pipeline-а от notes (blobToDataUrl → условна компресия → втори опит → грешка) — handleMapFile и handleMapPaste само го викат. document.addEventListener(\u0027paste\u0027, handleMapPaste) — веднъж, при module init. ui.js: добави \u0027mapModal\u0027 в initModalBackdrops. app.js: window.closeMapModal/saveMap/deleteMap/editMap/handleMapFile + facade re-exports. import { blobToDataUrl, needsCompression, compressImage } from \u0027./image.js\u0027 в maps.js (за да работи частичният vi.mock)."
+                      },
+                      {
+                          "id":  "430.5",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit — всичко зелено. Ръчна проверка НЕ се прави (без serve от агент — порт 45279). Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  440,
+        "category":  "feature",
+        "repo":  "inventory",
+        "lane":  "maps",
+        "files":  [
+                      "styles.css",
+                      "modules/viewer.js",
+                      "modules/maps.js",
+                      "app.js",
+                      "test/unit/viewer.spec.js"
+                  ],
+        "verify":  [
+                       "npm run test:unit"
+                   ],
+        "description":  "feat(maps): add fullscreen map viewer with wheel zoom, drag pan and pinch zoom",
+        "specRef":  "shared-inventory-structure.md §9 + maps-feature-plan.md",
+        "tddWorkflow":  true,
+        "notes":  "Прегледът е ОСНОВНО на Android таблет/телефон — pinch zoom е задължителен. Ползвай POINTER EVENTS (pointerdown/move/up/cancel + Map на активните пойнтери), НЕ touch events — един код за мишка и пръсти. wheel zoom към курсора за лаптопа, dblclick → reset, Esc/бутон ✕/клик на фона → затваряне. touch-action:none на overlay-а (иначе браузърът краде жестовете), preventDefault на wheel.\n\nАРХИТЕКТУРА ЗА ТЕСТИМОСТ: цялата геометрия е ЧИСТИ функции с unit тестове; DOM/event кодът е тънък. export function zoomAt(view, factor, cx, cy) → { scale, tx, ty }: newScale = clampScale(view.scale * factor); k = newScale / view.scale; tx\u0027 = cx - (cx - view.tx) * k; ty\u0027 = cy - (cy - view.ty) * k (точката под курсора остава на място). export function clampScale(s) → [1, 8]. Пинчът се свежда до zoomAt с factor = dist1/dist0 и център средата между двата пръста.\n\nОverlay-ят (#mapViewer) се създава ЕДНОКРАТНО при първото openViewer и се преизползва (display toggle). Прилагане: img.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`; transform-origin: 0 0.\n\nВръзка: клик на #mPreview в модала → openViewer(pendingImage или заредения data URL). Спекът на потребителя: „като се отвори за едит, да може да се види картата — с клик да се отвори на голям екран, да се зуумва“.",
+        "steps":  [
+                      {
+                          "id":  "440.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети modules/maps.js след таск 430 (къде живее pendingImage/preview data URL-ът), styles.css (модалните стилове), test/unit/ui.spec.js (как се тестват DOM-only модули)."
+                      },
+                      {
+                          "id":  "440.2",
+                          "phase":  "RED",
+                          "action":  "Създай test/unit/viewer.spec.js. Чиста математика: (а) zoomAt({scale:1,tx:0,ty:0}, 2, 100, 100) → {scale:2, tx:-100, ty:-100}; (б) инвариант — след zoomAt точката (cx,cy) показва същата точка от снимката: за произволни view/cx/cy провери (cx - tx\u0027)/scale\u0027 === (cx - tx)/scale; (в) clampScale(0.5)===1, clampScale(20)===8, zoomAt при scale 1 с factor 0.5 не пада под 1; (г) поредица zoom in + огледален zoom out връща изходния view (в рамките на floating point). DOM: (д) openViewer(\u0027data:...\u0027) → #mapViewer в document, видим, img.src сетнат; (е) повторен openViewer НЕ дублира overlay-а; (ж) closeViewer / Esc keydown / клик на фона (target === overlay) → скрит; (з) dblclick → transform reset (scale 1). Пусни — ЧЕРВЕНИ."
+                      },
+                      {
+                          "id":  "440.3",
+                          "phase":  "GREEN",
+                          "action":  "Създай modules/viewer.js: export { zoomAt, clampScale, openViewer, closeViewer }. Вътрешно view state {scale, tx, ty}; wheel (deltaY\u003c0 → factor 1.15, иначе 1/1.15, cx/cy от e.clientX/Y относно overlay-а); pan: pointerdown записва пойнтера в Map + setPointerCapture, pointermove с 1 активен пойнтер мести tx/ty; pinch: 2 активни пойнтера → zoomAt(view, distNew/distOld, midX, midY); pointerup/cancel чисти. dblclick reset {scale:1,tx:0,ty:0}. Esc listener само докато е отворен. styles.css: #mapViewer { position:fixed; inset:0; background:rgba(0,0,0,.92); z-index над модалите; display:flex; touch-action:none; } + img { transform-origin:0 0; } + бутон ✕ горе-дясно."
+                      },
+                      {
+                          "id":  "440.4",
+                          "phase":  "GREEN",
+                          "action":  "modules/maps.js: click listener на #mPreview → openViewer(текущия data URL) (в openMapModal wiring-а или при module init — но елементът е статичен в index.html, така че веднъж при init). app.js: facade re-export { zoomAt, clampScale, openViewer, closeViewer } from \u0027./modules/viewer.js\u0027."
+                      },
+                      {
+                          "id":  "440.5",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit — всичко зелено. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  450,
+        "category":  "e2e",
+        "repo":  "inventory",
+        "lane":  "maps",
+        "files":  [
+                      "test/fixtures/maps-fixture.html",
+                      "test/e2e/maps-accordion.spec.js",
+                      "styles.css",
+                      "modules/maps.js"
+                  ],
+        "description":  "test(maps): add e2e fixture and accordion spec for the Maps tab",
+        "specRef":  "test/e2e/quests-accordion.spec.js + test/fixtures/quests-fixture.html са ЕТАЛОНЪТ — огледален превод към maps",
+        "notes":  "Червена линия §3.5 („test/e2e/ и fixtures не се пипат“) важи за СЪЩЕСТВУВАЩИТЕ файлове — НОВИТЕ maps-* файлове тук са изрично позволени (§9). Съществуващите спекове/фикстури НЕ се редактират.\n\nФикстурата е STANDALONE HTML (както quests-fixture.html): инлайн копие на map стиловете (взети 1:1 от styles.css — .map-short/.map-details/tr.map-expanded + табличните базови стилове) + инлайн скрипт, който рендерира 2 карти и репликира акордеон логиката на renderMaps: карта 0 с кратки описания, карта 1 с ДЪЛГИ (3+ реда, за да има какво да клампва елипсисът). Снимка НЕ участва във фикстурата (тя не се показва в таблицата по дизайн).\n\nСпекът копира структурата на quests-accordion.spec.js: (а) .map-details има overflow hidden; (б) редът стартира без map-expanded; (в) клик expand-ва; (г) повторен клик колапсира; (д) само един expanded — вторият клик колапсира първия; (е) клик на edit бутон НЕ expand-ва.\n\n⚠ АГЕНТЪТ НЕ ПУСКА npm test (порт 45279 е на гейта)! Пиши спека КОНСЕРВАТИВНО по образеца — гейтът ще го пусне след merge. Пусни само npm run test:unit за регресия.\n\nТова е ФИНАЛНИЯТ таск на lane-а — БЕЗ verify override, пълният гейт (npm ci + test:unit + npm test/Playwright, вкл. новия спек) е задната мрежа. Ако при писането забележиш дребен пропуск от таскове 410-440 (стил, липсващ клас), поправи го ТУК — затова styles.css и modules/maps.js са в ownership-а.",
+        "steps":  [
+                      {
+                          "id":  "450.1",
+                          "action":  "Прочети test/fixtures/quests-fixture.html ИЗЦЯЛО и test/e2e/quests-accordion.spec.js ИЗЦЯЛО. Прочети styles.css map правилата (от таскове 420/430/440) и renderMaps в modules/maps.js — фикстурата трябва да репликира СЪЩИТЕ класове и структура на реда."
+                      },
+                      {
+                          "id":  "450.2",
+                          "action":  "Създай test/fixtures/maps-fixture.html по образеца: инлайн CSS (базовите табличен/бутонни стилове от quests-fixture + map класовете 1:1 от styles.css), таблица mapTable/mapBody, инлайн скрипт с data масив от 2 карти (карта 1 с многоредови shortDesc/details) и рендер + акордеон логика, огледални на renderMaps."
+                      },
+                      {
+                          "id":  "450.3",
+                          "action":  "Създай test/e2e/maps-accordion.spec.js по образеца на quests-accordion.spec.js (FIXTURE = \u0027/test/fixtures/maps-fixture.html\u0027, waitForSelector \u0027#mapBody tr[data-idx]\u0027, 6-те теста от notes)."
+                      },
+                      {
+                          "id":  "450.4",
+                          "action":  "npm run test:unit за регресия (e2e ще го пусне гейтът). Провери с git diff, че НИТО един съществуващ файл в test/e2e/ и test/fixtures/ не е променен. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  460,
+        "category":  "feature",
+        "repo":  "inventory",
+        "lane":  "maps",
+        "files":  [
+                      "index.html",
+                      "styles.css",
+                      "test/unit/maps.spec.js"
+                  ],
+        "verify":  [
+                       "npm run test:unit"
+                   ],
+        "description":  "feat(maps): add static world map link above the add button",
+        "specRef":  "shared-inventory-structure.md §9 + maps-feature-plan.md („Допълнения“)",
+        "tddWorkflow":  true,
+        "notes":  "Изискване на потребителя: НАД бутона „+ Добави карта“ в таб „Карти“ да стои СТАТИЧЕН външен линк към пълната карта на света:\nhref (ТОЧНО този URL): https://totalwarwarhammer.fandom.com/wiki/Map:Immortal_Empires_Factions\nЕтикет: „🗺 Immortal Empires Factions — пълната карта“. target=\"_blank\" + rel=\"noopener\" (външен сайт, приложението е PWA — да не подменя таба).\nЧисто статичен markup — НИКАКЪВ JS, никакъв Firestore. Не пипай нищо друго в tab-maps блока.",
+        "steps":  [
+                      {
+                          "id":  "460.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети index.html блока #tab-maps (controls + таблицата) и styles.css правилата за .controls, за да вградиш линка в същия визуален език (btn-ghost стилистика или muted link)."
+                      },
+                      {
+                          "id":  "460.2",
+                          "phase":  "RED",
+                          "action":  "В test/unit/maps.spec.js добави describe за линка: след bootApp() (а) document.querySelector(\u0027#tab-maps a.map-world-link\u0027) съществува; (б) href е ТОЧНО https://totalwarwarhammer.fandom.com/wiki/Map:Immortal_Empires_Factions; (в) target === \u0027_blank\u0027 и rel съдържа \u0027noopener\u0027; (г) линкът стои ПРЕДИ .controls бутона в DOM реда (compareDocumentPosition). Пусни — ЧЕРВЕНИ."
+                      },
+                      {
+                          "id":  "460.3",
+                          "phase":  "GREEN",
+                          "action":  "index.html: в #tab-maps, над div.controls, добави \u003cdiv class=\"map-world-row\"\u003e\u003ca class=\"map-world-link\" href=\"...\" target=\"_blank\" rel=\"noopener\"\u003e🗺 Immortal Empires Factions — пълната карта\u003c/a\u003e\u003c/div\u003e. styles.css: .map-world-row { text-align:right; margin-bottom:6px; } .map-world-link { color: var(--muted); font-size:0.85rem; } + hover подчертаване — дискретно, да не се бие с бутона."
+                      },
+                      {
+                          "id":  "460.4",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit — всичко зелено. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  470,
+        "category":  "feature",
+        "repo":  "inventory",
+        "lane":  "maps",
+        "files":  [
+                      "modules/maps.js",
+                      "modules/viewer.js",
+                      "app.js",
+                      "styles.css",
+                      "test/unit/maps.spec.js",
+                      "test/unit/maps-modal.spec.js",
+                      "test/unit/viewer.spec.js"
+                  ],
+        "description":  "feat(maps): add per-row preview button and viewer zoom buttons",
+        "specRef":  "shared-inventory-structure.md §9 + maps-feature-plan.md („Допълнения“); modules/maps.js renderMaps + modules/viewer.js са отправната точка",
+        "tddWorkflow":  true,
+        "notes":  "ДВЕ СВЪРЗАНИ ДОБАВКИ (изискване на потребителя — преглед на картата БЕЗ да се влиза в едит, пести място в таблицата):\n\n1. ПРЕВЮ БУТОН НА ВСЕКИ РЕД: в renderMaps() добави бутон 🔍 в .tbl-actions, ПЪРВИ преди ✏ и 🗑: \u003cbutton class=\"btn-ghost btn-sm\" onclick=\"previewMap(${i})\"\u003e🔍\u003c/button\u003e. Нова export async function previewMap(i): m = state.maps[i]; syncMsg(\u0027Зареждане…\u0027, \u0027saving\u0027); snap = await getDoc(mapImageDoc(m.id)); ако snap.exists() и има .image → openViewer(image) + syncMsg(\u0027● live\u0027, \u0027saved\u0027); иначе syncMsg(\u0027Няма снимка за тази карта\u0027, \u0027\u0027). НЕ отваря модала, НЕ пипа state.editingMapIdx. Всяко натискане тегли наново (без кеш — както решенията при едит preview-то). app.js: window.previewMap + facade re-export.\n\n2. ЛУПИЧКИ +/− ВЪВ VIEWER-А: видими zoom бутони (изискване „с лупичките за + и -“ — на таблет wheel няма, а pinch не е очевиден за всички). В ensureOverlay() добави два бутона: class viewer-zoom viewer-zoom-in (текст ➕) и viewer-zoom viewer-zoom-out (текст ➖), aria-label „Приближи“/„Отдалечи“. Клик → view = zoomAt(view, 1.4 | 1/1.4, cx, cy) с център СРЕДАТА на overlay-а (getBoundingClientRect().width/2, height/2; в jsdom rect е 0x0 → центърът е (0,0), тестът пак работи през transform-а) + applyTransform(). Клампването в [1,8] идва от zoomAt — на минимум/максимум кликът просто не мърда скейла. styles.css: .viewer-zoom — фиксирани долу-център (flex ред, gap), едри touch таргети (min 44px), полупрозрачен фон като .viewer-close.\n\nЧЕРВЕНИ ЛИНИИ: test/e2e/ и test/fixtures/ НЕ се пипат (maps-fixture-ът НЕ получава 🔍 бутона — e2e спекът за акордеона търси edit бутона в .tbl-actions по индекс САМО във фикстурата, тя е standalone и остава вярна на себе си). Никакъв реален Firestore. Това е ФИНАЛНИЯТ таск — БЕЗ verify override, пълният гейт е задната мрежа.",
+        "steps":  [
+                      {
+                          "id":  "470.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети modules/maps.js (renderMaps, openMapModal lazy getDoc патърна, ред 141-149), modules/viewer.js (ensureOverlay, zoomAt, applyTransform), test/unit/viewer.spec.js и test/unit/maps-modal.spec.js (как seed-ват снимка с __setDocData и как проверяват #mapViewer)."
+                      },
+                      {
+                          "id":  "470.2",
+                          "phase":  "RED",
+                          "action":  "test/unit/maps.spec.js: (а) при 2 карти всеки ред има бутон 🔍 в .tbl-actions, ПРЕДИ ✏; (б) клик на 🔍 НЕ expand-ва реда (уловено от съществуващия guard e.target.closest(\u0027button\u0027)— тестът го доказва). test/unit/maps-modal.spec.js (или нов describe в maps.spec.js): (в) __setDocData(\u0027maps/\u003cid\u003e\u0027, {image:\u0027data:image/png;base64,AAA\u0027}) → await previewMap(0) → #mapViewer е видим (display flex) и img.src е точно този data URL, а #mapModal НЯМА class open; (г) previewMap за карта БЕЗ image док → viewer-ът НЕ се отваря, #sync съдържа „Няма снимка“. test/unit/viewer.spec.js: (д) след openViewer overlay-ът има .viewer-zoom-in и .viewer-zoom-out бутони; (е) клик на ➕ → transform scale расте (парсни от style.transform); клик на ➖ след това → връща се; (ж) на scale 1 клик на ➖ оставя scale 1 (кламп); (з) многократни ➕ не надхвърлят scale 8. Пусни — ЧЕРВЕНИ по правилната причина."
+                      },
+                      {
+                          "id":  "470.3",
+                          "phase":  "GREEN",
+                          "action":  "modules/viewer.js: бутоните в ensureOverlay() по notes (клик листенъри → zoomAt към центъра + applyTransform; stopPropagation, за да не удари backdrop close). modules/maps.js: 🔍 бутонът в renderMaps() + export async function previewMap(i) по notes. app.js: window.previewMap = previewMap + facade re-export { previewMap }. styles.css: .viewer-zoom стиловете."
+                      },
+                      {
+                          "id":  "470.4",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit — всичко зелено (вкл. старите viewer/maps спекове). git diff — увери се, че test/e2e/ и test/fixtures/ са НЕПИПНАТИ. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    }
 ]

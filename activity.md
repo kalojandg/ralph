@@ -34,6 +34,39 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task 470 — feat(maps): add per-row preview button and viewer zoom buttons
+
+**Repo:** inventory · **Lane:** maps · **Branch:** ralph/task-470 · **Commit:** d930167
+
+### What
+Two linked additions so the party can preview a map without entering edit mode and can zoom on a tablet where wheel/pinch aren't obvious:
+1. **Per-row preview button** — `renderMaps()` now emits a `🔍` button first in `.tbl-actions` (before ✏/🗑). New `export async function previewMap(i)`: `syncMsg('Зареждане…','saving')`, `getDoc(mapImageDoc(m.id))`; on a doc with `.image` → `openViewer(image)` + `syncMsg('● live','saved')`, otherwise `syncMsg('Няма снимка за тази карта','')`. It never opens the modal or touches `state.editingMapIdx`, and re-fetches fresh every press (no cache). The existing row-click accordion guard `closest('button, .drag-handle')` already stops 🔍 from toggling the row.
+2. **Viewer +/- zoom buttons** — `ensureOverlay()` now builds a `.viewer-zoom-bar` with `.viewer-zoom.viewer-zoom-out` (➖) and `.viewer-zoom.viewer-zoom-in` (➕), each `stopPropagation()`-ing (so a click never triggers backdrop-close) and calling a new `zoomButton(factor)` → `zoomAt(view, 1.4 | 1/1.4, centreX, centreY)` + `applyTransform()`. Clamp [1,8] comes from `zoomAt`. In jsdom the rect is 0×0 so the centre is (0,0) and the transform still updates.
+
+`app.js`: `window.previewMap = previewMap` + facade re-export. `styles.css`: `.viewer-zoom-bar` (fixed bottom-centre flex row, gap) and `.viewer-zoom` (44px touch targets, translucent like `.viewer-close`).
+
+### Tests
+TDD: wrote 7 RED tests first (confirmed failing for the right reason), then implemented.
+- `test/unit/maps.spec.js`: 🔍 is first in `.tbl-actions` before ✏; clicking 🔍 doesn't expand the row; `previewMap(0)` with a seeded image doc opens `#mapViewer` (display flex, correct img src) without opening `#mapModal`; `previewMap` with no image doc leaves the viewer closed and puts 'Няма снимка' in `#sync`.
+- `test/unit/viewer.spec.js`: overlay exposes `.viewer-zoom-in`/`.viewer-zoom-out`; + zooms in and − zooms back; − at scale 1 stays clamped at 1; repeated + never exceeds scale 8.
+
+### Verify
+`npm run test:unit` → **132/132 passed** (125 prior + 7 new). e2e not run by agent (port 45279 is the gate's); `git diff` confirms `test/e2e/` and `test/fixtures/` are untouched (maps-fixture keeps its edit-by-index accordion spec).
+
+
+## Task 460 — feat(maps): add static world map link above the add button
+
+**Repo:** inventory · **Lane:** maps · **Status:** ✅ done
+
+Added a static external link to the full Immortal Empires Factions world map, placed ABOVE the `+ Добави карта` button inside `#tab-maps`.
+
+- **RED:** Added `maps — static world map link` describe to `test/unit/maps.spec.js` — asserts `#tab-maps a.map-world-link` exists, `href` is exactly `https://totalwarwarhammer.fandom.com/wiki/Map:Immortal_Empires_Factions`, `target="_blank"`, `rel` contains `noopener`, and the link precedes `.controls` in DOM order (compareDocumentPosition). Failed for the right reason (link absent).
+- **GREEN:** `index.html` — inserted `<div class="map-world-row"><a class="map-world-link" href="…" target="_blank" rel="noopener">🗺 Immortal Empires Factions — пълната карта</a></div>` above `.controls`. `styles.css` — `.map-world-row { text-align:right; margin-bottom:6px; }` and a muted `.map-world-link` (0.85rem, no underline, hover underline). Pure static markup, no JS/Firestore.
+- **Verify:** `npm run test:unit` → 11 files, 124 tests passed. Only `index.html`, `styles.css`, `test/unit/maps.spec.js` touched.
+
+Commit: `37b3802`
+
+
 ## Task 450 — test(maps): add e2e fixture and accordion spec for the Maps tab
 
 **Repo:** inventory · **Lane:** maps · **Commit:** b59c69a
@@ -694,6 +727,8 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
 
 
 
