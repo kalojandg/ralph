@@ -125,3 +125,20 @@ npm run test:unit       # vitest run — ЕДИНСТВЕНОТО, което а
 npm test                # Playwright e2e — САМО verify gate-ът (не агент!)
 ```
 Playwright browsers са инсталирани глобално на машината — `npm ci` е достатъчен за worktree.
+
+## §9. Maps фича (фаза 3 — одобрена от собственика, lane `maps`)
+
+Таб „Карти": ДМ-ът качва карти (скрийншоти) от лаптоп/браузър, партито гледа на Android таблет.
+Пълната спека: `maps-feature-plan.md` в корена на репото.
+
+**Данни (решено, не се предоговаря):** колекция `maps` — `maps/index` = `{ list: [{id, shortDesc, details, createdAt}] }` (ред = ред на показване; същият патърн като ITEMS_DOC), `maps/<uuid>` = `{ image: '<data URL>' }` (по един док на карта; снимката е ОТДЕЛНО от индекса — 1MB/док лимит + snapshot-ът на индекса да не тегли снимки). Компресия client-side (canvas, ~1600px, JPEG ~0.72) в `modules/image.js` — но САМО при нужда: прагът е `MAX_IMAGE_BYTES = 900000` върху **data URL дължината** (base64 надува ~33%, Firestore лимитът е 1MiB/док); под прага оригиналът се пази непипнат, над него компресия → втори по-агресивен опит → грешка в диалога. БЕЗ Firebase Storage, БЕЗ нови npm пакети. Firestore е schema-less — доковете възникват при първия запис; security rules за колекция `maps` са ръчна стъпка на собственика в конзолата, НЕ на агент.
+
+**Амендмънти на §3 (САМО за тази фаза, всичко останало важи):**
+1. §3.1 „не създавай нови колекции" → колекция `maps` е РАЗРЕШЕНА (единствено тя). `firebaseConfig` остава непипнат.
+2. §3.5 „test/e2e/ и fixtures не се пипат" → НОВИ `maps-*` файлове там са разрешени; съществуващите — не.
+3. §5 мокът се разширява АДИТИВНО: вътрешен store, `setDoc` пише и в store-а, `getDoc` чете от него (незасят token → `exists:false` както днес), нов export `__setDocData(token, data)`. Старите тестове остават зелени.
+4. §6 `bootApp` получава адитивен параметър `maps = null` → `__emit('maps/index', maps === null ? null : {list: maps})`.
+
+**Нови модули/id-та:** `modules/maps.js` (render/modal/save по образеца на quests.js), `modules/image.js` (fitDimensions чиста + compressImage тънка), `modules/viewer.js` (fullscreen zoom/pan; чиста геометрия `zoomAt`/`clampScale`). DOM: таб `tab-maps`, `mapTable/mapBody`, модал `mapModal` (`mShort`, `mDetails`, `mFile`, `mPreview`, `mMapError`), overlay `#mapViewer`. State: `maps, editingMapIdx, expandedMapIdx, savingMaps`.
+
+**Извън обхват:** export/import bundle-ът (v1) НЕ включва картите (снимките биха издули JSON-а). sw.js не се пипа (network-first покрива новите модули).
