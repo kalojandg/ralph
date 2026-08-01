@@ -131,7 +131,7 @@ npm test                # Playwright e2e — САМО verify gate-ът (не а�
 ```
 Playwright browsers са инсталирани глобално на машината — `npm ci` е достатъчен за worktree.
 
-## §9. Maps фича (фаза 3 — РЕАЛИЗИРАНА, таскове 410-450, lane `maps`)
+## §9. Maps фича (фаза 3 — РЕАЛИЗИРАНА, таскове 410-470, lane `maps`)
 
 Таб „Карти": ДМ-ът качва карти (скрийншоти) от лаптоп/браузър, партито гледа на Android таблет.
 Пълната спека: `maps-feature-plan.md` в корена на репото. **Статус: доставена и merge-ната в main, verify gate зелен.**
@@ -148,14 +148,21 @@ Playwright browsers са инсталирани глобално на машин
 
 | Модул | Съдържание |
 |-------|-----------|
-| `modules/maps.js` | `renderMaps` (акордеон като quests, клик на бутон/handle не toggle-ва), `saveMapsIndex` (флаг `savingMaps`), модал (`openMapModal/closeMapModal/editMap/saveMap/deleteMap`), image pipeline (`handleMapFile` за `<input type=file>` + `handleMapPaste` за Ctrl+V document-level listener), `processImageBlob` (компресия само над прага). `saveMap`: и двете описания задължителни, нова карта иска снимка, id = `crypto.randomUUID()`, image в ОТДЕЛЕН `mapImageDoc(id)`, splice+unshift. Клик на `#mPreview` → `openViewer`. |
+| `modules/maps.js` | `renderMaps` (акордеон като quests, клик на бутон/handle не toggle-ва; на всеки ред 🔍 preview / ✏ edit / 🗑 delete, 🔍 е ПЪРВИ), `saveMapsIndex` (флаг `savingMaps`), модал (`openMapModal/closeMapModal/editMap/saveMap/deleteMap`), `previewMap(i)` (таск 470 — виж по-долу), image pipeline (`handleMapFile` за `<input type=file>` + `handleMapPaste` за Ctrl+V document-level listener), `processImageBlob` (компресия само над прага). `saveMap`: и двете описания задължителни, нова карта иска снимка, id = `crypto.randomUUID()`, image в ОТДЕЛЕН `mapImageDoc(id)`, splice+unshift. Клик на `#mPreview` → `openViewer`. |
 | `modules/image.js` | `MAX_IMAGE_BYTES = 900000`, `needsCompression(len)`, `blobToDataUrl(blob)` (FileReader, работи в jsdom), `fitDimensions(w,h,maxDim=1600)` (чиста, не upscale-ва), `compressImage(blob,{maxDim,quality=0.72})` (тънък canvas wrapper, без unit тест — jsdom няма canvas). |
-| `modules/viewer.js` | `clampScale(s)` (range [1,8]), `zoomAt(view,factor,cx,cy)` (чиста геометрия, transform-origin 0 0), тънък DOM/event слой на pointer events (pan/pinch) + wheel zoom + Escape/backdrop/dblclick reset. Overlay `#mapViewer` се създава ВЕДНЪЖ (`ensureOverlay`) и се преизползва. |
+| `modules/viewer.js` | `clampScale(s)` (range [1,8]), `zoomAt(view,factor,cx,cy)` (чиста геометрия, transform-origin 0 0), тънък DOM/event слой на pointer events (pan/pinch) + wheel zoom + Escape/backdrop/dblclick reset + видими ➕/➖ zoom бутони (таск 470 — виж по-долу). Overlay `#mapViewer` се създава ВЕДНЪЖ (`ensureOverlay`) и се преизползва. |
 
 `firebase.js` добавя `MAPS_INDEX_DOC = doc(db,'maps','index')` и `mapImageDoc(id) = doc(db,'maps',id)` + export на `collection`. `state.js` добавя `maps, editingMapIdx, expandedMapIdx, savingMaps`. `app.js` добавя `window.*` за map handler-ите, 4-тия `onSnapshot(MAPS_INDEX_DOC)` и re-export на maps/viewer публичното API; `getState/setState` включват `maps`. DOM (в index.html): таб `tab-maps`, `mapTable/mapBody`, модал `mapModal` (`mapModalTitle, mShort, mDetails, mFile, mPreview, mMapError`); overlay `#mapViewer` НЕ е в markup-а — раждан от viewer.js.
 
+**Добавки след първия run (таскове 460, 470 — доставени, зелени):**
+1. **Статичен линк към картата на света (460)** — над бутона „+ Добави карта" в `tab-maps`: `<div class="map-world-row"><a class="map-world-link" target="_blank" rel="noopener" href=".../Map:Immortal_Empires_Factions">…</a></div>`. Чист markup в `index.html` + два стила в `styles.css`, БЕЗ JS. В DOM реда стои ПРЕДИ `.controls`.
+2. **Preview бутон 🔍 на всеки ред (470)** — `previewMap(i)` в `modules/maps.js`, export-нат и wired като `window.previewMap` в `app.js`. Отваря САМО снимката във fullscreen viewer-а без да минава през едит диалога: ленив `getDoc(mapImageDoc(m.id))` (без кеш, снимката не е в индекса), при успех `openViewer` + `● live`, при липса → „Няма снимка за тази карта". Не пипа `state.editingMapIdx`; кликът не toggle-ва акордеона. Бутонът е ПЪРВИ в `.tbl-actions`.
+3. **Видими zoom бутони ➕/➖ във viewer-а (470)** — `zoomButton(factor)` + `.viewer-zoom-bar` (долу-център) в `modules/viewer.js`, раждани в `ensureOverlay`. Едри touch таргети (44×44) за таблета, който няма wheel и на който pinch не е очевиден. Центърът на зуума е средата на overlay-а; клампът [1,8] идва от `zoomAt`/`clampScale`. `stopPropagation` пази backdrop-close listener-а. Стилове `.viewer-zoom-bar`/`.viewer-zoom` в `styles.css`.
+
+Нови DOM/CSS handle-ове: `.map-world-row`/`.map-world-link` (Maps таб), `.viewer-zoom-bar`/`.viewer-zoom` (overlay). `maps-feature-plan.md` носи същите допълнения в секция „Допълнения (след първия run)".
+
 **Test state (фаза 3, всичко зелено):**
-- Unit (Vitest): `image.spec.js` (9), `maps.spec.js` (8), `maps-modal.spec.js` (13), `viewer.spec.js` (13); мокът разширен → `firestore-mock.spec.js` (4). Общо unit spec-ове: 11 файла.
+- Unit (Vitest): `image.spec.js` (9), `maps.spec.js` (14 — +6 за world link и preview), `maps-modal.spec.js` (13), `viewer.spec.js` (17 — +4 за zoom бутоните); мокът разширен → `firestore-mock.spec.js` (4). Общо unit spec-ове: 11 файла.
 - E2e (Playwright): `test/e2e/maps-accordion.spec.js` (6) + фикстура `test/fixtures/maps-fixture.html`. Съществуващите items/quests e2e непроменени.
 
 **Извън обхват:** export/import bundle-ът (v1) НЕ включва картите (снимките биха издули JSON-а — `getState/setState` носят `maps` само за тестове/state, не за bundle-а). sw.js не се пипа (network-first покрива новите модули).
