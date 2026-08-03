@@ -34,6 +34,135 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task 550 — test(cube): end-to-end integration spec for face themes across the full app
+
+**Repo:** combat (monk_combat_app) · **Lane:** cube · **Branch:** ralph/task-550
+
+**What:** Created `test/e2e/cube-integration.spec.js`, the capstone integration spec for the Cube of Force feature. It drives the real dialog UI and observes the live app's COMPUTED colours (not just the link href), proving the three lanes (tokens/themes/cube) work together end-to-end.
+
+**Coverage (6 points from task notes):**
+1. Each of the 5 faces: Activate via dialog → `body` background-color == the palette bg (fog rgb(16,19,21) / stone rgb(21,17,13) / moss rgb(14,19,16) / arcane rgb(18,15,25) / bastion rgb(22,15,17)), `--pill`/`--panel`/`--accent` tokens all move off default, `#cubeThemeLink` href matches the theme file, and the ticker shows `FACE N ACTIVE`. Waits for the standalone stylesheet to load via `expect.poll` on the computed bg.
+2. Deactivate (face 6) → body reverts to default #0b0c12, ticker hidden, `#cubeThemeLink` removed.
+3. Minute Elapsed → same revert to default.
+4. Spell-drain to 0 (face 4, Apply 99 on Disintegrate) → charges 0, default theme, ticker hidden.
+5. Reload with active barrier → theme survives (link restored from `st.cube.activeFace`), body still themed, ticker restored.
+6. Tab switch (combat→inventory→stats) with active theme → theme unaffected (link lives in `<head>`).
+
+**Verify:** `npx playwright test cube-integration` → 10 passed (12.3s). No other spec/source file touched.
+
+**Notes:** Point 6 uses inventory/stats tabs — the combat section is always-visible and has no `.tab-btn`, so it can't be clicked. Ran `npm ci` once (worktree had no node_modules); the npm `.cache/` artifact was left uncommitted.
+
+
+## Task 520 — feat(themes): add 5 standalone face theme stylesheets (fog/stone/moss/arcane/bastion)
+
+**Repo:** combat (monk_combat_app) · **Lane:** themes · **Branch:** ralph/task-520 · **Commit:** 9c7ddf2
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+### What
+The five Cube of Force face themes as FULLY standalone CSS files: `themes/fog.css`, `themes/stone.css`, `themes/moss.css`, `themes/arcane.css`, `themes/bastion.css`. styles.css is NOT touched (no @import) — themes are applied via a dynamic `<link id="cubeThemeLink">` kept last in `<head>` (later stylesheet wins the `:root` ↔ `:root` cascade); removing it reverts to the styles.css default.
+
+Each file is a single `:root` block overriding the SAME 67 ambient tokens as the post-510 styles.css `:root` (verified 67/67 coverage, zero missing/extra per theme):
+- `--bg` and `--accent` pinned EXACTLY to the approved palette (fog #101315/#5e7681, stone #15110d/#8a6f4d, moss #0e1310/#5e7a58, arcane #120f19/#71618f, bastion #160f11/#8a5a62).
+- Every other surface/border/text/feat token re-hued to the theme hue (derived from the accent: fog 199°, stone 33°, moss 109°, arcane 261°, bastion 350°) with muted saturations (surf ~0.14–0.20, text ~0.06–0.08) while PRESERVING each token's original lightness → relative light↔dark ordering intact, everything muted (no bright/electric colors).
+- Semantic colors (coins, success/danger, cleric purple) are NOT themed — they live as literal values in styles.css, never as `:root` tokens.
+
+### How (TDD)
+- RED: created `test/e2e/cube-themes.spec.js` (mirrors styles.spec.js conventions) — for each theme it appends the theme link last in `<head>`, asserts computed `body` background-color equals the palette bg, asserts `--panel`/`--pill`/`--accent` change, then removes the link and asserts revert to default `#0b0c12`. Fails-for-the-right-reason before the files exist (404).
+- GREEN: generated the 5 files via a deterministic HSL re-tint of the default token set (script kept outside the worktree, not committed).
+- Verify (agent, no shared-port e2e): Node checks — 67/67 token coverage per theme, `--bg`/`--accent` byte-exact vs palette, balanced braces / single `:root` / all declarations terminated. The full Playwright gate (npm ci + npm test incl. cube-themes.spec.js) runs post-merge on the proper checkout — port 45278 is the gate's, so the agent did not spin it (reuseExistingServer would test the wrong checkout).
+
+### Red lines respected
+styles.css / index.html / app.js UNTOUCHED. Only `themes/**` + the new spec created (git scope confirmed clean). No @import, no reference to themes/ from styles.css. No real Firestore/JS wiring (that is lane cube, tasks 530/550).
+
+**Files modified:**
+- themes/fog.css (new)
+- themes/stone.css (new)
+- themes/moss.css (new)
+- themes/arcane.css (new)
+- themes/bastion.css (new)
+- test/e2e/cube-themes.spec.js (new)
+
+**Git commit:** `9c7ddf2` — `feat(themes): add 5 standalone face theme stylesheets (fog/stone/moss/arcane/bastion)`
+
+
+## Task 540 — feat(cube): add barrier news ticker and spell drain accordion
+
+**Repo:** combat (monk_combat_app) · **Lane:** cube · **Commit:** 809a0f6
+
+### What
+Two upgrades on top of 530's Cube of Force widget:
+
+1. **News ticker** — static `<div id="cubeTicker" class="hidden"><span></span></div>` inserted in index.html between the `.header` div and `#tab-combat`. Shown only while a barrier is active; text `FACE N ACTIVE — <effect> · N CHARGES` scrolls right→left. Per the accessibility mandate the animation is slow (~32s per cycle) and bold; `@media (prefers-reduced-motion: reduce)` disables the animation and shows static text. Styles live in cube.css. render() drives show/hide + text, so it is restored on reload with an active barrier.
+2. **Spell-drain accordion** — row under Minute Elapsed: a `Dmg from special spells` toggle (▶/▼) that expands the 5 RAW drain spells (Disintegrate 1d12, Horn of Blasting 1d10, Passwall 1d6, Prismatic Spray 1d20, Wall of Fire 1d4). Each row has a number input + Apply that subtracts the entered damage (die rolled physically), floors charges at 0, and at 0 drops the barrier (activeFace=null, theme link removed, ticker hidden) + save(). GATE: the toggle is enabled only when activeFace is 4 or 5; switching to a low face (1-3) or dropping the barrier auto-collapses and disables it.
+
+### How (TDD)
+- RED: extended test/e2e/cube-widget.spec.js with 8 tests [m]-[t] (ticker hidden/visible/restore/32s+bold, accordion gate/auto-close, Apply subtract, Apply→0 drops barrier). Confirmed 7 failing for the right reason.
+- GREEN: ticker div in index.html, ticker+accordion CSS in cube.css, ticker/drain/gate logic in modules/cube.js.
+- Verify: `npm test -- cube-widget critical-path` → 44 passed.
+
+### Red lines respected
+app.js, styles.css and themes/ untouched; specs extended in cube-widget.spec.js (no new file). Only the 4 `files` entries changed.
+
+
+## Task 510 — refactor(styles): tokenize ambient hardcoded colors behind :root custom properties (zero visual change)
+
+**Repo:** combat (monk_combat_app) · **Lane:** tokens · **Branch:** ralph/task-510 · **Commit:** 8a3f427
+
+### What
+Established the CSS custom-property contract that the Cube of Force face themes (task 520) will override. Moved all AMBIENT hardcoded colors (surfaces, borders, text nuances) in `styles.css` behind `:root` tokens, with **zero visual change** — every hardcoded value was replaced by `var(--token)` whose token holds the exact same value.
+
+### Changes
+- **styles.css**: added 52 new ambient tokens to `:root` (grouped: neutral text `--text-white/-bright/-soft/-mute-1..3`, tinted text `--text-lav-1..5`/`--text-slate`, borders `--border-1/-2/-slate/-notes`, `--pill-border`, `--card-border`, tab/subtab border+bg tokens, `--rule-accent`, surfaces `--input-bg`, `--surface-pill/-textarea/-card/-card-hover/-feat-body/-notes/-hover`, `--btn-bg/-alt-bg/-alt-bg-hover`, `--field-bg`, `--modal-bg/-textarea-bg/-btn-hover`, `--flavor-hover-bg`, `--tooltip-bg`, `--alias-th/-even/-odd-bg`, `--collapse-bg`, and `--feat-head-bg-hover/-border-hover`). Replaced every ambient hardcoded usage with `var(--...)`.
+- **tabs/stats-basicinfo.html**: inline `background:#101323` → `background:var(--surface-textarea)`.
+- **tabs/inventory.html**: intentionally untouched — its sole inline hex `#e05252` is the danger fallback in `var(--danger,#e05252)` (semantic; red line #1).
+
+### Red lines honored
+- Semantic colors left hardcoded: coins (#FFD700/#C0C0C0/#B87333/#E5E4E2 + rgba), success greens (#22c55e family, #5ae09f, #2d6245, #224a34, #1f6f3e, #2ab773, #4a7a55, #7ecb7e...), danger reds (#4a2730, #6b1f27, #ff5b73, #8d1f29, #b71c1c, #ff6b6b/#ffaaaa, you-died reds, rgba(255,0,0,...)), cleric/monk purple & orange (#9b8fff, #9b59f6, #c084fc, #dc78ff, #c8c0ff, #f0a030, #7c9ef8, rgba(155,143,255,...), rgba(240,160,48,...)). Also left: box-shadow colors and translucent black/white overlays (theme-neutral).
+- Zero visual change: each `var()` resolves to its original literal → computed values byte-identical. Verified programmatically that every mapped ambient value now appears exactly once in styles.css (its `:root` definition) and no raw hex remains in the touched partial.
+- Only styles.css + the two partials in scope; no @import, no themes/ references.
+
+### Verification
+- No unit infra in combat repo (test:unit absent); did NOT run Playwright/serve (shared port 45278 — the post-merge gate runs e2e incl. styles.spec.js characterization net). Correctness rests on byte-identical construction + script self-check.
+
+### Notes for next lanes
+- The `:root` ambient token set is the theming contract for task 520 (fog/stone/moss/arcane/bastion). All ambient surface/border/text tokens are now in one place at the top of styles.css.
+
+
+## [2026-08-03 00:00] - Task #530: feat(cube): add Cube of Force floating widget with charges, faces dialog and theme switching
+
+**Status:** ✅ Complete
+
+**Repo:** combat · **Lane:** cube · **Branch:** ralph/task-530 · **Commit:** 17e8403
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** Core of the Cube of Force feature — a floating widget on the right wall with a charges/faces dialog that themes the whole app by swapping a stylesheet link.
+
+**What was done:**
+- RED: wrote test/e2e/cube-widget.spec.js (12 scenarios a–l): peek state, click1->expand/click2->dialog/✕->peek, Activate Face 2 (36->34) creates #cubeThemeLink -> themes/stone.css as last <head> child + persists st.cube, already-active face disabled, switch to Face 5 (->29, bastion.css), Deactivate removes link with charges unchanged, Regain adds+caps at 36, Activate disabled when charges<cost, Minute Elapsed drops barrier with no cost, reload with active barrier restores link+charges (arcane.css), vertical drag moves widget without opening dialog.
+- GREEN: modules/cube.js (IIFE, DOMContentLoaded init) builds the widget + dialog in JS, manages the single id=cubeThemeLink element (create/append-last on activate, remove on deactivate/minute/drain-to-0), pointer-event vertical drag with 5px click threshold clamped to viewport, activate/deactivate/minuteElapsed/regain all call window.save(). cube.css holds all widget/dialog styles (z-index 800/900 — above tabs, below .modal=1000 and #youDiedOverlay=9999). index.html gets <link href=cube.css> + <script src=modules/cube.js> before app.js. app.js: one line — cube: { charges: 36, activeFace: null } in defaultState (persistence + Bundle v2 come for free via the existing {...defaultState, ...saved} merge).
+
+**Verification:**
+- node --check modules/cube.js → OK; spec parses as ESM → OK.
+- e2e (npm test -- cube-widget critical-path) is the post-merge gate's job (port 45278) — not run by the agent per repos.json/structure-reference red line.
+- themes/*.css are NOT created here (lane themes / task 520); the spec asserts only the link href/presence, and a 404 on the link doesn't break the page (per spec notes).
+- Existing specs unaffected: cube.css only targets .cube-*/#cubeWidget/#cubeDialog; import/export round-trips st.cube symmetrically.
+
+**Files modified:**
+- modules/cube.js (new)
+- cube.css (new)
+- index.html
+- app.js
+- test/e2e/cube-widget.spec.js (new)
+
+**Git commit:** `17e8403` — `feat(cube): add Cube of Force floating widget with charges, faces dialog and theme switching`
+
+---
+
+
 ## Task 470 — feat(maps): add per-row preview button and viewer zoom buttons
 
 **Repo:** inventory · **Lane:** maps · **Branch:** ralph/task-470 · **Commit:** d930167
@@ -727,6 +856,11 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
 
 
 

@@ -1,504 +1,510 @@
-[
-  {
-    "id": 410,
-    "category": "feature",
-    "repo": "inventory",
-    "lane": "maps",
-    "files": [
-      "modules/firebase.js",
-      "modules/image.js",
-      "modules/state.js",
-      "test/mocks/firebase-firestore.js",
-      "test/unit/image.spec.js",
-      "test/unit/firestore-mock.spec.js"
-    ],
-    "verify": [
-      "npm run test:unit"
-    ],
-    "description": "feat(maps): add maps data layer with index and image doc refs, image fit helpers and mock data store",
-    "specRef": "shared-inventory-structure.md §9 + maps-feature-plan.md (в корена на репото)",
-    "tddWorkflow": true,
-    "notes": "ЦЕЛ НА ФИЧАТА (5 таска, lane maps): таб „Карти“ — ДМ-ът качва карти (скрийншоти) от лаптоп/браузър, партито ги гледа на Android таблет. Този таск слага САМО данновия фундамент.\n\n=== ДАННОВ МОДЕЛ (РЕШЕН ОТ ПОТРЕБИТЕЛЯ — НЕ ГО ПРЕДОГОВАРЯЙ) ===\nКолекция 'maps', два вида документи:\n1. maps/index → { list: [ { id, shortDesc, details, createdAt } ] } — САМО метаданни, редът в list = ред на показване (същият патърн като ITEMS_DOC {list}).\n2. maps/<uuid> → { image: '<data URL>' } — по ЕДИН документ на карта, само снимката. Разделено е нарочно: (а) Firestore лимит 1MB/док; (б) snapshot на индекса НЕ тегли всички снимки при всяка промяна (таблетът е на мобилна връзка).\nid = crypto.randomUUID() (няма как да колидира с 'index').\nБЕЗ Firebase Storage (иска Blaze план — отхвърлено). БЕЗ нов npm пакет.\n\n=== КОМПРЕСИЯ САМО ПРИ НУЖДА (изискване на потребителя — качеството не се разваля излишно) ===\nПрагът е върху BASE64 РАЗМЕРА, не върху файла: base64 надува с ~33%, а Firestore лимитът е 1MiB/док. modules/image.js изнася: export const MAX_IMAGE_BYTES = 900000; export function needsCompression(dataUrlLength) { return dataUrlLength > MAX_IMAGE_BYTES; } (чиста, тестима); export function blobToDataUrl(blob) — FileReader.readAsDataURL, връща Promise<string> (работи в jsdom). Решението КОГА да се компресира е на consumer-а (таск 430) — image.js само дава инструментите.\n\nСхема във Firestore НЕ се създава предварително — Firestore е schema-less, доковете възникват при първия setDoc. Security rules за колекция 'maps' са РЪЧНА стъпка на собственика в конзолата (виж maps-feature-plan.md) — НЕ е работа на агент.\n\n=== РАЗРЕШЕНИЕ ===\nЧервена линия §3.1 („не създавай нови колекции“) е АМЕНДИРАНА от §9 за ТОЧНО тази колекция 'maps'. Всичко останало от §3 важи с пълна сила: firebaseConfig НЕ се пипа, CDN imports остават, НИКАКЪВ тест срещу реален Firestore, npm test/serve НЕ се пускат от агент (порт 45279 е на гейта).\n\n=== МОКЪТ СЕ РАЗШИРЯВА САМО АДИТИВНО ===\ntest/mocks/firebase-firestore.js: добави вътрешен store (Map token→data); setDoc ОСВЕН в calls записва и в store-а; getDoc(token) връща { exists: () => store.has(token), data: () => store.get(token) }; нов export __setDocData(token, data) за seed-ване от тестове; __reset() чисти и store-а. ПОВЕДЕНИЕТО НА СЪЩЕСТВУВАЩИТЕ ЕКСПОРТИ КЪМ СТАРИТЕ ТЕСТОВЕ НЕ СЕ ПРОМЕНЯ — getDoc за незасят token дава exists:false, точно както днес. Всички 6 съществуващи unit спека остават зелени.",
-    "steps": [
-      {
-        "id": "410.1",
-        "phase": "RECON",
-        "action": "Прочети maps-feature-plan.md (корена на репото), shared-inventory-structure.md §5 (контракта на мока) и §9, modules/firebase.js (26 реда), modules/state.js, test/mocks/firebase-firestore.js. Виж test/unit/gold.spec.js как консумира bootApp/мока."
-      },
-      {
-        "id": "410.2",
-        "phase": "RED",
-        "action": "Създай test/unit/image.spec.js за fitDimensions(w, h, maxDim=1600): (а) landscape 4000x2000 → 1600x800; (б) portrait 1000x3200 → 500x1600; (в) по-малка от maxDim (800x600) НЕ се upscale-ва → 800x600; (г) резултатът е цели числа (Math.round); (д) needsCompression(899000)===false, needsCompression(900001)===true, MAX_IMAGE_BYTES===900000; (е) blobToDataUrl(new Blob(['abc'])) резолвва с низ, започващ с 'data:'. Създай test/unit/firestore-mock.spec.js: (а) setDoc('maps/abc', {image:'x'}) → getDoc('maps/abc') дава exists()===true и data().image==='x'; (б) незасят token → exists()===false; (в) __setDocData seed-ва без запис в calls.setDoc; (г) __reset() чисти store-а. Пусни npm run test:unit — новите спекове ЧЕРВЕНИ по правилната причина (модулът/експортите липсват), старите зелени."
-      },
-      {
-        "id": "410.3",
-        "phase": "GREEN",
-        "action": "Създай modules/image.js: export const MAX_IMAGE_BYTES = 900000; export function needsCompression(dataUrlLength); export function blobToDataUrl(blob) — FileReader.readAsDataURL в Promise; export function fitDimensions(w, h, maxDim = 1600) — чиста математика, връща {w, h}; export async function compressImage(blob, {maxDim = 1600, quality = 0.72} = {}) — createImageBitmap(blob) (fallback: new Image + objectURL), canvas fitDimensions размер, drawImage, canvas.toDataURL('image/jpeg', quality), връща data URL низа. compressImage е ТЪНКА обвивка — jsdom няма canvas, тя се тества само през мокване в следващите таскове, НЕ пиши unit тест за тялото ѝ. Разшири test/mocks/firebase-firestore.js по контракта от notes. В modules/firebase.js добави и export-ни: const MAPS_INDEX_DOC = doc(db, 'maps', 'index'); function mapImageDoc(id) { return doc(db, 'maps', id); }. В modules/state.js добави: maps: [], editingMapIdx: null, expandedMapIdx: null, savingMaps: false."
-      },
-      {
-        "id": "410.4",
-        "phase": "DONE",
-        "action": "npm run test:unit — ВСИЧКИ спекове зелени (новите 2 + старите 6). Никакви други файлове не са пипнати. Commit с description-а дословно."
-      }
-    ],
-    "passes": true
-  },
-  {
-    "id": 420,
-    "category": "feature",
-    "repo": "inventory",
-    "lane": "maps",
-    "files": [
-      "index.html",
-      "styles.css",
-      "app.js",
-      "modules/maps.js",
-      "test/helpers/dom.js",
-      "test/unit/maps.spec.js"
-    ],
-    "verify": [
-      "npm run test:unit"
-    ],
-    "description": "feat(maps): add Maps tab with realtime table, ellipsis descriptions and accordion expand",
-    "specRef": "shared-inventory-structure.md §9 + maps-feature-plan.md; modules/quests.js е ЕТАЛОНЪТ",
-    "tddWorkflow": true,
-    "notes": "Табът показва САМО двете описания (кратко + детайли) с елипсис, както другите табове — НИКАКВА снимка в реда (снимките са в отделни докове и не се теглят при списване). Акордеонът е копие на quest патърна: точно един expanded ред, клик върху бутон/.drag-handle НЕ toggle-ва, expanded оцелява re-render през state.expandedMapIdx. Drag&drop с initSortable — редът се пази в maps/index.\n\nbootApp (test/helpers/dom.js) се разширява АДИТИВНО: нов параметър maps = null, след квестовете __emit('maps/index', maps === null ? null : { list: maps }). Дефолтът null пази всички стари тестове зелени — НЕ пипай нищо друго в helper-а.\n\nБутонът „+ Добави карта“ вика openMapModal() — в ТОЗИ таск openMapModal е минимален stub export (истинският модал идва в таск 430); дефинирай го в modules/maps.js, за да не гърми onclick.\n\nUI текстовете на български, както другите табове (таб „Карти“, empty state „Няма качени карти.“).",
-    "steps": [
-      {
-        "id": "420.1",
-        "phase": "RECON",
-        "action": "Прочети modules/quests.js (renderQuests + акордеона, редове 15-58), modules/items.js (по диагонал), index.html (nav реда 23-26, tab-quests блока 75-97), styles.css (.quest-desc/.quest-note-cell/.quest-expanded правилата), test/unit/quests.spec.js (как се тества render + акордеон през bootApp), test/helpers/dom.js."
-      },
-      {
-        "id": "420.2",
-        "phase": "RED",
-        "action": "Създай test/unit/maps.spec.js (bootApp с новия maps параметър): (а) __emit с 2 карти → 2 реда в #mapBody, shortDesc в <strong>, details в .map-details div; (б) empty state при maps:[] → ред с клас empty и текст „Няма качени карти.“; (в) esc() — shortDesc '<img>' излиза екраниран (няма img елемент в реда); (г) акордеон: клик на ред 1 → class map-expanded; клик на ред 0 → ред 1 губи класа, ред 0 го има; клик на expanded реда → колапс; (д) клик върху бутон в реда НЕ expand-ва; (е) при state.savingMaps=true входящ __emit('maps/index',...) се ИГНОРИРА (echo guard). Пусни — ЧЕРВЕНИ по правилната причина."
-      },
-      {
-        "id": "420.3",
-        "phase": "GREEN",
-        "action": "index.html: в <nav class=\"tab-nav\"> добави <button class=\"tab-btn\" data-tab=\"maps\">Карти</button>; след tab-quests добави <div id=\"tab-maps\" class=\"tab\"> с .controls бутон „+ Добави карта“ (onclick=\"openMapModal()\") и .tbl-wrap таблица id=mapTable: колони ☰ | Карта | Детайли | (действия), tbody id=mapBody. styles.css: .map-short и .map-details по образеца на .quest-desc/.quest-note-cell (-webkit-line-clamp:2, overflow:hidden, word-break), tr.map-expanded ги разгъва (display:block, overflow:visible, white-space:pre-wrap за details). initTabs() е generic (data-tab) — НЕ пипай ui.js."
-      },
-      {
-        "id": "420.4",
-        "phase": "GREEN",
-        "action": "Създай modules/maps.js по образеца на quests.js: import state, MAPS_INDEX_DOC + setDoc от firebase.js, esc/syncMsg/initSortable от ui.js. export function renderMaps() — empty state / редове (data-idx, drag-handle, strong shortDesc + div.map-details, actions ✏ editMap(i) / 🗑 deleteMap(i)) / акордеон wiring / initSortable('mapBody', state.maps, saveMapsIndex). export async function saveMapsIndex() — state.savingMaps флаг, setDoc(MAPS_INDEX_DOC, { list: state.maps }), syncMsg както saveQuests. export function openMapModal() {} — stub за таск 430. Разшири bootApp (dom.js) с maps параметъра по notes. app.js: import-ни renderMaps/saveMapsIndex/openMapModal + window.openMapModal; добави onSnapshot(MAPS_INDEX_DOC, snap => { if (state.savingMaps) return; state.maps = snap.exists() ? (snap.data().list || []) : []; renderMaps(); }); facade re-export { renderMaps, saveMapsIndex } и добави maps в getState/setState."
-      },
-      {
-        "id": "420.5",
-        "phase": "DONE",
-        "action": "npm run test:unit — всичко зелено (вкл. старите спекове, които boot-ват app.js — новият onSnapshot не бива да ги чупи: bootApp вече emit-ва maps/index null → state.maps=[] → renderMaps() върху наличния #mapBody от index.html markup-а). Commit с description-а дословно."
-      }
-    ],
-    "passes": true
-  },
-  {
-    "id": 430,
-    "category": "feature",
-    "repo": "inventory",
-    "lane": "maps",
-    "files": [
-      "index.html",
-      "styles.css",
-      "app.js",
-      "modules/maps.js",
-      "modules/ui.js",
-      "test/unit/maps-modal.spec.js"
-    ],
-    "verify": [
-      "npm run test:unit"
-    ],
-    "description": "feat(maps): add map dialog with file upload, clipboard paste, required descriptions and Firestore persistence",
-    "specRef": "shared-inventory-structure.md §9 + maps-feature-plan.md; modules/items.js модалът е ЕТАЛОНЪТ",
-    "tddWorkflow": true,
-    "notes": "ДВАТА ВХОДА (изискване на потребителя, качването е от лаптоп/браузър): (1) <input type=\"file\" accept=\"image/*\"> и (2) Ctrl+V — ДМ-ът прави скрийншот (Win+Shift+S) и пейства направо в отворения диалог. Paste: 'paste' listener на document, АКТИВЕН САМО докато mapModal е отворен (проверка classList.contains('open')); от e.clipboardData.items вземи първия item с type startsWith 'image/' → getAsFile().\n\nPIPELINE (компресия САМО при нужда — изискване на потребителя, качеството не се пипа излишно): blob (от файл или paste) → dataUrl = await blobToDataUrl(blob); АКО needsCompression(dataUrl.length) → dataUrl = await compressImage(blob); ако СЛЕД компресията пак needsCompression → втори опит compressImage(blob, {maxDim: 1200, quality: 0.6}); ако и той е над лимита → грешка в #mMapError („Снимката е твърде голяма и след компресия“), pendingImage остава null, save блокиран. Резултатът → preview <img id=\"mPreview\"> и модулна променлива pendingImage до save. В unit тестовете се мок-ва САМО compressImage с ЧАСТИЧЕН мок: vi.mock('../../modules/image.js', async (importOriginal) => ({ ...(await importOriginal()), compressImage: vi.fn(async () => 'data:image/jpeg;base64,FAKE') })) — blobToDataUrl/needsCompression/MAX_IMAGE_BYTES остават реалните (FileReader работи в jsdom); тествай ЧЕ и КОГА compressImage е извикана, не самата компресия.\n\nВАЛИДАЦИЯ (и двете описания ЗАДЪЛЖИТЕЛНИ — изрично изискване): shortDesc празно → блок + focus; details празно → блок + focus; нова карта без снимка → блок + съобщение в #mMapError. При редакция снимката е опционална (не е пипната → НЕ се праща setDoc към image дока).\n\nSAVE (нова): id = crypto.randomUUID(); await setDoc(mapImageDoc(id), { image: pendingImage }); после unshift на { id, shortDesc, details, createdAt: new Date().toISOString() } в state.maps + saveMapsIndex(). РЕДАКЦИЯ: splice на стария индекс + unshift (редактираното отива НАЙ-ОТГОРЕ — патърнът на saveItem/saveQuest); ако pendingImage е сменена → setDoc към СЪЩИЯ mapImageDoc(id). EDIT ОТВАРЯНЕ: попълни полетата от метаданните и зареди снимката ЛЕНИВО с getDoc(mapImageDoc(id)) → preview (докато чака: placeholder текст).\n\nDELETE: confirm() (както deleteItem), после deleteDoc(mapImageDoc(id)) + splice от state.maps + saveMapsIndex().\n\nmodules/ui.js: в initModalBackdrops масивът става ['itemModal','questModal','mapModal'] — ЕДИНСТВЕНАТА промяна там.\n\nЧервени линии: никакъв реален Firestore в тестове; export/import bundle-ът (v1) НЕ се пипа — картите нарочно НЕ влизат в него (снимките биха издули JSON-а).",
-    "steps": [
-      {
-        "id": "430.1",
-        "phase": "RECON",
-        "action": "Прочети modules/items.js (openItemModal/saveItem/deleteItem — целия модален жизнен цикъл), index.html itemModal блока (редове 99-129), modules/ui.js initModalBackdrops, test/unit/items.spec.js (как се тестват модал + calls към мока), test/mocks/firebase-firestore.js (вкл. __setDocData от таск 410)."
-      },
-      {
-        "id": "430.2",
-        "phase": "RED",
-        "action": "Създай test/unit/maps-modal.spec.js с vi.mock на modules/image.js (compressImage: vi.fn(async () => 'data:image/jpeg;base64,FAKE')). Тестове: (а) openMapModal() отваря #mapModal (class open), полетата празни; (б) saveMap без shortDesc → НЯМА setDoc calls, фокус на #mShort; (в) без details → блок; (г) нова карта без снимка → блок + #mMapError видим; (д) handleMapFile с МАЛЪК blob (напр. new Blob(['x'.repeat(1000)])) → compressImage НЕ е извикана, #mPreview.src е оригиналният data URL (качеството се пази); (д2) handleMapFile с ГОЛЯМ blob (new Blob(['x'.repeat(1200000)]) — data URL-ът му надхвърля MAX_IMAGE_BYTES) → compressImage ИЗВИКАНА, #mPreview.src === 'data:image/jpeg;base64,FAKE'; (д3) при голям blob И compressImage мокната да връща пак над-лимитен низ → #mMapError видим, saveMap блокиран; (е) handleMapPaste с fake event { clipboardData: { items: [{ type: 'image/png', getAsFile: () => blob }] } } при отворен модал → същият pipeline; при ЗАТВОРЕН модал → игнор; (ж) успешен saveMap → calls.setDoc има запис с token 'maps/<id>' и data.image==='data:image/jpeg;base64,FAKE' И запис с token 'maps/index' чийто data.list[0] е {id, shortDesc, details, createdAt}; модалът затворен; (з) редакция БЕЗ смяна на снимка → само 1 setDoc (към maps/index), редактираният елемент е unshift-нат отгоре; (и) deleteMap с confirm true → calls.deleteDoc има 'maps/<id>' и индексът е пренаписан; с confirm false → нищо. Пусни — ЧЕРВЕНИ по правилната причина."
-      },
-      {
-        "id": "430.3",
-        "phase": "GREEN",
-        "action": "index.html: добави mapModal по образеца на questModal — title id=mapModalTitle, поле „Кратко описание *“ <input id=\"mShort\" placeholder=\"Зоната на изток, в джунглата…\">, поле „Детайли *“ <textarea id=\"mDetails\" placeholder=\"Селището на дървесните елфи…\">, поле „Снимка *“ с <input type=\"file\" id=\"mFile\" accept=\"image/*\" onchange=\"handleMapFile(event)\"> + hint див „…или Ctrl+V скрийншот направо тук“, <img id=\"mPreview\" class=\"map-preview hidden\">, error див id=mMapError (по образеца на goldError), бутони Отказ/Запази (closeMapModal/saveMap). styles.css: .map-preview (max-width:100%, max-height:200px, cursor:zoom-in, border-radius)."
-      },
-      {
-        "id": "430.4",
-        "phase": "GREEN",
-        "action": "modules/maps.js: имплементирай openMapModal(idx=null) (edit: попълва полета + getDoc(mapImageDoc(id)) → pendingImage=null, preview от дока; new: чисти всичко), closeMapModal, editMap(i), handleMapFile(e), handleMapPaste(e) (гуардът по notes), saveMap() и deleteMap(i) по контракта от notes, saveMapsIndex остава от таск 420. Общ вътрешен async processImageBlob(blob) имплементира pipeline-а от notes (blobToDataUrl → условна компресия → втори опит → грешка) — handleMapFile и handleMapPaste само го викат. document.addEventListener('paste', handleMapPaste) — веднъж, при module init. ui.js: добави 'mapModal' в initModalBackdrops. app.js: window.closeMapModal/saveMap/deleteMap/editMap/handleMapFile + facade re-exports. import { blobToDataUrl, needsCompression, compressImage } from './image.js' в maps.js (за да работи частичният vi.mock)."
-      },
-      {
-        "id": "430.5",
-        "phase": "DONE",
-        "action": "npm run test:unit — всичко зелено. Ръчна проверка НЕ се прави (без serve от агент — порт 45279). Commit с description-а дословно."
-      }
-    ],
-    "passes": true
-  },
-  {
-    "id": 440,
-    "category": "feature",
-    "repo": "inventory",
-    "lane": "maps",
-    "files": [
-      "styles.css",
-      "modules/viewer.js",
-      "modules/maps.js",
-      "app.js",
-      "test/unit/viewer.spec.js"
-    ],
-    "verify": [
-      "npm run test:unit"
-    ],
-    "description": "feat(maps): add fullscreen map viewer with wheel zoom, drag pan and pinch zoom",
-    "specRef": "shared-inventory-structure.md §9 + maps-feature-plan.md",
-    "tddWorkflow": true,
-    "notes": "Прегледът е ОСНОВНО на Android таблет/телефон — pinch zoom е задължителен. Ползвай POINTER EVENTS (pointerdown/move/up/cancel + Map на активните пойнтери), НЕ touch events — един код за мишка и пръсти. wheel zoom към курсора за лаптопа, dblclick → reset, Esc/бутон ✕/клик на фона → затваряне. touch-action:none на overlay-а (иначе браузърът краде жестовете), preventDefault на wheel.\n\nАРХИТЕКТУРА ЗА ТЕСТИМОСТ: цялата геометрия е ЧИСТИ функции с unit тестове; DOM/event кодът е тънък. export function zoomAt(view, factor, cx, cy) → { scale, tx, ty }: newScale = clampScale(view.scale * factor); k = newScale / view.scale; tx' = cx - (cx - view.tx) * k; ty' = cy - (cy - view.ty) * k (точката под курсора остава на място). export function clampScale(s) → [1, 8]. Пинчът се свежда до zoomAt с factor = dist1/dist0 и център средата между двата пръста.\n\nОverlay-ят (#mapViewer) се създава ЕДНОКРАТНО при първото openViewer и се преизползва (display toggle). Прилагане: img.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`; transform-origin: 0 0.\n\nВръзка: клик на #mPreview в модала → openViewer(pendingImage или заредения data URL). Спекът на потребителя: „като се отвори за едит, да може да се види картата — с клик да се отвори на голям екран, да се зуумва“.",
-    "steps": [
-      {
-        "id": "440.1",
-        "phase": "RECON",
-        "action": "Прочети modules/maps.js след таск 430 (къде живее pendingImage/preview data URL-ът), styles.css (модалните стилове), test/unit/ui.spec.js (как се тестват DOM-only модули)."
-      },
-      {
-        "id": "440.2",
-        "phase": "RED",
-        "action": "Създай test/unit/viewer.spec.js. Чиста математика: (а) zoomAt({scale:1,tx:0,ty:0}, 2, 100, 100) → {scale:2, tx:-100, ty:-100}; (б) инвариант — след zoomAt точката (cx,cy) показва същата точка от снимката: за произволни view/cx/cy провери (cx - tx')/scale' === (cx - tx)/scale; (в) clampScale(0.5)===1, clampScale(20)===8, zoomAt при scale 1 с factor 0.5 не пада под 1; (г) поредица zoom in + огледален zoom out връща изходния view (в рамките на floating point). DOM: (д) openViewer('data:...') → #mapViewer в document, видим, img.src сетнат; (е) повторен openViewer НЕ дублира overlay-а; (ж) closeViewer / Esc keydown / клик на фона (target === overlay) → скрит; (з) dblclick → transform reset (scale 1). Пусни — ЧЕРВЕНИ."
-      },
-      {
-        "id": "440.3",
-        "phase": "GREEN",
-        "action": "Създай modules/viewer.js: export { zoomAt, clampScale, openViewer, closeViewer }. Вътрешно view state {scale, tx, ty}; wheel (deltaY<0 → factor 1.15, иначе 1/1.15, cx/cy от e.clientX/Y относно overlay-а); pan: pointerdown записва пойнтера в Map + setPointerCapture, pointermove с 1 активен пойнтер мести tx/ty; pinch: 2 активни пойнтера → zoomAt(view, distNew/distOld, midX, midY); pointerup/cancel чисти. dblclick reset {scale:1,tx:0,ty:0}. Esc listener само докато е отворен. styles.css: #mapViewer { position:fixed; inset:0; background:rgba(0,0,0,.92); z-index над модалите; display:flex; touch-action:none; } + img { transform-origin:0 0; } + бутон ✕ горе-дясно."
-      },
-      {
-        "id": "440.4",
-        "phase": "GREEN",
-        "action": "modules/maps.js: click listener на #mPreview → openViewer(текущия data URL) (в openMapModal wiring-а или при module init — но елементът е статичен в index.html, така че веднъж при init). app.js: facade re-export { zoomAt, clampScale, openViewer, closeViewer } from './modules/viewer.js'."
-      },
-      {
-        "id": "440.5",
-        "phase": "DONE",
-        "action": "npm run test:unit — всичко зелено. Commit с description-а дословно."
-      }
-    ],
-    "passes": true
-  },
-  {
-    "id": 450,
-    "category": "e2e",
-    "repo": "inventory",
-    "lane": "maps",
-    "files": [
-      "test/fixtures/maps-fixture.html",
-      "test/e2e/maps-accordion.spec.js",
-      "styles.css",
-      "modules/maps.js"
-    ],
-    "description": "test(maps): add e2e fixture and accordion spec for the Maps tab",
-    "specRef": "test/e2e/quests-accordion.spec.js + test/fixtures/quests-fixture.html са ЕТАЛОНЪТ — огледален превод към maps",
-    "notes": "Червена линия §3.5 („test/e2e/ и fixtures не се пипат“) важи за СЪЩЕСТВУВАЩИТЕ файлове — НОВИТЕ maps-* файлове тук са изрично позволени (§9). Съществуващите спекове/фикстури НЕ се редактират.\n\nФикстурата е STANDALONE HTML (както quests-fixture.html): инлайн копие на map стиловете (взети 1:1 от styles.css — .map-short/.map-details/tr.map-expanded + табличните базови стилове) + инлайн скрипт, който рендерира 2 карти и репликира акордеон логиката на renderMaps: карта 0 с кратки описания, карта 1 с ДЪЛГИ (3+ реда, за да има какво да клампва елипсисът). Снимка НЕ участва във фикстурата (тя не се показва в таблицата по дизайн).\n\nСпекът копира структурата на quests-accordion.spec.js: (а) .map-details има overflow hidden; (б) редът стартира без map-expanded; (в) клик expand-ва; (г) повторен клик колапсира; (д) само един expanded — вторият клик колапсира първия; (е) клик на edit бутон НЕ expand-ва.\n\n⚠ АГЕНТЪТ НЕ ПУСКА npm test (порт 45279 е на гейта)! Пиши спека КОНСЕРВАТИВНО по образеца — гейтът ще го пусне след merge. Пусни само npm run test:unit за регресия.\n\nТова е ФИНАЛНИЯТ таск на lane-а — БЕЗ verify override, пълният гейт (npm ci + test:unit + npm test/Playwright, вкл. новия спек) е задната мрежа. Ако при писането забележиш дребен пропуск от таскове 410-440 (стил, липсващ клас), поправи го ТУК — затова styles.css и modules/maps.js са в ownership-а.",
-    "steps": [
-      {
-        "id": "450.1",
-        "action": "Прочети test/fixtures/quests-fixture.html ИЗЦЯЛО и test/e2e/quests-accordion.spec.js ИЗЦЯЛО. Прочети styles.css map правилата (от таскове 420/430/440) и renderMaps в modules/maps.js — фикстурата трябва да репликира СЪЩИТЕ класове и структура на реда."
-      },
-      {
-        "id": "450.2",
-        "action": "Създай test/fixtures/maps-fixture.html по образеца: инлайн CSS (базовите табличен/бутонни стилове от quests-fixture + map класовете 1:1 от styles.css), таблица mapTable/mapBody, инлайн скрипт с data масив от 2 карти (карта 1 с многоредови shortDesc/details) и рендер + акордеон логика, огледални на renderMaps."
-      },
-      {
-        "id": "450.3",
-        "action": "Създай test/e2e/maps-accordion.spec.js по образеца на quests-accordion.spec.js (FIXTURE = '/test/fixtures/maps-fixture.html', waitForSelector '#mapBody tr[data-idx]', 6-те теста от notes)."
-      },
-      {
-        "id": "450.4",
-        "action": "npm run test:unit за регресия (e2e ще го пусне гейтът). Провери с git diff, че НИТО един съществуващ файл в test/e2e/ и test/fixtures/ не е променен. Commit с description-а дословно."
-      }
-    ],
-    "passes": true
-  },
-  {
-    "id": 460,
-    "category": "feature",
-    "repo": "inventory",
-    "lane": "maps",
-    "files": [
-      "index.html",
-      "styles.css",
-      "test/unit/maps.spec.js"
-    ],
-    "verify": [
-      "npm run test:unit"
-    ],
-    "description": "feat(maps): add static world map link above the add button",
-    "specRef": "shared-inventory-structure.md §9 + maps-feature-plan.md („Допълнения“)",
-    "tddWorkflow": true,
-    "notes": "Изискване на потребителя: НАД бутона „+ Добави карта“ в таб „Карти“ да стои СТАТИЧЕН външен линк към пълната карта на света:\nhref (ТОЧНО този URL): https://totalwarwarhammer.fandom.com/wiki/Map:Immortal_Empires_Factions\nЕтикет: „🗺 Immortal Empires Factions — пълната карта“. target=\"_blank\" + rel=\"noopener\" (външен сайт, приложението е PWA — да не подменя таба).\nЧисто статичен markup — НИКАКЪВ JS, никакъв Firestore. Не пипай нищо друго в tab-maps блока.",
-    "steps": [
-      {
-        "id": "460.1",
-        "phase": "RECON",
-        "action": "Прочети index.html блока #tab-maps (controls + таблицата) и styles.css правилата за .controls, за да вградиш линка в същия визуален език (btn-ghost стилистика или muted link)."
-      },
-      {
-        "id": "460.2",
-        "phase": "RED",
-        "action": "В test/unit/maps.spec.js добави describe за линка: след bootApp() (а) document.querySelector('#tab-maps a.map-world-link') съществува; (б) href е ТОЧНО https://totalwarwarhammer.fandom.com/wiki/Map:Immortal_Empires_Factions; (в) target === '_blank' и rel съдържа 'noopener'; (г) линкът стои ПРЕДИ .controls бутона в DOM реда (compareDocumentPosition). Пусни — ЧЕРВЕНИ."
-      },
-      {
-        "id": "460.3",
-        "phase": "GREEN",
-        "action": "index.html: в #tab-maps, над div.controls, добави <div class=\"map-world-row\"><a class=\"map-world-link\" href=\"...\" target=\"_blank\" rel=\"noopener\">🗺 Immortal Empires Factions — пълната карта</a></div>. styles.css: .map-world-row { text-align:right; margin-bottom:6px; } .map-world-link { color: var(--muted); font-size:0.85rem; } + hover подчертаване — дискретно, да не се бие с бутона."
-      },
-      {
-        "id": "460.4",
-        "phase": "DONE",
-        "action": "npm run test:unit — всичко зелено. Commit с description-а дословно."
-      }
-    ],
-    "passes": true
-  },
-  {
-    "id": 470,
-    "category": "feature",
-    "repo": "inventory",
-    "lane": "maps",
-    "files": [
-      "modules/maps.js",
-      "modules/viewer.js",
-      "app.js",
-      "styles.css",
-      "test/unit/maps.spec.js",
-      "test/unit/maps-modal.spec.js",
-      "test/unit/viewer.spec.js"
-    ],
-    "description": "feat(maps): add per-row preview button and viewer zoom buttons",
-    "specRef": "shared-inventory-structure.md §9 + maps-feature-plan.md („Допълнения“); modules/maps.js renderMaps + modules/viewer.js са отправната точка",
-    "tddWorkflow": true,
-    "notes": "ДВЕ СВЪРЗАНИ ДОБАВКИ (изискване на потребителя — преглед на картата БЕЗ да се влиза в едит, пести място в таблицата):\n\n1. ПРЕВЮ БУТОН НА ВСЕКИ РЕД: в renderMaps() добави бутон 🔍 в .tbl-actions, ПЪРВИ преди ✏ и 🗑: <button class=\"btn-ghost btn-sm\" onclick=\"previewMap(${i})\">🔍</button>. Нова export async function previewMap(i): m = state.maps[i]; syncMsg('Зареждане…', 'saving'); snap = await getDoc(mapImageDoc(m.id)); ако snap.exists() и има .image → openViewer(image) + syncMsg('● live', 'saved'); иначе syncMsg('Няма снимка за тази карта', ''). НЕ отваря модала, НЕ пипа state.editingMapIdx. Всяко натискане тегли наново (без кеш — както решенията при едит preview-то). app.js: window.previewMap + facade re-export.\n\n2. ЛУПИЧКИ +/− ВЪВ VIEWER-А: видими zoom бутони (изискване „с лупичките за + и -“ — на таблет wheel няма, а pinch не е очевиден за всички). В ensureOverlay() добави два бутона: class viewer-zoom viewer-zoom-in (текст ➕) и viewer-zoom viewer-zoom-out (текст ➖), aria-label „Приближи“/„Отдалечи“. Клик → view = zoomAt(view, 1.4 | 1/1.4, cx, cy) с център СРЕДАТА на overlay-а (getBoundingClientRect().width/2, height/2; в jsdom rect е 0x0 → центърът е (0,0), тестът пак работи през transform-а) + applyTransform(). Клампването в [1,8] идва от zoomAt — на минимум/максимум кликът просто не мърда скейла. styles.css: .viewer-zoom — фиксирани долу-център (flex ред, gap), едри touch таргети (min 44px), полупрозрачен фон като .viewer-close.\n\nЧЕРВЕНИ ЛИНИИ: test/e2e/ и test/fixtures/ НЕ се пипат (maps-fixture-ът НЕ получава 🔍 бутона — e2e спекът за акордеона търси edit бутона в .tbl-actions по индекс САМО във фикстурата, тя е standalone и остава вярна на себе си). Никакъв реален Firestore. Това е ФИНАЛНИЯТ таск — БЕЗ verify override, пълният гейт е задната мрежа.",
-    "steps": [
-      {
-        "id": "470.1",
-        "phase": "RECON",
-        "action": "Прочети modules/maps.js (renderMaps, openMapModal lazy getDoc патърна, ред 141-149), modules/viewer.js (ensureOverlay, zoomAt, applyTransform), test/unit/viewer.spec.js и test/unit/maps-modal.spec.js (как seed-ват снимка с __setDocData и как проверяват #mapViewer)."
-      },
-      {
-        "id": "470.2",
-        "phase": "RED",
-        "action": "test/unit/maps.spec.js: (а) при 2 карти всеки ред има бутон 🔍 в .tbl-actions, ПРЕДИ ✏; (б) клик на 🔍 НЕ expand-ва реда (уловено от съществуващия guard e.target.closest('button')— тестът го доказва). test/unit/maps-modal.spec.js (или нов describe в maps.spec.js): (в) __setDocData('maps/<id>', {image:'data:image/png;base64,AAA'}) → await previewMap(0) → #mapViewer е видим (display flex) и img.src е точно този data URL, а #mapModal НЯМА class open; (г) previewMap за карта БЕЗ image док → viewer-ът НЕ се отваря, #sync съдържа „Няма снимка“. test/unit/viewer.spec.js: (д) след openViewer overlay-ът има .viewer-zoom-in и .viewer-zoom-out бутони; (е) клик на ➕ → transform scale расте (парсни от style.transform); клик на ➖ след това → връща се; (ж) на scale 1 клик на ➖ оставя scale 1 (кламп); (з) многократни ➕ не надхвърлят scale 8. Пусни — ЧЕРВЕНИ по правилната причина."
-      },
-      {
-        "id": "470.3",
-        "phase": "GREEN",
-        "action": "modules/viewer.js: бутоните в ensureOverlay() по notes (клик листенъри → zoomAt към центъра + applyTransform; stopPropagation, за да не удари backdrop close). modules/maps.js: 🔍 бутонът в renderMaps() + export async function previewMap(i) по notes. app.js: window.previewMap = previewMap + facade re-export { previewMap }. styles.css: .viewer-zoom стиловете."
-      },
-      {
-        "id": "470.4",
-        "phase": "DONE",
-        "action": "npm run test:unit — всичко зелено (вкл. старите viewer/maps спекове). git diff — увери се, че test/e2e/ и test/fixtures/ са НЕПИПНАТИ. Commit с description-а дословно."
-      }
-    ],
-    "passes": true
-  },
-  {
-    "id": 510,
-    "category": "refactor",
-    "repo": "combat",
-    "lane": "tokens",
-    "files": [
-      "styles.css",
-      "tabs/inventory.html",
-      "tabs/stats-basicinfo.html"
-    ],
-    "verify": [],
-    "description": "refactor(styles): tokenize ambient hardcoded colors behind :root custom properties (zero visual change)",
-    "specRef": "d:\\Downloads\\monk\\cube-of-force.md (пълната спецификация на фичата — ЧЕТИ Я ПЪРВА) + monk-combat-structure.md",
-    "tddWorkflow": false,
-    "notes": "ПОДГОТВИТЕЛЕН таск за темите на Cube of Force: всички AMBIENT цветове (повърхности, бордери, текст) в styles.css минават през CSS custom properties. Теманите файлове (таск 520, друга lane) ще override-ват ТОЧНО тези токени през динамично зареден stylesheet — затова НАБОРЪТ ТОКЕНИ В :root Е КОНТРАКТЪТ между двата таска: смислени имена, всичко на едно място в :root блока.\n\n=== КАКВО СЕ ТОКЕНИЗИРА ===\nHardcoded ambient цветове извън :root (~200 срещания): сиви (#333 #444 #666 #f5f5f5 #fff), тъмни повърхности (#1e1e2f #2a2f45 #2a2a3d #1a223a и подобни), бордери, текстови нюанси (#c8cde8 #cfd7ff #e6e6ff...).\n- Идентична стойност със съществуващ токен → ползвай токена.\n- Близка, но НЕ идентична → НОВ токен със СТАРАТА стойност (zero-diff философия, не 'почиствай' нюанси). Нови токени: минимален брой, смислени имена (--text-bright, --surface-3 стил), дефинирани в :root при другите.\n- В tabs/inventory.html и tabs/stats-basicinfo.html има по 1 inline hex — замени с var(--токен) директно в style атрибута (БЕЗ нови класове в styles.css за това).\n\n=== ЧЕРВЕНИ ЛИНИИ ===\n1. СЕМАНТИЧНИТЕ цветове НЕ се пипат — те са константни във всички теми: монетите (#FFD700 злато, #C0C0C0 сребро, #B87333 мед, #E5E4E2 платина), success зелено (#22c55e, #5ae09f, #2d6245...), danger червено (rgba(255,0,0,...)), cleric/feat лилаво (#9b8fff, #9b59f6 + rgba(155,143,255,...)). При съмнение дали цвят е семантичен или ambient — остави го hardcoded (по-добре нетокенизиран, отколкото грешно темиран).\n2. НУЛЕВА визуална промяна — computed стойностите остават байт-идентични. styles.spec.js е характеризационната мрежа.\n3. Само styles.css + двата partial-а. НИКАКВИ @import-и, никакви referencing на themes/ — темите са напълно отделни файлове (lane themes).\nЕдинствен таск в lane tokens → БЕЗ verify override, пълният gate е мрежата.",
-    "steps": [
-      {
-        "id": "510.1",
-        "phase": "RECON",
-        "action": "Прочети cube-of-force.md (секции „Архитектура на темите\" + „Одобрени палитри\"), styles.css :root блока, test/e2e/styles.spec.js. Инвентаризирай hardcoded цветовете: grep -oE в styles.css, класифицирай ambient vs семантични по списъка в notes."
-      },
-      {
-        "id": "510.2",
-        "phase": "IMPLEMENT",
-        "action": "Замени ambient цветовете с var(--...) по правилата от notes (identical→съществуващ токен, близък→нов токен със старата стойност). Добави новите токени в :root. Оправи двата inline hex-а в tabs/inventory.html и tabs/stats-basicinfo.html с var(--...)."
-      },
-      {
-        "id": "510.3",
-        "phase": "DONE",
-        "action": "npm test -- styles tabs-navigation critical-path — зелено локално (пълният suite е на gate-а). Визуална проверка: нито един computed цвят не е мръднал. Commit с description-а дословно."
-      }
-    ],
-    "passes": false
-  },
-  {
-    "id": 520,
-    "category": "feature",
-    "repo": "combat",
-    "lane": "themes",
-    "dependsOn": [
-      510
-    ],
-    "files": [
-      "themes/**",
-      "test/e2e/cube-themes.spec.js"
-    ],
-    "verify": [],
-    "description": "feat(themes): add 5 standalone face theme stylesheets (fog/stone/moss/arcane/bastion)",
-    "specRef": "d:\\Downloads\\monk\\cube-of-force.md (пълната спецификация на фичата — ЧЕТИ Я ПЪРВА) + monk-combat-structure.md",
-    "tddWorkflow": true,
-    "notes": "Петте теми на Cube of Force като НАПЪЛНО САМОСТОЯТЕЛНИ CSS файлове: themes/fog.css, themes/stone.css, themes/moss.css, themes/arcane.css, themes/bastion.css. styles.css НЕ СЕ ПИПА — никакви @import-и (изрично решение на потребителя: темите се прилагат динамично, виж механизма).\n\n=== МЕХАНИЗЪМ „ПОЛЗВАЙ ТАЗИ ТЕМА\" (решение на потребителя — динамичен link swap, БЕЗ @import) ===\nТемите НЕ се реферират от styles.css по никакъв начин. modules/cube.js поддържа ЕДИН <link rel=\"stylesheet\" id=\"cubeThemeLink\"> елемент: при Activate го създава (ако липсва) и сет-ва href=\"themes/<име>.css\", като го държи ПОСЛЕДЕН елемент в <head> (тема файловете ползват :root — по-късният stylesheet печели каскадата при равна специфичност); при Deactivate/изтичане/0 charges го ПРЕМАХВА → дефолтът от styles.css важи. При reload с активна бариера link-ът се добавя на DOMContentLoaded от st.cube.activeFace (краткият FOUC до дефолтната тема е приет).\n\n=== ОДОБРЕНА ПАЛИТРА (bg / card / accent) — НЕ Я ПРЕДОГОВАРЯЙ ===\nfog.css     (face 1): #101315 / #1a2023 / #5e7681   (сиво-синьо, газове/мъгла)\nstone.css   (face 2): #15110d / #211a13 / #8a6f4d   (пясъчник/бронз, неживо)\nmoss.css    (face 3): #0e1310 / #182019 / #5e7a58   (мъх, живо)\narcane.css  (face 4): #120f19 / #1c1728 / #71618f   (опушено лилаво, магия)\nbastion.css (face 5): #160f11 / #22171a / #8a5a62   (тъмно бордо, пълен бункер)\nДефолт = :root в styles.css (НЕ се мести никъде — 'няма theme link' = дефолт).\n\n=== СЪДЪРЖАНИЕ НА ВСЕКИ ФАЙЛ ===\nЕдин :root { ... } блок, който override-ва СЪЩИЯ набор токени като styles.css :root (включително новите от таск 510 — dependsOn гарантира, че са merged; прочети АКТУАЛНИЯ :root блок и покрий всеки ambient токен): --bg от колоната bg; --panel/--panel2/--pill/--pill2 производни на card (запази относителните светлост-съотношения от дефолтните стойности — напр. --pill2 е по-светъл от --pill със същата стъпка); --accent от колоната accent; --border/--muted/текстовите нюанси леко тонирани към hue-то на темата; --feat-* токените тонирани към акцента. ВСИЧКО muted — никакви ярки/електрикови цветове (твърдо изискване).\n\n=== ЧЕРВЕНИ ЛИНИИ ===\n1. styles.css/index.html/app.js НЕ се пипат — този таск създава САМО themes/** + спека.\n2. Семантичните цветове (монети, success/danger, cleric лилаво) НЕ се override-ват в темите.\n3. JS няма в този таск — спекът зарежда link елемента ръчно (page.evaluate: createElement link, href, append в КРАЯ на head). Wiring-ът към куба е таск 530/550.\nЕдинствен таск в lane themes → БЕЗ verify override, пълният gate е мрежата.",
-    "steps": [
-      {
-        "id": "520.1",
-        "phase": "RECON",
-        "action": "Прочети cube-of-force.md (палитрите + архитектура на темите), АКТУАЛНИЯ styles.css :root (след merge-натия таск 510 — включително новите токени), test/e2e/styles.spec.js за стила на спековете."
-      },
-      {
-        "id": "520.2",
-        "phase": "RED",
-        "action": "Създай test/e2e/cube-themes.spec.js: за всяка от 5-те теми — page.evaluate добавя <link rel=\"stylesheet\" href=\"themes/<име>.css\"> като последно дете на head, изчаква зареждането → computed background-color на body става bg стойността от палитрата; премахва link-а → връща се дефолтният #0b0c12. Плюс тест, че pill/panel повърхностите също се сменят (не само body). Пусни — ЧЕРВЕНО по правилната причина (файловете липсват/404)."
-      },
-      {
-        "id": "520.3",
-        "phase": "GREEN",
-        "action": "Създай 5-те файла в themes/ по правилата от notes. Пусни спека — зелено."
-      },
-      {
-        "id": "520.4",
-        "phase": "DONE",
-        "action": "npm test -- cube-themes styles critical-path — зелено локално (пълният suite е на gate-а). Никакъв друг файл не е пипнат. Commit с description-а дословно."
-      }
-    ],
-    "passes": false
-  },
-  {
-    "id": 530,
-    "category": "feature",
-    "repo": "combat",
-    "lane": "cube",
-    "files": [
-      "modules/cube.js",
-      "cube.css",
-      "index.html",
-      "app.js",
-      "test/e2e/cube-widget.spec.js"
-    ],
-    "verify": [
-      "npm test -- cube-widget critical-path"
-    ],
-    "description": "feat(cube): add Cube of Force floating widget with charges, faces dialog and theme switching",
-    "specRef": "d:\\Downloads\\monk\\cube-of-force.md (пълната спецификация на фичата — ЧЕТИ Я ПЪРВА) + monk-combat-structure.md",
-    "tddWorkflow": true,
-    "notes": "ЯДРОТО на фичата: плаващ widget (дясната стена) + диалог с charges/лица. Работещ прототип-референция: https://claude.ai/code/artifact/ab1f4497-fc02-46ee-8133-08ee42e5dd27 (ако fetch не сработи — cube-of-force.md описва всичко). UI текстовете на АНГЛИЙСКИ.\n\n=== ЛИЦАТА (RAW, DMG p.159) ===\n1 Fog (1 ch): Gases, wind, and fog can't pass. 2 Stone (2 ch): Nonliving matter can't pass. 3 Moss (3 ch): Living matter can't pass. 4 Arcane (4 ch): Spell effects can't pass. 5 Bastion (5 ch): Nothing can pass. 6 Deactivate (0 ch): бариерата пада.\nCharges: max 36. Insufficient charges → Activate е DISABLED (нищо не се случва, нищо не се харчи). Активиране на ново лице при активна бариера = позволено, плаща цената на новото. Activate на ВЕЧЕ активното лице = disabled. Ако charges стигнат 0 (активация или drain) → бариерата пада (activeFace=null, дефолтна тема).\n\n=== МЕХАНИЗЪМ „ПОЛЗВАЙ ТАЗИ ТЕМА\" (решение на потребителя — динамичен link swap, БЕЗ @import) ===\nТемите НЕ се реферират от styles.css по никакъв начин. modules/cube.js поддържа ЕДИН <link rel=\"stylesheet\" id=\"cubeThemeLink\"> елемент: при Activate го създава (ако липсва) и сет-ва href=\"themes/<име>.css\", като го държи ПОСЛЕДЕН елемент в <head> (тема файловете ползват :root — по-късният stylesheet печели каскадата при равна специфичност); при Deactivate/изтичане/0 charges го ПРЕМАХВА → дефолтът от styles.css важи. При reload с активна бариера link-ът се добавя на DOMContentLoaded от st.cube.activeFace (краткият FOUC до дефолтната тема е приет).\n\n=== STATE ===\nst.cube = { charges: 36, activeFace: null } — добавя се в defaultState в app.js (ЕДИНСТВЕНАТА промяна в app.js!). Персистенцията идва даром: load() прави {...defaultState, ...saved} (st.cube от стар запис липсва → дефолтът влиза), save() пише целия st, Bundle v2 носи целия state. НЕ добавяй отделен localStorage ключ (червена линия §3 на репото). activeFace СЕ персистира — reload при активна бариера възстановява темата.\n\n=== WIDGET (modules/cube.js — IIFE по модела на другите модули) ===\n- Markup-ът се създава от JS (document.body.appendChild) — index.html получава САМО <link rel=\"stylesheet\" href=\"cube.css\"> и <script src=\"modules/cube.js\"></script> (преди app.js, като другите модули; инициализация на DOMContentLoaded — тогава window.st/window.save са налични, app.js е sync скрипт преди </body>).\n- 3 състояния: peek (подава се ~половин икона отдясно, opacity ~.75) → клик 1: цялата икона → клик 2: диалогът. Иконата: мини 3x3 „Рубик\" grid от 9 квадратчета в muted акцентните цветове на темите.\n- Drag САМО вертикално по дясната стена (pointer events + setPointerCapture, touch-action:none), clamp в рамките на viewport-а, threshold 5px разделя drag от клик. Позицията НЕ се персистира (решение — зависи от отворения таб).\n- Диалог: „Cube of Force\" + ✕ (затваря → връща peek). Ред 1: \"Charges: X / 36\" + number input + бутон \"Regain Charges\" — добавя ВЪВЕДЕНОТО число (зарът се хвърля физически на масата — апът НЕ хвърля 1d20!), cap 36, input се чисти. Ред 2: бутон \"Minute Elapsed\" — disabled без активна бариера; сваля бариерата БЕЗ charge cost (изтекла продължителност, не е действие). После 6-те лица: цветно прозорче (accent цвета на темата), \"Face N — Име\", ефект + цена, бутон Activate (Face 6 → \"Deactivate\", disabled без активна бариера).\n- Активиране: charges -= cost; theme link swap по механизма горе (href=\"themes/<име>.css\"). Деактивиране/0 charges → премахва link-а (дефолтна тема). Всяка промяна → window.save().\n- z-index НАД табовете, но диалогът ПОД .modal и #youDiedOverlay (провери им z-index стойностите).\n\n=== ЧЕРВЕНИ ЛИНИИ ===\n1. app.js: САМО st.cube реда в defaultState. Нищо друго.\n2. Стиловете на widget-а/диалога в cube.css (НЕ в styles.css — чужда lane!). themes/*.css НЕ се създават тук (lane themes) — спекът тества LINK елемента (href/присъствие), НЕ computed цветове; файловете може още да не съществуват и това е ОК (404 на link не чупи страницата).\n3. Legacy resolver-ът в beforeEach на старите спекове не се пипа; новият спек си сетва st директно при нужда (виж multiclass бележката в structure reference).",
-    "steps": [
-      {
-        "id": "530.1",
-        "phase": "RECON",
-        "action": "Прочети cube-of-force.md ИЗЦЯЛО, modules/inventory.js или namegen.js (IIFE/attach модела), app.js defaultState+load()+save() региона (редове ~94-199), index.html script реда, BEHAVIOR_DOCUMENTATION.md за state конвенциите. Виж z-index на .modal и .you-died в styles.css."
-      },
-      {
-        "id": "530.2",
-        "phase": "RED",
-        "action": "Създай test/e2e/cube-widget.spec.js: (а) widget-ът е в peek при load; (б) клик 1 → разгънат, клик 2 → диалог, ✕ → peek; (в) Activate Face 2 → charges 36→34, #cubeThemeLink съществува с href завършващ на themes/stone.css и е последно дете на head, save-нато в localStorage (monkSheet_v3.cube); (г) Activate на активното лице е disabled; (д) смяна към Face 5 → charges 34→29, href themes/bastion.css; (е) Deactivate → link-ът го НЯМА, charges непроменени; (ж) Regain: input 10 при 29 → 36 (cap), input 5 при 20 → 25; (з) Activate disabled при charges < cost (сетни st.cube.charges=1 през page.evaluate + reload); (и) Minute Elapsed: disabled без бариера, при активна → сваля я без cost; (к) reload при активна бариера → link-ът и charges се възстановяват; (л) вертикален drag мести widget-а, drag не отваря диалога. ЧЕРВЕНО по правилната причина."
-      },
-      {
-        "id": "530.3",
-        "phase": "GREEN",
-        "action": "Създай modules/cube.js + cube.css по notes. Добави link+script в index.html. Добави st.cube в defaultState (app.js). Спекът зелен."
-      },
-      {
-        "id": "530.4",
-        "phase": "DONE",
-        "action": "npm test -- cube-widget critical-path — зелено. Провери че app.js diff-ът е 1-2 реда. Commit с description-а дословно."
-      }
-    ],
-    "passes": false
-  },
-  {
-    "id": 540,
-    "category": "feature",
-    "repo": "combat",
-    "lane": "cube",
-    "files": [
-      "modules/cube.js",
-      "cube.css",
-      "index.html",
-      "test/e2e/cube-widget.spec.js"
-    ],
-    "verify": [
-      "npm test -- cube-widget critical-path"
-    ],
-    "description": "feat(cube): add barrier news ticker and spell drain accordion",
-    "specRef": "d:\\Downloads\\monk\\cube-of-force.md (пълната спецификация на фичата — ЧЕТИ Я ПЪРВА) + monk-combat-structure.md",
-    "tddWorkflow": true,
-    "notes": "Двете надстройки върху 530 (същата lane, върви след него):\n\n=== NEWS TICKER ===\nСтатичен <div id=\"cubeTicker\" class=\"hidden\"><span></span></div> в index.html МЕЖДУ .header div-а и #tab-combat секцията. Видим САМО при активна бариера. Текст: \"FACE N ACTIVE — <ефектът> · N CHARGES\" (англ.), скролира отдясно наляво като по новините.\n⚠ ТВЪРДО ACCESSIBILITY ИЗИСКВАНЕ (потребителят не може да чете бърз текст по здравословни причини): АНИМАЦИЯТА Е БАВНА — ~32 СЕКУНДИ на пълен цикъл, текстът BOLD. При prefers-reduced-motion: reduce → без анимация, статичен текст. Стиловете в cube.css (НЕ в styles.css!). Ticker-ът се възстановява при reload с активна бариера.\n\n=== SPELL DRAIN АКОРДЕОН ===\nВ диалога, ред под charges/Minute Elapsed: акордеон \"Dmg from special spells\" (стрелка, expand/collapse). Съдържа 5-те магии от RAW drain таблицата: Disintegrate 1d12, Horn of Blasting 1d10, Passwall 1d6, Prismatic Spray 1d20, Wall of Fire 1d4. Всеки ред: име + зар + number input + бутон \"Apply\" → изважда ВЪВЕДЕНОТО число от charges (зарът е физически!), floor 0; при 0 → бариерата пада (activeFace=null, theme link-ът се маха, ticker скрит), window.save().\n⚠ ГЕЙТ: акордеонът (header бутонът) е ENABLED САМО когато activeFace е 4 или 5 (решение на масата: ако бариерата не спира магии, няма какво да се дрейнва). При друго лице/без бариера → disabled, а отворен акордеон се затваря при смяна към лице 1-3.\n\n=== ЧЕРВЕНИ ЛИНИИ ===\nКато 530: app.js НЕ се пипа в този таск; styles.css НЕ се пипа; themes/ НЕ се пипа; спековете се РАЗШИРЯВАТ в cube-widget.spec.js (не нов файл).",
-    "steps": [
-      {
-        "id": "540.1",
-        "phase": "RECON",
-        "action": "Прочети cube-of-force.md (секции ticker + spell drain + duration), готовия modules/cube.js/cube.css от 530, index.html региона между .header и #tab-combat."
-      },
-      {
-        "id": "540.2",
-        "phase": "RED",
-        "action": "Разшири test/e2e/cube-widget.spec.js: (а) без бариера ticker-ът е скрит; (б) Activate Face 4 → видим, съдържа \"FACE 4 ACTIVE\"; (в) CSS анимацията е ~32s (провери animation-duration през getComputedStyle) и font-weight >= 700; (г) акордеонът е disabled при face 1-3 и без бариера, enabled при 4 и 5; (д) Apply с 7 при 30 charges → 23; (е) Apply, който сваля до 0 → бариерата пада, theme link-ът го няма, ticker скрит; (ж) reload с активна бариера → ticker-ът се възстановява. ЧЕРВЕНО по правилната причина."
-      },
-      {
-        "id": "540.3",
-        "phase": "GREEN",
-        "action": "Ticker div в index.html, стилове+анимация в cube.css (32s, bold, prefers-reduced-motion fallback), логика в modules/cube.js (show/hide/текст + акордеон + drain). Спекът зелен."
-      },
-      {
-        "id": "540.4",
-        "phase": "DONE",
-        "action": "npm test -- cube-widget critical-path — зелено. Commit с description-а дословно."
-      }
-    ],
-    "passes": false
-  },
-  {
-    "id": 550,
-    "category": "test",
-    "repo": "combat",
-    "lane": "cube",
-    "dependsOn": [
-      520
-    ],
-    "files": [
-      "test/e2e/cube-integration.spec.js"
-    ],
-    "verify": [],
-    "description": "test(cube): end-to-end integration spec for face themes across the full app",
-    "specRef": "d:\\Downloads\\monk\\cube-of-force.md (пълната спецификация на фичата — ЧЕТИ Я ПЪРВА) + monk-combat-structure.md",
-    "tddWorkflow": false,
-    "notes": "Капстоун: доказва, че ТРИТЕ lanes работят ЗАЕДНО — кликът в диалога реално сменя цветовете на целия ап през динамичния theme link. dependsOn 520 (тема файловете са merged; 520 от своя страна гейтва на 510), в lane cube (след 530/540).\n\nСпекът (нов файл test/e2e/cube-integration.spec.js, НЕ пипа другите спекове):\n1. За ВСЯКО от 5-те лица: Activate през UI-я на диалога → computed background-color на body == bg стойността от палитрата (fog #101315, stone #15110d, moss #0e1310, arcane #120f19, bastion #160f11) + pill повърхностите също сменени + ticker-ът видим с правилния текст. Изчаквай link load-а (waitForFunction върху computed стойността).\n2. Deactivate → body връща дефолтния #0b0c12, ticker скрит, #cubeThemeLink го няма.\n3. Minute Elapsed → същото връщане към дефолт.\n4. Spell drain до 0 (face 4, Apply с голямо число) → дефолтна тема + ticker скрит.\n5. Reload при активна тема → темата оцелява (link-ът се възстановява от st.cube.activeFace).\n6. Смяна на таб при активна тема → темата остава (link-ът е в <head>, не зависи от таб).\n\nАко нещо е червено, поправката е в СЪОТВЕТНИЯ файл-собственик (cube.js/cube.css за поведение, themes/*.css за цветове) — всичко е merged към момента на този таск (dependsOn + lane редът). ФИНАЛЕН таск на lane cube → БЕЗ verify override, пълният gate (452+ спека) е мрежата.",
-    "steps": [
-      {
-        "id": "550.1",
-        "phase": "RECON",
-        "action": "Прочети cube-of-force.md, готовите cube-widget.spec.js и cube-themes.spec.js (стил + селектори), modules/cube.js API-то."
-      },
-      {
-        "id": "550.2",
-        "phase": "IMPLEMENT",
-        "action": "Напиши test/e2e/cube-integration.spec.js по 6-те точки от notes. Пусни го локално срещу integration кода."
-      },
-      {
-        "id": "550.3",
-        "phase": "DONE",
-        "action": "npm test -- cube-integration — зелено. Никакви други файлове не са пипнати. Commit с description-а дословно."
-      }
-    ],
-    "passes": false
-  }
+﻿[
+    {
+        "id":  410,
+        "category":  "feature",
+        "repo":  "inventory",
+        "lane":  "maps",
+        "files":  [
+                      "modules/firebase.js",
+                      "modules/image.js",
+                      "modules/state.js",
+                      "test/mocks/firebase-firestore.js",
+                      "test/unit/image.spec.js",
+                      "test/unit/firestore-mock.spec.js"
+                  ],
+        "verify":  [
+                       "npm run test:unit"
+                   ],
+        "description":  "feat(maps): add maps data layer with index and image doc refs, image fit helpers and mock data store",
+        "specRef":  "shared-inventory-structure.md §9 + maps-feature-plan.md (в корена на репото)",
+        "tddWorkflow":  true,
+        "notes":  "ЦЕЛ НА ФИЧАТА (5 таска, lane maps): таб „Карти“ — ДМ-ът качва карти (скрийншоти) от лаптоп/браузър, партито ги гледа на Android таблет. Този таск слага САМО данновия фундамент.\n\n=== ДАННОВ МОДЕЛ (РЕШЕН ОТ ПОТРЕБИТЕЛЯ — НЕ ГО ПРЕДОГОВАРЯЙ) ===\nКолекция \u0027maps\u0027, два вида документи:\n1. maps/index → { list: [ { id, shortDesc, details, createdAt } ] } — САМО метаданни, редът в list = ред на показване (същият патърн като ITEMS_DOC {list}).\n2. maps/\u003cuuid\u003e → { image: \u0027\u003cdata URL\u003e\u0027 } — по ЕДИН документ на карта, само снимката. Разделено е нарочно: (а) Firestore лимит 1MB/док; (б) snapshot на индекса НЕ тегли всички снимки при всяка промяна (таблетът е на мобилна връзка).\nid = crypto.randomUUID() (няма как да колидира с \u0027index\u0027).\nБЕЗ Firebase Storage (иска Blaze план — отхвърлено). БЕЗ нов npm пакет.\n\n=== КОМПРЕСИЯ САМО ПРИ НУЖДА (изискване на потребителя — качеството не се разваля излишно) ===\nПрагът е върху BASE64 РАЗМЕРА, не върху файла: base64 надува с ~33%, а Firestore лимитът е 1MiB/док. modules/image.js изнася: export const MAX_IMAGE_BYTES = 900000; export function needsCompression(dataUrlLength) { return dataUrlLength \u003e MAX_IMAGE_BYTES; } (чиста, тестима); export function blobToDataUrl(blob) — FileReader.readAsDataURL, връща Promise\u003cstring\u003e (работи в jsdom). Решението КОГА да се компресира е на consumer-а (таск 430) — image.js само дава инструментите.\n\nСхема във Firestore НЕ се създава предварително — Firestore е schema-less, доковете възникват при първия setDoc. Security rules за колекция \u0027maps\u0027 са РЪЧНА стъпка на собственика в конзолата (виж maps-feature-plan.md) — НЕ е работа на агент.\n\n=== РАЗРЕШЕНИЕ ===\nЧервена линия §3.1 („не създавай нови колекции“) е АМЕНДИРАНА от §9 за ТОЧНО тази колекция \u0027maps\u0027. Всичко останало от §3 важи с пълна сила: firebaseConfig НЕ се пипа, CDN imports остават, НИКАКЪВ тест срещу реален Firestore, npm test/serve НЕ се пускат от агент (порт 45279 е на гейта).\n\n=== МОКЪТ СЕ РАЗШИРЯВА САМО АДИТИВНО ===\ntest/mocks/firebase-firestore.js: добави вътрешен store (Map token→data); setDoc ОСВЕН в calls записва и в store-а; getDoc(token) връща { exists: () =\u003e store.has(token), data: () =\u003e store.get(token) }; нов export __setDocData(token, data) за seed-ване от тестове; __reset() чисти и store-а. ПОВЕДЕНИЕТО НА СЪЩЕСТВУВАЩИТЕ ЕКСПОРТИ КЪМ СТАРИТЕ ТЕСТОВЕ НЕ СЕ ПРОМЕНЯ — getDoc за незасят token дава exists:false, точно както днес. Всички 6 съществуващи unit спека остават зелени.",
+        "steps":  [
+                      {
+                          "id":  "410.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети maps-feature-plan.md (корена на репото), shared-inventory-structure.md §5 (контракта на мока) и §9, modules/firebase.js (26 реда), modules/state.js, test/mocks/firebase-firestore.js. Виж test/unit/gold.spec.js как консумира bootApp/мока."
+                      },
+                      {
+                          "id":  "410.2",
+                          "phase":  "RED",
+                          "action":  "Създай test/unit/image.spec.js за fitDimensions(w, h, maxDim=1600): (а) landscape 4000x2000 → 1600x800; (б) portrait 1000x3200 → 500x1600; (в) по-малка от maxDim (800x600) НЕ се upscale-ва → 800x600; (г) резултатът е цели числа (Math.round); (д) needsCompression(899000)===false, needsCompression(900001)===true, MAX_IMAGE_BYTES===900000; (е) blobToDataUrl(new Blob([\u0027abc\u0027])) резолвва с низ, започващ с \u0027data:\u0027. Създай test/unit/firestore-mock.spec.js: (а) setDoc(\u0027maps/abc\u0027, {image:\u0027x\u0027}) → getDoc(\u0027maps/abc\u0027) дава exists()===true и data().image===\u0027x\u0027; (б) незасят token → exists()===false; (в) __setDocData seed-ва без запис в calls.setDoc; (г) __reset() чисти store-а. Пусни npm run test:unit — новите спекове ЧЕРВЕНИ по правилната причина (модулът/експортите липсват), старите зелени."
+                      },
+                      {
+                          "id":  "410.3",
+                          "phase":  "GREEN",
+                          "action":  "Създай modules/image.js: export const MAX_IMAGE_BYTES = 900000; export function needsCompression(dataUrlLength); export function blobToDataUrl(blob) — FileReader.readAsDataURL в Promise; export function fitDimensions(w, h, maxDim = 1600) — чиста математика, връща {w, h}; export async function compressImage(blob, {maxDim = 1600, quality = 0.72} = {}) — createImageBitmap(blob) (fallback: new Image + objectURL), canvas fitDimensions размер, drawImage, canvas.toDataURL(\u0027image/jpeg\u0027, quality), връща data URL низа. compressImage е ТЪНКА обвивка — jsdom няма canvas, тя се тества само през мокване в следващите таскове, НЕ пиши unit тест за тялото ѝ. Разшири test/mocks/firebase-firestore.js по контракта от notes. В modules/firebase.js добави и export-ни: const MAPS_INDEX_DOC = doc(db, \u0027maps\u0027, \u0027index\u0027); function mapImageDoc(id) { return doc(db, \u0027maps\u0027, id); }. В modules/state.js добави: maps: [], editingMapIdx: null, expandedMapIdx: null, savingMaps: false."
+                      },
+                      {
+                          "id":  "410.4",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit — ВСИЧКИ спекове зелени (новите 2 + старите 6). Никакви други файлове не са пипнати. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  420,
+        "category":  "feature",
+        "repo":  "inventory",
+        "lane":  "maps",
+        "files":  [
+                      "index.html",
+                      "styles.css",
+                      "app.js",
+                      "modules/maps.js",
+                      "test/helpers/dom.js",
+                      "test/unit/maps.spec.js"
+                  ],
+        "verify":  [
+                       "npm run test:unit"
+                   ],
+        "description":  "feat(maps): add Maps tab with realtime table, ellipsis descriptions and accordion expand",
+        "specRef":  "shared-inventory-structure.md §9 + maps-feature-plan.md; modules/quests.js е ЕТАЛОНЪТ",
+        "tddWorkflow":  true,
+        "notes":  "Табът показва САМО двете описания (кратко + детайли) с елипсис, както другите табове — НИКАКВА снимка в реда (снимките са в отделни докове и не се теглят при списване). Акордеонът е копие на quest патърна: точно един expanded ред, клик върху бутон/.drag-handle НЕ toggle-ва, expanded оцелява re-render през state.expandedMapIdx. Drag\u0026drop с initSortable — редът се пази в maps/index.\n\nbootApp (test/helpers/dom.js) се разширява АДИТИВНО: нов параметър maps = null, след квестовете __emit(\u0027maps/index\u0027, maps === null ? null : { list: maps }). Дефолтът null пази всички стари тестове зелени — НЕ пипай нищо друго в helper-а.\n\nБутонът „+ Добави карта“ вика openMapModal() — в ТОЗИ таск openMapModal е минимален stub export (истинският модал идва в таск 430); дефинирай го в modules/maps.js, за да не гърми onclick.\n\nUI текстовете на български, както другите табове (таб „Карти“, empty state „Няма качени карти.“).",
+        "steps":  [
+                      {
+                          "id":  "420.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети modules/quests.js (renderQuests + акордеона, редове 15-58), modules/items.js (по диагонал), index.html (nav реда 23-26, tab-quests блока 75-97), styles.css (.quest-desc/.quest-note-cell/.quest-expanded правилата), test/unit/quests.spec.js (как се тества render + акордеон през bootApp), test/helpers/dom.js."
+                      },
+                      {
+                          "id":  "420.2",
+                          "phase":  "RED",
+                          "action":  "Създай test/unit/maps.spec.js (bootApp с новия maps параметър): (а) __emit с 2 карти → 2 реда в #mapBody, shortDesc в \u003cstrong\u003e, details в .map-details div; (б) empty state при maps:[] → ред с клас empty и текст „Няма качени карти.“; (в) esc() — shortDesc \u0027\u003cimg\u003e\u0027 излиза екраниран (няма img елемент в реда); (г) акордеон: клик на ред 1 → class map-expanded; клик на ред 0 → ред 1 губи класа, ред 0 го има; клик на expanded реда → колапс; (д) клик върху бутон в реда НЕ expand-ва; (е) при state.savingMaps=true входящ __emit(\u0027maps/index\u0027,...) се ИГНОРИРА (echo guard). Пусни — ЧЕРВЕНИ по правилната причина."
+                      },
+                      {
+                          "id":  "420.3",
+                          "phase":  "GREEN",
+                          "action":  "index.html: в \u003cnav class=\"tab-nav\"\u003e добави \u003cbutton class=\"tab-btn\" data-tab=\"maps\"\u003eКарти\u003c/button\u003e; след tab-quests добави \u003cdiv id=\"tab-maps\" class=\"tab\"\u003e с .controls бутон „+ Добави карта“ (onclick=\"openMapModal()\") и .tbl-wrap таблица id=mapTable: колони ☰ | Карта | Детайли | (действия), tbody id=mapBody. styles.css: .map-short и .map-details по образеца на .quest-desc/.quest-note-cell (-webkit-line-clamp:2, overflow:hidden, word-break), tr.map-expanded ги разгъва (display:block, overflow:visible, white-space:pre-wrap за details). initTabs() е generic (data-tab) — НЕ пипай ui.js."
+                      },
+                      {
+                          "id":  "420.4",
+                          "phase":  "GREEN",
+                          "action":  "Създай modules/maps.js по образеца на quests.js: import state, MAPS_INDEX_DOC + setDoc от firebase.js, esc/syncMsg/initSortable от ui.js. export function renderMaps() — empty state / редове (data-idx, drag-handle, strong shortDesc + div.map-details, actions ✏ editMap(i) / 🗑 deleteMap(i)) / акордеон wiring / initSortable(\u0027mapBody\u0027, state.maps, saveMapsIndex). export async function saveMapsIndex() — state.savingMaps флаг, setDoc(MAPS_INDEX_DOC, { list: state.maps }), syncMsg както saveQuests. export function openMapModal() {} — stub за таск 430. Разшири bootApp (dom.js) с maps параметъра по notes. app.js: import-ни renderMaps/saveMapsIndex/openMapModal + window.openMapModal; добави onSnapshot(MAPS_INDEX_DOC, snap =\u003e { if (state.savingMaps) return; state.maps = snap.exists() ? (snap.data().list || []) : []; renderMaps(); }); facade re-export { renderMaps, saveMapsIndex } и добави maps в getState/setState."
+                      },
+                      {
+                          "id":  "420.5",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit — всичко зелено (вкл. старите спекове, които boot-ват app.js — новият onSnapshot не бива да ги чупи: bootApp вече emit-ва maps/index null → state.maps=[] → renderMaps() върху наличния #mapBody от index.html markup-а). Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  430,
+        "category":  "feature",
+        "repo":  "inventory",
+        "lane":  "maps",
+        "files":  [
+                      "index.html",
+                      "styles.css",
+                      "app.js",
+                      "modules/maps.js",
+                      "modules/ui.js",
+                      "test/unit/maps-modal.spec.js"
+                  ],
+        "verify":  [
+                       "npm run test:unit"
+                   ],
+        "description":  "feat(maps): add map dialog with file upload, clipboard paste, required descriptions and Firestore persistence",
+        "specRef":  "shared-inventory-structure.md §9 + maps-feature-plan.md; modules/items.js модалът е ЕТАЛОНЪТ",
+        "tddWorkflow":  true,
+        "notes":  "ДВАТА ВХОДА (изискване на потребителя, качването е от лаптоп/браузър): (1) \u003cinput type=\"file\" accept=\"image/*\"\u003e и (2) Ctrl+V — ДМ-ът прави скрийншот (Win+Shift+S) и пейства направо в отворения диалог. Paste: \u0027paste\u0027 listener на document, АКТИВЕН САМО докато mapModal е отворен (проверка classList.contains(\u0027open\u0027)); от e.clipboardData.items вземи първия item с type startsWith \u0027image/\u0027 → getAsFile().\n\nPIPELINE (компресия САМО при нужда — изискване на потребителя, качеството не се пипа излишно): blob (от файл или paste) → dataUrl = await blobToDataUrl(blob); АКО needsCompression(dataUrl.length) → dataUrl = await compressImage(blob); ако СЛЕД компресията пак needsCompression → втори опит compressImage(blob, {maxDim: 1200, quality: 0.6}); ако и той е над лимита → грешка в #mMapError („Снимката е твърде голяма и след компресия“), pendingImage остава null, save блокиран. Резултатът → preview \u003cimg id=\"mPreview\"\u003e и модулна променлива pendingImage до save. В unit тестовете се мок-ва САМО compressImage с ЧАСТИЧЕН мок: vi.mock(\u0027../../modules/image.js\u0027, async (importOriginal) =\u003e ({ ...(await importOriginal()), compressImage: vi.fn(async () =\u003e \u0027data:image/jpeg;base64,FAKE\u0027) })) — blobToDataUrl/needsCompression/MAX_IMAGE_BYTES остават реалните (FileReader работи в jsdom); тествай ЧЕ и КОГА compressImage е извикана, не самата компресия.\n\nВАЛИДАЦИЯ (и двете описания ЗАДЪЛЖИТЕЛНИ — изрично изискване): shortDesc празно → блок + focus; details празно → блок + focus; нова карта без снимка → блок + съобщение в #mMapError. При редакция снимката е опционална (не е пипната → НЕ се праща setDoc към image дока).\n\nSAVE (нова): id = crypto.randomUUID(); await setDoc(mapImageDoc(id), { image: pendingImage }); после unshift на { id, shortDesc, details, createdAt: new Date().toISOString() } в state.maps + saveMapsIndex(). РЕДАКЦИЯ: splice на стария индекс + unshift (редактираното отива НАЙ-ОТГОРЕ — патърнът на saveItem/saveQuest); ако pendingImage е сменена → setDoc към СЪЩИЯ mapImageDoc(id). EDIT ОТВАРЯНЕ: попълни полетата от метаданните и зареди снимката ЛЕНИВО с getDoc(mapImageDoc(id)) → preview (докато чака: placeholder текст).\n\nDELETE: confirm() (както deleteItem), после deleteDoc(mapImageDoc(id)) + splice от state.maps + saveMapsIndex().\n\nmodules/ui.js: в initModalBackdrops масивът става [\u0027itemModal\u0027,\u0027questModal\u0027,\u0027mapModal\u0027] — ЕДИНСТВЕНАТА промяна там.\n\nЧервени линии: никакъв реален Firestore в тестове; export/import bundle-ът (v1) НЕ се пипа — картите нарочно НЕ влизат в него (снимките биха издули JSON-а).",
+        "steps":  [
+                      {
+                          "id":  "430.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети modules/items.js (openItemModal/saveItem/deleteItem — целия модален жизнен цикъл), index.html itemModal блока (редове 99-129), modules/ui.js initModalBackdrops, test/unit/items.spec.js (как се тестват модал + calls към мока), test/mocks/firebase-firestore.js (вкл. __setDocData от таск 410)."
+                      },
+                      {
+                          "id":  "430.2",
+                          "phase":  "RED",
+                          "action":  "Създай test/unit/maps-modal.spec.js с vi.mock на modules/image.js (compressImage: vi.fn(async () =\u003e \u0027data:image/jpeg;base64,FAKE\u0027)). Тестове: (а) openMapModal() отваря #mapModal (class open), полетата празни; (б) saveMap без shortDesc → НЯМА setDoc calls, фокус на #mShort; (в) без details → блок; (г) нова карта без снимка → блок + #mMapError видим; (д) handleMapFile с МАЛЪК blob (напр. new Blob([\u0027x\u0027.repeat(1000)])) → compressImage НЕ е извикана, #mPreview.src е оригиналният data URL (качеството се пази); (д2) handleMapFile с ГОЛЯМ blob (new Blob([\u0027x\u0027.repeat(1200000)]) — data URL-ът му надхвърля MAX_IMAGE_BYTES) → compressImage ИЗВИКАНА, #mPreview.src === \u0027data:image/jpeg;base64,FAKE\u0027; (д3) при голям blob И compressImage мокната да връща пак над-лимитен низ → #mMapError видим, saveMap блокиран; (е) handleMapPaste с fake event { clipboardData: { items: [{ type: \u0027image/png\u0027, getAsFile: () =\u003e blob }] } } при отворен модал → същият pipeline; при ЗАТВОРЕН модал → игнор; (ж) успешен saveMap → calls.setDoc има запис с token \u0027maps/\u003cid\u003e\u0027 и data.image===\u0027data:image/jpeg;base64,FAKE\u0027 И запис с token \u0027maps/index\u0027 чийто data.list[0] е {id, shortDesc, details, createdAt}; модалът затворен; (з) редакция БЕЗ смяна на снимка → само 1 setDoc (към maps/index), редактираният елемент е unshift-нат отгоре; (и) deleteMap с confirm true → calls.deleteDoc има \u0027maps/\u003cid\u003e\u0027 и индексът е пренаписан; с confirm false → нищо. Пусни — ЧЕРВЕНИ по правилната причина."
+                      },
+                      {
+                          "id":  "430.3",
+                          "phase":  "GREEN",
+                          "action":  "index.html: добави mapModal по образеца на questModal — title id=mapModalTitle, поле „Кратко описание *“ \u003cinput id=\"mShort\" placeholder=\"Зоната на изток, в джунглата…\"\u003e, поле „Детайли *“ \u003ctextarea id=\"mDetails\" placeholder=\"Селището на дървесните елфи…\"\u003e, поле „Снимка *“ с \u003cinput type=\"file\" id=\"mFile\" accept=\"image/*\" onchange=\"handleMapFile(event)\"\u003e + hint див „…или Ctrl+V скрийншот направо тук“, \u003cimg id=\"mPreview\" class=\"map-preview hidden\"\u003e, error див id=mMapError (по образеца на goldError), бутони Отказ/Запази (closeMapModal/saveMap). styles.css: .map-preview (max-width:100%, max-height:200px, cursor:zoom-in, border-radius)."
+                      },
+                      {
+                          "id":  "430.4",
+                          "phase":  "GREEN",
+                          "action":  "modules/maps.js: имплементирай openMapModal(idx=null) (edit: попълва полета + getDoc(mapImageDoc(id)) → pendingImage=null, preview от дока; new: чисти всичко), closeMapModal, editMap(i), handleMapFile(e), handleMapPaste(e) (гуардът по notes), saveMap() и deleteMap(i) по контракта от notes, saveMapsIndex остава от таск 420. Общ вътрешен async processImageBlob(blob) имплементира pipeline-а от notes (blobToDataUrl → условна компресия → втори опит → грешка) — handleMapFile и handleMapPaste само го викат. document.addEventListener(\u0027paste\u0027, handleMapPaste) — веднъж, при module init. ui.js: добави \u0027mapModal\u0027 в initModalBackdrops. app.js: window.closeMapModal/saveMap/deleteMap/editMap/handleMapFile + facade re-exports. import { blobToDataUrl, needsCompression, compressImage } from \u0027./image.js\u0027 в maps.js (за да работи частичният vi.mock)."
+                      },
+                      {
+                          "id":  "430.5",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit — всичко зелено. Ръчна проверка НЕ се прави (без serve от агент — порт 45279). Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  440,
+        "category":  "feature",
+        "repo":  "inventory",
+        "lane":  "maps",
+        "files":  [
+                      "styles.css",
+                      "modules/viewer.js",
+                      "modules/maps.js",
+                      "app.js",
+                      "test/unit/viewer.spec.js"
+                  ],
+        "verify":  [
+                       "npm run test:unit"
+                   ],
+        "description":  "feat(maps): add fullscreen map viewer with wheel zoom, drag pan and pinch zoom",
+        "specRef":  "shared-inventory-structure.md §9 + maps-feature-plan.md",
+        "tddWorkflow":  true,
+        "notes":  "Прегледът е ОСНОВНО на Android таблет/телефон — pinch zoom е задължителен. Ползвай POINTER EVENTS (pointerdown/move/up/cancel + Map на активните пойнтери), НЕ touch events — един код за мишка и пръсти. wheel zoom към курсора за лаптопа, dblclick → reset, Esc/бутон ✕/клик на фона → затваряне. touch-action:none на overlay-а (иначе браузърът краде жестовете), preventDefault на wheel.\n\nАРХИТЕКТУРА ЗА ТЕСТИМОСТ: цялата геометрия е ЧИСТИ функции с unit тестове; DOM/event кодът е тънък. export function zoomAt(view, factor, cx, cy) → { scale, tx, ty }: newScale = clampScale(view.scale * factor); k = newScale / view.scale; tx\u0027 = cx - (cx - view.tx) * k; ty\u0027 = cy - (cy - view.ty) * k (точката под курсора остава на място). export function clampScale(s) → [1, 8]. Пинчът се свежда до zoomAt с factor = dist1/dist0 и център средата между двата пръста.\n\nОverlay-ят (#mapViewer) се създава ЕДНОКРАТНО при първото openViewer и се преизползва (display toggle). Прилагане: img.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`; transform-origin: 0 0.\n\nВръзка: клик на #mPreview в модала → openViewer(pendingImage или заредения data URL). Спекът на потребителя: „като се отвори за едит, да може да се види картата — с клик да се отвори на голям екран, да се зуумва“.",
+        "steps":  [
+                      {
+                          "id":  "440.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети modules/maps.js след таск 430 (къде живее pendingImage/preview data URL-ът), styles.css (модалните стилове), test/unit/ui.spec.js (как се тестват DOM-only модули)."
+                      },
+                      {
+                          "id":  "440.2",
+                          "phase":  "RED",
+                          "action":  "Създай test/unit/viewer.spec.js. Чиста математика: (а) zoomAt({scale:1,tx:0,ty:0}, 2, 100, 100) → {scale:2, tx:-100, ty:-100}; (б) инвариант — след zoomAt точката (cx,cy) показва същата точка от снимката: за произволни view/cx/cy провери (cx - tx\u0027)/scale\u0027 === (cx - tx)/scale; (в) clampScale(0.5)===1, clampScale(20)===8, zoomAt при scale 1 с factor 0.5 не пада под 1; (г) поредица zoom in + огледален zoom out връща изходния view (в рамките на floating point). DOM: (д) openViewer(\u0027data:...\u0027) → #mapViewer в document, видим, img.src сетнат; (е) повторен openViewer НЕ дублира overlay-а; (ж) closeViewer / Esc keydown / клик на фона (target === overlay) → скрит; (з) dblclick → transform reset (scale 1). Пусни — ЧЕРВЕНИ."
+                      },
+                      {
+                          "id":  "440.3",
+                          "phase":  "GREEN",
+                          "action":  "Създай modules/viewer.js: export { zoomAt, clampScale, openViewer, closeViewer }. Вътрешно view state {scale, tx, ty}; wheel (deltaY\u003c0 → factor 1.15, иначе 1/1.15, cx/cy от e.clientX/Y относно overlay-а); pan: pointerdown записва пойнтера в Map + setPointerCapture, pointermove с 1 активен пойнтер мести tx/ty; pinch: 2 активни пойнтера → zoomAt(view, distNew/distOld, midX, midY); pointerup/cancel чисти. dblclick reset {scale:1,tx:0,ty:0}. Esc listener само докато е отворен. styles.css: #mapViewer { position:fixed; inset:0; background:rgba(0,0,0,.92); z-index над модалите; display:flex; touch-action:none; } + img { transform-origin:0 0; } + бутон ✕ горе-дясно."
+                      },
+                      {
+                          "id":  "440.4",
+                          "phase":  "GREEN",
+                          "action":  "modules/maps.js: click listener на #mPreview → openViewer(текущия data URL) (в openMapModal wiring-а или при module init — но елементът е статичен в index.html, така че веднъж при init). app.js: facade re-export { zoomAt, clampScale, openViewer, closeViewer } from \u0027./modules/viewer.js\u0027."
+                      },
+                      {
+                          "id":  "440.5",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit — всичко зелено. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  450,
+        "category":  "e2e",
+        "repo":  "inventory",
+        "lane":  "maps",
+        "files":  [
+                      "test/fixtures/maps-fixture.html",
+                      "test/e2e/maps-accordion.spec.js",
+                      "styles.css",
+                      "modules/maps.js"
+                  ],
+        "description":  "test(maps): add e2e fixture and accordion spec for the Maps tab",
+        "specRef":  "test/e2e/quests-accordion.spec.js + test/fixtures/quests-fixture.html са ЕТАЛОНЪТ — огледален превод към maps",
+        "notes":  "Червена линия §3.5 („test/e2e/ и fixtures не се пипат“) важи за СЪЩЕСТВУВАЩИТЕ файлове — НОВИТЕ maps-* файлове тук са изрично позволени (§9). Съществуващите спекове/фикстури НЕ се редактират.\n\nФикстурата е STANDALONE HTML (както quests-fixture.html): инлайн копие на map стиловете (взети 1:1 от styles.css — .map-short/.map-details/tr.map-expanded + табличните базови стилове) + инлайн скрипт, който рендерира 2 карти и репликира акордеон логиката на renderMaps: карта 0 с кратки описания, карта 1 с ДЪЛГИ (3+ реда, за да има какво да клампва елипсисът). Снимка НЕ участва във фикстурата (тя не се показва в таблицата по дизайн).\n\nСпекът копира структурата на quests-accordion.spec.js: (а) .map-details има overflow hidden; (б) редът стартира без map-expanded; (в) клик expand-ва; (г) повторен клик колапсира; (д) само един expanded — вторият клик колапсира първия; (е) клик на edit бутон НЕ expand-ва.\n\n⚠ АГЕНТЪТ НЕ ПУСКА npm test (порт 45279 е на гейта)! Пиши спека КОНСЕРВАТИВНО по образеца — гейтът ще го пусне след merge. Пусни само npm run test:unit за регресия.\n\nТова е ФИНАЛНИЯТ таск на lane-а — БЕЗ verify override, пълният гейт (npm ci + test:unit + npm test/Playwright, вкл. новия спек) е задната мрежа. Ако при писането забележиш дребен пропуск от таскове 410-440 (стил, липсващ клас), поправи го ТУК — затова styles.css и modules/maps.js са в ownership-а.",
+        "steps":  [
+                      {
+                          "id":  "450.1",
+                          "action":  "Прочети test/fixtures/quests-fixture.html ИЗЦЯЛО и test/e2e/quests-accordion.spec.js ИЗЦЯЛО. Прочети styles.css map правилата (от таскове 420/430/440) и renderMaps в modules/maps.js — фикстурата трябва да репликира СЪЩИТЕ класове и структура на реда."
+                      },
+                      {
+                          "id":  "450.2",
+                          "action":  "Създай test/fixtures/maps-fixture.html по образеца: инлайн CSS (базовите табличен/бутонни стилове от quests-fixture + map класовете 1:1 от styles.css), таблица mapTable/mapBody, инлайн скрипт с data масив от 2 карти (карта 1 с многоредови shortDesc/details) и рендер + акордеон логика, огледални на renderMaps."
+                      },
+                      {
+                          "id":  "450.3",
+                          "action":  "Създай test/e2e/maps-accordion.spec.js по образеца на quests-accordion.spec.js (FIXTURE = \u0027/test/fixtures/maps-fixture.html\u0027, waitForSelector \u0027#mapBody tr[data-idx]\u0027, 6-те теста от notes)."
+                      },
+                      {
+                          "id":  "450.4",
+                          "action":  "npm run test:unit за регресия (e2e ще го пусне гейтът). Провери с git diff, че НИТО един съществуващ файл в test/e2e/ и test/fixtures/ не е променен. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  460,
+        "category":  "feature",
+        "repo":  "inventory",
+        "lane":  "maps",
+        "files":  [
+                      "index.html",
+                      "styles.css",
+                      "test/unit/maps.spec.js"
+                  ],
+        "verify":  [
+                       "npm run test:unit"
+                   ],
+        "description":  "feat(maps): add static world map link above the add button",
+        "specRef":  "shared-inventory-structure.md §9 + maps-feature-plan.md („Допълнения“)",
+        "tddWorkflow":  true,
+        "notes":  "Изискване на потребителя: НАД бутона „+ Добави карта“ в таб „Карти“ да стои СТАТИЧЕН външен линк към пълната карта на света:\nhref (ТОЧНО този URL): https://totalwarwarhammer.fandom.com/wiki/Map:Immortal_Empires_Factions\nЕтикет: „🗺 Immortal Empires Factions — пълната карта“. target=\"_blank\" + rel=\"noopener\" (външен сайт, приложението е PWA — да не подменя таба).\nЧисто статичен markup — НИКАКЪВ JS, никакъв Firestore. Не пипай нищо друго в tab-maps блока.",
+        "steps":  [
+                      {
+                          "id":  "460.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети index.html блока #tab-maps (controls + таблицата) и styles.css правилата за .controls, за да вградиш линка в същия визуален език (btn-ghost стилистика или muted link)."
+                      },
+                      {
+                          "id":  "460.2",
+                          "phase":  "RED",
+                          "action":  "В test/unit/maps.spec.js добави describe за линка: след bootApp() (а) document.querySelector(\u0027#tab-maps a.map-world-link\u0027) съществува; (б) href е ТОЧНО https://totalwarwarhammer.fandom.com/wiki/Map:Immortal_Empires_Factions; (в) target === \u0027_blank\u0027 и rel съдържа \u0027noopener\u0027; (г) линкът стои ПРЕДИ .controls бутона в DOM реда (compareDocumentPosition). Пусни — ЧЕРВЕНИ."
+                      },
+                      {
+                          "id":  "460.3",
+                          "phase":  "GREEN",
+                          "action":  "index.html: в #tab-maps, над div.controls, добави \u003cdiv class=\"map-world-row\"\u003e\u003ca class=\"map-world-link\" href=\"...\" target=\"_blank\" rel=\"noopener\"\u003e🗺 Immortal Empires Factions — пълната карта\u003c/a\u003e\u003c/div\u003e. styles.css: .map-world-row { text-align:right; margin-bottom:6px; } .map-world-link { color: var(--muted); font-size:0.85rem; } + hover подчертаване — дискретно, да не се бие с бутона."
+                      },
+                      {
+                          "id":  "460.4",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit — всичко зелено. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  470,
+        "category":  "feature",
+        "repo":  "inventory",
+        "lane":  "maps",
+        "files":  [
+                      "modules/maps.js",
+                      "modules/viewer.js",
+                      "app.js",
+                      "styles.css",
+                      "test/unit/maps.spec.js",
+                      "test/unit/maps-modal.spec.js",
+                      "test/unit/viewer.spec.js"
+                  ],
+        "description":  "feat(maps): add per-row preview button and viewer zoom buttons",
+        "specRef":  "shared-inventory-structure.md §9 + maps-feature-plan.md („Допълнения“); modules/maps.js renderMaps + modules/viewer.js са отправната точка",
+        "tddWorkflow":  true,
+        "notes":  "ДВЕ СВЪРЗАНИ ДОБАВКИ (изискване на потребителя — преглед на картата БЕЗ да се влиза в едит, пести място в таблицата):\n\n1. ПРЕВЮ БУТОН НА ВСЕКИ РЕД: в renderMaps() добави бутон 🔍 в .tbl-actions, ПЪРВИ преди ✏ и 🗑: \u003cbutton class=\"btn-ghost btn-sm\" onclick=\"previewMap(${i})\"\u003e🔍\u003c/button\u003e. Нова export async function previewMap(i): m = state.maps[i]; syncMsg(\u0027Зареждане…\u0027, \u0027saving\u0027); snap = await getDoc(mapImageDoc(m.id)); ако snap.exists() и има .image → openViewer(image) + syncMsg(\u0027● live\u0027, \u0027saved\u0027); иначе syncMsg(\u0027Няма снимка за тази карта\u0027, \u0027\u0027). НЕ отваря модала, НЕ пипа state.editingMapIdx. Всяко натискане тегли наново (без кеш — както решенията при едит preview-то). app.js: window.previewMap + facade re-export.\n\n2. ЛУПИЧКИ +/− ВЪВ VIEWER-А: видими zoom бутони (изискване „с лупичките за + и -“ — на таблет wheel няма, а pinch не е очевиден за всички). В ensureOverlay() добави два бутона: class viewer-zoom viewer-zoom-in (текст ➕) и viewer-zoom viewer-zoom-out (текст ➖), aria-label „Приближи“/„Отдалечи“. Клик → view = zoomAt(view, 1.4 | 1/1.4, cx, cy) с център СРЕДАТА на overlay-а (getBoundingClientRect().width/2, height/2; в jsdom rect е 0x0 → центърът е (0,0), тестът пак работи през transform-а) + applyTransform(). Клампването в [1,8] идва от zoomAt — на минимум/максимум кликът просто не мърда скейла. styles.css: .viewer-zoom — фиксирани долу-център (flex ред, gap), едри touch таргети (min 44px), полупрозрачен фон като .viewer-close.\n\nЧЕРВЕНИ ЛИНИИ: test/e2e/ и test/fixtures/ НЕ се пипат (maps-fixture-ът НЕ получава 🔍 бутона — e2e спекът за акордеона търси edit бутона в .tbl-actions по индекс САМО във фикстурата, тя е standalone и остава вярна на себе си). Никакъв реален Firestore. Това е ФИНАЛНИЯТ таск — БЕЗ verify override, пълният гейт е задната мрежа.",
+        "steps":  [
+                      {
+                          "id":  "470.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети modules/maps.js (renderMaps, openMapModal lazy getDoc патърна, ред 141-149), modules/viewer.js (ensureOverlay, zoomAt, applyTransform), test/unit/viewer.spec.js и test/unit/maps-modal.spec.js (как seed-ват снимка с __setDocData и как проверяват #mapViewer)."
+                      },
+                      {
+                          "id":  "470.2",
+                          "phase":  "RED",
+                          "action":  "test/unit/maps.spec.js: (а) при 2 карти всеки ред има бутон 🔍 в .tbl-actions, ПРЕДИ ✏; (б) клик на 🔍 НЕ expand-ва реда (уловено от съществуващия guard e.target.closest(\u0027button\u0027)— тестът го доказва). test/unit/maps-modal.spec.js (или нов describe в maps.spec.js): (в) __setDocData(\u0027maps/\u003cid\u003e\u0027, {image:\u0027data:image/png;base64,AAA\u0027}) → await previewMap(0) → #mapViewer е видим (display flex) и img.src е точно този data URL, а #mapModal НЯМА class open; (г) previewMap за карта БЕЗ image док → viewer-ът НЕ се отваря, #sync съдържа „Няма снимка“. test/unit/viewer.spec.js: (д) след openViewer overlay-ът има .viewer-zoom-in и .viewer-zoom-out бутони; (е) клик на ➕ → transform scale расте (парсни от style.transform); клик на ➖ след това → връща се; (ж) на scale 1 клик на ➖ оставя scale 1 (кламп); (з) многократни ➕ не надхвърлят scale 8. Пусни — ЧЕРВЕНИ по правилната причина."
+                      },
+                      {
+                          "id":  "470.3",
+                          "phase":  "GREEN",
+                          "action":  "modules/viewer.js: бутоните в ensureOverlay() по notes (клик листенъри → zoomAt към центъра + applyTransform; stopPropagation, за да не удари backdrop close). modules/maps.js: 🔍 бутонът в renderMaps() + export async function previewMap(i) по notes. app.js: window.previewMap = previewMap + facade re-export { previewMap }. styles.css: .viewer-zoom стиловете."
+                      },
+                      {
+                          "id":  "470.4",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit — всичко зелено (вкл. старите viewer/maps спекове). git diff — увери се, че test/e2e/ и test/fixtures/ са НЕПИПНАТИ. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  510,
+        "category":  "refactor",
+        "repo":  "combat",
+        "lane":  "tokens",
+        "files":  [
+                      "styles.css",
+                      "tabs/inventory.html",
+                      "tabs/stats-basicinfo.html"
+                  ],
+        "verify":  [
+
+                   ],
+        "description":  "refactor(styles): tokenize ambient hardcoded colors behind :root custom properties (zero visual change)",
+        "specRef":  "d:\\Downloads\\monk\\cube-of-force.md (пълната спецификация на фичата — ЧЕТИ Я ПЪРВА) + monk-combat-structure.md",
+        "tddWorkflow":  false,
+        "notes":  "ПОДГОТВИТЕЛЕН таск за темите на Cube of Force: всички AMBIENT цветове (повърхности, бордери, текст) в styles.css минават през CSS custom properties. Теманите файлове (таск 520, друга lane) ще override-ват ТОЧНО тези токени през динамично зареден stylesheet — затова НАБОРЪТ ТОКЕНИ В :root Е КОНТРАКТЪТ между двата таска: смислени имена, всичко на едно място в :root блока.\n\n=== КАКВО СЕ ТОКЕНИЗИРА ===\nHardcoded ambient цветове извън :root (~200 срещания): сиви (#333 #444 #666 #f5f5f5 #fff), тъмни повърхности (#1e1e2f #2a2f45 #2a2a3d #1a223a и подобни), бордери, текстови нюанси (#c8cde8 #cfd7ff #e6e6ff...).\n- Идентична стойност със съществуващ токен → ползвай токена.\n- Близка, но НЕ идентична → НОВ токен със СТАРАТА стойност (zero-diff философия, не \u0027почиствай\u0027 нюанси). Нови токени: минимален брой, смислени имена (--text-bright, --surface-3 стил), дефинирани в :root при другите.\n- В tabs/inventory.html и tabs/stats-basicinfo.html има по 1 inline hex — замени с var(--токен) директно в style атрибута (БЕЗ нови класове в styles.css за това).\n\n=== ЧЕРВЕНИ ЛИНИИ ===\n1. СЕМАНТИЧНИТЕ цветове НЕ се пипат — те са константни във всички теми: монетите (#FFD700 злато, #C0C0C0 сребро, #B87333 мед, #E5E4E2 платина), success зелено (#22c55e, #5ae09f, #2d6245...), danger червено (rgba(255,0,0,...)), cleric/feat лилаво (#9b8fff, #9b59f6 + rgba(155,143,255,...)). При съмнение дали цвят е семантичен или ambient — остави го hardcoded (по-добре нетокенизиран, отколкото грешно темиран).\n2. НУЛЕВА визуална промяна — computed стойностите остават байт-идентични. styles.spec.js е характеризационната мрежа.\n3. Само styles.css + двата partial-а. НИКАКВИ @import-и, никакви referencing на themes/ — темите са напълно отделни файлове (lane themes).\nЕдинствен таск в lane tokens → БЕЗ verify override, пълният gate е мрежата.",
+        "steps":  [
+                      {
+                          "id":  "510.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети cube-of-force.md (секции „Архитектура на темите\" + „Одобрени палитри\"), styles.css :root блока, test/e2e/styles.spec.js. Инвентаризирай hardcoded цветовете: grep -oE в styles.css, класифицирай ambient vs семантични по списъка в notes."
+                      },
+                      {
+                          "id":  "510.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Замени ambient цветовете с var(--...) по правилата от notes (identical→съществуващ токен, близък→нов токен със старата стойност). Добави новите токени в :root. Оправи двата inline hex-а в tabs/inventory.html и tabs/stats-basicinfo.html с var(--...)."
+                      },
+                      {
+                          "id":  "510.3",
+                          "phase":  "DONE",
+                          "action":  "npm test -- styles tabs-navigation critical-path — зелено локално (пълният suite е на gate-а). Визуална проверка: нито един computed цвят не е мръднал. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  520,
+        "category":  "feature",
+        "repo":  "combat",
+        "lane":  "themes",
+        "dependsOn":  [
+                          510
+                      ],
+        "files":  [
+                      "themes/**",
+                      "test/e2e/cube-themes.spec.js"
+                  ],
+        "verify":  [
+
+                   ],
+        "description":  "feat(themes): add 5 standalone face theme stylesheets (fog/stone/moss/arcane/bastion)",
+        "specRef":  "d:\\Downloads\\monk\\cube-of-force.md (пълната спецификация на фичата — ЧЕТИ Я ПЪРВА) + monk-combat-structure.md",
+        "tddWorkflow":  true,
+        "notes":  "Петте теми на Cube of Force като НАПЪЛНО САМОСТОЯТЕЛНИ CSS файлове: themes/fog.css, themes/stone.css, themes/moss.css, themes/arcane.css, themes/bastion.css. styles.css НЕ СЕ ПИПА — никакви @import-и (изрично решение на потребителя: темите се прилагат динамично, виж механизма).\n\n=== МЕХАНИЗЪМ „ПОЛЗВАЙ ТАЗИ ТЕМА\" (решение на потребителя — динамичен link swap, БЕЗ @import) ===\nТемите НЕ се реферират от styles.css по никакъв начин. modules/cube.js поддържа ЕДИН \u003clink rel=\"stylesheet\" id=\"cubeThemeLink\"\u003e елемент: при Activate го създава (ако липсва) и сет-ва href=\"themes/\u003cиме\u003e.css\", като го държи ПОСЛЕДЕН елемент в \u003chead\u003e (тема файловете ползват :root — по-късният stylesheet печели каскадата при равна специфичност); при Deactivate/изтичане/0 charges го ПРЕМАХВА → дефолтът от styles.css важи. При reload с активна бариера link-ът се добавя на DOMContentLoaded от st.cube.activeFace (краткият FOUC до дефолтната тема е приет).\n\n=== ОДОБРЕНА ПАЛИТРА (bg / card / accent) — НЕ Я ПРЕДОГОВАРЯЙ ===\nfog.css     (face 1): #101315 / #1a2023 / #5e7681   (сиво-синьо, газове/мъгла)\nstone.css   (face 2): #15110d / #211a13 / #8a6f4d   (пясъчник/бронз, неживо)\nmoss.css    (face 3): #0e1310 / #182019 / #5e7a58   (мъх, живо)\narcane.css  (face 4): #120f19 / #1c1728 / #71618f   (опушено лилаво, магия)\nbastion.css (face 5): #160f11 / #22171a / #8a5a62   (тъмно бордо, пълен бункер)\nДефолт = :root в styles.css (НЕ се мести никъде — \u0027няма theme link\u0027 = дефолт).\n\n=== СЪДЪРЖАНИЕ НА ВСЕКИ ФАЙЛ ===\nЕдин :root { ... } блок, който override-ва СЪЩИЯ набор токени като styles.css :root (включително новите от таск 510 — dependsOn гарантира, че са merged; прочети АКТУАЛНИЯ :root блок и покрий всеки ambient токен): --bg от колоната bg; --panel/--panel2/--pill/--pill2 производни на card (запази относителните светлост-съотношения от дефолтните стойности — напр. --pill2 е по-светъл от --pill със същата стъпка); --accent от колоната accent; --border/--muted/текстовите нюанси леко тонирани към hue-то на темата; --feat-* токените тонирани към акцента. ВСИЧКО muted — никакви ярки/електрикови цветове (твърдо изискване).\n\n=== ЧЕРВЕНИ ЛИНИИ ===\n1. styles.css/index.html/app.js НЕ се пипат — този таск създава САМО themes/** + спека.\n2. Семантичните цветове (монети, success/danger, cleric лилаво) НЕ се override-ват в темите.\n3. JS няма в този таск — спекът зарежда link елемента ръчно (page.evaluate: createElement link, href, append в КРАЯ на head). Wiring-ът към куба е таск 530/550.\nЕдинствен таск в lane themes → БЕЗ verify override, пълният gate е мрежата.",
+        "steps":  [
+                      {
+                          "id":  "520.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети cube-of-force.md (палитрите + архитектура на темите), АКТУАЛНИЯ styles.css :root (след merge-натия таск 510 — включително новите токени), test/e2e/styles.spec.js за стила на спековете."
+                      },
+                      {
+                          "id":  "520.2",
+                          "phase":  "RED",
+                          "action":  "Създай test/e2e/cube-themes.spec.js: за всяка от 5-те теми — page.evaluate добавя \u003clink rel=\"stylesheet\" href=\"themes/\u003cиме\u003e.css\"\u003e като последно дете на head, изчаква зареждането → computed background-color на body става bg стойността от палитрата; премахва link-а → връща се дефолтният #0b0c12. Плюс тест, че pill/panel повърхностите също се сменят (не само body). Пусни — ЧЕРВЕНО по правилната причина (файловете липсват/404)."
+                      },
+                      {
+                          "id":  "520.3",
+                          "phase":  "GREEN",
+                          "action":  "Създай 5-те файла в themes/ по правилата от notes. Пусни спека — зелено."
+                      },
+                      {
+                          "id":  "520.4",
+                          "phase":  "DONE",
+                          "action":  "npm test -- cube-themes styles critical-path — зелено локално (пълният suite е на gate-а). Никакъв друг файл не е пипнат. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  530,
+        "category":  "feature",
+        "repo":  "combat",
+        "lane":  "cube",
+        "files":  [
+                      "modules/cube.js",
+                      "cube.css",
+                      "index.html",
+                      "app.js",
+                      "test/e2e/cube-widget.spec.js"
+                  ],
+        "verify":  [
+                       "npm test -- cube-widget critical-path"
+                   ],
+        "description":  "feat(cube): add Cube of Force floating widget with charges, faces dialog and theme switching",
+        "specRef":  "d:\\Downloads\\monk\\cube-of-force.md (пълната спецификация на фичата — ЧЕТИ Я ПЪРВА) + monk-combat-structure.md",
+        "tddWorkflow":  true,
+        "notes":  "ЯДРОТО на фичата: плаващ widget (дясната стена) + диалог с charges/лица. Работещ прототип-референция: https://claude.ai/code/artifact/ab1f4497-fc02-46ee-8133-08ee42e5dd27 (ако fetch не сработи — cube-of-force.md описва всичко). UI текстовете на АНГЛИЙСКИ.\n\n=== ЛИЦАТА (RAW, DMG p.159) ===\n1 Fog (1 ch): Gases, wind, and fog can\u0027t pass. 2 Stone (2 ch): Nonliving matter can\u0027t pass. 3 Moss (3 ch): Living matter can\u0027t pass. 4 Arcane (4 ch): Spell effects can\u0027t pass. 5 Bastion (5 ch): Nothing can pass. 6 Deactivate (0 ch): бариерата пада.\nCharges: max 36. Insufficient charges → Activate е DISABLED (нищо не се случва, нищо не се харчи). Активиране на ново лице при активна бариера = позволено, плаща цената на новото. Activate на ВЕЧЕ активното лице = disabled. Ако charges стигнат 0 (активация или drain) → бариерата пада (activeFace=null, дефолтна тема).\n\n=== МЕХАНИЗЪМ „ПОЛЗВАЙ ТАЗИ ТЕМА\" (решение на потребителя — динамичен link swap, БЕЗ @import) ===\nТемите НЕ се реферират от styles.css по никакъв начин. modules/cube.js поддържа ЕДИН \u003clink rel=\"stylesheet\" id=\"cubeThemeLink\"\u003e елемент: при Activate го създава (ако липсва) и сет-ва href=\"themes/\u003cиме\u003e.css\", като го държи ПОСЛЕДЕН елемент в \u003chead\u003e (тема файловете ползват :root — по-късният stylesheet печели каскадата при равна специфичност); при Deactivate/изтичане/0 charges го ПРЕМАХВА → дефолтът от styles.css важи. При reload с активна бариера link-ът се добавя на DOMContentLoaded от st.cube.activeFace (краткият FOUC до дефолтната тема е приет).\n\n=== STATE ===\nst.cube = { charges: 36, activeFace: null } — добавя се в defaultState в app.js (ЕДИНСТВЕНАТА промяна в app.js!). Персистенцията идва даром: load() прави {...defaultState, ...saved} (st.cube от стар запис липсва → дефолтът влиза), save() пише целия st, Bundle v2 носи целия state. НЕ добавяй отделен localStorage ключ (червена линия §3 на репото). activeFace СЕ персистира — reload при активна бариера възстановява темата.\n\n=== WIDGET (modules/cube.js — IIFE по модела на другите модули) ===\n- Markup-ът се създава от JS (document.body.appendChild) — index.html получава САМО \u003clink rel=\"stylesheet\" href=\"cube.css\"\u003e и \u003cscript src=\"modules/cube.js\"\u003e\u003c/script\u003e (преди app.js, като другите модули; инициализация на DOMContentLoaded — тогава window.st/window.save са налични, app.js е sync скрипт преди \u003c/body\u003e).\n- 3 състояния: peek (подава се ~половин икона отдясно, opacity ~.75) → клик 1: цялата икона → клик 2: диалогът. Иконата: мини 3x3 „Рубик\" grid от 9 квадратчета в muted акцентните цветове на темите.\n- Drag САМО вертикално по дясната стена (pointer events + setPointerCapture, touch-action:none), clamp в рамките на viewport-а, threshold 5px разделя drag от клик. Позицията НЕ се персистира (решение — зависи от отворения таб).\n- Диалог: „Cube of Force\" + ✕ (затваря → връща peek). Ред 1: \"Charges: X / 36\" + number input + бутон \"Regain Charges\" — добавя ВЪВЕДЕНОТО число (зарът се хвърля физически на масата — апът НЕ хвърля 1d20!), cap 36, input се чисти. Ред 2: бутон \"Minute Elapsed\" — disabled без активна бариера; сваля бариерата БЕЗ charge cost (изтекла продължителност, не е действие). После 6-те лица: цветно прозорче (accent цвета на темата), \"Face N — Име\", ефект + цена, бутон Activate (Face 6 → \"Deactivate\", disabled без активна бариера).\n- Активиране: charges -= cost; theme link swap по механизма горе (href=\"themes/\u003cиме\u003e.css\"). Деактивиране/0 charges → премахва link-а (дефолтна тема). Всяка промяна → window.save().\n- z-index НАД табовете, но диалогът ПОД .modal и #youDiedOverlay (провери им z-index стойностите).\n\n=== ЧЕРВЕНИ ЛИНИИ ===\n1. app.js: САМО st.cube реда в defaultState. Нищо друго.\n2. Стиловете на widget-а/диалога в cube.css (НЕ в styles.css — чужда lane!). themes/*.css НЕ се създават тук (lane themes) — спекът тества LINK елемента (href/присъствие), НЕ computed цветове; файловете може още да не съществуват и това е ОК (404 на link не чупи страницата).\n3. Legacy resolver-ът в beforeEach на старите спекове не се пипа; новият спек си сетва st директно при нужда (виж multiclass бележката в structure reference).",
+        "steps":  [
+                      {
+                          "id":  "530.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети cube-of-force.md ИЗЦЯЛО, modules/inventory.js или namegen.js (IIFE/attach модела), app.js defaultState+load()+save() региона (редове ~94-199), index.html script реда, BEHAVIOR_DOCUMENTATION.md за state конвенциите. Виж z-index на .modal и .you-died в styles.css."
+                      },
+                      {
+                          "id":  "530.2",
+                          "phase":  "RED",
+                          "action":  "Създай test/e2e/cube-widget.spec.js: (а) widget-ът е в peek при load; (б) клик 1 → разгънат, клик 2 → диалог, ✕ → peek; (в) Activate Face 2 → charges 36→34, #cubeThemeLink съществува с href завършващ на themes/stone.css и е последно дете на head, save-нато в localStorage (monkSheet_v3.cube); (г) Activate на активното лице е disabled; (д) смяна към Face 5 → charges 34→29, href themes/bastion.css; (е) Deactivate → link-ът го НЯМА, charges непроменени; (ж) Regain: input 10 при 29 → 36 (cap), input 5 при 20 → 25; (з) Activate disabled при charges \u003c cost (сетни st.cube.charges=1 през page.evaluate + reload); (и) Minute Elapsed: disabled без бариера, при активна → сваля я без cost; (к) reload при активна бариера → link-ът и charges се възстановяват; (л) вертикален drag мести widget-а, drag не отваря диалога. ЧЕРВЕНО по правилната причина."
+                      },
+                      {
+                          "id":  "530.3",
+                          "phase":  "GREEN",
+                          "action":  "Създай modules/cube.js + cube.css по notes. Добави link+script в index.html. Добави st.cube в defaultState (app.js). Спекът зелен."
+                      },
+                      {
+                          "id":  "530.4",
+                          "phase":  "DONE",
+                          "action":  "npm test -- cube-widget critical-path — зелено. Провери че app.js diff-ът е 1-2 реда. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  540,
+        "category":  "feature",
+        "repo":  "combat",
+        "lane":  "cube",
+        "files":  [
+                      "modules/cube.js",
+                      "cube.css",
+                      "index.html",
+                      "test/e2e/cube-widget.spec.js"
+                  ],
+        "verify":  [
+                       "npm test -- cube-widget critical-path"
+                   ],
+        "description":  "feat(cube): add barrier news ticker and spell drain accordion",
+        "specRef":  "d:\\Downloads\\monk\\cube-of-force.md (пълната спецификация на фичата — ЧЕТИ Я ПЪРВА) + monk-combat-structure.md",
+        "tddWorkflow":  true,
+        "notes":  "Двете надстройки върху 530 (същата lane, върви след него):\n\n=== NEWS TICKER ===\nСтатичен \u003cdiv id=\"cubeTicker\" class=\"hidden\"\u003e\u003cspan\u003e\u003c/span\u003e\u003c/div\u003e в index.html МЕЖДУ .header div-а и #tab-combat секцията. Видим САМО при активна бариера. Текст: \"FACE N ACTIVE — \u003cефектът\u003e · N CHARGES\" (англ.), скролира отдясно наляво като по новините.\n⚠ ТВЪРДО ACCESSIBILITY ИЗИСКВАНЕ (потребителят не може да чете бърз текст по здравословни причини): АНИМАЦИЯТА Е БАВНА — ~32 СЕКУНДИ на пълен цикъл, текстът BOLD. При prefers-reduced-motion: reduce → без анимация, статичен текст. Стиловете в cube.css (НЕ в styles.css!). Ticker-ът се възстановява при reload с активна бариера.\n\n=== SPELL DRAIN АКОРДЕОН ===\nВ диалога, ред под charges/Minute Elapsed: акордеон \"Dmg from special spells\" (стрелка, expand/collapse). Съдържа 5-те магии от RAW drain таблицата: Disintegrate 1d12, Horn of Blasting 1d10, Passwall 1d6, Prismatic Spray 1d20, Wall of Fire 1d4. Всеки ред: име + зар + number input + бутон \"Apply\" → изважда ВЪВЕДЕНОТО число от charges (зарът е физически!), floor 0; при 0 → бариерата пада (activeFace=null, theme link-ът се маха, ticker скрит), window.save().\n⚠ ГЕЙТ: акордеонът (header бутонът) е ENABLED САМО когато activeFace е 4 или 5 (решение на масата: ако бариерата не спира магии, няма какво да се дрейнва). При друго лице/без бариера → disabled, а отворен акордеон се затваря при смяна към лице 1-3.\n\n=== ЧЕРВЕНИ ЛИНИИ ===\nКато 530: app.js НЕ се пипа в този таск; styles.css НЕ се пипа; themes/ НЕ се пипа; спековете се РАЗШИРЯВАТ в cube-widget.spec.js (не нов файл).",
+        "steps":  [
+                      {
+                          "id":  "540.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети cube-of-force.md (секции ticker + spell drain + duration), готовия modules/cube.js/cube.css от 530, index.html региона между .header и #tab-combat."
+                      },
+                      {
+                          "id":  "540.2",
+                          "phase":  "RED",
+                          "action":  "Разшири test/e2e/cube-widget.spec.js: (а) без бариера ticker-ът е скрит; (б) Activate Face 4 → видим, съдържа \"FACE 4 ACTIVE\"; (в) CSS анимацията е ~32s (провери animation-duration през getComputedStyle) и font-weight \u003e= 700; (г) акордеонът е disabled при face 1-3 и без бариера, enabled при 4 и 5; (д) Apply с 7 при 30 charges → 23; (е) Apply, който сваля до 0 → бариерата пада, theme link-ът го няма, ticker скрит; (ж) reload с активна бариера → ticker-ът се възстановява. ЧЕРВЕНО по правилната причина."
+                      },
+                      {
+                          "id":  "540.3",
+                          "phase":  "GREEN",
+                          "action":  "Ticker div в index.html, стилове+анимация в cube.css (32s, bold, prefers-reduced-motion fallback), логика в modules/cube.js (show/hide/текст + акордеон + drain). Спекът зелен."
+                      },
+                      {
+                          "id":  "540.4",
+                          "phase":  "DONE",
+                          "action":  "npm test -- cube-widget critical-path — зелено. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  550,
+        "category":  "test",
+        "repo":  "combat",
+        "lane":  "cube",
+        "dependsOn":  [
+                          520
+                      ],
+        "files":  [
+                      "test/e2e/cube-integration.spec.js"
+                  ],
+        "verify":  [
+
+                   ],
+        "description":  "test(cube): end-to-end integration spec for face themes across the full app",
+        "specRef":  "d:\\Downloads\\monk\\cube-of-force.md (пълната спецификация на фичата — ЧЕТИ Я ПЪРВА) + monk-combat-structure.md",
+        "tddWorkflow":  false,
+        "notes":  "Капстоун: доказва, че ТРИТЕ lanes работят ЗАЕДНО — кликът в диалога реално сменя цветовете на целия ап през динамичния theme link. dependsOn 520 (тема файловете са merged; 520 от своя страна гейтва на 510), в lane cube (след 530/540).\n\nСпекът (нов файл test/e2e/cube-integration.spec.js, НЕ пипа другите спекове):\n1. За ВСЯКО от 5-те лица: Activate през UI-я на диалога → computed background-color на body == bg стойността от палитрата (fog #101315, stone #15110d, moss #0e1310, arcane #120f19, bastion #160f11) + pill повърхностите също сменени + ticker-ът видим с правилния текст. Изчаквай link load-а (waitForFunction върху computed стойността).\n2. Deactivate → body връща дефолтния #0b0c12, ticker скрит, #cubeThemeLink го няма.\n3. Minute Elapsed → същото връщане към дефолт.\n4. Spell drain до 0 (face 4, Apply с голямо число) → дефолтна тема + ticker скрит.\n5. Reload при активна тема → темата оцелява (link-ът се възстановява от st.cube.activeFace).\n6. Смяна на таб при активна тема → темата остава (link-ът е в \u003chead\u003e, не зависи от таб).\n\nАко нещо е червено, поправката е в СЪОТВЕТНИЯ файл-собственик (cube.js/cube.css за поведение, themes/*.css за цветове) — всичко е merged към момента на този таск (dependsOn + lane редът). ФИНАЛЕН таск на lane cube → БЕЗ verify override, пълният gate (452+ спека) е мрежата.",
+        "steps":  [
+                      {
+                          "id":  "550.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети cube-of-force.md, готовите cube-widget.spec.js и cube-themes.spec.js (стил + селектори), modules/cube.js API-то."
+                      },
+                      {
+                          "id":  "550.2",
+                          "phase":  "IMPLEMENT",
+                          "action":  "Напиши test/e2e/cube-integration.spec.js по 6-те точки от notes. Пусни го локално срещу integration кода."
+                      },
+                      {
+                          "id":  "550.3",
+                          "phase":  "DONE",
+                          "action":  "npm test -- cube-integration — зелено. Никакви други файлове не са пипнати. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    }
 ]
