@@ -1,7 +1,7 @@
 # Monk Combat App — Architecture Reference
 
 > Прочети ПРЕДИ код по repo `combat`. D&D Monk/Cleric character sheet (v3) с автоматизирани тестове. Vanilla JS, без bundler.
-> НАЙ-ГОЛЯМОТО и най-старото приложение — очаквай наслоена история. Актуализиран: 2026-07-27 (след Flavor/Names консолидациите + TTS).
+> НАЙ-ГОЛЯМОТО и най-старото приложение — очаквай наслоена история. Актуализиран: 2026-08-03 (след Cube of Force widget-а + face темите).
 
 ## Файлове
 
