@@ -337,7 +337,8 @@
         "phase": "DONE",
         "action": "npm test -- styles tabs-navigation critical-path — зелено локално (пълният suite е на gate-а). Визуална проверка: нито един computed цвят не е мръднал. Commit с description-а дословно."
       }
-    ]
+    ],
+    "passes": false
   },
   {
     "id": 520,
@@ -377,7 +378,8 @@
         "phase": "DONE",
         "action": "npm test -- cube-themes styles critical-path — зелено локално (пълният suite е на gate-а). Никакъв друг файл не е пипнат. Commit с description-а дословно."
       }
-    ]
+    ],
+    "passes": false
   },
   {
     "id": 530,
@@ -419,7 +421,8 @@
         "phase": "DONE",
         "action": "npm test -- cube-widget critical-path — зелено. Провери че app.js diff-ът е 1-2 реда. Commit с description-а дословно."
       }
-    ]
+    ],
+    "passes": false
   },
   {
     "id": 540,
@@ -460,7 +463,8 @@
         "phase": "DONE",
         "action": "npm test -- cube-widget critical-path — зелено. Commit с description-а дословно."
       }
-    ]
+    ],
+    "passes": false
   },
   {
     "id": 550,
@@ -494,6 +498,7 @@
         "phase": "DONE",
         "action": "npm test -- cube-integration — зелено. Никакви други файлове не са пипнати. Commit с description-а дословно."
       }
-    ]
+    ],
+    "passes": false
   }
 ]
