@@ -34,6 +34,91 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #650 — test(bases): add e2e fixture and accordion spec for the Bases tab
+
+**Repo:** inventory (shared-inventory) · **Lane:** bases-e2e · **Commit:** 144d293
+
+**What:** Final task of the Bases feature. Added two new files (both explicitly permitted by §10; existing e2e/fixtures untouched per red line §3.5):
+- `test/fixtures/bases-fixture.html` — standalone HTML with inline copy of the base table/button styles + the `.base-location` / `tr.base-expanded` accordion rules (1:1 from styles.css). Inline script renders 2 bases (base 0 short location, base 1 a 3+ line location to give the ellipsis something to clamp) and replicates renderBases' row markup (drag-handle, name `<strong>`, `.base-location` div, `.tbl-actions` with 📖 openBaseDetail + 🗑 deleteBase) and its single-open accordion logic. No detail page / hash routing / Firestore (unit tests cover those).
+- `test/e2e/bases-accordion.spec.js` — mirrors maps-accordion.spec.js: FIXTURE `/test/fixtures/bases-fixture.html`, waits for `#baseBody tr[data-idx]`, and the 6 tests: (a) `.base-location` overflow hidden; (b) row starts without `base-expanded`; (c) click expands; (d) re-click collapses; (e) only one expanded (second click collapses first); (f) clicking the 📖 button does not expand.
+
+**Verify:** `npm run test:unit` green (14 files, 177 tests). Did NOT run `npm test` (Playwright on shared port 45279 — left for the post-merge gate). `git status` confirms only the two new files, no existing spec/fixture edited. No 610/620 markup/style gaps needed fixing, so index.html/styles.css/modules/bases.js were not modified.
+
+**Red lines:** respected — no Firestore/persistence touched, no runtime artifacts committed, existing e2e specs/fixtures untouched.
+
+
+## Task 630 — feat(bases): implement base detail hash routing with editable name, location and history
+
+**Repo:** inventory (shared-inventory) · **Lane:** bases-detail · **Branch:** ralph/task-630 · **Commit:** 003f07b
+
+**What:** Filled the stubs in `modules/base-detail.js` (from the 610 foundation) with the real hash-routing implementation, per §10 + bases-feature-plan.md.
+
+- `renderRoute()` — the single transition point, wired to `hashchange` and called from the bases `onSnapshot`. On `#base/<id>` for a known base: adds `hidden` to `.tab-nav` + every `.tab`, reveals `#baseDetail`, sets `state.currentBaseId`, and (only when the route id actually changes) populates `bdName/bdLocation/bdHistory` and dispatches `document` `CustomEvent('base-route', {detail:{id}})`. On empty/unknown hash: restores the tabs with `tab-bases` active and dispatches `{id:null}` — but only when leaving an open detail, so a plain load never steals the active tab. Unknown id with data present clears the stale hash; with an empty list it waits for the snapshot (deep-link on load).
+- `openBaseDetail(i)` → `location.hash = '#base/' + id`. `saveBaseDetail()` requires `bdName` (empty → focus + return), updates the fields and splices+unshifts the edited base to the top (saveQuest pattern) while keeping the detail open (anchor is the id, not the index), then `await saveBases()`.
+- Field repopulation is gated on a module-level `lastRenderedId`, so an incoming snapshot while the detail is open does not overwrite what the DM is typing.
+- Init wiring: `hashchange` listener, `btnBaseBack` → clear hash + renderRoute, `btnBaseSave` → saveBaseDetail.
+
+**Tests:** Added `test/unit/bases-detail.spec.js` (7 tests: open/route, back button + bases-tab active, unknown id fallback, save moves-to-top + persists, empty-name block + focus, deep link, snapshot does not clobber typed input). TDD: RED against the stubs, then GREEN.
+
+**Verify:** `npm run test:unit` → 13 files, **152 passed** (145 prior + 7 new), no regressions. `git status` — only `modules/base-detail.js` + the new spec touched. No real Firestore, no e2e/fixtures touched, UI Bulgarian.
+
+
+### Task 620 — feat(bases): implement bases list with accordion, add dialog, delete and drag ordering
+
+**Repo:** inventory (shared-inventory) · **Lane:** bases-list · **Commit:** 08945ee
+
+Filled the no-op stubs from the 610 foundation in `modules/bases.js`, mirroring `modules/quests.js` (the etalon):
+
+- **renderBases()** — empty state `Няма добавени бази.` (colspan 4, `.empty`); rows `data-idx` with ☰ `.drag-handle`, `<strong>${esc(name)}</strong>`, `<div class="base-location">${esc(location)}</div>`, and `.tbl-actions` with 📖 `openBaseDetail(i)` first then 🗑 `deleteBase(i)` (no ✏ — editing lives on the detail page). Accordion is a copy of the quest pattern: class `base-expanded`, exactly one expanded, clicks on a button/handle don't toggle, expanded survives re-render via `state.expandedBaseIdx`. `initSortable('baseBody', state.bases, saveBases)`.
+- **openBaseModal(idx=null)** — clears `bName`/`bLocation`, title `Добави база`, opens `#baseModal`, focuses `bName`.
+- **saveBase()** — name required (empty → focus + return); new base `{ id: crypto.randomUUID(), name, location, history:'', buildings:[], populace:[], production:[] }`, unshift + close + render + `await saveBases()`.
+- **deleteBase(i)** — `confirm("Изтрий база …?")` → splice + render + saveBases.
+- `saveBases` left as the real implementation from 610; exports list identical.
+
+**Tests:** added `test/unit/bases.spec.js` (15 tests: render, escaping, action-button order, sortable, accordion behaviour, add modal + validation + unshift, delete confirm/cancel). Note: jsdom does not resolve `window`-expando globals from inline `onclick` content attributes, so the accordion-guard test drops the button's `onclick` before DOM-clicking (it exercises the row guard, not the wired handler) — consistent with the suite calling `window.fn()` directly elsewhere.
+
+**Verify:** `npm run test:unit` → 13 files / 160 tests green (incl. bases-foundation and all pre-existing specs). Scope: only `modules/bases.js` + `test/unit/bases.spec.js` touched.
+
+
+### Task 640 — feat(bases): implement buildings, populace and production sub-tables with shared dialog
+
+**Repo:** inventory (shared-inventory) · **Lane:** bases-tables · **Branch:** ralph/task-640 · **Commit:** c30fb67
+
+**What:** Implemented the three base sub-tables in `modules/base-tables.js`, replacing the 610 no-op stubs while keeping the export signature identical (`renderSubTables, openSubModal, closeSubModal, editSub, saveSub, deleteSub`).
+
+- **Generic, not ×3:** one `renderSubTable(kind)` + `renderSubTables()`; `kind ∈ buildings|populace|production` maps to `bdBuildingsBody/bdPopulaceBody/bdProductionBody`.
+- **Row markup (app pattern):** ☰ `.drag-handle` | `<strong>${esc(name)}</strong>` | `<div class="bs-details">${esc(details)}</div>` | `.tbl-actions` ✏ `editSub` / 🗑 `deleteSub` (confirm). Empty sub-array → `.empty` row „Няма записи.“.
+- **Shared modal `#bsModal`:** `state.editingSub = {kind, idx}`; `openSubModal(kind, idx=null)` sets title „Добави/Редактирай сграда|жител|продукция“ and prefills; `saveSub` requires name (empty → focus + return), unshifts new/edited record to the top of the sub-array, closes modal, then `await saveBases()`.
+- **Per-table accordion:** class `bs-expanded`, exactly one expanded per table via `state.expandedSub[kind]`; expanding populace does not collapse buildings; clicks on button/handle do not toggle.
+- **Contract to detail lane:** current base resolved ALWAYS by `state.currentBaseId` (null → tables cleared), never by index; listens to `document` event `base-route` → `renderSubTables()`. Never calls base-detail.js.
+- **Drag&drop:** `initSortable(tbodyId, base[kind], saveBases)` per tbody.
+
+**Tests:** new `test/unit/bases-tables.spec.js` (TDD: 16 RED against stubs → 17 GREEN) covering rendering per kind, empty state, currentBaseId null, `base-route` re-render, sortable init, modal open/empty/title, name-required, new/edit unshift into the right base by id, delete confirm true/false, and the per-table accordion. `npm run test:unit` → 13 files / 162 tests all green.
+
+**Scope:** only `modules/base-tables.js` + `test/unit/bases-tables.spec.js` touched (index.html/styles.css/app.js/bases.js/base-detail.js untouched — parallel lanes). No real Firestore, e2e/fixtures untouched, UI in Bulgarian.
+
+
+## Task 610 — feat(bases): add bases foundation with 2x2 tab grid, full markup, data layer and module stubs
+
+**Repo:** inventory · **Lane:** bases-core · **Branch:** ralph/task-610 · **Commit:** 0f115fc
+
+**What:** Laid the shared foundation for the Bases feature (§10) so lanes 620/630/640 can proceed in parallel, each editing only its own module.
+
+- **index.html:** 4th nav button `data-tab="bases"` (Бази); `#tab-bases` (controls „+ Добави база" + baseTable/baseBody: ☰|Име|Локация|действия); `#baseDetail.hidden` (btnBaseBack, bdName/bdLocation/bdHistory, btnBaseSave + 3 sections Сгради/Население/Продукция each with „+ Добави" openSubModal(kind) and tbody bdBuildingsBody/bdPopulaceBody/bdProductionBody); `baseModal` (bName/bLocation); `bsModal` (bsName/bsDetails).
+- **styles.css:** `.tab-nav{flex-wrap:wrap}` + `.tab-btn{flex:1 1 50%}` → 2×2; `.base-location`/`.bs-details` line-clamp mirroring `.quest-desc`; `tr.base-expanded`/`tr.bs-expanded`; `#baseDetail` page style + `#baseDetail.hidden{display:none}` + base-history min-height 120px.
+- **modules/firebase.js:** `BASES_DOC = doc(db,'bases','index')`.
+- **modules/state.js:** bases, editingBaseIdx, expandedBaseIdx, savingBases, currentBaseId, editingSub, expandedSub.
+- **modules/bases.js:** stubs renderBases/openBaseModal/closeBaseModal/saveBase/deleteBase + REAL saveBases (savingBases flag, setDoc(BASES_DOC,{list}), syncMsg).
+- **modules/base-detail.js:** stubs renderRoute/openBaseDetail/saveBaseDetail.
+- **modules/base-tables.js:** stubs renderSubTables/openSubModal/closeSubModal/editSub/saveSub/deleteSub.
+- **modules/ui.js:** baseModal + bsModal added to initModalBackdrops.
+- **app.js:** imports + all window.* base handlers + 5th onSnapshot(BASES_DOC) with savingBases echo guard → renderBases()+renderRoute()+renderSubTables(); facade re-exports; bases in getState/setState.
+- **test/helpers/dom.js:** additive `bases = null` param → __emit('bases/index', ...).
+- **test/unit/bases-foundation.spec.js:** tab/markup contract, data layer (state.bases populate, saveBases write, echo guard), modal backdrops.
+
+**Verify:** `npm run test:unit` → 12 files, 145 tests, all green. Scope limited to the task's files list (git status clean of anything else). e2e/serve left to the gate (port 45279).
+
+
 ## Task 550 — test(cube): end-to-end integration spec for face themes across the full app
 
 **Repo:** combat (monk_combat_app) · **Lane:** cube · **Branch:** ralph/task-550
@@ -856,6 +941,11 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
 
 
 

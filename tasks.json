@@ -506,5 +506,221 @@
                       }
                   ],
         "passes":  true
+    },
+    {
+        "id":  610,
+        "category":  "feature",
+        "repo":  "inventory",
+        "lane":  "bases-core",
+        "files":  [
+                      "index.html",
+                      "styles.css",
+                      "app.js",
+                      "modules/firebase.js",
+                      "modules/state.js",
+                      "modules/ui.js",
+                      "modules/bases.js",
+                      "modules/base-detail.js",
+                      "modules/base-tables.js",
+                      "test/helpers/dom.js",
+                      "test/unit/bases-foundation.spec.js"
+                  ],
+        "verify":  [
+                       "npm run test:unit"
+                   ],
+        "description":  "feat(bases): add bases foundation with 2x2 tab grid, full markup, data layer and module stubs",
+        "specRef":  "shared-inventory-structure.md §10 (АРХИТЕКТУРАТА — чети я ПЪРВА) + bases-feature-plan.md (в корена на репото); modules/quests.js е ЕТАЛОНЪТ за стил",
+        "tddWorkflow":  true,
+        "notes":  "ЦЕЛ НА ФИЧАТА (5 таска): таб „Бази“ — селищата на партито: списък (име+локация), детайлна страница през hash routing с история и 3 под-таблици (сгради/население/продукция). ТОЗИ таск е ФУНДАМЕНТЪТ: изяжда ВСИЧКИ споделени файлове (index.html, styles.css, app.js, state, ui, firebase, dom.js), за да могат таскове 620/630/640 да вървят ПАРАЛЕЛНО, редактирайки всеки САМО собствения си модул. Каквото пропуснеш в markup-а тук, паралелните lanes НЕ могат да го добавят — бъди ИЗЧЕРПАТЕЛЕН по DOM контракта в §10.\n\n=== ДАННОВ МОДЕЛ (РЕШЕН ОТ ПОТРЕБИТЕЛЯ — НЕ ГО ПРЕДОГОВАРЯЙ) ===\nКолекция \u0027bases\u0027, ЕДИН док: BASES_DOC = doc(db,\u0027bases\u0027,\u0027index\u0027) = { list: [ { id, name, location, history, buildings: [{name, details}], populace: [{name, details}], production: [{name, details}] } ] }. id = crypto.randomUUID(). Всичко е свободен текст. Един док НАРОЧНО — 1 read на snapshot, пази free tier (изрично изискване). НЕ прави по док на база, НЕ ползвай Firebase Storage, НЕ инсталирай npm пакети.\n\n=== РАЗРЕШЕНИЕ ===\nЧервена линия §3.1 („не създавай нови колекции“) е АМЕНДИРАНА от §10 за ТОЧНО колекция \u0027bases\u0027. Всичко останало от §3 важи: firebaseConfig НЕ се пипа, CDN imports остават, НИКАКЪВ тест срещу реален Firestore, npm test/serve НЕ се пускат от агент (порт 45279 е на гейта). Агентът пуска САМО npm run test:unit.\n\n=== TAB 2×2 (изискване на потребителя) ===\nС 4-тия таб .tab-nav става 2 реда × 2 таба: .tab-nav { flex-wrap: wrap }, .tab-btn { flex: 1 1 50% } — на всякакъв екран. initTabs() в ui.js е generic (data-tab) — НЕ я пипай.\n\n=== ПЪЛНИЯТ MARKUP (DOM контрактът от §10 — дословно) ===\n1. nav: \u003cbutton class=\"tab-btn\" data-tab=\"bases\"\u003eБази\u003c/button\u003e. Таб \u003cdiv id=\"tab-bases\" class=\"tab\"\u003e: .controls „+ Добави база“ (onclick=\"openBaseModal()\") + .tbl-wrap таблица baseTable (☰ | Име | Локация | действия, tbody baseBody).\n2. Модал baseModal по образеца на questModal: baseModalTitle, „Име *“ input bName, „Локация“ input bLocation, Отказ/Запази (closeBaseModal/saveBase).\n3. Детайл \u003cdiv id=\"baseDetail\" class=\"hidden\"\u003e СЛЕД табовете: бутон btnBaseBack „← Назад“ (btn-ghost), „Име *“ input bdName, „Локация“ input bdLocation, „История“ textarea bdHistory (min-height ~120px), бутон btnBaseSave „Запази“ (btn-primary); после 3 секции: \u003ch3\u003eСгради и съоръжения\u003c/h3\u003e / \u003ch3\u003eНаселение\u003c/h3\u003e / \u003ch3\u003eПродукция\u003c/h3\u003e, всяка с .controls „+ Добави“ (onclick=\"openSubModal(\u0027buildings\u0027)\" / \u0027populace\u0027 / \u0027production\u0027) + .tbl-wrap таблица (☰ | Име | Детайли | действия; tbody bdBuildingsBody / bdPopulaceBody / bdProductionBody).\n4. Модал bsModal: bsModalTitle, „Име *“ input bsName, „Детайли“ textarea bsDetails, Отказ/Запази (closeSubModal/saveSub).\nstyles.css: 2×2 табовете; .base-location и .bs-details по образеца на .quest-desc (line-clamp, overflow hidden); tr.base-expanded и tr.bs-expanded ги разгъват; #baseDetail в стила на .tab (max-width 900px, центриран, padding). UI на български.\n\n=== МОДУЛИТЕ КАТО STUBS (контрактът от §10) ===\nТрите модула СЪЩЕСТВУВАТ от този таск с ТОЧНИТЕ exports, но телата са no-op (paralелните таскове ги пълнят):\n- modules/bases.js: export function renderBases() {} / openBaseModal() {} / closeBaseModal() {} / saveBase() {} / deleteBase() {} + РЕАЛНАТА export async function saveBases() (флаг state.savingBases, setDoc(BASES_DOC, {list: state.bases}), syncMsg както saveQuests — другите модули я import-ват, тя НЕ е stub).\n- modules/base-detail.js: export function renderRoute() {} / openBaseDetail(i) {} / saveBaseDetail() {}.\n- modules/base-tables.js: export function renderSubTables() {} / openSubModal(kind, idx) {} / closeSubModal() {} / editSub(kind, i) {} / saveSub() {} / deleteSub(kind, i) {}.\nmodules/firebase.js: добави и export-ни BASES_DOC. modules/state.js: полетата от §10 (вкл. currentBaseId). modules/ui.js: \u0027baseModal\u0027 И \u0027bsModal\u0027 в initModalBackdrops — ЕДИНСТВЕНАТА промяна там. app.js: import-и, ВСИЧКИ window.* (openBaseModal/closeBaseModal/saveBase/deleteBase/openBaseDetail/openSubModal/closeSubModal/editSub/saveSub/deleteSub), onSnapshot(BASES_DOC) с echo guard → renderBases() + renderRoute() + renderSubTables(), facade re-exports по §10, bases в getState/setState.\n\n=== bootApp СЕ РАЗШИРЯВА АДИТИВНО ===\ntest/helpers/dom.js: нов параметър bases = null → __emit(\u0027bases/index\u0027, bases === null ? null : { list: bases }). Дефолтът null пази ВСИЧКИ стари тестове зелени. Мокът на firestore НЕ се пипа (store-ът от таск 410 стига).",
+        "steps":  [
+                      {
+                          "id":  "610.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети shared-inventory-structure.md §10 ИЗЦЯЛО (архитектурата, DOM контракта, stubs списъка), bases-feature-plan.md (корена на репото), modules/quests.js, modules/firebase.js, modules/state.js, modules/ui.js, index.html (nav + tab блоковете + модалите), styles.css (.tab-nav/.tab-btn, .quest-desc/.quest-expanded), test/helpers/dom.js, test/unit/quests.spec.js."
+                      },
+                      {
+                          "id":  "610.2",
+                          "phase":  "RED",
+                          "action":  "Създай test/unit/bases-foundation.spec.js (bootApp с новия bases параметър): (а) nav-ът има 4 бутона, 4-тият data-tab=\"bases\" с текст „Бази“; клик активира #tab-bases; (б) markup контрактът: съществуват #baseBody, #baseModal с #bName/#bLocation, #baseDetail (с class hidden по подразбиране) с #btnBaseBack/#bdName/#bdLocation/#bdHistory/#btnBaseSave, трите tbody-та #bdBuildingsBody/#bdPopulaceBody/#bdProductionBody, #bsModal с #bsName/#bsDetails; (в) __emit(\u0027bases/index\u0027, {list:[...]}) → getState().bases съдържа списъка; (г) saveBases() → calls.setDoc има token \u0027bases/index\u0027 с data.list = state.bases; (д) echo guard: при state.savingBases=true входящ __emit НЕ променя state.bases; (е) backdrop клик на #baseModal и #bsModal маха class open. Пусни npm run test:unit — новият спек ЧЕРВЕН по правилната причина, старите 11 зелени."
+                      },
+                      {
+                          "id":  "610.3",
+                          "phase":  "GREEN",
+                          "action":  "index.html: целият markup от notes (nav бутон, tab-bases, baseModal, baseDetail с полетата + 3-те секции, bsModal). styles.css: .tab-nav flex-wrap + .tab-btn flex-basis 50%, .base-location/.bs-details клампове, tr.base-expanded/tr.bs-expanded, #baseDetail стила."
+                      },
+                      {
+                          "id":  "610.4",
+                          "phase":  "GREEN",
+                          "action":  "modules/firebase.js: BASES_DOC. modules/state.js: полетата от §10. Създай трите модула със stubs + реалната saveBases (по notes). modules/ui.js: baseModal + bsModal в initModalBackdrops. app.js: пълния wiring по notes. test/helpers/dom.js: bases параметъра."
+                      },
+                      {
+                          "id":  "610.5",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit — ВСИЧКИ спекове зелени (новият + старите 11: bootApp вече emit-ва bases/index null → state.bases=[], stubs не рендерират нищо). Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  620,
+        "category":  "feature",
+        "repo":  "inventory",
+        "lane":  "bases-list",
+        "dependsOn":  [
+                          610
+                      ],
+        "files":  [
+                      "modules/bases.js",
+                      "test/unit/bases.spec.js"
+                  ],
+        "verify":  [
+                       "npm run test:unit"
+                   ],
+        "description":  "feat(bases): implement bases list with accordion, add dialog, delete and drag ordering",
+        "specRef":  "shared-inventory-structure.md §10 + bases-feature-plan.md; modules/quests.js е ЕТАЛОНЪТ",
+        "tddWorkflow":  true,
+        "notes":  "Пълниш stubs-овете в modules/bases.js от фундамента 610. ⚠ ПИПАШ САМО modules/bases.js + собствения си спек — index.html/styles.css/app.js/ui.js са СОБСТВЕНОСТ НА ДРУГИ LANES (паралелни таскове ги четат). Markup-ът и wiring-ът ВЕЧЕ СЪЩЕСТВУВАТ (610) — ако нещо липсва, опиши го в result summary, НЕ го добавяй.\n\n=== СПИСЪКЪТ (quests.js е еталонът) ===\nrenderBases(): empty state „Няма добавени бази.“ (colspan 4, клас empty); редове data-idx: ☰ .drag-handle | \u003cstrong\u003e${esc(name)}\u003c/strong\u003e | \u003cdiv class=\"base-location\"\u003e${esc(location)}\u003c/div\u003e | .tbl-actions: 📖 onclick=\"openBaseDetail(${i})\" ПЪРВИ, после 🗑 onclick=\"deleteBase(${i})\". БЕЗ ✏ — редакцията е в детайлната страница (lane bases-detail). Акордеон = копие на quest патърна: клас base-expanded, точно един expanded, клик върху бутон/.drag-handle НЕ toggle-ва, оцелява re-render през state.expandedBaseIdx. initSortable(\u0027baseBody\u0027, state.bases, saveBases). openBaseDetail е import от \u0027./base-detail.js\u0027?? НЕ — той е глобален window.openBaseDetail (610 го е върза̀л) — в onclick стринга това стига, НЕ import-вай base-detail.js (в твоя worktree е stub и това е ОК).\n\n=== ADD ДИАЛОГ ===\nopenBaseModal(idx=null) — за списъка idx е винаги null (нова база): чисти bName/bLocation, титла „Добави база“, class open, focus bName. saveBase(): име задължително (празно → focus + return); нова база = { id: crypto.randomUUID(), name, location, history: \u0027\u0027, buildings: [], populace: [], production: [] } + unshift + closeBaseModal() + renderBases() + await saveBases(). deleteBase(i): confirm(`Изтрий база \"...\"?`) → splice + renderBases() + saveBases(). saveBases е ВЕЧЕ реална от 610 — не я пренаписвай, освен ако спекът не хване дефект.\n\n=== ЧЕРВЕНИ ЛИНИИ ===\nНикакъв реален Firestore; test/e2e/ и fixtures НЕ се пипат; UI на български; НЕ пипай файлове извън files списъка.",
+        "steps":  [
+                      {
+                          "id":  "620.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети modules/bases.js (stubs от 610 + реалната saveBases), modules/quests.js ИЗЦЯЛО (еталонът), index.html #tab-bases/#baseModal блоковете (само ЧЕТИ), test/unit/bases-foundation.spec.js и test/unit/quests.spec.js (тестовите патърни), test/helpers/dom.js."
+                      },
+                      {
+                          "id":  "620.2",
+                          "phase":  "RED",
+                          "action":  "Създай test/unit/bases.spec.js (bootApp с bases параметъра): (а) 2 бази → 2 реда в #baseBody, name в \u003cstrong\u003e, location в .base-location; (б) bases:[] → ред .empty „Няма добавени бази.“; (в) esc(): name \u0027\u003cimg\u003e\u0027 излиза екраниран; (г) акордеон: клик на ред → base-expanded; клик на другия → първият губи класа; повторен клик → колапс; клик върху бутон НЕ expand-ва; expandedBaseIdx оцелява re-render; (д) openBaseModal() отваря #baseModal с празни полета; saveBase без име → НЯМА setDoc, фокус #bName; (е) успешен saveBase → calls.setDoc token \u0027bases/index\u0027, data.list[0] = { id непразен низ, name, location, history:\u0027\u0027, buildings:[], populace:[], production:[] }, модалът затворен; втора нова база отива [0] (unshift); (ж) deleteBase с confirm true → базата липсва + setDoc; с false → нищо; (з) Sortable: #baseBody._sortable съществува след render. Пусни — ЧЕРВЕНИ по правилната причина (stubs)."
+                      },
+                      {
+                          "id":  "620.3",
+                          "phase":  "GREEN",
+                          "action":  "Имплементирай renderBases/openBaseModal/closeBaseModal/saveBase/deleteBase в modules/bases.js по notes (замени stubs-овете, запази exports списъка ИДЕНТИЧЕН)."
+                      },
+                      {
+                          "id":  "620.4",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit — всичко зелено (вкл. bases-foundation.spec.js и старите). git status — пипнати са САМО modules/bases.js и test/unit/bases.spec.js. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  630,
+        "category":  "feature",
+        "repo":  "inventory",
+        "lane":  "bases-detail",
+        "dependsOn":  [
+                          610
+                      ],
+        "files":  [
+                      "modules/base-detail.js",
+                      "test/unit/bases-detail.spec.js"
+                  ],
+        "description":  "feat(bases): implement base detail hash routing with editable name, location and history",
+        "specRef":  "shared-inventory-structure.md §10 + bases-feature-plan.md",
+        "tddWorkflow":  true,
+        "notes":  "Пълниш stubs-овете в modules/base-detail.js от фундамента 610. ⚠ ПИПАШ САМО modules/base-detail.js + собствения си спек — index.html/styles.css/app.js/bases.js/base-tables.js са чужда собственост (паралелни lanes!). Markup-ът (#baseDetail с полетата и бутоните) и wiring-ът (window.openBaseDetail, onSnapshot → renderRoute()) ВЕЧЕ СЪЩЕСТВУВАТ. saveBases се import-ва от \u0027./bases.js\u0027 (реална от 610). Липсва ти нещо → опиши в result summary, НЕ пипай чужди файлове.\n\n=== ROUTING (решено — hash; работи на GitHub Pages, пази телефонния back бутон) ===\n\u0027#base/\u003cid\u003e\u0027 = детайлът; празно/друго = табовете. openBaseDetail(i): location.hash = \u0027#base/\u0027 + state.bases[i].id. renderRoute(): парсва location.hash; при match със СЪЩЕСТВУВАЩА база → .tab-nav и всички .tab дивове получават class hidden, #baseDetail губи hidden, state.currentBaseId = id, dispatch document CustomEvent(\u0027base-route\u0027, {detail:{id}}); полетата bdName/bdLocation/bdHistory се попълват САМО при СМЯНА на route id-то (пази последния рендериран id в модулна променлива — входящ snapshot при отворен детайл НЕ презаписва каквото човекът пише); при празен hash → обратното (табовете видими, #baseDetail hidden, state.currentBaseId = null, event с {id:null}), активен таб bases: bases табът получава active (бутонът data-tab=bases и #tab-bases, свали active от другите — както прави initTabs при клик); при НЕПОЗНАТ id → като празен hash + изчисти hash-а, НО само ако state.bases.length \u003e 0 (данните може още да не са дошли — deep link при зареждане; при празен списък изчакай snapshot-а, който вика renderRoute пак).\n\n=== WIRING ПРИ MODULE INIT ===\nwindow.addEventListener(\u0027hashchange\u0027, renderRoute); btnBaseBack.addEventListener(\u0027click\u0027, () =\u003e { location.hash = \u0027\u0027; renderRoute(); }); btnBaseSave.addEventListener(\u0027click\u0027, saveBaseDetail) — елементите са статични в index.html.\n\n=== SAVE (сортировката — изискване на потребителя) ===\nsaveBaseDetail(): намери базата по state.currentBaseId; bdName задължително (празно → focus + return); обнови name/location/history; splice на стария индекс + unshift НАЙ-ОТГОРЕ (патърнът на saveQuest); await saveBases(). Детайлът ОСТАВА отворен — котвата е id, не индекс; НЕ пипай hash-а.\n\n=== jsdom БЕЛЕЖКА ЗА ТЕСТОВЕТЕ ===\nlocation.hash в jsdom не винаги гърми hashchange синхронно — в тестовете след смяна на hash викай window.dispatchEvent(new HashChangeEvent(\u0027hashchange\u0027)) или export-натата renderRoute() директно.\n\n=== ЧЕРВЕНИ ЛИНИИ ===\nНикакъв реален Firestore; test/e2e/ и fixtures НЕ се пипат; UI на български. Под-таблиците НЕ са твоя работа (lane bases-tables слуша \u0027base-route\u0027 event-а) — ти само dispatch-ваш event-а.",
+        "steps":  [
+                      {
+                          "id":  "630.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети modules/base-detail.js (stubs от 610), modules/bases.js (реалната saveBases + как quests-патърнът прави splice/unshift), index.html #baseDetail блока и nav-а (само ЧЕТИ), modules/ui.js initTabs (как се сменя active), app.js (onSnapshot wiring-а), test/unit/bases-foundation.spec.js (setup патърна)."
+                      },
+                      {
+                          "id":  "630.2",
+                          "phase":  "RED",
+                          "action":  "Създай test/unit/bases-detail.spec.js (bootApp с 2 бази; за route ползвай hash + dispatch или renderRoute() по jsdom бележката): (а) openBaseDetail(0) → hash \u0027#base/\u003cid на база 0\u003e\u0027; след route: #baseDetail видим (без hidden), .tab-nav скрит, bdName/bdLocation/bdHistory = стойностите на базата, state.currentBaseId = id (провери през getState или страничен ефект), document е получил \u0027base-route\u0027 event с detail.id; (б) btnBaseBack клик → hash \u0027\u0027, .tab-nav видим, #baseDetail скрит, бутонът data-tab=\"bases\" и #tab-bases имат active, event с detail.id null; (в) hash \u0027#base/nonexistent\u0027 при заредени бази → детайлът скрит, табовете видими; (г) промяна на полетата + btnBaseSave → calls.setDoc token \u0027bases/index\u0027, редактираната база е list[0] (НАЙ-ОТГОРЕ) с новите стойности, #baseDetail ОСТАВА видим; (д) save с празно bdName → НЯМА setDoc, фокус #bdName; (е) deep link: сетни hash ПРЕДИ bootApp → след __emit детайлът е видим; (ж) входящ __emit при отворен детайл НЕ презаписва въведеното в bdName (сетни стойност, emit-ни СЪЩИЯ route, провери че стои). Пусни — ЧЕРВЕНИ по правилната причина (stubs)."
+                      },
+                      {
+                          "id":  "630.3",
+                          "phase":  "GREEN",
+                          "action":  "Имплементирай renderRoute/openBaseDetail/saveBaseDetail + init wiring-а в modules/base-detail.js по notes (замени stubs-овете, запази exports списъка идентичен)."
+                      },
+                      {
+                          "id":  "630.4",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit — всичко зелено. git status — пипнати са САМО modules/base-detail.js и test/unit/bases-detail.spec.js. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  640,
+        "category":  "feature",
+        "repo":  "inventory",
+        "lane":  "bases-tables",
+        "dependsOn":  [
+                          610
+                      ],
+        "files":  [
+                      "modules/base-tables.js",
+                      "test/unit/bases-tables.spec.js"
+                  ],
+        "description":  "feat(bases): implement buildings, populace and production sub-tables with shared dialog",
+        "specRef":  "shared-inventory-structure.md §10 + bases-feature-plan.md; таблиците „+ Добави“ + модал са патърнът на целия ап",
+        "tddWorkflow":  true,
+        "notes":  "Пълниш stubs-овете в modules/base-tables.js от фундамента 610. ⚠ ПИПАШ САМО modules/base-tables.js + собствения си спек — index.html/styles.css/app.js/bases.js/base-detail.js са чужда собственост (паралелни lanes!). Markup-ът (3-те секции + bsModal) и wiring-ът (window.*, onSnapshot → renderSubTables()) ВЕЧЕ СЪЩЕСТВУВАТ. saveBases се import-ва от \u0027./bases.js\u0027 (реална от 610).\n\n=== КОНТРАКТЪТ КЪМ ДЕТАЙЛА (НЕ викай base-detail.js!) ===\nТекущата база се намира по state.currentBaseId (сетва го lane bases-detail; в ТВОИТЕ тестове го сетваш директно). null → renderSubTables() рендерира нищо/чисти. Слушай document event \u0027base-route\u0027 при module init → renderSubTables(). Така двата модула се пишат паралелно.\n\n=== ГЕНЕРИЧНО, НЕ ×3 КОПИЯ ===\nkind ∈ buildings | populace | production; tbody map: buildings→bdBuildingsBody, populace→bdPopulaceBody, production→bdProductionBody. Една renderSubTable(kind) + renderSubTables() (трите). Общият модал bsModal: state.editingSub = { kind, idx } (idx null = нова). openSubModal(kind, idx=null) (титла по kind-а: „Добави/Редактирай сграда|жител|продукция“ — избери формулировка и я тествай), closeSubModal, editSub(kind, i) → openSubModal(kind, i) с попълнени полета, saveSub(), deleteSub(kind, i).\n\n=== ПОВЕДЕНИЕ (патърните на апа) ===\nРед: ☰ .drag-handle | \u003cstrong\u003e${esc(name)}\u003c/strong\u003e | \u003cdiv class=\"bs-details\"\u003e${esc(details)}\u003c/div\u003e | .tbl-actions ✏ editSub / 🗑 deleteSub (confirm). Акордеон PER под-таблица: клас bs-expanded, точно един expanded НА таблица (state.expandedSub[kind]), expanded в buildings НЕ колапсира expanded в populace, клик на бутон/handle НЕ toggle-ва. saveSub: име задължително (празно → focus + return); нова → unshift; edit → splice + unshift НАЙ-ОТГОРЕ В под-масива (сортировката — изискване на потребителя); после renderSubTable(kind) + await saveBases(). deleteSub: confirm → splice + render + saveBases. Drag\u0026drop: initSortable(tbodyId, base[kind], saveBases) за всяка. Empty state: „Няма записи.“ (клас empty). Базата се намира ВИНАГИ по state.currentBaseId, НЕ по индекс (unshift-ове я местят в list-а).\n\n=== ЧЕРВЕНИ ЛИНИИ ===\nНикакъв реален Firestore; test/e2e/ и fixtures НЕ се пипат; UI на български; НЕ пипай файлове извън files списъка.",
+        "steps":  [
+                      {
+                          "id":  "640.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети modules/base-tables.js (stubs от 610), modules/bases.js (saveBases + quests-патърна за модал/акордеон през modules/quests.js), index.html секциите в #baseDetail и #bsModal (само ЧЕТИ), modules/ui.js (initSortable, esc), test/unit/bases-foundation.spec.js (setup патърна)."
+                      },
+                      {
+                          "id":  "640.2",
+                          "phase":  "RED",
+                          "action":  "Създай test/unit/bases-tables.spec.js: bootApp с 1 база с по 2 записа във всеки под-масив; сетни state.currentBaseId = id-то (през setState/import на state) и извикай renderSubTables() (facade export-а). Параметризирано за трите kind-а (describe.each/цикъл): (а) редовете са в правилния tbody, name в \u003cstrong\u003e, details в .bs-details; (б) празен под-масив → ред .empty „Няма записи.“; (в) openSubModal(kind) отваря #bsModal с празни полета; saveSub без име → НЯМА setDoc, фокус #bsName; (г) успешен saveSub (нова) → в calls.setDoc data-та записът е [0] в ПРАВИЛНИЯ под-масив на ПРАВИЛНАТА база (по id), модалът затворен; (д) editSub на запис 1 + saveSub → записът е [0] с новите стойности, старата позиция я няма; (е) deleteSub с confirm true → записът липсва + setDoc; с false → нищо; (ж) акордеон per таблица: bs-expanded, само един В таблицата, expanded в buildings оцелява expand в populace; клик на бутон НЕ toggle-ва; (з) el._sortable съществува на трите tbody-та; (и) state.currentBaseId = null → renderSubTables() оставя таблиците празни; (к) document.dispatchEvent(new CustomEvent(\u0027base-route\u0027, {detail:{id}})) → таблиците се рендерират. Пусни — ЧЕРВЕНИ по правилната причина (stubs)."
+                      },
+                      {
+                          "id":  "640.3",
+                          "phase":  "GREEN",
+                          "action":  "Имплементирай renderSubTables/renderSubTable/openSubModal/closeSubModal/editSub/saveSub/deleteSub + \u0027base-route\u0027 listener-а в modules/base-tables.js по notes (замени stubs-овете, запази exports списъка идентичен)."
+                      },
+                      {
+                          "id":  "640.4",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit — всичко зелено. git status — пипнати са САМО modules/base-tables.js и test/unit/bases-tables.spec.js. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  650,
+        "category":  "e2e",
+        "repo":  "inventory",
+        "lane":  "bases-e2e",
+        "dependsOn":  [
+                          610,
+                          620
+                      ],
+        "files":  [
+                      "test/fixtures/bases-fixture.html",
+                      "test/e2e/bases-accordion.spec.js",
+                      "index.html",
+                      "styles.css",
+                      "modules/bases.js"
+                  ],
+        "description":  "test(bases): add e2e fixture and accordion spec for the Bases tab",
+        "specRef":  "test/e2e/maps-accordion.spec.js + test/fixtures/maps-fixture.html са ЕТАЛОНЪТ — огледален превод към bases",
+        "notes":  "Червена линия §3.5 („test/e2e/ и fixtures не се пипат“) важи за СЪЩЕСТВУВАЩИТЕ файлове — НОВИТЕ bases-* файлове тук са изрично позволени (§10). Съществуващите спекове/фикстури НЕ се редактират.\n\nФикстурата е STANDALONE HTML (както maps-fixture.html): инлайн копие на bases стиловете (1:1 от styles.css — .base-location/tr.base-expanded + табличните базови стилове) + инлайн скрипт, който рендерира 2 бази и репликира акордеон логиката на renderBases: база 0 с кратка локация, база 1 с ДЪЛГА (3+ реда, за да има какво да клампва елипсисът). Детайлната страница/hash routing-ът НЕ участват във фикстурата (unit тестовете ги покриват; фикстурата е standalone без Firestore). В .tbl-actions на реда стоят 📖 и 🗑 както в реалния renderBases.\n\nСпекът копира структурата на maps-accordion.spec.js (FIXTURE = \u0027/test/fixtures/bases-fixture.html\u0027, waitForSelector \u0027#baseBody tr[data-idx]\u0027): (а) .base-location има overflow hidden; (б) редът стартира без base-expanded; (в) клик expand-ва; (г) повторен клик колапсира; (д) само един expanded — кликът на втория колапсира първия; (е) клик на бутон (📖) НЕ expand-ва.\n\n⚠ АГЕНТЪТ НЕ ПУСКА npm test (порт 45279 е на гейта)! Пиши спека КОНСЕРВАТИВНО по образеца — гейтът ще го пусне след merge. Пусни само npm run test:unit за регресия.\n\nТова е ФИНАЛНИЯТ таск на фичата — БЕЗ verify override, пълният гейт (npm ci + test:unit + Playwright, вкл. новия спек) е задната мрежа. dependsOn 620 (списъкът е merged; 610 е merged преди него). Ако при писането забележиш дребен пропуск от 610/620 (стил, липсващ клас, дребен markup дефект), поправи го ТУК — затова index.html/styles.css/modules/bases.js са в ownership-а (към този момент lanes bases-core и bases-list са приключили).",
+        "steps":  [
+                      {
+                          "id":  "650.1",
+                          "action":  "Прочети test/fixtures/maps-fixture.html ИЗЦЯЛО и test/e2e/maps-accordion.spec.js ИЗЦЯЛО. Прочети styles.css bases правилата (от 610) и renderBases в modules/bases.js (от 620) — фикстурата трябва да репликира СЪЩИТЕ класове и структура на реда."
+                      },
+                      {
+                          "id":  "650.2",
+                          "action":  "Създай test/fixtures/bases-fixture.html по образеца: инлайн CSS (базовите таблични/бутонни стилове от maps-fixture + bases класовете 1:1 от styles.css), таблица baseTable/baseBody, инлайн скрипт с data масив от 2 бази (база 1 с многоредова локация) и рендер + акордеон логика, огледални на renderBases."
+                      },
+                      {
+                          "id":  "650.3",
+                          "action":  "Създай test/e2e/bases-accordion.spec.js по образеца на maps-accordion.spec.js (6-те теста от notes)."
+                      },
+                      {
+                          "id":  "650.4",
+                          "action":  "npm run test:unit за регресия (e2e ще го пусне гейтът). Провери с git diff, че НИТО един съществуващ файл в test/e2e/ и test/fixtures/ не е променен. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
     }
 ]
