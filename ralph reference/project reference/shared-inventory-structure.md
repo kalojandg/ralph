@@ -11,16 +11,16 @@ shared-inventory/
 ├── index.html            ← страницата: markup + (до таск 2) целият JS inline; (до таск 1) целият CSS inline
 ├── styles.css            ← след таск 1: целият CSS (извлечен от <style> блока)
 ├── app.js                ← след таск 2: целият JS (извлечен verbatim от <script type="module">) + exports
-├── modules/              ← след фаза REFACTOR (таскове 20-26): firebase.js, state.js, gold.js, items.js, quests.js, ui.js; след фаза 3 MAPS (410-450): maps.js, image.js, viewer.js
+├── modules/              ← след фаза REFACTOR (таскове 20-26): firebase.js, state.js, gold.js, items.js, quests.js, ui.js; след фаза 3 MAPS (410-450): maps.js, image.js, viewer.js; след фаза 4 BASES (610-650): bases.js, base-detail.js, base-tables.js
 ├── sw.js                 ← service worker (регистрира се от малък inline classic script — ОСТАВА в index.html)
 ├── manifest.json         ← PWA manifest
 ├── vitest.config.js      ← след таск 3 (unit test инфраструктура)
 ├── test/
-│   ├── e2e/              ← Playwright specs (items-accordion, quests-accordion, maps-accordion) — съществуващите НЕ СЕ ПИПАТ (maps-* добавен от таск 450)
-│   ├── fixtures/         ← standalone HTML фикстури за e2e (items-, quests-, maps-fixture.html) — НЕ СЕ ПИПАТ (те са собственост на e2e)
+│   ├── e2e/              ← Playwright specs (items-accordion, quests-accordion, maps-accordion, bases-accordion) — съществуващите НЕ СЕ ПИПАТ (maps-* добавен от таск 450, bases-* от таск 650)
+│   ├── fixtures/         ← standalone HTML фикстури за e2e (items-, quests-, maps-, bases-fixture.html) — НЕ СЕ ПИПАТ (те са собственост на e2e)
 │   ├── mocks/            ← след таск 3: firebase-app.js, firebase-firestore.js (виж §5)
 │   ├── helpers/          ← след таск 3: dom.js (bootApp helper, виж §6)
-│   └── unit/             ← unit тестове (фаза 1: 10-14; фаза 3 maps: image/maps/maps-modal/viewer — виж §9)
+│   └── unit/             ← unit тестове (фаза 1: 10-14; фаза 3 maps: image/maps/maps-modal/viewer — виж §9; фаза 4 bases: bases-foundation/bases/bases-detail/bases-tables — виж §10)
 ├── playwright.config.js  ← e2e: testDir test/e2e, baseURL localhost:45279, webServer 'npm run serve' — НЕ СЕ ПИПА
 └── package.json          ← scripts: test (playwright), serve (http-server 45279); таск 3 добавя test:unit (vitest run)
 ```
@@ -41,12 +41,13 @@ shared-inventory/
 | DND | `initSortable(tbodyId, arr, saveFn)` — destroy на предишния instance, `onEnd` splice-ва и вика saveFn. **`Sortable` е ГЛОБАЛ** (classic script от CDN) |
 | TABS/MODALS | tab-btn click listeners, backdrop click затваря модала |
 | HELPERS | `esc(s)` — HTML escape (&, <, >, ") |
-| LISTENERS | 4× `onSnapshot`: gold (missing→zeros), items (игнорира при `saving`), quests (игнорира при `savingQuests`; сетва `#syncStatus` = 'Live sync ✓' и `window.__appReady = true`), maps (игнорира при `savingMaps`; чете `snap.data().list`, само индекс-докът — снимките са отделни докове, §9) |
+| LISTENERS | 5× `onSnapshot`: gold (missing→zeros), items (игнорира при `saving`), quests (игнорира при `savingQuests`; сетва `#syncStatus` = 'Live sync ✓' и `window.__appReady = true`), maps (игнорира при `savingMaps`; чете `snap.data().list`, само индекс-докът — снимките са отделни докове, §9), bases (игнорира при `savingBases`; чете `snap.data().list`; вика `renderBases()` + `renderRoute()` + `renderSubTables()` — §10) |
 | EXPORT/IMPORT | `window.exportData` (bundle {version:1, exportedAt, gold, items, quests} → download), `window.importData` (confirm → setDoc за наличните ключове; невалиден JSON → alert) |
 | PWA | `beforeinstallprompt` → `#btnInstall` |
 
 DOM id-та: `sync, syncStatus, dispPP/GP/SP/CP, inPP/GP/SP/CP, goldError, invBody, invFooter, questBody, itemModal (iName,iCat,iQty,iWeight,iValue,iCarrier,iNote), questModal (qName,qStatus,qGiver,qDesc,qReward,qNote), btnInstall`.
 Maps (фаза 3): таб `tab-maps` (tab-btn `data-tab="maps"`), `mapTable/mapBody`, `mapModal` (`mapModalTitle, mShort, mDetails, mFile, mPreview, mMapError`), overlay `#mapViewer` (създава се от viewer.js, не е в index.html).
+Bases (фаза 4): таб `tab-bases` (tab-btn `data-tab="bases"`), `baseTable/baseBody`, `baseModal` (`baseModalTitle, bName, bLocation`), детайл `#baseDetail` (`btnBaseBack, bdName, bdLocation, bdHistory, btnBaseSave` + `bdBuildingsBody/bdPopulaceBody/bdProductionBody`), общ под-модал `bsModal` (`bsModalTitle, bsName, bsDetails`) — §10.
 
 ## §3. Червени линии (нарушение = failed таск)
 
@@ -172,3 +173,41 @@ Playwright browsers са инсталирани глобално на машин
 - E2e (Playwright): `test/e2e/maps-accordion.spec.js` (6) + фикстура `test/fixtures/maps-fixture.html`. Съществуващите items/quests e2e непроменени.
 
 **Извън обхват:** export/import bundle-ът (v1) НЕ включва картите (снимките биха издули JSON-а — `getState/setState` носят `maps` само за тестове/state, не за bundle-а). sw.js не се пипа (network-first покрива новите модули).
+
+## §10. Bases фича (фаза 4 — РЕАЛИЗИРАНА, таскове 610-650, lanes `bases-core` → `bases-list` ∥ `bases-detail` ∥ `bases-tables` → `bases-e2e`)
+
+Таб „Бази" — селищата/базите на партито: списък (име + локация), детайлна „страница" през hash routing с история и 3 под-таблици (сгради, население, продукция). Пълната спека: `bases-feature-plan.md` в корена на репото. **Статус: доставена и merge-ната в main, verify gate зелен.** Реалността потвърждава контракта по-долу — трите модула са доставени точно както е описано (import-ват `saveBases` от bases.js, комуникират detail→tables през `state.currentBaseId` + `base-route` event-а).
+
+**Данни (решено от потребителя — НЕ се предоговаря):** колекция `bases`, **ЕДИН док** `BASES_DOC = doc(db,'bases','index')` = `{ list: [ { id, name, location, history, buildings: [{name, details}], populace: [{name, details}], production: [{name, details}] } ] }`. Всичко е свободен текст. `id = crypto.randomUUID()` (котва за routing-а). Един док нарочно — 1 read на snapshot, пази free tier (изрично изискване; съображението за отделни докове при maps беше снимките — тук снимки НЯМА). Редът в `list` = ред на показване, `{list}` патърнът на ITEMS_DOC.
+
+**Амендмънти на §3 (САМО за тази фаза, всичко останало важи):**
+1. §3.1 „не създавай нови колекции" → колекция `bases` е РАЗРЕШЕНА (единствено тя). `firebaseConfig` остава непипнат.
+2. §3.5 „test/e2e/ и fixtures не се пипат" → НОВИ `bases-*` файлове там са разрешени; съществуващите — не.
+3. §6 `bootApp` получава адитивен параметър `bases = null` → `__emit('bases/index', bases === null ? null : {list: bases})`. Дефолтът null пази старите тестове зелени.
+
+**Tabs 2×2 (решение на потребителя):** `.tab-nav { flex-wrap: wrap }`, `.tab-btn { flex: 1 1 50% }` — 4-те таба стоят 2 реда × 2 на всякакъв екран.
+
+**Routing:** hash — `#base/<id>` = детайлът, празно/друго = табовете. При отворен детайл `.tab-nav` и `.tab` дивовете са скрити, `#baseDetail` видим; „← Назад" → `location.hash = ''` → табовете с активен `tab-bases`. Непознат/изтрит id → връщане към списъка. `renderRoute()` се вика от `hashchange` И от bases snapshot-а (deep link при зареждане — данните идват след DOM-а).
+
+**DOM контракт:** nav бутон `data-tab="bases"` („Бази"); `#tab-bases`: „+ Добави база" (`openBaseModal()`) + таблица `baseTable`/`baseBody` (☰ | Име | Локация | действия: 📖 `openBaseDetail(i)` / 🗑 `deleteBase(i)`); модал `baseModal` (`baseModalTitle`, `bName`, `bLocation`); детайл `#baseDetail` (`btnBaseBack` „← Назад", `bdName`, `bdLocation`, `bdHistory`, `btnBaseSave` „Запази") + 3 секции: „Сгради и съоръжения" `bdBuildingsBody`, „Население" `bdPopulaceBody`, „Продукция" `bdProductionBody`, всяка с „+ Добави" (`openSubModal(kind)`); общ под-модал `bsModal` (`bsModalTitle`, `bsName`, `bsDetails`).
+
+**АРХИТЕКТУРА — ТРИ МОДУЛА (за паралелни lanes; контрактът тук е границата между тях):**
+
+| Модул | Lane | Съдържание |
+|-------|------|-----------|
+| `modules/bases.js` | bases-list | Списъкът: `renderBases` (акордеон: клас `base-expanded`, точно един, клик на бутон/.drag-handle НЕ toggle-ва, оцелява re-render през `state.expandedBaseIdx`; `initSortable('baseBody', state.bases, saveBases)`); `saveBases` (флаг `savingBases`, `setDoc(BASES_DOC, {list: state.bases})` — имплементира се ОЩЕ ВЪВ ФУНДАМЕНТА 610, другите модули я import-ват); `openBaseModal/closeBaseModal/saveBase` (име задължително; нова база: `{id: crypto.randomUUID(), name, location, history:'', buildings:[], populace:[], production:[]}` + unshift); `deleteBase` (confirm) |
+| `modules/base-detail.js` | bases-detail | Routing + полетата: `renderRoute`, `openBaseDetail(i)` (сетва hash), `saveBaseDetail` — splice+unshift (редактираната НАЙ-ОТГОРЕ, патърнът на saveQuest), детайлът ОСТАВА отворен (котвата е id, не индекс); wiring на btnBaseBack/btnBaseSave + `hashchange` listener при module init. Сетва `state.currentBaseId` (id или null) и dispatch-ва `document`-event **`base-route`** (`new CustomEvent('base-route', {detail:{id}})`) при всяка смяна на route. Полетата се попълват САМО при влизане в route-а — входящ snapshot НЕ презаписва каквото човекът пише в bdName/bdLocation/bdHistory |
+| `modules/base-tables.js` | bases-tables | Под-таблиците: `renderSubTables`/`renderSubTable(kind)` — четат текущата база през `state.currentBaseId` (null → нищо); `openSubModal(kind, idx)/closeSubModal/editSub/saveSub/deleteSub` — `kind ∈ buildings|populace|production`, редове `{name, details}`, edit = splice+unshift В под-масива + `saveBases()`, всяка под-таблица с initSortable + акордеон (`state.expandedSub[kind]`, клас `bs-expanded`). Слуша `base-route` event-а → renderSubTables() |
+
+Модулите се **import**-ват взаимно (base-detail/base-tables → `saveBases` от bases.js) — това е ОК; правилото за lanes е кой ги **редактира**. Комуникацията detail→tables минава през `state.currentBaseId` + `base-route` event-а, НЕ през директни викания — двата модула се пишат паралелно срещу stubs.
+
+**state.js добавя:** `bases: [], editingBaseIdx: null, expandedBaseIdx: null, savingBases: false, currentBaseId: null, editingSub: null` (`{kind, idx}` или null), `expandedSub: { buildings: null, populace: null, production: null }`.
+
+**app.js добавя (всичко във фундамента 610):** window.* wiring за ВСИЧКИ base handler-и, 5-ти `onSnapshot(BASES_DOC)` (echo guard `savingBases` → `renderBases()` + `renderRoute()` + `renderSubTables()`), facade re-exports (`renderBases, saveBases` / `renderRoute, openBaseDetail, saveBaseDetail` / `renderSubTables`), `bases` в getState/setState. Export bundle-ът НЕ се пипа (базите не влизат, както картите).
+
+**Board (паралелизъм):** 610 фундамент (lane bases-core): ЦЕЛИЯТ markup + стилове + данновия слой + трите модула като stubs (+ реалната saveBases) + пълния app.js/ui.js/dom.js wiring — изяжда всички отровни файлове. После 620 (bases-list) ∥ 630 (bases-detail) ∥ 640 (bases-tables) — всеки редактира САМО своя модул + своя spec, dependsOn 610. Накрая 650 (bases-e2e, dependsOn 620) — fixture + e2e спек + slack за дребни поправки.
+
+**Test state (фаза 4 — доставено, всичко зелено):**
+- Unit (Vitest): `bases-foundation.spec.js` (6 — таб/markup/данни/wiring, 610), `bases.spec.js` (15 — списък/модал/акордеон/drag, 620), `bases-detail.spec.js` (7 — routing + детайл, 630), `bases-tables.spec.js` (11 — под-таблиците, 640). Общо unit spec-ове след фаза 4: **15 файла** (11 от фаза 3 + 4 bases).
+- E2e (Playwright): `test/e2e/bases-accordion.spec.js` (6) + фикстура `test/fixtures/bases-fixture.html` (огледални на maps-двойката, 650). Съществуващите items/quests/maps e2e непроменени.
+- Security rules за `bases` — ръчна стъпка на собственика, НЕ на агент.
