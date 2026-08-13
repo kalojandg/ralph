@@ -1,0 +1,55 @@
+RALPH — Proprietary License / Собственически лиценз
+=====================================================
+
+Copyright (c) 2026 Калоян Димитров Георгиев (Kaloyan Dimitrov Georgiev)
+All rights reserved. / Всички права запазени.
+
+EN
+--
+This software and its accompanying materials — including but not limited to the
+orchestration scripts (ralph.ps1, ralph-iteration.ps1, ralph-swarm.ps1), the
+methodology skills (.claude/skills/), the reference documentation
+("ralph reference/") and the task/board formats — are the personal work and
+exclusive intellectual property of Kaloyan Dimitrov Georgiev, created as a
+private project. Its creation and evolution predate and are independent of any
+employment engagement; the commit history of this repository serves as dated
+evidence of authorship and prior existence.
+
+No part of this work may be used, copied, modified, merged, published,
+distributed, sublicensed, or incorporated into other works without the express
+prior written permission of the copyright holder.
+
+Use of this software within or on behalf of any employer or organization
+requires an explicit prior written agreement with the copyright holder.
+Absent such agreement, no rights are granted, and no employment relationship
+shall be construed as transferring any rights over this work.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY ARISING FROM THE USE OF THE SOFTWARE.
+
+BG
+--
+Този софтуер и придружаващите го материали — включително, но не само,
+оркестрационните скриптове (ralph.ps1, ralph-iteration.ps1, ralph-swarm.ps1),
+методологичните скилове (.claude/skills/), референтната документация
+("ralph reference/") и форматите на таскове/board — са лично произведение и
+изключителна интелектуална собственост на Калоян Димитров Георгиев, създадени
+като частен проект. Създаването и развитието им предхождат и са независими от
+каквото и да е трудово правоотношение; commit историята на това репо служи като
+датирано доказателство за авторство и предходно съществуване.
+
+Никаква част от това произведение не може да бъде използвана, копирана,
+променяна, публикувана, разпространявана, подлицензирана или включвана в други
+произведения без изричното предварително писмено разрешение на носителя на
+правата.
+
+Използването на този софтуер в рамките на или от името на работодател или
+организация изисква изрично предварително писмено споразумение с носителя на
+правата. При липса на такова споразумение не се предоставят никакви права и
+никое трудово правоотношение не следва да се тълкува като прехвърлящо права
+върху това произведение.
+
+СОФТУЕРЪТ СЕ ПРЕДОСТАВЯ „ВЪВ ВИДА, В КОЙТО Е", БЕЗ КАКВИТО И ДА Е ГАРАНЦИИ.
+АВТОРЪТ НЕ НОСИ ОТГОВОРНОСТ ЗА КАКВИТО И ДА Е ВРЕДИ, ПРОИЗТИЧАЩИ ОТ
+ИЗПОЛЗВАНЕТО НА СОФТУЕРА.
