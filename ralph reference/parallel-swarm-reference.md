@@ -74,6 +74,18 @@ repos.json                 ← + gitRoot / workSubdir / mainBranch (worktree т�
 7. Слотът се освобождава → следващият eligible таск стартира (rolling pipeline)
 8. Всички passes:true → **FINISHING STEP** → SWARM SUMMARY → exit
      Finishing step (САМО при пълен успех — всеки merge е минал гейта, публикуването е безопасно):
+       finish_review → REVIEW STAGE (преди docs/push): по репо — review агент чете diff-а
+                     на ЦЕЛИЯ run (startSha..HEAD, снимнат при старта) срещу structure
+                     reference-а като правила (шаблон: ralph reference/review-prompt-template.md,
+                     адаптиран от служебния review промпт на потребителя) → доклад в
+                     C:\CodeReview\<repo>\CODE-REVIEW-*.md + машинен verdict.json
+                     {blockers, important, recommendations}. ACCEPTANCE: 0 блокери И 0 важни
+                     (препоръките са позволени). При провал → FIX агент оправя САМО
+                     блокери+важни (или обосновава грешна забележка в доклада), commit,
+                     който трябва да мине ПЪЛНИЯ verify гейт (червен → rollback) → ре-ревю.
+                     До finish_review_cycles (default 2) цикъла; неуспех → FINISHING ABORTED:
+                     без docs, БЕЗ push — докладите чакат човек. Логове: logs/review-* и
+                     logs/reviewfix-*.
        finish_docs → по един docs агент per докоснато репо: обновява structure reference-а
                      (в ralph репото) + собствените docs на репото (README/BEHAVIOR/TEST_CASES)
                      спрямо какво board-ът промени; commit-ва САМО документация; timeout 25 мин;

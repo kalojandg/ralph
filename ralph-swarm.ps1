@@ -93,9 +93,15 @@ if ($config -and $config.swarm -and $config.swarm.PSObject.Properties['escalate_
 # Full-success only: partially failed boards stay local for human review.
 $finishDocs = $true
 $finishPush = $true
+$finishReview = $true
+$reviewCycles = 2
+$reviewDirBase = "C:\CodeReview"
 if ($config -and $config.swarm) {
     if ($config.swarm.PSObject.Properties['finish_docs']) { $finishDocs = [bool]$config.swarm.finish_docs }
     if ($config.swarm.PSObject.Properties['finish_push']) { $finishPush = [bool]$config.swarm.finish_push }
+    if ($config.swarm.PSObject.Properties['finish_review']) { $finishReview = [bool]$config.swarm.finish_review }
+    if ($config.swarm.PSObject.Properties['finish_review_cycles']) { $reviewCycles = [int]$config.swarm.finish_review_cycles }
+    if ($config.swarm.PSObject.Properties['review_dir']) { $reviewDirBase = $config.swarm.review_dir }
 }
 $agentModel = "claude-opus-5"
 if ($config -and $config.claude_args) {
@@ -235,6 +241,94 @@ function Invoke-VerifyGate($task) {
     return $null
 }
 
+# REVIEW STAGE (part of finishing): review -> fix -> re-review, per touched repo.
+# Acceptance: ZERO blockers AND ZERO important findings (recommendations are allowed).
+# Runs claude agents synchronously in the MAIN checkout (swarm is done - exclusive).
+# Fix commits must survive the repo's FULL verify gate, else they are rolled back.
+# Returns $true when every repo passes; $false aborts docs/push for human attention.
+function Invoke-ReviewStage($tasks, $repoKeys) {
+    $template = Get-Content (Join-Path $scriptDir "ralph reference\review-prompt-template.md") -Raw -Encoding UTF8
+    $taskList = ($tasks | ForEach-Object { "  #$($_.id) [$($_.repo)] $($_.description)" }) -join "`n"
+    $taskIds = ($tasks | ForEach-Object { $_.id }) -join ","
+    $allPass = $true
+    foreach ($k in $repoKeys) {
+        $r = $reposMap.repos.$k
+        if (-not $r) { continue }
+        $startSha = $script:startShas[$r.gitRoot]
+        $headSha = (& git -C $r.gitRoot rev-parse HEAD 2>$null)
+        if (-not $startSha -or $startSha -eq $headSha) {
+            Write-Host "[r] Repo '$k': no changes this run - review skipped" -ForegroundColor DarkGray
+            continue
+        }
+        $range = "$startSha..HEAD"
+        $outDir = Join-Path $reviewDirBase $k
+        if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }
+        $refPath = Join-Path (Join-Path $scriptDir "ralph reference\project reference") $r.reference
+        $repoPass = $false
+        for ($cycle = 1; $cycle -le ($reviewCycles + 1); $cycle++) {
+            $stamp = Get-Date -Format "yyyy-MM-dd_HH-mm"
+            $verdictPath = Join-Path $outDir "verdict.json"
+            Remove-Item $verdictPath -Force -ErrorAction SilentlyContinue
+            $prompt = $template.Replace("{{REPO_NAME}}", $k).Replace("{{REPO_DESC}}", "$($r.description)").
+                Replace("{{REPO_PATH}}", $r.location).Replace("{{RANGE}}", $range).
+                Replace("{{RULES_PATH}}", $refPath).Replace("{{TASK_LIST}}", $taskList).
+                Replace("{{TASK_IDS}}", $taskIds).Replace("{{OUT_DIR}}", $outDir).Replace("{{STAMP}}", "$stamp-cycle$cycle")
+            $tempP = Join-Path $env:TEMP "ralph-review-$k.txt"
+            $prompt | Out-File $tempP -Encoding UTF8
+            Write-Host "[r] Repo '$k': review cycle $cycle (timeout 20 min)..." -ForegroundColor Cyan
+            $job = Start-Job -ScriptBlock {
+                param($dir, $pf, $model, $useKey)
+                Set-Location $dir
+                if (-not $useKey) { Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue }
+                & claude -p "@$pf" --model $model --dangerously-skip-permissions 2>&1 | Out-String
+            } -ArgumentList $r.location, $tempP, $agentModel, $useApiKeyCfg
+            $done = Wait-Job $job -Timeout 1200
+            if ($done) { Receive-Job $job | Out-String | Out-File (Join-Path $scriptDir "logs\review-$k-cycle$cycle-$stamp.txt") -Encoding UTF8 }
+            else { Stop-Job $job -ErrorAction SilentlyContinue }
+            Remove-Job $job -Force -ErrorAction SilentlyContinue
+            Remove-Item $tempP -ErrorAction SilentlyContinue
+            $verdict = $null
+            if (Test-Path $verdictPath) {
+                try { $verdict = Get-Content $verdictPath -Raw -Encoding UTF8 | ConvertFrom-Json } catch {}
+            }
+            if (-not $verdict) {
+                Write-Host "[!] Repo '$k': no valid verdict.json from reviewer - treating as FAILED review" -ForegroundColor Yellow
+                break
+            }
+            $bad = [int]$verdict.blockers + [int]$verdict.important
+            Write-Host "[r] Repo '$k' cycle ${cycle}: blockers=$($verdict.blockers) important=$($verdict.important) recommendations=$($verdict.recommendations)" -ForegroundColor $(if ($bad -eq 0) { 'Green' } else { 'Yellow' })
+            if ($bad -eq 0) { $repoPass = $true; break }
+            if ($cycle -gt $reviewCycles) { break }
+            # ---- FIX cycle: one agent addresses blockers+important, then must survive the gate
+            $preFixSha = (& git -C $r.gitRoot rev-parse HEAD 2>$null)
+            $fixPrompt = "You are the FIX agent after a code review. Read the newest CODE-REVIEW-*.md in '$outDir' (cycle $cycle). Fix ONLY the items listed under the Blockers (must fix) and Important (should fix) sections - surgically, nothing else. Respect the red lines in '$refPath'. You may run the repo's unit tests if any; do NOT run e2e/servers. Commit your fixes in '$($r.location)' with message 'fix: address code review findings (board $taskIds, cycle $cycle)'. If a finding is WRONG (the reviewer misread the code), do not change code for it - instead append a short justification section at the bottom of the review file explaining why, so the next review cycle can account for it."
+            $tempF = Join-Path $env:TEMP "ralph-reviewfix-$k.txt"
+            $fixPrompt | Out-File $tempF -Encoding UTF8
+            Write-Host "[r] Repo '$k': fix cycle $cycle (timeout 25 min)..." -ForegroundColor Cyan
+            $job = Start-Job -ScriptBlock {
+                param($dir, $pf, $model, $useKey)
+                Set-Location $dir
+                if (-not $useKey) { Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue }
+                & claude -p "@$pf" --model $model --dangerously-skip-permissions 2>&1 | Out-String
+            } -ArgumentList $r.location, $tempF, $agentModel, $useApiKeyCfg
+            $done = Wait-Job $job -Timeout 1500
+            if ($done) { Receive-Job $job | Out-String | Out-File (Join-Path $scriptDir "logs\reviewfix-$k-cycle$cycle-$stamp.txt") -Encoding UTF8 }
+            else { Stop-Job $job -ErrorAction SilentlyContinue }
+            Remove-Job $job -Force -ErrorAction SilentlyContinue
+            Remove-Item $tempF -ErrorAction SilentlyContinue
+            # fixes must keep the repo green: run the FULL repo gate; red -> roll back fixes
+            $gateErr = Invoke-VerifyGate ([pscustomobject]@{ id = 0; repo = $k })
+            if ($gateErr) {
+                & git -C $r.gitRoot reset --hard $preFixSha 2>&1 | Out-Null
+                Write-Host "[!] Repo '$k': fix cycle $cycle broke the gate - fixes ROLLED BACK. Review stage failed." -ForegroundColor Red
+                break
+            }
+        }
+        if (-not $repoPass) { $allPass = $false }
+    }
+    return $allPass
+}
+
 # FINISHING STEP - runs only when every task on the board is passes:true (all merges
 # survived the gate, so the integration branches are verified green = safe to publish).
 # 1) finish_docs: one docs agent per touched repo refreshes the ralph structure reference
@@ -247,6 +341,16 @@ function Invoke-FinishingStep {
     if ($repoKeys.Count -eq 0) { return }
     Write-Host ""
     Write-Host "==================== FINISHING STEP ====================" -ForegroundColor Cyan
+
+    if ($finishReview) {
+        $reviewOk = Invoke-ReviewStage $t $repoKeys
+        if (-not $reviewOk) {
+            Write-Host "[X] FINISHING ABORTED: review acceptance not met (blockers/important remain or reviewer failed)." -ForegroundColor Red
+            Write-Host "    Reports: $reviewDirBase\<repo>. Fix manually (or re-run) - docs/push were NOT executed." -ForegroundColor Red
+            Write-Host "========================================================" -ForegroundColor Cyan
+            return
+        }
+    }
 
     if ($finishDocs) {
         $taskList = ($t | ForEach-Object { "#$($_.id) [$($_.repo)] $($_.description)" }) -join "`n"
@@ -656,6 +760,17 @@ $script:failCounts    = @{}   # taskId -> informed retries used this session
 $script:fastFails     = 0     # consecutive instant (<60s) agent deaths -> environment problem guard
 $script:fatalEnv      = $false # exit 4 seen (credits/auth) -> abort the whole run immediately
 $script:conflictPending = @{} # taskId -> next spawn is a conflict-resolution retry (merge main in-worktree)
+# Snapshot each touched repo's HEAD at run start - the finishing review stage reviews
+# exactly what THIS run changed (startSha..HEAD).
+$script:startShas = @{}
+foreach ($t0 in (Read-Tasks)) {
+    if ($t0.PSObject.Properties['repo'] -and $t0.repo -and $reposMap.repos.$($t0.repo)) {
+        $gr0 = $reposMap.repos.$($t0.repo).gitRoot
+        if (-not $script:startShas.ContainsKey($gr0)) {
+            $script:startShas[$gr0] = (& git -C $gr0 rev-parse HEAD 2>$null)
+        }
+    }
+}
 $stats = @{ merged = 0; conflicts = 0; skipped = 0; failed = 0; requeued = 0; timeoutRequeues = 0; failRetries = 0; verifyReverts = 0; conflictRequeues = 0 }
 $freeSlots = New-Object System.Collections.ArrayList
 1..$agents | ForEach-Object { [void]$freeSlots.Add($_) }
