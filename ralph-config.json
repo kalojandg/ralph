@@ -29,7 +29,7 @@
     "agents": 5,
     "worktree_root": "",
     "keep_windows": false,
-    "window_style": "Minimized",
+    "window_style": "Normal",
     "max_timeout_requeues": 4,
     "max_fail_retries": 4,
     "verify_enabled": true,
