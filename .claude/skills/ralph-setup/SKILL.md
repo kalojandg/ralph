@@ -27,7 +27,7 @@ RALPH_ROOT = директорията на ralph репото (тук: `D:\Downl
 
 ## 3. Предстартов чеклист (платен с кръв — не прескачай)
 1. **ЗЕЛЕН BASELINE**: пълният suite на ЕКСКЛУЗИВЕН порт — нула работещи агенти, нула чужди сървъри (`reuseExistingServer` иначе мери грешно приложение). Червените се оправят ПРЕДИ board (фосилите иначе горят retry бюджети). Запиши колко трае → сверка с `swarm.verify_timeout_min` (config, сега 45 мин).
-2. Integration branch: checked out + ЧИСТ (`git status --porcelain` празен) — мръсен checkout = MERGE SKIPPED на всичко.
+2. Integration branch: checked out + ЧИСТ (`git status --porcelain` празен) — мръсен checkout = MERGE SKIPPED на всичко. **И ЗАДЪЛЖИТЕЛНО ПОПИТАЙ ПОТРЕБИТЕЛЯ**: „В момента сте на клон '<current>' и агентите ще merge-ват в '<mainBranch>' — да?"; при „не" → създай/checkout-ни посочения от него клон И обнови `repos.json → mainBranch`. Board към прод клон (main/master/develop) само след изрично „да" — никога по подразбиране.
 3. `.gitignore` покрива runtime артефактите (node_modules, playwright-report, test-results, coverage) — verify команди, оставящи untracked файлове, правят следващите merges "dirty-skipped".
 4. Env файлове: untracked `.env*` се копират в worktrees от оркестратора — провери, че са в location root-а.
 5. Среда: `claude --version` (моделите в config-а се поддържат?), git версия (worktree-ите искат ≥2.5; `--show-current` иска ≥2.22 — оркестраторът ползва rev-parse), диск за worktrees (~размер на репото × агенти).
