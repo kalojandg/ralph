@@ -4,7 +4,7 @@
   "_use_api_key_comment": "false (default) = агентите МАХАТ ANTHROPIC_API_KEY от env-а си и вървят на абонамента (OAuth login). true = ползват API ключа (кредити). Сет-нат ANTHROPIC_API_KEY иначе тихо отвлича билинга към кредити и игнорира Max плана.",
   "claude_args": [
     "--output-format", "text",
-    "--model", "claude-opus-4-8",
+    "--model", "claude-opus-5",
     "--dangerously-skip-permissions"
   ],
   "prerequisite_steps": {

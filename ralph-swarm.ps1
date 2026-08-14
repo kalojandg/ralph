@@ -97,7 +97,7 @@ if ($config -and $config.swarm) {
     if ($config.swarm.PSObject.Properties['finish_docs']) { $finishDocs = [bool]$config.swarm.finish_docs }
     if ($config.swarm.PSObject.Properties['finish_push']) { $finishPush = [bool]$config.swarm.finish_push }
 }
-$agentModel = "claude-opus-4-8"
+$agentModel = "claude-opus-5"
 if ($config -and $config.claude_args) {
     $mi = [array]::IndexOf($config.claude_args, "--model")
     if ($mi -ge 0 -and $mi -lt $config.claude_args.Count - 1) { $agentModel = $config.claude_args[$mi + 1] }

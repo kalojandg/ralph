@@ -32,7 +32,7 @@ if (Test-Path $configFile) {
 }
 
 # Get model from config or use default
-$model = "claude-opus-4-8"
+$model = "claude-opus-5"
 if ($config -and $config.claude_args) {
     $modelIndex = [array]::IndexOf($config.claude_args, "--model")
     if ($modelIndex -ge 0 -and $modelIndex -lt $config.claude_args.Count - 1) {
