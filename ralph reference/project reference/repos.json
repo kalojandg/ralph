@@ -4,10 +4,34 @@
   "_reference_base": "Всички `reference` пътища са спрямо тази папка (ralph/ralph reference/project reference/).",
   "_worktree_fields": "gitRoot = коренът на git репото (оттам се прави `git worktree add`). workSubdir = относителен път ВЪТРЕ в репото до работната директория (празен = коренът). mainBranch = integration branch — ⚠ РАЗЛИЧЕН per repo: hero-sheet e 'master', останалите 'main'.",
   "_verify_field": "verify = POST-MERGE VERIFICATION GATE (swarm). Масив от команди в `location` СЛЕД всеки merge. Зелено → passes:true. Червено/timeout → reset --hard + информиран retry. Липсва/празен → няма gate. Бързите команди първи. Командите НЕ трябва да оставят untracked файлове. ⚠ ПОРТ 45279 е СПОДЕЛЕН от inventory/hero (и spells baseURL) — гейтовете са последователни (ок), но НЕ оставяй ръчен 'npm run serve' да върви по време на swarm run (reuseExistingServer ще тества ГРЕШНОТО приложение).",
-  "version": 5,
-  "project": "DnD apps fleet: shared-inventory, hero-sheet, monk_combat_app, spell_app",
+  "version": 6,
+  "project": "DnD apps fleet: shared-inventory, hero-sheet, monk_combat_app, spell_app + party-up (greenfield монорепо)",
 
   "repos": {
+    "partyup": {
+      "location": "D:\\Downloads\\monk\\party-up",
+      "gitRoot": "D:\\Downloads\\monk\\party-up",
+      "workSubdir": "",
+      "mainBranch": "main",
+      "reference": "party-up-structure.md",
+      "description": "TTRPG matchmaking (pull модел). МОНОРЕПО: backend/ (.NET 10 + Hot Chocolate GraphQL + EF/Npgsql, слънце PartyUp.slnx — .NET 10 slnx формат!), frontend/ (Expo SDK 57, TS + Expo Router + Apollo), contracts/ (schema.graphql — експорт от BE, FE само чете). Тестове: xUnit + Testcontainers (ИСКА работещ Docker Desktop!), jest-expo/RNTL. Зоните BE/FE/contracts се управляват от lanes, не от отделни repos записи.",
+      "verify": [
+        "npm --prefix frontend install --no-audit --no-fund",
+        "npm --prefix frontend run typecheck",
+        "npm --prefix frontend test",
+        "dotnet test backend/PartyUp.slnx --nologo -v q"
+      ],
+      "commands": {
+        "be_test": "dotnet test backend/PartyUp.slnx   (unit + Testcontainers Postgres — Docker Desktop трябва да върви)",
+        "be_unit_only": "dotnet test backend/tests/PartyUp.UnitTests   (бърз, без Docker)",
+        "fe_test": "npm --prefix frontend test   (jest-expo)",
+        "fe_typecheck": "npm --prefix frontend run typecheck",
+        "schema_export": "cd backend && dotnet run --project src/PartyUp.Api -- schema export --output ../../../contracts/schema.graphql   (пътят е спрямо проекта!)",
+        "be_dev": "dotnet run --project backend/src/PartyUp.Api   (https://localhost:5001 — НЕ от агент)",
+        "fe_dev": "npm --prefix frontend run web   (Expo dev server 8081 — НЕ от агент)"
+      }
+    },
+
     "inventory": {
       "location": "D:\\Downloads\\monk\\shared-inventory",
       "gitRoot": "D:\\Downloads\\monk\\shared-inventory",
