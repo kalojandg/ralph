@@ -94,12 +94,14 @@ if ($config -and $config.swarm -and $config.swarm.PSObject.Properties['escalate_
 $finishDocs = $true
 $finishPush = $true
 $finishReview = $true
+$finishIndex = $true
 $reviewCycles = 2
 $reviewDirBase = "C:\CodeReview"
 if ($config -and $config.swarm) {
     if ($config.swarm.PSObject.Properties['finish_docs']) { $finishDocs = [bool]$config.swarm.finish_docs }
     if ($config.swarm.PSObject.Properties['finish_push']) { $finishPush = [bool]$config.swarm.finish_push }
     if ($config.swarm.PSObject.Properties['finish_review']) { $finishReview = [bool]$config.swarm.finish_review }
+    if ($config.swarm.PSObject.Properties['finish_index']) { $finishIndex = [bool]$config.swarm.finish_index }
     if ($config.swarm.PSObject.Properties['finish_review_cycles']) { $reviewCycles = [int]$config.swarm.finish_review_cycles }
     if ($config.swarm.PSObject.Properties['review_dir']) { $reviewDirBase = $config.swarm.review_dir }
 }
@@ -450,6 +452,23 @@ Do, in this order:
                 $tail = $pushOut.Trim(); if ($tail.Length -gt 200) { $tail = $tail.Substring(0, 200) }
                 Write-Host "[!] Push FAILED for '$($pushRoots[$root])': $tail" -ForegroundColor Yellow
             }
+        }
+    }
+
+    # GitNexus re-index: ONCE, at the very end, FIRE-AND-FORGET (analyze can run 30+ min
+    # on big repos and is banned mid-run - the board is done, so a detached refresh means
+    # the NEXT board starts with a fresh code graph at zero wall-clock cost here.
+    # --no-install: fail fast into the log if gitnexus is not set up for the repo.
+    if ($finishIndex) {
+        foreach ($k in $repoKeys) {
+            $r = $reposMap.repos.$k
+            if (-not $r) { continue }
+            $ts = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
+            $logF = Join-Path $scriptDir "logs\gitnexus-$k-$ts.txt"
+            # Minimized (not Hidden): the taskbar console IS the progress indicator -
+            # it disappears when indexing completes. Log keeps the full output.
+            Start-Process powershell.exe -ArgumentList "-NoProfile", "-Command", "`$host.UI.RawUI.WindowTitle = 'GitNexus re-index: $k'; Set-Location '$($r.location)'; npx --no-install gitnexus analyze *> '$logF'" -WindowStyle Minimized | Out-Null
+            Write-Host "[f] GitNexus re-index launched for '$k' (detached console in taskbar; gone = done; log: logs\gitnexus-$k-$ts.txt)" -ForegroundColor Cyan
         }
     }
     Write-Host "========================================================" -ForegroundColor Cyan
