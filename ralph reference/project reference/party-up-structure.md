@@ -110,6 +110,28 @@ cd backend && dotnet run --project src/PartyUp.Api -- schema export --output ../
 2. **Vertical slice архитектура (решение на board-а):** всеки use case = папка `Features/<Област>/<UseCase>/` (handler + HC type extension). Регистрация през source generator (`AddTypes()`) + IEndpointModule reflection котва — Program.cs се пипа САМО от таскове 1 и 26. Feature таск НЕ добавя entities (моделът е изцяло в таск 1), НЕ пипа csproj/Program.cs/Domain/Common.
 3. **FE codegen:** src/gql/ е GITIGNORED, генерира се в typecheck/test скриптовете — генерираният код никога не се комитва (нулеви конфликти между паралелни FE таскове). Locale ns файловете и route placeholder-ите се създават ВСИЧКИ от таск 3 — фича таскът пълни само своите.
 
+## §7б. REVIEW КРИТЕРИИ (за finishing review stage — ревюърът оценява diff-а СПРЯМО ТЯХ)
+
+**BE (C# / Hot Chocolate):**
+1. Vertical slice дисциплина: нова логика живее в `Features/<Област>/<UseCase>/`; фича diff НЕ пипа Domain/Common/Program.cs/csproj (изкл. таскове 1/26). Нарушение = Блокер.
+2. Зависимости навътре: slice не reference-ва типове на друг slice директно (само през Domain модела); без „сървиси-чували"; интерфейс само при реална подмяна (§2а.3) — двойка IXxx/Xxx по инерция = Важно.
+3. Read дисциплина (§2а.4): query handler без AsNoTracking/Select проекция = Важно; вложена колекция без DataLoader (N+1) = Важно.
+4. Result pattern (§4.5): очакван провал като exception = Блокер; raw exception, стигащ до GraphQL error без мапване = Блокер.
+5. Тестове: нов use case без unit тест = Важно; персистенция без integration (Testcontainers) тест = Важно.
+
+**FE (Expo / Apollo):**
+6. Контрактът е закон: ръчно писани типове, дублиращи schema.graphql (вместо codegen от src/gql) = Важно; редакция на contracts/ от FE = Блокер.
+7. Server state само в Apollo кеша, UI state само в Zustand (§2) — смесване = Важно.
+8. i18n: хардкоднат UI низ = Блокер (§4.6); ключ в грешен namespace = Препоръка.
+9. Форми през react-hook-form; тестове с RNTL v14 async render (`await render`) — old-style = Важно (флейки).
+
+**Общи (проверявай ПЪРВО):**
+10. Секрети в diff-а (connection strings, client secrets, токени) = БЛОКЕР, винаги.
+11. Несъответствие код ↔ contracts/schema.graphql (поле/тип в кода, липсващо в контракта или обратно) = Блокер до таск 41, Важно след него.
+12. Мъртъв код, закоментирани блокове, TODO без референция = Препоръка.
+
+**Калибровка на приоритетите:** Блокер = нарушена червена линия (§4) / счупена логика / секрет. Важно = нарушен патърн (§2а/§8а) с реален риск. Препоръка = стил и бъдещи подобрения. НЕ инфлирай: стилово мнение, маскирано като Важно, съсипва acceptance цикъла.
+
 ## §8. Правила за декомпозиция (за /ralph-plan)
 
 - Lanes по зони: `contracts/BE` тасковете (C# + експорт) са СЕРИЙНИ помежду си (schema.graphql е отрова); FE тасковете се паралелизират срещу ЗАМРАЗЕН контракт.

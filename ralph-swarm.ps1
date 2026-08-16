@@ -264,6 +264,15 @@ function Invoke-ReviewStage($tasks, $repoKeys) {
         $outDir = Join-Path $reviewDirBase $k
         if (-not (Test-Path $outDir)) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }
         $refPath = Join-Path (Join-Path $scriptDir "ralph reference\project reference") $r.reference
+        # Rules resolution: a rules/ folder IN THE REPO wins (out-of-the-box on any repo,
+        # e.g. an employer's); the ralph structure reference is the fallback rulebook.
+        $rulesDir = Join-Path $r.location "rules"
+        $hasRules = (Test-Path $rulesDir) -and (@(Get-ChildItem $rulesDir -File -ErrorAction SilentlyContinue).Count -gt 0)
+        if ($hasRules) {
+            $rulesInstr = "The repo has a 'rules' folder at '$rulesDir' - READ EVERY file in it; those are the BINDING review rules. Also consult the architecture reference at '$refPath' for repo-specific red lines."
+        } else {
+            $rulesInstr = "The rulebook is the architecture reference at '$refPath' - read it fully and evaluate against it (especially the red lines and review criteria sections)."
+        }
         $repoPass = $false
         for ($cycle = 1; $cycle -le ($reviewCycles + 1); $cycle++) {
             $stamp = Get-Date -Format "yyyy-MM-dd_HH-mm"
@@ -271,7 +280,7 @@ function Invoke-ReviewStage($tasks, $repoKeys) {
             Remove-Item $verdictPath -Force -ErrorAction SilentlyContinue
             $prompt = $template.Replace("{{REPO_NAME}}", $k).Replace("{{REPO_DESC}}", "$($r.description)").
                 Replace("{{REPO_PATH}}", $r.location).Replace("{{RANGE}}", $range).
-                Replace("{{RULES_PATH}}", $refPath).Replace("{{TASK_LIST}}", $taskList).
+                Replace("{{RULES_INSTRUCTION}}", $rulesInstr).Replace("{{TASK_LIST}}", $taskList).
                 Replace("{{TASK_IDS}}", $taskIds).Replace("{{OUT_DIR}}", $outDir).Replace("{{STAMP}}", "$stamp-cycle$cycle")
             $tempP = Join-Path $env:TEMP "ralph-review-$k.txt"
             $prompt | Out-File $tempP -Encoding UTF8
@@ -301,7 +310,7 @@ function Invoke-ReviewStage($tasks, $repoKeys) {
             if ($cycle -gt $reviewCycles) { break }
             # ---- FIX cycle: one agent addresses blockers+important, then must survive the gate
             $preFixSha = (& git -C $r.gitRoot rev-parse HEAD 2>$null)
-            $fixPrompt = "You are the FIX agent after a code review. Read the newest CODE-REVIEW-*.md in '$outDir' (cycle $cycle). Fix ONLY the items listed under the Blockers (must fix) and Important (should fix) sections - surgically, nothing else. Respect the red lines in '$refPath'. You may run the repo's unit tests if any; do NOT run e2e/servers. Commit your fixes in '$($r.location)' with message 'fix: address code review findings (board $taskIds, cycle $cycle)'. If a finding is WRONG (the reviewer misread the code), do not change code for it - instead append a short justification section at the bottom of the review file explaining why, so the next review cycle can account for it."
+            $fixPrompt = "You are the FIX agent after a code review. Read the newest CODE-REVIEW-*.md in '$outDir' (cycle $cycle). Fix ONLY the items listed under the Blockers (must fix) and Important (should fix) sections - surgically, nothing else. $rulesInstr You may run the repo's unit tests if any; do NOT run e2e/servers. Commit your fixes in '$($r.location)' with message 'fix: address code review findings (board $taskIds, cycle $cycle)'. If a finding is WRONG (the reviewer misread the code), do not change code for it - instead append a short justification section at the bottom of the review file explaining why, so the next review cycle can account for it."
             $tempF = Join-Path $env:TEMP "ralph-reviewfix-$k.txt"
             $fixPrompt | Out-File $tempF -Encoding UTF8
             Write-Host "[r] Repo '$k': fix cycle $cycle (timeout 25 min)..." -ForegroundColor Cyan
