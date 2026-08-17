@@ -34,6 +34,75 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #3 — feat(fe): wire Apollo, codegen, i18n, NativeWind theme shell, tab navigation and test utils
+
+**Репо:** partyup (frontend/) · **Бранч:** ralph/task-3 · **Commit:** `031dc52`
+
+### Какво е направено
+
+**Codegen (contract-first).** `frontend/codegen.ts` с client-preset срещу `../contracts/schema.graphql`; изходът `src/gql/` е **gitignored** и се регенерира от `npm run codegen`, който виси пред `typecheck` и `test`. Така паралелните FE таскове никога не комитват генериран код (§7а.3). Семето на кодгена е `lib/session.ts` с `me` заявката — client-preset иска поне един документ.
+
+**Apollo (`lib/apollo.ts`).** HttpLink към `/graphql` с `credentials: 'include'` (cookie auth), GraphQLWsLink през graphql-ws, `split` по `isSubscriptionOperation`. `createClient` резолвва WebSocket имплементацията ВЕДНАГА и хвърля, ако няма такава — затова ws линкът се създава само при наличен `WebSocket` (статичният web export и jest нямат). API базата е една константа в `lib/config.ts`.
+
+**i18n (`lib/i18n.ts`).** react-i18next + expo-localization; default-ът е локалът на устройството, ръчният override живее в ui-store-а. Създадени са ВСИЧКИ 15 namespace-а × bg/en (`common, auth, authLinking, profile, tables, tableForm, tableSettings, board, showcase, candidacy, contact, chat, lifecycle, lifecycleActions, push`) — празни `{}` освен `common` (бутони, състояния, общи грешки, таб етикети, заглавия на екрани). Индексът ги import-ва статично, значи фича таскът пипа САМО своя json. Смяната на езика създава нова i18next инстанция вместо `changeLanguage` — init-ът с вградени ресурси е синхронен, тестовете стават детерминистични. Добавен е `domainErrorMessage(t, i18nKey)` за конвенцията „DomainError.i18nKey → човешки текст, никога `message`".
+
+**Тема (Е.9).** NativeWind v4 wiring: `babel.config.js` (jsxImportSource + `nativewind/babel`), `metro.config.js` (`withNativeWind`), `tailwind.config.js` (`darkMode: 'class'` + surface/ink/brand токени), `@tailwind` директивите в `src/global.css`. Режимът light/dark/system живее в `lib/ui-store.ts` (Zustand + persist през localStorage адаптер с fallback в паметта — БЕЗ нов пакет) и се пуска в NativeWind през `colorScheme.set()` от `lib/theme.tsx`.
+
+**Навигация.** `app/_layout.tsx` = провайдъри (Apollo + i18n + тема) + `<AuthGate>` + Stack; `app/index.tsx` пренасочва към борда. `(tabs)/` с `board.tsx` („Борд"), `tables.tsx` („Моите маси"), `profile.tsx` („Профил"); `login.tsx` е извън табовете. `lib/auth-gate.tsx` е СТЪБ (пуска всичко) — таск 27 го запълва в същия файл, без да пипа `_layout.tsx`. Създадени са всички placeholder route-ове (table/create, table/[id]/{index,settings,lifecycle}, showcase/{index,[id]}, chat/{index,[chatId]}, candidacy/[id], settings, notifications, refound-invite) през един `<PlaceholderScreen name="..." />` — заглавието е i18n ключ, не низ.
+
+**Test utils.** `src/test-utils/render.tsx` → `renderWithProviders(ui, { mocks, link, language, themeMode })` = Apollo MockedProvider + i18n (bg по подразбиране) + тема; `subscription.ts` → `createSubscriptionMock()` върху `MockSubscriptionLink` за чата/известията. Jest мапва `*.css` към празен модул (metro го компилира, jest — не).
+
+**Чистка.** Изтрити: `explore.tsx`, `animated-icon*`, `hint-row`, `web-badge`, `app-tabs*`, `external-link`, `ui/collapsible`, `themed-text/view`, `constants/theme.ts`, `hooks/use-color-scheme*`, `hooks/use-theme` — темизацията вече е NativeWind. `app.json` се казва Party Up (беше „frontend").
+
+### TDD
+
+RED първо: 4 спека паднаха с „Could not locate module @/lib/ui-store". GREEN след имплементацията. Тестовете: таб барът с bg етикети и превключване на en (`renderRouter` срещу РЕАЛНАТА `src/app` директория — хваща счупен root layout), тогълът light→dark→system в ui-store, три placeholder route-а, и ремонтираният смоук през `renderWithProviders` с Apollo мок на `me`.
+
+### Верификация
+
+- `npm --prefix frontend run typecheck` — зелено (codegen + `tsc --noEmit`, 0 грешки)
+- `npm --prefix frontend test` — зелено, 4 suite-а / 9 теста, ~4 сек
+- Червени линии: contracts/ и backend/ непипнати; никакви секрети; тестовете не пипат мрежа; dev сървъри не са пускани; `src/gql/` и node_modules не са комитнати; нови пакети НЯМА (`package-lock.json` непроменен)
+
+### Бележки за следващите
+
+- Тестовете рендерират през `renderWithProviders` — инфраструктурен файл, фича таск го КОНСУМИРА, не го преправя (§4.7).
+- `lib/auth-gate.tsx` е единственият файл от тази зона, който таск 27 е упълномощен да редактира.
+- Всеки фича таск попълва САМО своя locale json — индексът вече знае namespace-а.
+
+
+## Таск 2 — feat(contracts): design the complete v0.1 GraphQL schema as the frozen BE-FE contract
+
+**Репо:** partyup (`contracts/`) · **Branch:** `ralph/task-2` · **Commit:** `2f6aa31`
+
+### Какво е направено
+
+- **`contracts/schema.graphql`** — ръчно написаната целева схема за целия v0.1 разрез (party-up.md секция Е, точки 1-9 + Web Push):
+  - **18 query:** `hello`, `me`, `linkedProviders`, `linkProviderUrl`, `myProfile`, `myListing`, `myTables`, `lfgBoard(filter)`, `tablesShowcase(filter)`, `table(id)`, `myTableCandidacies`, `candidacy(id)`, `groupDecision(id)`, `staleDecisions`, `myChats`, `chat(id)`, `notifications(unreadOnly)`, `vapidPublicKey`.
+  - **25 mutation:** `logout`, `unlinkProvider`, `updateProfile`, `createTable`, `updateTableSettings`, `setTableListing`, `publishMyListing`/`unpublishMyListing`, `pullCandidate`, `castVote`, `openContactChat`, `submitVerdict`, `snoozeDecision`, `sendMessage`, `startTrial`/`startDecidingPhase`/`finalizeDeciding`/`stayOrLeave`, `leaveTable`, `proposeKick`, `refoundTable`/`acceptRefoundInvite`, `markNotificationRead`, `pushSubscribe`/`pushUnsubscribe`.
+  - **2 subscription:** `onMessage(chatId)`, `onNotification`.
+  - **Hot Chocolate конвенции:** camelCase полета, `SCREAMING_SNAKE` enum стойности, скалари `UUID` (Guid) и `DateTime` (DateTimeOffset), `xxx(input: XxxInput!): XxxPayload!` с `errors: [XxxError!]`, където `XxxError` е union (както ги генерира `AddMutationConventions()` дори при един error тип).
+  - **Грешки по Result pattern-а (решение 13.08):** `interface Error { message }` + `type DomainError implements Error { message, code, i18nKey }` — FE рендерира `t(error.i18nKey)`, `message` никога не стига до UI.
+  - **Домейнът е огледален на таск 1:** `ExperienceLevel`, `GameFormat`, `TableStatus`, `AdmissionMode`, `MembershipRole`, `CandidacyStatus`, `DecisionTopic`, `DecisionStatus`, `ChatType`, `AuthProvider`; типове `User`/`CurrentUser`/`UserProfile`, `PlayerListing`, `Table`, `TableMembership`, `Candidacy`, `GroupDecision` (с **явните** гласове + `pendingVoters` + `excludedUser`), `Vote`, `Chat`, `Message`, `Notification`, `PushSubscription`, `LinkedProvider`.
+- **`contracts/DESIGN-NOTES.md`** — карта operation→таск (BE + FE консуматор за всичките 42 таска), конвенциите, продуктовите решения зад схемата и съзнателните опростявания.
+
+### Ключови решения
+
+- **Записана е екзепцията от §3.1** (амендмънт §7а.1): таск 2 е ЕДИНСТВЕНАТА упълномощена ръчна редакция; между 2 и 41 никой не пипа `contracts/`; таск 41 затваря екзепцията с реалния HC експорт.
+- **`UUID` вместо `ID`** — `[ID]` в HC би включило base64 relay кодиране, което v0.1 не иска.
+- **`[UseMutationConvention(PayloadFieldName = "...")]`** е документирано като задължително там, където data полето на payload-а не съвпада с camelCase на върнатия C# тип (`success`, `linkedProviders`, `pushSubscription`) — иначе таск 41 намира drift.
+- **Прагът 4 НЕ е в схемата** — константа в `Common`; `pullCandidate` връща `Candidacy.decision = null` при founder fast-path, FE чете резултата, не преизчислява правилото.
+- **Съзнателни опростявания:** без пагинация/Relay connections, без `node(id)`, `String` (не enum) за език и система, място = описание (не гео), без наличностни решетки, без „покани конкретен играч" (моделът е PULL), `Notification.payloadJson` като JSON низ.
+- **`hello` остава** в схемата, докато интеграционният smoke на таск 1 го ползва (иначе §7б.11 гърми).
+
+### Верификация
+
+- `graphql.buildSchema` парсва чисто; `validateSchema` → **0 грешки**.
+- Скриптова проверка на конвенциите: всичките 25 мутации имат коректна `XxxInput`/`XxxPayload!`/`errors: [XxxError!]` тройка; всичките 25 error union-а сочат `DomainError`. **0 нарушения.**
+- `dotnet test backend/tests/PartyUp.UnitTests` → **1/1 passed** (таскът не пипа код).
+- Обхват: САМО `contracts/schema.graphql` + `contracts/DESIGN-NOTES.md`. Никакви секрети, никакви runtime артефакти.
+
+
 ## Task #650 — test(bases): add e2e fixture and accordion spec for the Bases tab
 
 **Repo:** inventory (shared-inventory) · **Lane:** bases-e2e · **Commit:** 144d293
@@ -941,6 +1010,8 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
 
 
 

@@ -19,8 +19,10 @@
         "npm --prefix frontend install --no-audit --no-fund",
         "npm --prefix frontend run typecheck",
         "npm --prefix frontend test",
-        "dotnet test backend/PartyUp.slnx --nologo -v q"
+        "dotnet test backend/PartyUp.slnx --nologo -v q",
+        "git checkout -- frontend/package-lock.json"
       ],
+      "_verify_note": "Последната команда е ЗАДЪЛЖИТЕЛНА хигиена: npm install мутира package-lock.json (optional deps churn) в ГЛАВНИЯ checkout -> мръсен checkout -> MERGE SKIPPED за всички следващи таскове (инцидентът от 16.08, таскове 27/28). Гейтът чисти след себе си. Комитнатият lock остава source of truth (агентите го комитват от worktrees).",
       "commands": {
         "be_test": "dotnet test backend/PartyUp.slnx   (unit + Testcontainers Postgres — Docker Desktop трябва да върви)",
         "be_unit_only": "dotnet test backend/tests/PartyUp.UnitTests   (бърз, без Docker)",
