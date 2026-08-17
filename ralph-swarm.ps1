@@ -33,6 +33,19 @@ if (-not $claudeCmd) { Write-Host "[X] FATAL: 'claude' CLI not found on PATH" -F
 $gitCmd = Get-Command git -ErrorAction SilentlyContinue
 if (-not $gitCmd) { Write-Host "[X] FATAL: 'git' not found on PATH" -ForegroundColor Red; exit 1 }
 
+# Orphan agents from a previous (killed) session would fight this run for the same
+# worktrees - a new spawn either deletes the worktree under them or continues alongside
+# them. Refuse to start until they are closed.
+$orphans = @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -match 'ralph-iteration\.ps1' })
+if ($orphans.Count -gt 0) {
+    $pids = ($orphans | ForEach-Object { $_.ProcessId }) -join ', '
+    Write-Host "[X] FATAL: $($orphans.Count) agent process(es) from a previous session still running (pids: $pids)." -ForegroundColor Red
+    Write-Host "    Close those agent windows (or: Stop-Process -Id $pids), then re-run." -ForegroundColor Red
+    Write-Host "    Their worktrees are PRESERVED - the new run will continue their work, not redo it." -ForegroundColor Yellow
+    exit 1
+}
+
 $config = $null
 if (Test-Path $configFile) { $config = Get-Content $configFile -Raw -Encoding UTF8 | ConvertFrom-Json }
 
@@ -527,9 +540,15 @@ function Start-AgentForTask($task, $slot) {
     $branchOk = $false
     & git -C $gitRoot rev-parse --verify --quiet $branchName 2>$null | Out-Null
     if ($LASTEXITCODE -eq 0) { $branchOk = $true }
-    $resume = (Test-Path $retryCtx) -and (Test-Path $wtPath) -and $branchOk
+    # Continuation whenever the predecessor's worktree+branch survive - INCLUDING runs
+    # interrupted mid-flight (Ctrl+C), where no retry context was ever written: the work
+    # in the worktree is real, so write an interruption note and let the agent continue.
+    $resume = (Test-Path $wtPath) -and $branchOk
+    if ($resume -and -not (Test-Path $retryCtx)) {
+        Save-RetryContext $task.id "resume" "INTERRUPTED RUN - the previous session was stopped mid-task (no failure recorded). The worktree is PRESERVED with whatever state the previous agent left (committed and/or uncommitted). Inspect with git status / git log / git diff and continue from where it stopped."
+    }
     if ($resume) {
-        Write-Host "[i] Task #$($task.id): CONTINUATION retry - reusing predecessor's worktree/branch (fix, don't regenerate)" -ForegroundColor Yellow
+        Write-Host "[i] Task #$($task.id): CONTINUATION - reusing existing worktree/branch (fix/continue, don't regenerate)" -ForegroundColor Yellow
     } else {
         # clean leftovers from previous sessions, then (re)create branch off the integration branch
         if (Test-Path $wtPath) {
