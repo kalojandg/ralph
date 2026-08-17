@@ -44,7 +44,7 @@
                           "action":  "dotnet test backend/PartyUp.slnx — всичко зелено (Docker Desktop трябва да върви!). npm --prefix frontend test + typecheck — непипнати, зелени. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  2,
@@ -1122,7 +1122,7 @@
                           "action":  "npm --prefix frontend run typecheck \u0026\u0026 npm --prefix frontend test — зелени. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  28,
@@ -1164,7 +1164,7 @@
                           "action":  "typecheck + test зелени. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  29,

@@ -34,6 +34,142 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## [2026-08-17 12:35] - Task #1: feat(be): add domain model, DbContext, Result primitives, Identity external auth, GraphQL module registration and test fixtures
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** Фундаментът на бекенда. Този таск изяжда всички отровни BE файлове (Program.cs, csproj, Domain/, Common/), за да могат 20+ feature таска после да вървят паралелно като вертикални slice-ове, без никой от тях да пипа споделен файл. Предишният опит беше прекъснат след успешния commit, но преди записа на result файла — тази итерация продължи от съществуващото състояние (запази всичко, ре-верифицира, затвори таска), вместо да пренаписва.
+
+**What was done:**
+- RED: спекове за Result/DomainError и FromResult мапинга (UnitTests/Common/), за ApiFactory + { hello } през Testcontainers Postgres, за TestAuthHandler (userId header → сесия) и за домейн модела (seed AppUser+UserProfile+Table+Membership → прочитане, доказва модела + EnsureCreated) — червени по правилната причина.
+- GREEN: пакетите (HotChocolate.Subscriptions.InMemory, HotChocolate.Types.Analyzers, Lib.Net.Http.WebPush; Mvc.Testing в IntegrationTests); Domain/ — пълният v0.1 модел (13 entity-та + 9 enum-а, feature таск НЕ добавя entities); Data/PartyUpDbContext — DbSet-ове + fluent конфиг (List<string> → text[], read индекси, уникален (DecisionId, VoterUserId): вотът е един на човек); Common/ — Results (Result, Result<T>, DomainError{Code, I18nKey} + фабриките), GraphQL/MutationResult.FromResult (Result → typed GraphQL error), Notifications/INotifier + DefaultNotifier, AdmissionThreshold=4 като константа, IEndpointModule reflection механиката; Program.cs — DbContext, IdentityCore (само external), OAuth схемите, CORS с AllowCredentials, AddGraphQLServer().AddPartyUpTypes().AddMutationConventions().AddInMemorySubscriptions(), MapPartyUpEndpoints, RunWithGraphQLCommandsAsync (schema export остава жив); appsettings — публичните client ID-та + ПРАЗНИ secret placeholder-и; Support/ фикстурите.
+
+**Findings (важни за downstream таскове):**
+- Генерираният метод е `AddPartyUpTypes()`, не `AddTypes()` (Hot Chocolate именува по асембли), а генераторът не емитва НИЩО при нула анотирани типа → фундаментът регистрира DomainError през [ObjectType<T>], за да компилира Program.cs.
+- Hot Chocolate инжектира `global using GreenDonut;`, чийто Result<T> се сблъсква с нашия → премахнато с MSBuild target, иначе всеки slice щеше да удари CS0104.
+- OAuth провайдър с празен секрет чупи ВСЯКА заявка (remote handler-ите са IAuthenticationRequestHandler) → неконфигурираните провайдъри се пропускат, не се регистрират.
+- Контрактът на таск 2 беше вече мърднат → SessionFormat/TableRole преименувани на GameFormat/MembershipRole; останалото съвпада поле по поле.
+
+**Verification:**
+- `dotnet test backend/PartyUp.slnx` → 29/29 pass (20 unit + 9 integration, вкл. двата заварени smoke теста)
+- `npm --prefix frontend run typecheck` → clean · `npm --prefix frontend test` → 1/1 pass (frontend/ непипнат)
+- Работно дърво чисто, никакви останали контейнери/слушащи процеси; contracts/ не е докосван; никакви секрети в git (секретите са празни placeholder-и).
+
+**Files modified:**
+- backend/src/PartyUp.Api/{Program.cs, PartyUp.Api.csproj, appsettings.json, appsettings.Development.json}
+- backend/src/PartyUp.Api/Domain/** (AppUser, UserProfile, PlayerListing, Table, TableMembership, Candidacy, GroupDecision, Vote, Chat, Message, Notification, PushSubscription, Enums)
+- backend/src/PartyUp.Api/Data/PartyUpDbContext.cs
+- backend/src/PartyUp.Api/Common/** (Results, GraphQL, Notifications, Endpoints, CurrentUser, FrontendOptions, TableRules)
+- backend/src/PartyUp.Api/GraphQL/TypeModule.cs
+- backend/tests/PartyUp.UnitTests/{Support/TestSchema.cs, Common/*}
+- backend/tests/PartyUp.IntegrationTests/{Support/*, Foundation/*, PartyUp.IntegrationTests.csproj}
+
+**Git commit:** `c8072ba` — `feat(be): add domain model, DbContext, Result primitives, Identity external auth, GraphQL module registration and test fixtures`
+
+---
+
+
+## [2026-08-17 11:52] - Task #27: feat(fe-auth): add login screen with three OAuth providers, session hook and auth gate
+
+**Репо:** partyup (frontend/) · **Бранч:** ralph/task-27 · **Commit:** `b32c0da`
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+### Какво е направено
+
+**`features/auth/oauth.ts`** — списъкът на провайдърите (`google, discord, facebook` — редът тук е редът на бутоните) + `buildLoginUrl` → `<apiBase>/auth/login/{provider}?returnUrl=…` върху `API_BASE_URL` от `lib/config` (фундаментът от таск 3). Входът е HTTP endpoint, не GraphQL мутация — сесията идва като HttpOnly бисквитка от redirect-а, а схемата има само `me`/`logout`. Уеб: `location.assign` (XHR не може да следва redirect-ите на провайдъра и не би получил бисквитката); нативно: `WebBrowser.openAuthSessionAsync` върху `Linking.createURL('/')`.
+
+**`features/auth/use-session.ts`** — `me` заявката → `{ user, loading, resolved }`. Сървърен state, значи живее в Apollo кеша, не в Zustand (§2.4). `resolved` разграничава „сървърът каза: няма сесия" от „още не знаем".
+
+**`features/auth/use-logout.ts`** — `Logout` мутацията + `client.resetStore()`. Кешът не се кърпи на ръка: `me` се презарежда, гейтът вижда празна сесия и праща към входа.
+
+**`features/auth/login-screen.tsx` + `app/login.tsx`** — три бутона и нищо друго (без форма, без пароли). Route файлът е тънък — екранът живее в областта си (§2.1).
+
+**`lib/auth-gate.tsx`** — стъбът от таск 3 е подменен съдържателно: анонимна сесия → `<Redirect href="/login">`, `loading` → splash НАД вече монтираното дърво (без второ сглобяване при готова сесия), сегментът `login` остава публичен.
+
+**`locales/{bg,en}/auth.json`** — всички низове през `auth` namespace-а (§4.6), нула твърдо зашити текстове в компонентите.
+
+### Едно решение, което си заслужава да се спомене
+
+Гейтът препраща САМО при изричен `me: null`, не при грешка на заявката. Мрежова грешка не е анонимен потребител — да я третираме като такава щеше да изхвърля всеки потребител на `/login` при паднал бекенд И щеше да счупи заварения `navigation.test.tsx`, който рендерира истинския рутер срещу истинския Apollo клиент (файл извън обхвата ми).
+
+### TDD
+
+RED първо: 4 спека паднаха, преди да има имплементация. GREEN след това. Тестовете: трите бутона с БЪЛГАРСКИТЕ етикети + превключване на en, `assign` към `buildLoginUrl(provider, origin)`, гейтът (splash при чакане / пуска при `me` мок / препраща при `null` / не препраща на самия `login` сегмент), logout вика мутацията и `resetStore`.
+
+### Верификация
+
+- `npm --prefix frontend test` — зелено, **8 suite-а / 20 теста** (4-те заварени suite-а непроменени и зелени)
+- `npm --prefix frontend run typecheck` — зелено (codegen + `tsc --noEmit`, 0 грешки)
+- Червени линии: пипнати са САМО файловете от `files` списъка; `contracts/` и `backend/` непипнати; e2e и dev сървъри НЕ са пускани; `src/gql/` и node_modules не са комитнати; `package-lock.json` непроменен; работното дърво е чисто след тестовете
+
+### Бележки за следващите
+
+- `useSession()` е единственият източник за „кой съм" — консумирай го, не дублирай `me` заявката.
+- `useLogout()` вече прави `resetStore` — екранът, който го вика, не бута кеша допълнително.
+- Ако някой таск има нужда гейтът да реагира и на грешка, това е СЪЗНАТЕЛНО решение да се промени, не пропуск.
+
+**Files modified:**
+- frontend/src/features/auth/oauth.ts (+ oauth.test.ts)
+- frontend/src/features/auth/use-session.ts
+- frontend/src/features/auth/use-logout.ts (+ use-logout.test.tsx)
+- frontend/src/features/auth/login-screen.tsx (+ login-screen.test.tsx)
+- frontend/src/app/login.tsx
+- frontend/src/lib/auth-gate.tsx (+ auth-gate.test.tsx)
+- frontend/src/locales/bg/auth.json
+- frontend/src/locales/en/auth.json
+
+**Git commit:** `b32c0da` — `feat(fe-auth): add login screen with three OAuth providers, session hook and auth gate`
+
+---
+
+
+## [2026-08-17 12:20] - Task #28: feat(fe-auth): add settings screen with provider management, theme and language toggles
+
+**Репо:** partyup (frontend/) · **Бранч:** ralph/task-28 · **Commit:** `1769266`
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** `settings.tsx` беше placeholder от таск 3. Трябваше да стане реалният екран: свързани акаунти + тема + UI език. Това е и витрината на Result патърна на FE — `CANNOT_UNLINK_LAST` е ОЧАКВАН провал, не изключение.
+
+### Какво е направено
+
+**Свързани акаунти (`features/auth-linking/`).** `documents.ts` държи трите кодген документа: `linkedProviders`, `linkProviderUrl($provider)` и мутацията `unlinkProvider`. В payload-а НАРОЧНО не се селектира `DomainError.message` — той е за разработчици; UI-ят чете само `code` + `i18nKey` (§4.6, §7б.4). `use-auth-linking.ts` е хукът: сървърният state живее САМО в Apollo кеша, в React state стоят единствено двете UI решения — чакащото потвърждение и готовото съобщение за грешка. `unlinkProvider` връща остатъчния списък, който се пише право в кеша с `overwrite: true` (`LinkedProvider` няма `id`, иначе кешът предупреждава за сливане на два масива) — без refetch. `linkProviderUrl` се тегли с `fetchPolicy: 'network-only'`: URL-ът носи еднократен OAuth state и кеширането му е грешка. Самото пренасочване е изнесено в `redirect.ts` (`expo-linking.openURL`) — единственият страничен ефект на фичата, оставен като мокваем шев.
+
+**Result патърнът на екрана.** `domainErrorText` резолвва `i18nKey` първо в namespace-а на фичата, после пада на общата витрина `domainErrorMessage` → `errors.unknown`. Така `CANNOT_UNLINK_LAST` излиза като „Това е единственият ти начин за влизане…“, а не като код или exception. Премахването минава през вградено потвърждение (необратимо действие).
+
+**Тема и език (Е.9).** `appearance-section.tsx` — чипове light/dark/system и bg/en/system; двете четат и пишат `ui-store` (логиката дойде готова от таск 3, тук е UI-ът). `null` за език = „следвай устройството“.
+
+**i18n.** Празният ns `authLinking` (bg + en) е запълнен: заглавия, имена на провайдъри, действия, потвърждение и `errors.auth.cannotUnlinkLast`.
+
+### TDD
+
+RED първо — 8 спека срещу липсващия модул. GREEN след имплементацията. Покриват: списъкът от мока (свързаните с „Премахни“, останалите със „Свържи“), потвърждението преди премахване, успешното премахване (списъкът се свива през кеша), човешкото съобщение при `CANNOT_UNLINK_LAST` + изрична проверка, че кодът НЕ изтича в UI-я, редиректът към URL-а от контракта, двата тогъла срещу `ui-store`, маркирането на текущия избор и пълният екран на английски.
+
+**Verification:**
+- `npm --prefix frontend run typecheck` → exit 0
+- `npm --prefix frontend test` → 5 suites / 18 tests pass
+- Чист worktree след кодген; `src/gql/` остава генериран и некомитнат; BE и `contracts/` непипнати.
+
+**Files modified:**
+- frontend/src/app/settings.tsx
+- frontend/src/features/auth-linking/{documents.ts,use-auth-linking.ts,redirect.ts,linked-accounts-section.tsx,appearance-section.tsx,primitives.tsx,index.ts}
+- frontend/src/features/auth-linking/__tests__/settings-screen.test.tsx
+- frontend/src/locales/{bg,en}/authLinking.json
+
+**Git commit:** `1769266` — `feat(fe-auth): add settings screen with provider management, theme and language toggles`
+
+**Бележка за следващите итерации:** в RNTL v14 `fireEvent` е асинхронен — без `await` се получават застъпващи се `act()` извиквания и полу-рендерирани дървета. Тази итерация беше resume след прекъснат ран: комитът беше налице, липсваше само result файлът; кодът е ре-верифициран без промени.
+
+---
+
+
 ## Task #3 — feat(fe): wire Apollo, codegen, i18n, NativeWind theme shell, tab navigation and test utils
 
 **Репо:** partyup (frontend/) · **Бранч:** ralph/task-3 · **Commit:** `031dc52`
@@ -1010,6 +1146,9 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
 
 
 
