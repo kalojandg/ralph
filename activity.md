@@ -34,6 +34,148 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## [2026-08-17 18:20] - Task #7: feat(profile): add myTables query listing memberships with table snapshots
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** „Моите маси" (А3) е следствие от мултичленството: един и същ човек може да е founder+GM на едната маса и обикновен играч на другата, затова екранът листва ЧЛЕНСТВА, а не маси. Чист query таск — първият, който изкарва `Table`/`TableMembership` в схемата.
+
+**What was done:**
+- RECON: merged таск 1 (Domain.Table/TableMembership, PartyUpDbContext, CurrentUser.GetUserId), merged таск 2 (`myTables: [TableMembership!]!`, `type Table`, `type TableMembership`), слайсът на таск 5 като образец за конвенциите, structure §2а.4 (read дисциплина) и §7а.5 (`[ObjectType<Query>]`, НЕ `[QueryType]`).
+- RED: 4 интеграционни спека (`Features/MyTables/MyTablesTests.cs`) — активните членства с ролите, последно joined първо (2 активни + 1 напусната → 2); table снапшотът с брой АКТИВНИ членове (напусналият не държи слот); чужди членства не изтичат; без сесия → празен списък. Червени по правилната причина: `The field 'myTables' does not exist on the type 'Query'`.
+- GREEN: `Features/MyTables/` — `MyTablesQueries` (`[ObjectType<Query>]`, AsNoTracking + изрична проекция право в GraphQL типа, `Where(Active)` + `OrderByDescending(JoinedAt)`); `TableMembershipType` и `TableType` (`[ObjectType<T>]` върху ДОМЕЙН ентитата — не собствени record-и, иначе схемата би получила втори тип със същото име при слайсовете 8/9/13); `MyTablesDataLoaders.ActiveMemberCount` (source-generated `[DataLoader]`) захранва изчислимото `slotsFilled` с един SQL за целия списък (§2а.4, срещу N+1).
+
+**Решения по обхвата (за таск 41):**
+- Скрити са полетата, които контрактът няма и които биха изтекли: `TableMembership.User` стои зад Identity ентитито `AppUser` — авто-инференцията му би сложила `passwordHash`/`securityStamp` в публичната схема; също `TableId`/`UserId`/`Table.FounderId`/`Table.Memberships`.
+- Контрактните `TableMembership.user`, `Table.founder` и `Table.members` изискват публичния `User` тип, който идва със слайса на витрината (таск 13) — оттам и липсват тук. За „моите маси" няма смислова загуба: членството е винаги на викащия.
+- `table: Table!` е изрично не-nullable през дескриптора (навигацията в ентитито е nullable, членство без маса не съществува).
+
+**Verification:**
+- `dotnet test backend/PartyUp.slnx` → PartyUp.UnitTests **20/20**, PartyUp.IntegrationTests **20/20** (беше 16 — четирите нови спека), 0 skipped
+- `schema export` (в TEMP, `contracts/` НЕ е пипано — червена линия §4.2): `myTables: [TableMembership!]!`, `type TableMembership { id table role isGm active joinedAt leftAt }`, `type Table { … slotsFilled … }` — съвпада с контракта поле по поле (без `founder`/`members`, виж по-горе)
+- `frontend/`, `contracts/`, `Program.cs`, `csproj`, `Domain/`, `Common/` — непипнати
+
+**Files modified:**
+- backend/src/PartyUp.Api/Features/MyTables/MyTablesQueries.cs
+- backend/src/PartyUp.Api/Features/MyTables/TableMembershipType.cs
+- backend/src/PartyUp.Api/Features/MyTables/TableType.cs
+- backend/src/PartyUp.Api/Features/MyTables/MyTablesDataLoaders.cs
+- backend/tests/PartyUp.IntegrationTests/Features/MyTables/MyTablesTests.cs
+
+**Git commit:** `5254294` — `feat(profile): add myTables query listing memberships with table snapshots`
+
+**Note за следващите таскове (8/9/10/13):** `Table` и `TableMembership` ВЕЧЕ са в схемата като разширения на домейн ентитата (`[ObjectType<Domain.Table>]`). Добавяй полета към СЪЩИТЕ типове от своята папка (`founder`, `members`, …) — собствен C# тип с име `Table` би дал „name already registered". `slotsFilled` вече съществува, не го дублирай. Генераторът кръщава DataLoader класа на метода (`GetActiveMemberCountAsync` → `ActiveMemberCountDataLoader`), затова контейнерният клас трябва да се казва другояче, иначе билдът пада с CS0708.
+
+---
+
+
+## Task #4 — feat(auth): add OAuth challenge endpoints, email-keyed user provisioning and me query
+
+**Repo:** partyup · **Lane:** be-auth · **Branch:** ralph/task-4 · **Commit:** `d591ce7`
+
+### What was wrong
+The previous attempt shipped a complete, correct `Features/Auth/` slice but the post-merge verify gate came back red with **42 of 43 integration tests failing** — including tests that have nothing to do with auth (`DomainModelTests`, `NotifierTests`, `GraphQLPipelineTests`, `ProfileTests`). That breadth was the tell: the failure was not in a resolver, it was the application refusing to boot.
+
+Reconstructing the merged tree locally (copying main's task 5 + task 6 files into the worktree as untracked files — the merge is add-only on both sides, so this reproduces it exactly) surfaced the real error:
+
+```
+HotChocolate.SchemaException:
+1. The name `UserProfile` was already registered by another type.
+   (HotChocolate.Types.ObjectType<PartyUp.Api.Features.Auth.Me.UserProfile>)
+```
+
+Task 4 declared its own `record UserProfile` as the type of `CurrentUser.profile`. Task 6 — merged to `main` in the meantime — registers the **domain entity** as that GraphQL type via `[ObjectType<UserProfile>]` and hides its internal `Id`/`User` members there. Two CLR types, one GraphQL name → schema build throws → `ApiFactory` can't start the host → every integration test fails at fixture initialisation. In isolation neither branch is wrong; only their merge is.
+
+### The fix
+`CurrentUser.Profile` is now the domain `UserProfile`, with no parallel DTO — one line of type change plus the removal of the shadow record. This is not a workaround: §7б.2 says slices meet **through the Domain model**, never through each other's types, and task 6's own `UserProfileType.cs` documents the expectation verbatim — *"Така и другите slice-ове (User.profile, CurrentUser.profile) връщат просто UserProfile"*. The Profiles slice owns the type; Auth consumes it. A missing profile row still yields an empty-but-present profile (`profile` is non-null in the contract), so `AccountWithoutAProfileRow_StillAnswers` keeps its meaning.
+
+I left the reason in a doc comment on `Profile`, because the failure mode is invisible locally and catastrophic globally — the next slice that wants a profile-shaped DTO needs to know why it must not write one.
+
+Everything else from the predecessor was kept untouched: the OAuth challenge/callback endpoint module, the verified-email gate, email-keyed provisioning with multi-provider auto-linking, the redirect whitelist, `me` and `logout`. Its `[QueryType]` → `[ObjectType<Query>]` correction (§7а.5) and the centrally-authorised deletion of the `Common/GraphQL/DomainErrorType.cs` bootstrap crutch (§7а.4 — `main` already lacks it via task 5, so it is a conflict-free delete/delete) both stand.
+
+### Verification
+- **Reconstructed merged tree** (branch + main's task 5/6 slices): `dotnet test backend/PartyUp.slnx` → **63 unit + 43 integration, 0 failures**. The 43 matches the gate's own `42 failed + 1 passed = 43`, so this is the same suite the gate ran.
+- **Exported the live Hot Chocolate schema** to a temp path (`contracts/` untouched) from that merged tree: `CurrentUser` and `UserProfile` match `contracts/schema.graphql` field-for-field, `UserProfile` is registered exactly once, and the entity's internal `id`/`user` do not leak.
+- **Isolated branch**: 51 unit + 27 integration green.
+- Simulation files removed before committing (`git clean -fd` listed exactly the five copied directories); the diff is a single file.
+- FE untouched (C#-only diff) — and the failing gate run reached `dotnet test`, i.e. it had already passed FE typecheck and jest, so FE was never implicated.
+
+### Scope
+`backend/src/PartyUp.Api/Features/Auth/Me/CurrentUser.cs` only, inside the task's `files` boundary.
+
+### Note carried forward
+The task notes ask for a `hasListing` flag on `me`, but `contracts/schema.graphql` does not define it. A code↔contract mismatch is a Blocker until task 41 (§7б.11), so the contract wins and the flag is deliberately absent — task 41 is the place to reconcile it.
+
+
+## [2026-08-17 16:52] - Task #6: feat(profile): add myProfile query and updateProfile mutation with validation
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** Предишният опит написа целия слайс правилно (комит `fd0703e`), но таскът беше блокиран от фундаментален дефект ИЗВЪН обхвата му: `Common/GraphQL/DomainErrorType.cs` регистрира `DomainError` ръчно през `[ObjectType<DomainError>]`. При ПЪРВАТА реална мутация Hot Chocolate mutation conventions регистрират `ErrorObjectType<DomainError>` под същото име → `SchemaException: The name 'DomainError' was already registered by another type` → хостът не стартира и падат ВСИЧКИ интеграционни тестове, вкл. заварените foundation тестове. Централно решение от 16.08 авторизира изтриването на файла като част от този слайс.
+
+**What was done:**
+- RECON: `git log/status/diff` — запазена е цялата работа на предшественика (8 файла, 639 реда); нищо не е преписвано.
+- RED (от предишната итерация): 12 unit спека за валидатора + интеграционни спекове (update+четене, празно име → VALIDATION, двете роли false → VALIDATION).
+- GREEN: `Features/Profiles/` — `UserProfileType` ([ObjectType<UserProfile>], скрива Id/User), `MyProfile/MyProfileQueries` (AsNoTracking + изрична проекция), `UpdateProfile/` (Draft, Validator, Handler — upsert през Result pattern, Mutations с `[UseMutationConvention(PayloadFieldName = "profile")]`).
+- FIX (тази итерация): изтрит `backend/src/PartyUp.Api/Common/GraphQL/DomainErrorType.cs` (11 реда). Патерицата съществуваше само защото source generator-ът не емитва `AddPartyUpTypes()` при НУЛА анотирани типа — този слайс носи три такива, така че билдът върви и без нея, а конвенцията сама произвежда правилния `DomainError` тип.
+
+**Verification:**
+- `dotnet build backend/PartyUp.slnx` → Build succeeded, 0 errors (доказва, че генераторът все още емитва `AddPartyUpTypes()`)
+- `dotnet test backend/PartyUp.slnx` → PartyUp.UnitTests **32/32** pass · PartyUp.IntegrationTests **18/18** pass (преди фикса: 1/18)
+- `schema export` (в temp, `contracts/` НЕ е пипано — червена линия §4.2) → съвпада точно с замразения контракт: `myProfile: UserProfile`, `updateProfile(input: UpdateProfileInput!): UpdateProfilePayload!`, `type DomainError implements Error`, `union UpdateProfileError = DomainError`, `type UserProfile` с 10-те А3 полета
+
+**Files modified:**
+- backend/src/PartyUp.Api/Features/Profiles/UserProfileType.cs
+- backend/src/PartyUp.Api/Features/Profiles/MyProfile/MyProfileQueries.cs
+- backend/src/PartyUp.Api/Features/Profiles/UpdateProfile/ProfileDraft.cs
+- backend/src/PartyUp.Api/Features/Profiles/UpdateProfile/UpdateProfileValidator.cs
+- backend/src/PartyUp.Api/Features/Profiles/UpdateProfile/UpdateProfileHandler.cs
+- backend/src/PartyUp.Api/Features/Profiles/UpdateProfile/UpdateProfileMutations.cs
+- backend/tests/PartyUp.UnitTests/Features/Profiles/UpdateProfileValidatorTests.cs
+- backend/tests/PartyUp.IntegrationTests/Features/Profiles/ProfileTests.cs
+- backend/src/PartyUp.Api/Common/GraphQL/DomainErrorType.cs *(ИЗТРИТ — централно авторизиран fix извън обхвата)*
+
+**Git commit:** `fd0703e` — `feat(profile): add myProfile query and updateProfile mutation with validation` (слайсът)
+**Git commit:** `fa44c3e` — `feat(profile): add myProfile query and updateProfile mutation with validation` (блокерът)
+
+**Note за следващите таскове:** генераторният `[QueryType]` НЕ се закача, когато `Program.cs` вика `AddQueryType<Query>()` — конфигурацията виси по име на операцията. Ползвай `[ObjectType<Api.GraphQL.Query>]` за query разширенията. Мутациите не са засегнати (Mutation root-а го създава генераторът).
+
+---
+
+
+## Task #5 - feat(auth): add linked providers query with link and unlink mutations
+
+**Repo:** partyup (`backend/`) - lane `be-auth-linking` - branch `ralph/task-5` - commit `10c00c0`
+
+### What was done
+
+Retry/continuation. The predecessor had already built the slice correctly but reported `failed` because a foundation file outside the `files` boundary broke schema construction. The operator authorised the cross-boundary fix centrally, so this iteration kept every line of the slice, applied that fix, re-verified and squashed to a single commit.
+
+**The slice** (`backend/src/PartyUp.Api/Features/AuthLinking/`):
+- `AuthProvider` enum (Google/Facebook/Discord) + `AuthProviderSchemes` bridging it to Identity through the handlers' own scheme constants (`GoogleDefaults.AuthenticationScheme` etc.) rather than hand-copied strings - `LoginProvider` in the DB *is* the scheme name, so a transcription slip would diverge silently from what the callback writes. `FromScheme` returns `null` for unknown schemes so a stale login cannot break the whole query.
+- `LinkedProvider` projection - `ProviderKey` deliberately never leaves the server (it identifies the account at the provider, it is not UI data).
+- `AuthLinkingHandler` - static, dependencies as parameters (Hot Chocolate injects them, so no DI registration and Program.cs stays untouched). Read path is `AsNoTracking` + `Select` straight into the GraphQL type. Unlink refuses to remove the last login (`CANNOT_UNLINK_LAST` as a `DomainError` value, not an exception) and goes through `UserManager.RemoveLoginAsync` so the security stamp rotates and live sessions do not survive the detach.
+- `AuthLinkingQueries` (`linkedProviders`, `linkProviderUrl`) and `AuthLinkingMutations` (`unlinkProvider` via `FieldResult<T, DomainError>` + mutation conventions). `linkProviderUrl` only builds the `/auth/login/{scheme}?intent=link` address - the OAuth ceremony and the email-based attach in the callback belong to task 4, which was left untouched.
+- 7 integration specs (Testcontainers Postgres, logins seeded through `UserManager` exactly as the callback would write them - no real OAuth): list is caller-scoped; empty without a session; link URL carries the intent; unlink one of two succeeds and returns the remainder; the last one returns `CANNOT_UNLINK_LAST`; an unlinked provider is `NOT_FOUND`; anonymous is `FORBIDDEN`.
+
+**The authorised cross-boundary fix:** deleted `backend/src/PartyUp.Api/Common/GraphQL/DomainErrorType.cs`. Its `[ObjectType<DomainError>]` collided with the `ErrorObjectType<DomainError>` that `AddMutationConventions()` generates for any mutation returning `FieldResult<T, DomainError>` (`SchemaException: The name 'DomainError' was already registered`). The file was a bootstrap crutch so the source generator would emit `AddPartyUpTypes()` when nothing else was annotated; this slice now supplies annotated types, so the generator works without it.
+
+### Notes for later tasks
+
+- `[QueryType]` type extensions are **silently dropped** - `Program.cs` calls `AddQueryType<Query>()`, so the generator's `TryAddRootType` no-ops and the operation-keyed configuration never attaches. No error, no warning; the fields simply are not in the schema. `[ObjectType<Query>]` merges correctly and is what this slice uses. Every query-adding task needs this.
+- `DomainErrorType.cs` is deleted on this branch. Other branches deleting it too is a conflict-free delete/delete merge.
+
+### Verification
+
+- `dotnet test backend/PartyUp.slnx` - **20/20 unit, 16/16 integration, 0 skipped**.
+- Schema export diffed against `contracts/schema.graphql`: `linkedProviders`, `linkProviderUrl`, `unlinkProvider`, `LinkedProvider`, `UnlinkProviderInput`, `UnlinkProviderPayload` and `AuthProvider` match the contract exactly.
+- `frontend/` and `contracts/` untouched.
+
+
 ## [2026-08-17 12:35] - Task #1: feat(be): add domain model, DbContext, Result primitives, Identity external auth, GraphQL module registration and test fixtures
 
 **Status:** ✅ Complete
@@ -1146,6 +1288,10 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
 
 
 

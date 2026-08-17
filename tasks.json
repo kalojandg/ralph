@@ -174,7 +174,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  5,
@@ -215,7 +215,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  6,
@@ -257,7 +257,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  7,
@@ -298,7 +298,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  8,
