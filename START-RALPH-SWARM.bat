@@ -1,21 +1,19 @@
 @echo off
 REM Ralph SWARM - parallel agents over git worktrees
 REM Usage: START-RALPH-SWARM.bat [agents] [maxTasks]
-REM   agents   - parallel slots (default 0 = take from ralph-config.json swarm.agents)
+REM   agents   - parallel slots (default 3; from playbook: start 2-3, ceiling 5-6)
 REM   maxTasks - stop after N tasks (default 0 = run until done/blocked)
 
 setlocal
 set AGENTS=%1
 set MAXTASKS=%2
-if "%AGENTS%"=="" set AGENTS=0
+if "%AGENTS%"=="" set AGENTS=3
 if "%MAXTASKS%"=="" set MAXTASKS=0
 
 echo.
 echo ====================================================
 echo    Ralph SWARM - Parallel Agentic Development
-set AGENTS_LABEL=%AGENTS%
-if "%AGENTS%"=="0" set AGENTS_LABEL=from config (swarm.agents)
-echo    Agents: %AGENTS_LABEL%   MaxTasks: %MAXTASKS%
+echo    Agents: %AGENTS%   MaxTasks: %MAXTASKS%
 echo ====================================================
 echo.
 echo Each agent gets its OWN worktree + branch + console window.
