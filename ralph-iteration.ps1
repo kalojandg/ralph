@@ -262,6 +262,14 @@ Write-Host ""
 # Run Claude - capture output but also display progress indicator
 $outputFile = Join-Path $env:TEMP "ralph-output-$iterationNumber.txt"
 
+# FOSSIL GUARD: a stale output file from a killed previous run (Ctrl+C during quota wait
+# skips the post-wait cleanup) still contains yesterday's final "result" event. The
+# completion check below tails the file BEFORE the new claude writes anything, sees the
+# old terminal_reason, and the wrapper then reads the OLD text — e.g. a stale
+# "hit your session limit" => phantom QUOTA EXCEEDED while the real quota is at 2%.
+# Always start from a clean slate.
+Remove-Item $outputFile -Force -ErrorAction SilentlyContinue
+
 # Working directory: canonical mode = project root (Claude navigates to repos via prerequisite);
 # parallel mode = the agent's isolated worktree (sub)dir.
 $agentWorkDir = if ($isParallel -and $workDir) { $workDir } else { $projectRoot }
