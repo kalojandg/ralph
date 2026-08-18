@@ -190,7 +190,13 @@ function Release-Claim($id) {
 # (iterationNumber = task id in swarm mode), so the tail of the newest match is what the
 # failed attempt was doing when it died.
 function Get-AgentLogTail($taskId, $lines = 60) {
+    # CROSS-BOARD GUARD (18.08): iteration-<taskId> names carry no board identity, so an
+    # old board's log for the same task id (e.g. July's combat #31 vs today's partyup #31)
+    # is a perfect filename match - and its tail then poisons the retry context with a
+    # different project's work. Logs older than 3 days cannot belong to the current run
+    # chain (legit resumes are same-day/overnight); treat them as absent.
     $latest = Get-ChildItem (Join-Path $scriptDir "logs") -Filter "iteration-$taskId-*.txt" -ErrorAction SilentlyContinue |
+              Where-Object { $_.LastWriteTime -gt (Get-Date).AddDays(-3) } |
               Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if (-not $latest) { return "(no agent log found)" }
     return ((Get-Content $latest.FullName -Tail $lines -ErrorAction SilentlyContinue) -join "`n")
@@ -782,6 +788,29 @@ function Complete-Agent($info) {
         # retry budget on the same environment error. Any merge or slow failure resets.
         $runtimeSec = ((Get-Date) - $info.started).TotalSeconds
         if ($runtimeSec -lt 60) { $script:fastFails++ } else { $script:fastFails = 0 }
+
+        # TRANSIENT API DEATH (18.08, Party Up run): "API Error: 529 Overloaded" /
+        # "Connection closed mid-response" kill the CLI mid-task through no fault of the
+        # agent's - task #31 burned 3/4 fail retries on three perfectly good attempts during
+        # an evening 529 storm. No result file + an API error as the log's dying words =
+        # environment, not agent failure. Classify like a watchdog kill: blind re-queue on
+        # the TIMEOUT budget, fail budget untouched. Result-file failures never take this
+        # path (an agent that wrote a result survived its API hiccups).
+        if (-not $result) {
+            $apiTail = Get-AgentLogTail $t.id 6
+            if ($apiTail -match 'API Error:\s*(529|5\d\d\s+Overloaded|Connection closed|Overloaded)') {
+                $n = $script:timeoutCounts[$t.id]; if (-not $n) { $n = 0 }
+                if ($n -lt $maxTimeoutRequeues) {
+                    $script:timeoutCounts[$t.id] = $n + 1
+                    Save-RetryContext $t.id "resume" "TRANSIENT API ERROR (529 overloaded / connection drop) - the previous agent was killed by the API, not by its own work. Work in the worktree is PRESERVED; run git status/diff and continue from where it stopped."
+                    Write-Host "[~] Task #$($t.id): killed by transient API error (529/connection) - RE-QUEUED on timeout budget ($($n + 1)/$maxTimeoutRequeues), fail budget untouched" -ForegroundColor Yellow
+                    Release-Claim $t.id
+                    return "timeout_requeue"
+                }
+                # Budget exhausted -> fall through to the normal fail path below.
+            }
+        }
+
         $why = "no result file"
         if ($result) { $why = "status=$($result.status): $($result.summary)" }
         $n = $script:failCounts[$t.id]; if (-not $n) { $n = 0 }

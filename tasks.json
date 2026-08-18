@@ -340,7 +340,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  9,
@@ -381,7 +381,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  10,
@@ -423,7 +423,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  11,
@@ -464,7 +464,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  12,
@@ -505,7 +505,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  13,
@@ -546,7 +546,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  14,
@@ -588,7 +588,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  15,
@@ -628,7 +628,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  16,
@@ -668,7 +668,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  17,
@@ -708,7 +708,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  18,
@@ -750,7 +750,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  19,
@@ -791,7 +791,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  20,
@@ -831,7 +831,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  21,
@@ -873,7 +873,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  22,
@@ -914,7 +914,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  23,
@@ -954,7 +954,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  24,
@@ -995,7 +995,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  25,
@@ -1036,7 +1036,7 @@
                           "action":  "dotnet test зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  26,
@@ -1079,7 +1079,7 @@
                           "action":  "dotnet test — ЦЕЛИЯТ suite (пипаш Program.cs — пълна регресия). Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  27,
@@ -1206,7 +1206,7 @@
                           "action":  "typecheck + test зелени. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  30,
@@ -1248,7 +1248,7 @@
                           "action":  "typecheck + test зелени. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  31,
@@ -1332,7 +1332,7 @@
                           "action":  "typecheck + test зелени. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  33,

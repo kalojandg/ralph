@@ -34,6 +34,593 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## [2026-08-18 20:14] - Task #26: feat(push): add notifier fan-out decorator sending web push and publishing notification topic
+
+**Repo:** partyup (backend) · **Lane:** be-push-send · **Commit:** `f2a244e`
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** Таск 25 остави адресната книга, таск 20 — абоната на `onNotification`, но по личната тема никой не публикуваше и до нито един endpoint не тръгваше пратка. `INotifier` (фундаментът) беше интерфейс точно заради този момент: слоят се закача като ДЕКОРАТОР, без нито един от handler-ите, които вече викат `NotifyAsync`, да разбере.
+
+**What was done:**
+- RED: 8 unit спека (`PushFanout` — разпраща до всяко устройство, връща за изтриване САМО мъртвите (410), временният провал НЕ маха адреса, хвърлил sender се гълта и следващото устройство пак получава; `PushEnvelope` — носи id/тип и payload-а ДОСЛОВНО) + 8 integration спека (`INotifier` резолвва към декоратора; редът в базата оцелява; публикува ПЕРСИСТИРАНИЯ ред по `NotificationTopics.User`; push до всички свои устройства и до ничии чужди; пратката == `PushEnvelope` на реда; 410 → записът пада, живият остава; аварирал push сървис НЕ проваля `NotifyAsync`). Червени по правилната причина — `NotImplementedException` от скелетите, а останалите 121 unit-а зелени.
+- GREEN: `Features/PushSend/` — `IPushSender`/`PushDelivery` (Delivered/Skipped/Expired/Failed), `WebPushSender` (Lib.Net.Http.WebPush; 410/404 → Expired, всичко друго → Failed с лог), `VapidCredentials` (публичният ключ през СЪЩАТА константа, с която `vapidPublicKey` го раздава на браузъра — разминаване тук е мълчаливо смъртоносно; липсващ ключ = push слоят не съществува в тази среда), `PushFanout` (чиста логика, без база), `PushEnvelope` (вгражда `PayloadJson` като JSON, за да са push и `onNotification` два канала на ЕДНО известие), `FanoutNotifier` и `PushSendServices.AddPushFanout()`.
+- Program.cs: ЕДИН ред — `AddScoped<INotifier, DefaultNotifier>()` → `AddPushFanout()` (цялото wiring живее в слайса, за да не се връща никой в отровния файл).
+
+**Verification:**
+- `dotnet test backend/PartyUp.slnx` → 129/129 unit + 287/287 integration, 0 failed, 0 skipped (пълна регресия — Program.cs е пипнат)
+- contracts/schema.graphql НЕПИПНАТ — слоят не добавя нито едно GraphQL поле (`onNotification` вече го има от таск 20)
+- никакви секрети: `Push:VapidPrivateKey`/`Push:VapidSubject` се четат от конфигурацията, стойности в git НЯМА
+
+**⚠ ИЗЛЯЗОХ ИЗВЪН `files` С ЕДНА ПРОМЯНА (за преглед):** `backend/tests/PartyUp.IntegrationTests/Foundation/NotifierTests.cs` от таск 1 твърдеше `Assert.IsType<DefaultNotifier>(INotifier)` — точно регистрацията, която ТОЗИ таск е дефиниран да замени (файлът сам казва „таск 26 закача push fan-out декоратор около него"). Спекът е обновен НАЙ-МИНИМАЛНО и със запазено намерение (името му е `INotifier_IsResolvableAsAScopedService`): веригата се резолвва + дефолтът е още жив като услуга. Другият спек във файла (записва непрочетена нотификация със сериализиран payload) е непипнат и вече минава ПРЕЗ декоратора. Без тази промяна пълният suite е червен и merge-ът пада.
+
+**Files modified:**
+- backend/src/PartyUp.Api/Program.cs
+- backend/src/PartyUp.Api/Features/PushSend/IPushSender.cs
+- backend/src/PartyUp.Api/Features/PushSend/FanoutNotifier.cs
+- backend/src/PartyUp.Api/Features/PushSend/PushFanout.cs
+- backend/src/PartyUp.Api/Features/PushSend/PushEnvelope.cs
+- backend/src/PartyUp.Api/Features/PushSend/WebPushSender.cs
+- backend/src/PartyUp.Api/Features/PushSend/VapidCredentials.cs
+- backend/src/PartyUp.Api/Features/PushSend/PushSendServices.cs
+- backend/tests/PartyUp.UnitTests/Features/PushSend/PushFanoutTests.cs
+- backend/tests/PartyUp.UnitTests/Features/PushSend/PushEnvelopeTests.cs
+- backend/tests/PartyUp.UnitTests/Features/PushSend/StubPushSender.cs
+- backend/tests/PartyUp.IntegrationTests/Features/PushSend/FanoutNotifierTests.cs
+- backend/tests/PartyUp.IntegrationTests/Features/PushSend/RecordingPushSender.cs
+- backend/tests/PartyUp.IntegrationTests/Foundation/NotifierTests.cs (вж. бележката горе)
+
+**Git commit:** `f2a244e` — `feat(push): add notifier fan-out decorator sending web push and publishing notification topic`
+
+---
+
+
+## Task 32 — feat(fe-tables): add create table form with one-shot event fields and training tag
+
+**Repo:** partyup · **Lane:** fe-table-create · **Commit:** `d12cd1c`
+
+### Какво е направено
+
+Екранът „Създай маса" (А3, founder flow) — една react-hook-form форма върху `createTable`:
+
+- **`features/table-create/table-form-values.ts`** — стойностите на формата (низове, както `TextInput` ги връща) + `toCreateTableInput` мапингът към контракта: тагове „с запетаи" → `[String!]`, дата+час → ISO UTC, празен текст → `null`. `founderIsGm: !seekingGm` (половин мач, ядка №3). `fieldForErrorKey` реши коя типизирана грешка при кое поле сяда.
+- **`table-form-fields.tsx`** — `TextField` / `RadioGroup` / `CheckboxField`. Етикетите влизат ГОТОВИ преведени, за да не се крият i18n ключове в презентационния слой (§4.6).
+- **`table-create-form.tsx`** — всички полета по `CreateTableInput`: име, система, формат, място (свободен текст, Б), език на сесиите (отделен от езика на UI, Е.9), тагове, описание, слотове 2–10, „търсим DM", и **„ОБУЧИТЕЛЕН ONE-SHOT"** чекбокс с визуално открояване (Е.8 — сърцето на клина: „ела да те научим, 0 опит"). Времето е **радио** (Б): ONE-SHOT (дата+час+място на събитието) ↔ ПОСТОЯНЕН (свободен график „сряда 19:00") — режимът решава кои полета изобщо съществуват, затова се `watch`-ва.
+- **Result pattern (§4.5)** — `payload.errors` са СТОЙНОСТИ: всяка сяда при полето си по `i18nKey`, непознатите остават над бутона. Никога `message` (той е за разработчици). Успех → `router.replace('/tables')`.
+- **`table-create.gql.ts`** — тясна селекция (масата вече съществува; „Моите маси" си дърпа своя списък).
+- **`app/table/create.tsx`** — placeholder-ът заменен с реалния екран.
+- **i18n ns `tableForm` (BG+EN, 63 ключа, пълен паритет)** — включително всички `tables.*` ключове, които `CreateTableValidator` реално емитва.
+
+### TDD
+
+RED първо (6 спека, RNTL v14 async `render`/`fireEvent`): радиото сменя полетата за време · валиден submit праща верния input (вкл. обучителния таг) и препраща към „Моите маси" · постоянна маса праща график вместо дата · слотове = 1 блокира записа · one-shot без дата блокира · типизирана грешка от сървъра се показва при съответното поле.
+
+### Верификация
+
+`npm --prefix frontend run typecheck` ✅ · `npm --prefix frontend test` ✅ **15 suites / 59 теста зелени**.
+
+### Бележки
+
+Итерацията е ПРОДЪЛЖЕНИЕ на провален опит (API 529 Overloaded уби предшественика след GREEN, преди commit-а и result файла). Работата в worktree-то беше ревюирана срещу контракта и червените линии, намерена за коректна и пълна, и комитната без пренаписване. При първия тестов пуск два ПРЕДХОДНИ спека (profile-screen, settings-screen) паднаха с 5s timeout заради натоварване веднага след `npm install` — минават стабилно при всеки следващ пуск и не са пипани от този таск. `src/gql/` остава gitignored, `package-lock.json` — непроменен.
+
+
+## [2026-08-18 19:52] - Task #25: feat(push): add pushSubscribe and pushUnsubscribe mutations with vapid public key query
+
+**Repo:** partyup (backend) · **Lane:** be-push-subscribe · **Commit:** `4d5fb8a`
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** След таск 20 subscriptions-ите носят realtime, докато приложението е отворено. За затворения браузър (Е, Web Push в v0.1) трябва адресна книга: на кои endpoint-и да се звънне за даден човек — без самото пращане (таск 26).
+
+**What was done:**
+- RED: 12 integration спека в `Features/Push/` — subscribe регистрира адреса; повторен subscribe оставя ТОЧНО един ред и обновява ключовия материал; второ устройство пази два адреса; смяна на собственика на устройството; unsubscribe — свой/непознат (тих успех)/чужд (непокътнат); анонимен викащ → FORBIDDEN; theory спек че `p256dh`/`auth`/`userId` НЕ съществуват в схемата; vapidPublicKey от config override / празен без ключ / четим анонимно. Червени — полетата ги нямаше в схемата.
+- GREEN: `PushRegistrationHandler` (upsert по endpoint — ключът е ИНСТАЛАЦИЯТА на service worker-а, не потребителят; unique индексът от таск 1 го пази), `PushSubscriptionMutations` (mutation conventions → Input/Payload двойките от контракта, Result pattern), `PushSubscriptionGraphQLType` (Ignore на P256dh/Auth/UserId/User) и `VapidQueries` с `[ObjectType<Query>]`.
+
+**Verification:**
+- `dotnet test backend/PartyUp.slnx` → 121/121 unit + 252/252 integration, 0 failed, 0 skipped
+- експортираната HC схема (в temp, не в contracts/) съвпада дословно с `contracts/schema.graphql` за целия push разрез (операции, Input-и, Payload-и, error union-и, `PushSubscription` без ключов материал)
+- Program.cs/csproj НЕПИПНАТИ — регистрацията е през source generator-а
+
+**Files modified:**
+- backend/src/PartyUp.Api/Features/Push/Subscriptions/PushRegistrationHandler.cs
+- backend/src/PartyUp.Api/Features/Push/Subscriptions/PushSubscriptionMutations.cs
+- backend/src/PartyUp.Api/Features/Push/Subscriptions/PushSubscriptionGraphQLType.cs
+- backend/src/PartyUp.Api/Features/Push/Vapid/VapidQueries.cs
+- backend/tests/PartyUp.IntegrationTests/Features/Push/PushSeed.cs
+- backend/tests/PartyUp.IntegrationTests/Features/Push/PushSubscriptionTests.cs
+- backend/tests/PartyUp.IntegrationTests/Features/Push/VapidPublicKeyTests.cs
+
+**⚠ РЪЧНА СТЪПКА ПРИ DEPLOY:** реална VAPID двойка НЕ е генерирана и НЕ влиза в git. `Push:VapidPublicKey` е ПРАЗЕН placeholder — докато е такъв, `vapidPublicKey` връща празен стринг и FE го чете като „няма push слой" (progressive enhancement). При deploy: генерирай двойката, публичният в config, частният САМО в user-secrets/deploy тайни.
+
+**Git commit:** `4d5fb8a` — `feat(push): add pushSubscribe and pushUnsubscribe mutations with vapid public key query`
+
+---
+
+
+## [2026-08-18 19:40] - Task #30: feat(fe-tables): add my tables list with status badges and create entry point
+
+**Repo:** partyup (frontend) · **Lane:** fe-my-tables · **Commit:** `c312806`
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** Предишният опит е бил прекъснат между GREEN и DONE: целият slice беше написан, но некомитнат и `typecheck` падаше. Retry отчетът беше от друг проект (monk_combat_app / flavor tab) — нерелевантен, диагнозата е направена от самия worktree.
+
+**What was done:**
+- RECON: `git status`/`git diff` — запазено е всичко коректно от предшественика; сверка срещу `contracts/schema.graphql` (`myTables: [TableMembership!]!`).
+- RED/GREEN (от предишната сесия, прието): `features/my-tables/` — `queries.ts` (codegen документ `MyTables`), `my-tables-screen.tsx`, `table-card.tsx` (име, система, роля, GM индикатор, линк → `/table/[id]`), `status-badge.tsx` (преведен статус, никога суров enum), `empty-state.tsx` (двоен CTA: създай / публикувай се), `(tabs)/tables.tsx` вече рендерира екрана вместо placeholder, `tables` ns попълнен BG/EN.
+- FIX: хелпърът `myTablesMocks` беше типизиран като `(typeof FOUNDED_TABLE)[]`, което заковава `role: 'FOUNDER'`/`status: 'TRIAL'` като литерали и отхвърля `JOINED_TABLE` (TS2322 × 2). Сменен с генерирания `MyTablesQuery['myTables']` — контрактът е законът, не фикстурата.
+
+**Verification:**
+- `npm --prefix frontend run typecheck` → codegen + tsc clean (0 errors)
+- `npm --prefix frontend test` → 14/14 pass, 5 suites; `my-tables-screen.test.tsx` → 5/5 (карти, линкове, empty state, EN превод, грешка)
+- Чист working tree след commit — `src/gql/` остава gitignored, `package-lock.json` непипнат.
+
+**Files modified:**
+- frontend/src/features/my-tables/{index.ts,queries.ts,my-tables-screen.tsx,table-card.tsx,status-badge.tsx,empty-state.tsx}
+- frontend/src/features/my-tables/__tests__/my-tables-screen.test.tsx
+- frontend/src/app/(tabs)/tables.tsx
+- frontend/src/locales/{bg,en}/tables.json
+
+**Git commit:** `c312806` — `feat(fe-tables): add my tables list with status badges and create entry point`
+
+---
+
+
+## Task #29 — feat(fe-profile): add profile form with react-hook-form covering all player fields
+
+**Repo:** partyup (frontend) · **Lane:** fe-profile · **Commit:** `6bfafd0`
+
+### Какво е направено
+Профил табът е реален екран вместо placeholder. Вертикален FE слайс в `frontend/src/features/profile/`:
+
+- **`profile.gql.ts`** — `ProfileFields` фрагмент + `MyProfile` query + `UpdateProfile` mutation; типовете идват от codegen-а (`@/gql`), нищо не е писано на ръка (§7б.6). Мутацията чете `errors { ... on DomainError { code i18nKey } }` — Result pattern-ът, не exceptions.
+- **`profile-form-values.ts`** — чистата логика: `toFormValues` / `toUpdateProfileInput` (форма ↔ контракт), `parseSystems` (запетайки → списък), `toggleInList` (мултиселект в каноничен ред, пази непознати стойности), `fieldForErrorCode` (машинният `DomainError.code` → полето, което да светне).
+- **`profile-fields.tsx`** — `FormField` / `TextField` / `ToggleGroup` (radio за „едно от", checkbox за мултиселект; RN няма `<select>`, затова натискаеми чипове с `accessibilityState.checked`).
+- **`profile-form.tsx`** — RHF форма с всички полета от А3: DisplayName, опит, тип игра (свободен текст), формат, **езици на ИГРА** (съзнателно отделени от UI езика — Е.9, подсказката го казва), **DM/играч мултиселект** (двете едновременно е валидно), системи, Bio. Типизираните грешки сядат при полето си през `t(i18nKey)`; непознат код → грешка над бутона. Успехът е „✓ Записано" **на бутона** (установеният патърн, без toast) и се извежда от `saved && !isDirty`, не се синхронизира ръчно.
+- **`profile-screen.tsx`** — `myProfile` → loading / грешка / форма с готови дефолти (формата се монтира чак след заявката, за да не се ресетва под пръстите на потребителя).
+- **`(tabs)/profile.tsx`** — тънък route, който само рендерира `<ProfileScreen />`.
+- **`locales/{bg,en}/profile.json`** — попълнен САМО profile namespace-ът (нула конфликт с паралелните FE таскове). Нито един хардкоднат низ в компонент (§4.6).
+
+### Тестове
+- `profile-form-values.test.ts` — чистите трансформации.
+- `profile-form.test.tsx` — init от профил; празен профил → празни дефолти; **двете роли off → блокиран запис**; submit праща точния `UpdateProfileInput` и бутонът казва „✓ Записано"; типизирана грешка от сървъра → съобщението при полето, бутонът НЕ показва успех.
+- `profile-screen.test.tsx` — myProfile → форма; null профил; loading; грешка.
+
+**Verify:** `npm --prefix frontend run typecheck` ✅ · `npm --prefix frontend test` ✅ 22/22 в 7 suite-а.
+
+### Бележка (continuation)
+Итерацията беше рестарт след прекъснат run — цялата работа беше в worktree-то, но некомитната. Сверих я срещу `contracts/schema.graphql` (`UserProfile`, `UpdateProfileInput`, `UpdateProfilePayload` съвпадат поле по поле), пуснах двата гейта и я комитнах. Единственият ми опит за промяна — махане на `await` пред `fireEvent`, за да замлъкнат React `act` предупрежденията — счупи два теста (изтекъл act scope изпразва дървото на СЛЕДВАЩИЯ тест) и го върнах: async `fireEvent` идиомът е правилният за RNTL v14 и коментарът в теста вече го документира.
+
+
+## Task 24 — feat(lifecycle): add refoundTable mutation cloning profile and auto-inviting active members
+
+**Repo:** partyup (branch `ralph/task-24`, commit `a0e51f1`)
+
+**Какво е направено:**
+- `backend/src/PartyUp.Api/Features/Lifecycle/Refound/` — нов вертикален слайс:
+  - `RefoundTableHandler` — клонира ПРОФИЛА на масата (име/система/формат/място/език/тагове/описание/слотове/seekingGm/one-shot/график/режим на прием) в нова маса със `Status=Forming` и `ListingActive=false`; founder = викащият (с пренесен `IsGm` от старото му членство). Право има ВСЕКИ активен член (А5 — механизмът е точно за заспал founder), не само основателят. Старата маса не се пипа; чатовете не се клонират.
+  - `RefoundInvite` — типът на известието `REFOUND_INVITE` + сглобяване/разчитане на payload-а на едно място. Поканата Е известието (отделна таблица „покани" не се строи).
+  - `AcceptRefoundInviteHandler` — лек прием без церемония (пресъздаване, не прием — А2 не важи тук): проверява поканата, създава/възкресява членство `Member`, пренася GM ролята, идемпотентен при повторен клик; без покана → `FORBIDDEN`.
+  - `RefoundMutations` — `refoundTable(tableId, name?)` → payload `table`, `acceptRefoundInvite(tableId)` → payload `membership`; регистрация през source generator-а, Program.cs непипнат.
+- `backend/tests/PartyUp.IntegrationTests/Features/Lifecycle/Refound/` — 12 спека: клониране на всички полета + ново основателство, покани към останалите активни (вкл. стария founder, БЕЗ напусналия и БЕЗ викащия), старата маса непроменена, ново име само на клонинга, FORBIDDEN за външен/напуснал, NOT_FOUND, приемане на покана (без decision/candidacy), пренесена GM роля, външен → FORBIDDEN, двоен accept → едно членство.
+
+**TDD:** RED (спековете не компилират — слайсът липсва) → GREEN (12/12).
+
+**Тестове:** `dotnet test backend/PartyUp.slnx` — 121 unit + 237 integration, всичко зелено. FE не е пипан (BE-only diff).
+
+
+## [2026-08-18] - Task #23: feat(lifecycle): add kick flow through group decision excluding the affected member
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** Kick-ът е единственото действие, за което А4/А5/А7 говорят в три различни секции наведнъж: винаги групов (никакъв founder fast-path, дори когато режимът на прием е „founder одобрява"), винаги без засегнатия във вота и в чата, и никога срещу founder-а (там пътят е exodus/„Преоснови", не превземане). Примитивът от таск 14 вече умее всичко това — липсваше входът към него и мястото, където одобреният вот реално маха човека.
+
+**What was done:**
+- RECON: merged 14 (`DecisionService.OpenAsync` + `excludedUserId` механиката, `DueVoterIdsAsync`, pendingVoters DataLoader-ът вече изключва засегнатия) и merged 16 (`CandidacyService` — Apply-ът е ПРИ ЧЕТЕНЕ: изходът живее върху решението и се пренася идемпотентно, а зоната на решенията не знае за консуматорите си). А4 (kick = групово, алармата само стартира процеса), А5 (founder-ът е постоянен; напускането е лично право), А7 (kick е ВИНАГИ групов, режимът пипа само приема) — прочетени дословно.
+- RED: `ProposeKickTests` — 15 спека през реалната схема: решение без засегнатия (subject/excludedUser/чат/pendingVoters = останалите), единодушие → неактивно членство + едно неутрално MEMBER_KICKED, „не" → нищо не се случва, пренасяне на изхода преди правата, founder → FORBIDDEN, режим „founder одобрява" → пак вот, под 3 активни (вкл. с напуснали) → TOO_SMALL_FOR_KICK, втори kick → ALREADY_PROPOSED, self-kick → VALIDATION, чужд/анонимен → FORBIDDEN, липсваща маса/член → NOT_FOUND. Червени на компилация (слайсът не съществува).
+- GREEN: `Features/Lifecycle/Kick/` — `ProposeKickHandler` (порти в реда: маса → sync → права → self → founder → член → праг 3 → отворена церемония → `OpenAsync(Kick, subject=excluded=member)`; `ShouldUseFounderApprove` НЕ се пита нарочно), `KickService.SyncFromDecisionsAsync` (Approved kick решения → `Active=false` + `LeftAt`, запис ПРЕДИ известията, после по едно `MEMBER_KICKED` с payload само `{ tableId }`; пипа само АКТИВНИ членства → идемпотентно), `ProposeKickMutations` (`[MutationType]` + `PayloadFieldName = "decision"` — Program.cs непипнат).
+- Синхронизаторът се вика от mutation-а ПРЕДИ правата: иначе вече изключен човек би предлагал нови kick-ове, а прагът би броял хора, които вече не са на масата. Public/static е нарочно — всеки бъдещ прочит на състава го вика без DI регистрация.
+
+**Verification:**
+- `dotnet test backend/tests/PartyUp.IntegrationTests --filter ProposeKickTests` → 15/15 pass
+- `dotnet test backend/PartyUp.slnx` → 121/121 unit + 226/226 integration, 0 failed
+- Обхват: само `Features/Lifecycle/Kick/**` + `tests/.../Features/Lifecycle/Kick/**`; contracts/schema.graphql, Program.cs, csproj и Domain — непипнати
+
+**Files modified:**
+- backend/src/PartyUp.Api/Features/Lifecycle/Kick/KickService.cs (нов)
+- backend/src/PartyUp.Api/Features/Lifecycle/Kick/ProposeKickHandler.cs (нов)
+- backend/src/PartyUp.Api/Features/Lifecycle/Kick/ProposeKickMutations.cs (нов)
+- backend/tests/PartyUp.IntegrationTests/Features/Lifecycle/Kick/ProposeKickTests.cs (нов)
+
+**Git commit:** `558624a` — `feat(lifecycle): add kick flow through group decision excluding the affected member`
+
+---
+
+
+## Task 22 — feat(lifecycle): add unilateral leaveTable mutation
+
+**Репо:** partyup (`backend/src/PartyUp.Api/Features/Lifecycle/Leave/`) · **Branch:** ralph/task-22 · **Commit:** `52e0227`
+
+**RECON.** Прочетен party-up.md А5 дословно: напускането е едностранно право (противоположността на kick-а), решението е exodus, НЕ превземане → founder-ът е постоянен като роля, но напуска като всеки друг и никаква succession логика не влиза в модела. Съседният слайс `Lifecycle/Trial` даде патърна (mutation conventions + Result pattern + INotifier), а `StayOrLeaveHandler` — умишления контраст: там founder-ът получава FORBIDDEN, защото това е ДРУГ вход (отговор на въпроса на групата), не А5.
+
+**RED.** `Features/Lifecycle/Leave/LeaveTableTests.cs` + собствен `LeaveSeed.cs` (границата на слайса важи и за тестовете) — 12 спека: напускане на място, нула GroupDecision/Vote, работи във ВСЯКА фаза (Theory над 4-те статуса), известия само към останалите, founder напуска без грешка и без прехвърляне на ролята, не-член / вече напуснал / липсваща маса → NOT_MEMBER. Червени по правилната причина: `The field 'leaveTable' does not exist on the type 'Mutation'`.
+
+**GREEN.** Три файла в `Features/Lifecycle/Leave/`: `LeaveTableMutations.cs` (`[MutationType]`, `PayloadFieldName = "membership"` — контрактът от contracts/schema.graphql), `LeaveTableHandler.cs` (едно запитване за активно членство → NOT_MEMBER при липса, Active=false + LeftAt, после известия) и `LeaveNotifications.cs` (`MEMBER_LEFT`). Известията тръгват СЛЕД записа — тогава „останалите" е просто активният състав и напусналият вече не е в него, без изключение, което да се разсинхронизира.
+
+**Верификация.** `dotnet test backend/PartyUp.slnx` → **121 unit + 223 integration, 0 червени**. Program.cs / csproj / Domain / contracts непипнати (§7а.2 — регистрацията минава през source generator-а); никакви секрети; целият diff е вътре в `files` обхвата на таска.
+
+
+## Task #18 — feat(candidacy): add submitVerdict mutation with membership, auto-delist and neutral notifications
+
+**Репо:** partyup (BE) · **Lane:** be-candidacy-verdict · **Commit:** `bdd4aa0`
+
+### Какво е направено
+
+- **RED:** `backend/tests/PartyUp.IntegrationTests/Features/Candidacies/Verdict/` — `VerdictSeed.cs` (маса с контролируеми `SlotsTotal`/`ListingActive`/`SeekingGm` + кандидатура преди verdict, стъпило върху `DecisionSeed`/`CandidacySeed`) и `SubmitVerdictTests.cs` с 14 спека. Червено по правилната причина: слайсът `Features/Candidacies/Verdict` не съществуваше.
+- **GREEN:** `backend/src/PartyUp.Api/Features/Candidacies/Verdict/`
+  - `SubmitVerdictHandler.cs` — права (активен член на масата) → валиден статус (`ApprovedForContact` | `InContact`) → изход. **ACCEPT:** `TableMembership` (`Member`, `Active`, `IsGm = asGm && table.SeekingGm`), после `UnpublishService.UnpublishAsync` (таск 12) и `TableDelistService.DelistIfFullAsync` (таск 10) — обявите се свалят от собствениците си, не се преписват тук; накрая `INotifier` → `CANDIDACY_ACCEPTED`. **REJECT:** `Rejected` + `CandidacyService.CandidacyClosedNotification` (`CANDIDACY_CLOSED`) с payload САМО `candidacyId`.
+  - `SubmitVerdictMutations.cs` — `[MutationType]` + `[UseMutationConvention(PayloadFieldName = "candidacy")]`, разгънати аргументи `candidacyId/accepted/asGm` точно по `contracts/schema.graphql`. Program.cs непипнат (§7а.2).
+
+### Решения
+
+- **Контрактът бие notes-а:** taskът пише `accept`, схемата — `accepted: Boolean!` + `asGm: Boolean`. Следван е контрактът (§7б.11), contracts/ не е пипан.
+- **Неутралността (А2) е тествана като payload, не като тип:** спекът изброява ключовете на JSON-а и иска точно `["candidacyId"]` — нито маса, нито гласували, нито причина.
+- **Повторен и подранил verdict = един и същ `INVALID_STATE`:** и двете са невалиден преход, а не липсващо право.
+- **Съществуващо неактивно членство се възкресява, не се дублира** — два реда за един човек биха счупили точно броенето, по което пада обявата на масата.
+
+### Верификация
+
+- `dotnet test backend/PartyUp.slnx` → **121 unit + 207 integration, 0 fail** (~18 сек, Testcontainers).
+- FE не е пипан (BE-only diff), `frontend/node_modules` липсва в worktree-то → FE командите остават за post-merge гейта; `package-lock.json` нарочно не е мутиран.
+
+
+## Task #17 — feat(candidacy): add openContactChat mutation creating the private face-to-candidate chat
+
+- **Repo:** partyup (`D:\Downloads\monk\party-up`), branch `ralph/task-17`, commit `c435b4c`
+- **Lane:** be-candidacy-contact · **dependsOn:** 16 (CandidacyService merged)
+
+### Какво е направено
+
+Нов vertical slice `backend/src/PartyUp.Api/Features/Candidacies/Contact/`:
+
+- **`OpenContactChatHandler`** — правата първо (активен член на масата на кандидатурата; кандидатът удря в същата проверка, защото не е член), после `CandidacyService.SyncFromDecisionAsync` (изходът на вота живее върху решението и се пренася при четене — иначе единодушното „да“ се препъва в „още се обсъжда“), после статусна порта: само `ApprovedForContact`/`InContact`, иначе `INVALID_STATE`. Създава `Chat { Type = Direct, TableId = null }` с ТОЧНО двама участници — отварящият + кандидатът (Отворени 18.07: „чист 1:1, личен“ — групата НЕ вижда съдържанието). Кандидатурата минава в `InContact`, а `ContactChatId` пази ПЪРВИЯ разговор (`??=`).
+- **Идемпотентност без ново понятие:** разговорът се търси по самите двама участници (генеричен 1:1 между потребители), а не по кандидатурата — затова повторното отваряне от СЪЩИЯ човек връща същата нишка, а ДРУГ член получава свой отделен 1:1 (А2 т.3: „лицето“ не е формална роля; ако всички решат да пишат — тяхно право).
+- **`OpenContactChatMutations`** — `[MutationType]` + `[UseMutationConvention(PayloadFieldName = "chat")]`, регистрация през source generator-а, Program.cs непипнат (§7а.2). Формата съвпада 1:1 с `contracts/schema.graphql` (`OpenContactChatInput`/`OpenContactChatPayload`/`OpenContactChatError`) — контрактът НЕ е пипан.
+
+### Тестове (TDD, RED първо)
+
+`backend/tests/PartyUp.IntegrationTests/Features/Candidacies/Contact/` — `ContactTestBase` (seed-ва маса + кандидат на борда през съществуващия `CandidacySeed`, кандидатура в зададен статус, по избор с групово решение) + 10 спека: чист 1:1 с точно 2-ма и без маса, идемпотентност за същия човек, отделен чат за друг член с непроменен `ContactChatId`, пренасяне на одобрен вот преди статусната проверка, `INVALID_STATE` при Discussing и при затворена кандидатура, `FORBIDDEN` за външен/за самия кандидат/без сесия, `NOT_FOUND` за липсваща кандидатура.
+
+RED потвърден за правилната причина („The field `openContactChat` does not exist on the type `Mutation`“) преди имплементацията.
+
+### Верификация
+
+`dotnet test backend/PartyUp.slnx` → **101 unit + 189 integration, 0 failed**. Обхватът е точно `files` списъкът — никакви други файлове (contracts/, Program.cs, Domain, FE) не са докоснати.
+
+
+## Task 20 — feat(chat): add onMessage and onNotification GraphQL subscriptions with authorization
+
+**Репо:** partyup (be-chat-subscriptions lane) · **Commit:** `cbe6eba` · **Тестове:** 101 unit + 155 integration ✅
+
+### Какво е направено
+
+- `Features/Chats/Subscriptions/ChatSubscriptions.cs` — `onMessage(chatId): Message!` през `[Subscribe(With = ...)]`. Абонира се за `ChatTopics.Messages(chatId)` (класът от merged таск 19 — низът е контракт между двата слайса и не се преписва наум). Авторизацията е при абонирането, защото веднъж отворен потокът пропуска всяко следващо съобщение без нов въпрос: липсващ чат → `NOT_FOUND`, чужд чат → `NOT_PARTICIPANT` (същият код, който връща и `sendMessage`), без сесия → `FORBIDDEN`.
+- `Features/Chats/Subscriptions/NotificationSubscriptions.cs` — `onNotification: Notification!`. Полето НЯМА аргумент и това е самата авторизация: темата (`user:<userId>`) се извежда от сесията, тоест чуждият поток е недостижим по КОНСТРУКЦИЯ. Публикуването по нея идва от таск 26.
+- `Features/Chats/Subscriptions/SubscriptionRefusal.cs` — отказът като GraphQL грешка с `code` + `i18nKey`. Subscription-ите нямат error канал в payload-а (контрактът е `Message!`/`Notification!`), тоест mutation conventions тук нямат къде да сложат отказа; мълчаливо празен поток обаче би бил по-лош — клиентът не може да го различи от тих разговор и би чакал вечно.
+- `Features/Chats/Subscriptions/NotificationGraphQLType.cs` — `[ObjectType<Notification>]` със скрити `UserId` (потокът е личен — получателят е винаги викащият) и навигацията `User` (зад нея стои Identity ентитито `AppUser`).
+- Интеграционни спекове: 5 за `onMessage` (доставка вкл. `sender` през DataLoader-а, изолация между темите, трите отказа) + 3 за `onNotification`.
+
+### Открито и поправено от предишния опит
+
+Предшественикът беше оставил тестовете и `NotificationTopics.cs`, но `SubscriptionTestBase` НЕ компилираше: в Hot Chocolate 16.6 `OperationResult.Data` е `OperationResultData`, а не речник — индексирането по име на поле не съществува. Вместо да се рови във вътрешното представяне, всяко събитие сега се форматира до JSON със СЪЩИЯ `JsonResultFormatter`, който сериализира и по мрежата → тестът твърди нещо за това, което вижда клиентът, и ползва общите `GraphQLResponseExtensions` helper-и като останалия suite.
+
+### Сверка със схемата
+
+Експорт на реалната HC схема (във временен файл, БЕЗ да се пипа `contracts/schema.graphql` — §7а.1 го пази за таск 41) потвърди дословно съвпадение с контракта: `Subscription { onMessage(chatId: UUID!): Message!, onNotification: Notification! }` и `Notification { id, type, payloadJson, createdAt, readAt }`. Никакви странични полета от source generator-а — subscribe резолверите са `internal` точно затова.
+
+### Бележки
+
+- Program.cs / csproj / Domain / Common — НЕПИПНАТИ (§7а.2); двата `[SubscriptionType]` класа се регистрират сами през `AddPartyUpTypes()`.
+- FE не е докосван — `npm` командите не са пускани в това worktree (verify гейтът ги пуска след merge).
+
+
+## Task #21 — feat(lifecycle): add trial-to-permanent transitions with stay-or-leave choice
+
+**Repo:** partyup (backend, lane be-lifecycle-trial) · **Commit:** `4a86021`
+
+**Какво е направено:**
+- `Features/Lifecycle/Trial/TrialTransitions.cs` — пътеката от А6 като ЧИСТА функция: разрешени са само Forming→Trial, Trial→Deciding, Deciding→Permanent. Прескачане на фаза, връщане назад, повторен същ статус и Disbanded (в двете посоки) → `INVALID_STATE`.
+- `TrialPhaseHandler.cs` — трите фазови прехода: само founder (`FORBIDDEN`), липсваща маса → `NOT_FOUND`, невалиден преход → `INVALID_STATE`. При влизане в Deciding праща `STAY_OR_LEAVE_PROMPT` през `INotifier` към активните членове БЕЗ founder-а (той е задал въпроса).
+- `StayOrLeaveHandler.cs` — отговорът НЕ е вот (Решения 18.07): `stay=false` деактивира членството ВЕДНАГА (+`LeftAt`), `stay=true` не записва нищо (няма кворум за броене). Извън фаза Deciding → `INVALID_STATE`; не-член → `FORBIDDEN`; founder → `FORBIDDEN` (А5 exodus е отделен, паркиран flow — масата не остава без основател мълчаливо).
+- `TrialLifecycleMutations.cs` — `startTrial` / `startDecidingPhase` / `finalizeDeciding` / `stayOrLeave` по mutation conventions, точно по contracts/schema.graphql. Регистрация през source generator-а — Program.cs непипнат.
+- `TrialLifecycleNotifications.cs` — типът `STAY_OR_LEAVE_PROMPT`.
+
+**Тестове:**
+- Unit (наследен RED спек от предишния опит, оставен непроменен): 6 theory групи върху преходния валидатор.
+- Integration (нови, Testcontainers): пълната пътека Forming→Trial→Deciding→stayOrLeave(false)→finalizeDeciding→Permanent с проверка кой остава активен; нотификациите отиват при членовете, не при founder-а; „оставам" не създава решение/глас; невалиден преход, не-founder, не-член, липсваща маса, повторен startTrial, founder+stayOrLeave.
+- `dotnet test backend/PartyUp.slnx` — **121 unit + 178 integration, 0 fail**.
+
+**Обхват:** само `Features/Lifecycle/Trial/**` + собствените тестови папки. Domain/Common/Program.cs/csproj/contracts непипнати.
+
+
+## Task 16 — feat(candidacy): add pullCandidate mutation opening admission decision or founder fast-path
+
+**Repo:** partyup · **Lane:** be-candidacy-pull · **Commit:** `1f6199e`
+
+### Контекст
+Итерацията е RESUME на прекъснат опит (quota exceeded). Worktree-то съдържаше ПЪЛНИЯ слайс като uncommitted untracked файлове. Подходът беше диагностичен, не пренаписващ: прочетох предшественика, сверих го срещу `contracts/schema.graphql` и §4/§7б червените линии, пуснах suite-а — всичко зелено → запазих кода и го комитнах.
+
+### Какво има в слайса
+- **`PullCandidateHandler`** — PULL моделът (А): масата дърпа, играчът не кандидатства. Реди проверките по приоритет: маса → `NOT_FOUND`; викащият активен член → `FORBIDDEN` (правата ПРЕДИ причината — извън масата дори отказът не е чужда работа); после `NOT_LISTED` (бордът е единственият вход), `ALREADY_MEMBER`, `ALREADY_PULLED`.
+- **Двете пътеки на приема** — коя важи НЕ се решава тук: пита се `DecisionService.ShouldUseFounderApproveAsync` (merged 14), за да не съществуват две копия на праговата логика. Лек прием (А6/А7) → `ApprovedForContact` без решение/чат/вот, и дърпа САМО founder-ът (член → именуваната `FOUNDER_APPROVES_MODE`, не глухо „нямаш право"). Пълна церемония → `DecisionService.OpenAsync(Admission, subject=кандидата)` → `Discussing` + `DecisionId`.
+- **`CandidacyService`** (public, за таскове 17/18) — `SyncManyFromDecisionsAsync`: изходът на вота живее върху решението и се пренася върху кандидатурата ПРИ ЧЕТЕНЕ, така зоната на решенията остава непипната и не знае, че кандидатури съществуват. Approved → `ApprovedForContact`; Rejected → `Rejected` + ЕДНА неутрална `CANDIDACY_CLOSED` нотификация. Идемпотентно по конструкция (пипа само `Discussing`), статусът се записва ПРЕДИ известията.
+- **`CandidacyQueries`** — `candidacy(id)` / `myTableCandidacies(tableId)`, видими само отвътре на масата (кандидатът и външният получават `null`/празен списък — груповите работи не са витрина, А2). Правото се проверява ПРЕДИ sync-а, за да не задвижва чуждо четене чужда кандидатура.
+- **`CandidacyType` + `CandidacyDataLoaders`** — домейн ентитито Е GraphQL типът (без паралелен DTO); FK-тата и EF навигациите са `Ignore`-нати, полетата минават през DataLoader-и срещу N+1 (§2а.4).
+
+### Червени линии — сверени
+- Обхватът е точно `files` списъкът: САМО `Features/Candidacies/Pull/**` + огледалните тестове. `Program.cs` / `csproj` / `Domain` / `Common` / `contracts/` / `frontend/` — НЕПИПНАТИ (§7а.2). Регистрацията е автоматична през source generator-а.
+- `[ObjectType<Query>]`, НЕ `[QueryType]` (§7а.5 — иначе полетата изчезват от схемата БЕЗШУМНО).
+- Result pattern навсякъде; очакваните провали са стойности, не exceptions (§4.5). `AsNoTracking()` + изрични Select проекции.
+- Кодът съвпада с контракта: `PullCandidateInput`/`PullCandidatePayload{candidacy,errors}`, `Candidacy{decision,contactChat,resolvedAt}` — без разминаване (§7б.11). Никакви секрети, никакви build артефакти в commit-а.
+- Неутралността е ПРОВЕРИМА в теста: payload-ът на `CANDIDACY_CLOSED` не съдържа нито масата, нито гласувалите.
+
+### Тестове
+`dotnet test backend/PartyUp.slnx` → **101 unit + 140 integration, 0 failed, 0 skipped**. 15 от интеграционните са на този слайс: двете пътеки на приема, авто-spawn-натият чат с точния състав на дължимите гласове (кандидатът отвън), четирите типизирани грешки, „листването остава на борда за други маси", единодушие → `ApprovedForContact`, отказ → неутрално затваряне, известието само веднъж, скритост от кандидата/външния.
+
+
+## Task #15 — feat(decisions): add stale voter founder alert and snooze mutation
+
+**Repo:** partyup (backend, lane be-decision-alerts) · **Branch:** ralph/task-15 · **Commit:** 3d53f7a
+
+### Какво е направено
+- **RECON:** прочетени merged Decision API-то от таск 14 (DecisionService/DecisionDataLoaders/GroupDecisionType), party-up.md А4 дословно и секциите на контракта за `staleDecisions`/`snoozeDecision`.
+- **RED:** `backend/tests/PartyUp.IntegrationTests/Features/DecisionAlerts/StaleDecisionTests.cs` — 17 спека, всичките червени с правилната причина (`The field 'staleDecisions' does not exist on the type 'Query'`).
+- **GREEN:** `backend/src/PartyUp.Api/Features/DecisionAlerts/` — `StaleDecisionRules` (3 дни праг / 3 дни таван на отлагането / `DECISION_STALE`), `StaleDecisionFinder` (мързеливо откриване при заявка, без hosted service; едно запитване за имената на негласувалите за ВСИЧКИ решения — без N+1), `StaleDecisionQueries` (`[ObjectType<Query>]`, §7а.5), `SnoozeDecisionHandler` + `SnoozeDecisionMutations` (mutation conventions, `PayloadFieldName = "decision"`).
+
+### Продуктови решения
+- **А4 границата се пази от тест:** алармата САМО стартира процеса — спек `StaleDecisions_NeverKicksAnyoneByItself` доказва, че членството остава активно и никакво Kick решение не се отваря.
+- **Алармата звъни ВЕДНЪЖ на решение** (панелът се отваря по десет пъти на ден); отлагането я пре-зарежда, тоест след изтекъл snooze тя звъни отново.
+- **`until` е изричен вход, не фиксирана стъпка** — така го иска контрактът; продуктовите „+3 дни" от notes-а остават като ГРАНИЦА на избора (минал момент или > 3 дни → `VALIDATION`).
+- Чужд поглед към `staleDecisions` получава празен списък, а не грешка (дискретността от А2).
+
+### Проверки
+- `dotnet test backend/PartyUp.slnx` → **235/235 зелени** (101 unit + 134 integration, Testcontainers).
+- Схемата, експортирана от кода (във временен файл), съвпада точка по точка с `contracts/schema.graphql`: `staleDecisions: [GroupDecision!]!`, `SnoozeDecisionInput { decisionId, until }`, `SnoozeDecisionPayload { decision, errors }`, `union SnoozeDecisionError = DomainError`.
+- Червени линии: без секрети, `contracts/` непипнат, Program.cs/csproj/Domain/Common непипнати, diff-ът е строго в `Features/DecisionAlerts/**` + тестовете му.
+
+
+## Task #19 — feat(chat): add sendMessage mutation, chat queries and topic event publish
+
+**Repo:** partyup · **Lane:** be-chat-messaging · **Branch:** ralph/task-19 · **Commit:** 85e9adc
+
+### Какво е направено
+Нов vertical slice `Features/Chats/Messaging/` (Е.6) — целият чат обмен без subscription resolver-а (той е таск 20).
+
+- **`sendMessage(chatId, text)`** — mutation conventions + Result pattern. Редът на проверките е нарочен: сесия → чатът съществува (`NOT_FOUND`) → участник ли съм (`NOT_PARTICIPANT`) → текстът (`VALIDATION`, trim + 1–2000, колкото е и колоната). Правото се гледа ПРЕДИ съдържанието — какво е написал човек без право да пише е без значение (А2).
+- **Publish на `chat:<chatId>`** през `ITopicEventSender`, СЛЕД записа в базата. Името на темата живее в `ChatTopics` — то е контракт между този таск и таск 20, който се абонира за същия низ.
+- **`INotifier` NEW_MESSAGE** към ОСТАНАЛИТЕ участници (payload: chatId/messageId/senderUserId — къде и кое, не готов текст). На подателя не се праща нищо.
+- **`myChats`** — подредба по ПОСЛЕДНО СЪОБЩЕНИЕ (чат без реплики пада по CreatedAt), **`chat(id)`** — нишката; и двете видими само за участник, чуждият чат връща null, а не грешка.
+- **Типовете:** `Chat`/`Message` са домейн ентитита с скрити навигации (`ChatParticipant.User` → Identity ентитито би изсипало passwordHash в публичната схема). `participants`/`sender`/`lastMessage`/`table` минават през 4 DataLoader-а — всяко от тях виси на всеки ред от `myChats`, тоест наивен resolver = N+1 (§2а.4). `messages` е с offset пагинация, страницата се брои от най-новото назад и се връща в четивен ред.
+
+### Тестове
+22 нови integration теста (Testcontainers), вкл. отделен тест че publish-ът стига до `chat:<chatId>` — иначе счупена тема би останала невидима и за двата таска. Пълен BE suite: **90 unit + 126 integration, 0 червени**.
+
+### Бележки
+- `sender`/`participants` връщат СЪЩИЯ контрактен `User` тип, който въведе LFG бордът — паралелен запис би се регистрирал под същото име и би съборил схемата.
+- Program.cs/csproj/Domain/Common са НЕПИПНАТИ — слайсът се регистрира сам през source generator-а (§7а.2).
+- `contracts/schema.graphql` не е пипан (§3.1); `messages(skip/take)` е добавка спрямо дизайнерската схема — реконсилира се в таск 41.
+
+
+## Task #13 - feat(lfg): add readonly tables showcase query with party composition
+
+**Repo:** partyup (backend) - branch `ralph/task-13`, commit `3f3848d`
+
+### Какво стана
+Заявката/витрината си беше написана от предишния опит и е коректна - счупен беше **интегрираният** свят, не слайсът. Гейтът върна 111 от 112 интеграционни теста червени, включително `Foundation` тестовете, което е подписът на **счупен старт на хоста**, а не на бъгава фича. Причината, дословно от Hot Chocolate:
+
+```
+The name `User` was already registered by another type.
+(HotChocolate.Types.ObjectType<PartyUp.Api.Features.Lfg.Showcase.User>)
+```
+
+Двама паралелни агента са стигнали до един и същи извод независимо: контрактният `type User` не бива да е Identity ентитито (иначе `passwordHash`/`securityStamp` влизат в ПУБЛИЧНАТА схема), значи трябва тесен запис. Таск #11 (`Features/Lfg/Board/User.cs`) го е написал и е мърджнат пръв; таск #13 е написал втори, свой. В C# това са два различни типа в два namespace-а и компилаторът мълчи - **GraphQL името обаче е глобално**, така че схемата пада още при warmup-а и с нея цялото приложение.
+
+### Поправка (в границите на `Features/Lfg/Showcase/**`)
+- Изтрит `Showcase/User.cs`; трите файла, които го ползваха, минават през `using User = PartyUp.Api.Features.Lfg.Board.User;`.
+- `User.From(id, profile)` → частен `Publicly(id, profile)` в `ShowcaseDataLoaders` (типът на Board изнася `Empty(id)`, не `From`); поведението е същото - липсващ профил дава ПРАЗЕН профил, защото контрактът обявява `profile: UserProfile!` и `null` тук би съборил цялата заявка вместо да покаже един беден ред.
+- Alias, а не `using` на цялото пространство: заемката е ЕДИН тип и се вижда на реда. Съзнателна отстъпка от §7б.2 („слайс не reference-ва чужд тип") - дублирането е Блокер (счупена схема), alias-ът е Важно, а трети вариант в рамките на моя обхват няма: собственик на типа е Board, защото витрината е втората, която го поиска.
+
+### Верификация
+Worktree-ът е от преди #11 и #9, тоест сам по себе си НЕ възпроизвежда провала. Затова тестовете вървяха срещу **истинското интегрирано състояние**: единайсетте файла, с които main е избягал напред (`Lfg/Board/**`, `Tables/Settings/**` + спековете им), бяха положени в worktree-а като untracked overlay, пуснат беше целият suite, после overlay-ът беше изчистен ПРЕДИ коммита (`git clean -fd` по изрични пътища; `git status` показва само моите 4 файла).
+
+- `dotnet test backend/PartyUp.slnx` → **90 unit + 112 integration, 0 failed** (същите 112, които гейтът върна червени).
+- Преди поправката, същият overlay: `Hello_IsServedThroughTheRealPipeline` пада с горната `SchemaException` - тоест диагнозата е доказана, не предположена.
+- `schema export` към временен път ИЗВЪН репото: `type User`, `input TablesShowcaseFilter`, `tablesShowcase(filter:)`, `table(id:)` и `TableMembership.user` съвпадат поле по поле с `contracts/schema.graphql` (който остава непипнат - §3.1, таск 41 го притежава).
+
+### ⚠ За мърджъра
+Клонът НАРОЧНО не компилира самостоятелно - `User` вече живее в мърджнатия Board слайс. Мърджва се върху main (където е зелен), не се билдва изолирано.
+
+
+## Task 14 — feat(decisions): add group decision primitive with unanimous voting, threshold rule and auto-spawned chat
+
+**Repo:** partyup · **Lane:** be-decisions · **Commit:** `59449a9`
+
+### Какво е направено
+- **RED:** unit спекове за единодушието (`VoteTallyTests`) и за прага/церемонията (`AdmissionCeremonyTests`); интеграционни спекове за откриването на решение с авто-чат (`DecisionServiceTests`) и за вота през GraphQL (`CastVoteTests`). Червени по правилната причина — слайсът не съществуваше.
+- **GREEN — `Features/Decisions/`:**
+  - `VoteTally.Evaluate(dueVoterIds, votes)` — ЧИСТА функция: всички дължими с „да" → `Approved`; едно „не" → `Rejected` НЕЗАБАВНО; гласове от недължими (изключения при kick, външни хора) не се броят; празен състав остава `Open`.
+  - `DecisionService.OpenAsync` — GroupDecision + АВТО-spawn групов `Chat` с участници активните членове минус `excludedUserId` (А2: чатът се ражда заедно с темата; субектът стои отвън). `DueVoterIdsAsync` се чете при ВСЯКО броене, не се снима при откриване — напусналият не блокира решението.
+  - `DecisionService.ShouldUseFounderApprove(status, mode, activeMembers)` — праговата логика на ЕДНО място (таск 16 пита оттук): лек прием при режим „founder одобрява" (А7), под прага 4 (А2) ИЛИ докато масата не е `Permanent` (А6 дословно: „церемонията се включва чак при постоянна група").
+  - `CastVoteHandler` + `castVote` mutation по Result pattern: `NOT_FOUND`, `INVALID_STATE` (затворено решение), `FORBIDDEN` (недължим глас — външен или изключен при kick, А4), `ALREADY_VOTED` (вотът е КРАЕН, не се преиграва).
+  - `groupDecision(id)` query — видимо САМО за активните членове на масата (чуждият поглед получава `null`, не грешка); проекция + `AsNoTracking`.
+  - GraphQL типове: `GroupDecisionType` (table/chat/subject/excludedUser/votes/**pendingVoters** — всички през DataLoader-и заради списъчното четене от таск 15), `VoteType` (`voter: User!` — вотът е ЯВЕН, А2), `ChatGraphQLType` (първото изнасяне на чата в схемата; скрити са навигациите, зад които стои Identity ентитито).
+- **DONE:** `dotnet test backend/PartyUp.slnx` → 101 unit + 103 integration, 0 fail.
+
+### Решения по пътя
+- **Прагът включва и жизнения цикъл.** Notes-ът на таска дава само „под 4 ИЛИ FounderApproves", но А6 е изричен („прием в пробната фаза: лек — церемонията се включва чак при постоянна група") и contracts коментарът също казва „below the admission threshold / **in TRIAL**". Затова сигнатурата е `(TableStatus, AdmissionMode, int)` — статусът е видим за таск 16, който ще сее `Permanent` маси, когато иска реален вот.
+- **Публичният `User` тип се преизползва** от слайса на борда, вместо да се регистрира втори със същото име (схемата не би се построила). Същото важи за `Chat`: тук влиза минималната безопасна регистрация, а `participants`/`messages`/`lastMessage` ги добавя таск 19, който ги притежава.
+- **`pendingVoters` е част от типа**, не отделна заявка — А2 прозрачността („виси заради Гошо") е и входът на алармата от А4, така таск 15 няма да си преписва логиката.
+
+### Червени линии
+✅ Никакви секрети · ✅ `contracts/schema.graphql` непипнат · ✅ нищо извън `Features/Decisions/**` + тестовите му папки (Program.cs / csproj / Domain / Common — недокоснати) · ✅ Result pattern, никакви exceptions за очакван провал · ✅ `AsNoTracking` + DataLoader-и (без N+1)
+
+
+## Task #9 — feat(tables): add updateTableSettings mutation restricted to the founder
+
+**Repo:** partyup · **Lane:** be-table-settings · **Commit:** a8e9a81
+
+### Какво е направено
+
+Вертикален слайс `Features/Tables/Settings/` (нищо извън него + собствената му тестова папка):
+
+- **`UpdateTableSettingsMutations`** — `[MutationType]` с разгънати аргументи, точно по `UpdateTableSettingsInput` от контракта; `PayloadFieldName = "table"`. Регистрира се сам през source generator-а, Program.cs остава непипнат.
+- **`TableSettingsPatch`** — входът като стойност, ЧАСТИЧЕН по конструкция: `null` = „не го пипай" (същата конвенция като merged `setTableListing`), празен низ = „изчисти свободния текст". Умишлено НЯМА режим на изгонване — kick-ът е ВИНАГИ групово решение (А7), затова не е настройка.
+- **`TableSettingsValidator`** — валидира САМО подаденото и го канонизира (език `"EN "` → `"en"`, тагове trim/dedupe, `OneShotAt` → UTC заради `timestamptz`). Границите повтарят тези на създаването нарочно: слайс не reference-ва чужд слайс (§7б.2), а правилата на масата не бива да зависят от това през коя операция е минала.
+- **`UpdateTableSettingsHandler`** — NOT_FOUND → FORBIDDEN (проверява ОСНОВАТЕЛСТВО, не членство: ролята е постоянна) → валидация → времеви режим → слотове. Подадена дата значи „масата Е събитие" и графикът пада със същата заявка (Б: смяната на режим е едно решение, не двустъпков ритуал); дата И график наведнъж е единствената истинска двусмислица → VALIDATION.
+- **Слотове под състава = CONFLICT**, не VALIDATION: числото е законно, но масата вече е приела повече хора — настройка няма право да предизвика изгонване мълчаливо (А7). Броят е на АКТИВНИТЕ членства; напусналият не държи слот.
+- **`TableSchemaGuard`** — слайсът е първият, който изнася `Table` в схемата на този клон, а инференцията следва `Memberships → TableMembership.User` и изнася ЦЯЛОТО Identity ентити публично (`passwordHash`, `securityStamp`). Навигацията е скрита; дублираният `Ignore` при merge е идемпотентен и никой слайс не бива да разчита на реда на появяване.
+
+### Тестове
+
+TDD: 14 интеграционни спека през Testcontainers написани ПЪРВО и потвърдени червени по правилната причина (`The field 'updateTableSettings' does not exist on the type 'Mutation'`), после зелени. Покриват: пълна смяна + канонизация, непипнати пропуснати полета, смяна на церемонията (А7), FORBIDDEN за член и без сесия, NOT_FOUND, CONFLICT при свиване под състава, свиване точно до състава, игнориране на напусналите, смяна към one-shot, двата режима наведнъж, изчистен график без дата, празно име, слотове извън диапазона.
+
+**Пълен BE suite: 63 unit + 57 integration — зелени.** Frontend не е пипан.
+
+
+## [2026-08-18 15:20] - Task #11: feat(lfg): add lfgBoard query with format, language, system and DM filters
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** Бордът (А3) е query върху АКТИВНИТЕ листвания, не отделна структура — листва ХОРА, защото масите са активната страна и дърпат оттам (PULL моделът). Две предишни итерации бяха прекъснати: кодът беше написан, но НИКОГА не беше комитнат (стоеше само като untracked файлове в worktree-то).
+
+**What was done:**
+- RED: `LfgBoardTests` — 10 integration теста върху seed от 5 души (4 на борда + 1 свалила се): пълен борд най-нови първо, скрити неактивни, профилен снапшот, формат в двете посоки, език, система, onlyDm, комбиниране с И, публичен достъп без сесия.
+- GREEN: `Features/Lfg/Board/` — `LfgBoardQueries` (`[ObjectType<Query>]` по §7а.5, join listing↔profile, `AsNoTracking` + `Select` проекция по §2а.4), `LfgBoardFilter` + изричен `LfgBoardFilterType`, `PlayerListingType` (профилът през DataLoader срещу N+1), тесен `User` запис вместо Identity ентитито.
+- Ключова находка на предшественика, запазена: Hot Chocolate лепи суфикса „Input" СЛЕД `[GraphQLName]`, тоест типът се регистрира като `LfgBoardFilterInput` и се разминава с контракта. Изричен `InputObjectType<T>` с `descriptor.Name("LfgBoardFilter")` заобикаля конвенцията.
+- Семантиката на „и двете": `Both` не ограничава в НИТО една посока — нито когато търсещият е гъвкав, нито когато листнатият е. `onlyDm: false` също не ограничава, иначе бордът би скрил всички DM-и.
+
+**Verification:**
+- `LfgBoardTests` → 10/10 pass
+- `dotnet test backend/PartyUp.slnx` → 86 unit + 66 integration, 0 failed, 0 skipped
+- build → 0 errors (2 pre-existing NU1903 warnings от SSH.NET, вън от обхвата)
+
+**Files modified:**
+- backend/src/PartyUp.Api/Features/Lfg/Board/LfgBoardQueries.cs
+- backend/src/PartyUp.Api/Features/Lfg/Board/LfgBoardFilter.cs
+- backend/src/PartyUp.Api/Features/Lfg/Board/PlayerListingType.cs
+- backend/src/PartyUp.Api/Features/Lfg/Board/User.cs
+- backend/tests/PartyUp.IntegrationTests/Features/Lfg/Board/LfgBoardTests.cs
+
+**Git commit:** `975851d` — `feat(lfg): add lfgBoard query with format, language, system and DM filters`
+
+---
+
+
+## Task #12 - feat(lfg): add publish and unpublish listing mutations with auto-unpublish service
+
+**Repo:** partyup | **Lane:** be-lfg-publish | **Commit:** `f550817`
+
+### What was done
+
+This was a RETRY of an interrupted run. The retry report's log tail was stale (it described a `quests.spec.js` task from another repo entirely), so the worktree was inspected directly: `git status` showed the previous agent had built the whole slice but **never committed it** - `backend/src/PartyUp.Api/Features/Lfg/` and `backend/tests/PartyUp.IntegrationTests/Features/Lfg/` sat untracked, with zero commits on the branch. Per continuation mode the existing work was kept and verified, not rewritten.
+
+**Slice `Features/Lfg/Publish/` (4 files):**
+- `PublishListingHandler.cs` - profile gate (`DisplayName` non-blank **and** (`IsDm` || `IsPlayer`)) -> `PROFILE_INCOMPLETE` so the FE can route to the profile instead of showing an error. Idempotent: an existing listing is re-activated in place rather than duplicated (a duplicate = the same person twice on the board).
+- `UnpublishService.cs` - **public** entry `UnpublishAsync(db, userId, ct)`, the single agreed cross-slice door required by the task notes so task 18 can auto-unpublish on final accept. Idempotent and failure-free; keeps the row (listing is a toggle, not a delete, so `createdAt` survives re-publishing).
+- `MyListingMutations.cs` - both argument-less mutations per the contract, with explicit `PayloadFieldName = "listing"` (convention would otherwise emit `playerListing`). Anonymous callers get `FORBIDDEN` as a Result value, not an exception (§4.5).
+- `PlayerListingType.cs` - binds the domain entity directly (no parallel DTO), ignoring `UserId` and the `User` navigation so Identity's `passwordHash`/`securityStamp` cannot leak into the public schema via auto-inference.
+
+**Spec `MyListingTests.cs` - 14 integration tests (Testcontainers):** empty/nameless/role-less profile -> `PROFILE_INCOMPLETE` + nothing listed; DM-only is enough; publish -> active listing persisted; double publish -> same id, one row; unpublish -> inactive but row kept; double unpublish and never-published unpublish -> idempotent no-ops; re-publish reactivates the same id; both mutations `FORBIDDEN` without a session; and `UnpublishService` exercised directly for the accept flow (both the hit and the no-op path).
+
+### Verification
+
+- `dotnet test backend/PartyUp.slnx` -> **156 passed / 0 failed** (86 unit + 70 integration, 14 of them new).
+- Targeted `--filter MyListingTests` -> 14/14 green.
+- Assertions confirmed non-vacuous: the `Data()` helper asserts there are no top-level GraphQL errors, so these tests could not pass if the mutations were missing from the schema.
+- Scope clean: `git diff HEAD --stat` empty - only the 5 new in-scope files were added. `Program.cs`, `PartyUp.Api.csproj`, `Domain/`, `Common/` and `contracts/schema.graphql` were all left untouched (§7а.2; the contract is re-exported by task 41).
+
+
+## Task #10 — feat(tables): add table listing toggle with GM slot flag and auto-delist service
+
+**Repo:** partyup (`backend/`) · **Lane:** be-table-listing · **Commit:** `8a84eed`
+
+### Какво е направено
+
+**RED → GREEN (TDD).** Първо спековете, потвърдено червени (слайсът не съществува), после минималната имплементация.
+
+- `Features/Tables/Listing/SetTableListingMutations.cs` — `[MutationType]` + `[UseMutationConvention(PayloadFieldName = "table")]`; аргументите са разгънати, за да произведе конвенцията точно `SetTableListingInput` от контракта. Регистрацията е автоматична през `AddPartyUpTypes()` — Program.cs остава непипнат.
+- `Features/Tables/Listing/SetTableListingHandler.cs` — `NOT_FOUND` за липсваща маса, `FORBIDDEN` за не-founder (А7: обявата е негова настройка; ролята е постоянна, проверява се `FounderId`), иначе вдига/сваля флаговете. Всичко през Result, нула exceptions.
+- `Features/Tables/Listing/TableDelistService.cs` — public static, за да го вика таск 18 без DI регистрация и без reference към чужд slice: `ShouldDelist(listingActive, activeMembers, slotsTotal)` (чиста функция, ≥ не ==) + `DelistIfFullAsync(db, tableId, ct)`.
+
+### Решения
+
+- **`seekingGm` е nullable в контракта → пропуснатата стойност значи „не го пипай", не „изгаси го".** Ядка №3: няма отделна GM витрина, half-match опашката са масите със `seekingGm`, така че двата флага се вдигат и падат независимо.
+- **Авто-свалянето брои САМО активните членства** — напусналият не държи слот, иначе обявата пада на призрачен състав.
+- **Липсваща маса / вече свалена обява = no-op, не грешка.** Викащият (таск 18) е вътрешен код в средата на друга операция, а не потребителско намерение (§4.5).
+- Не е въведено CONFLICT правило при вдигане на обява на пълна маса — спеката на таска не го иска, а измислени кодове извън контракта са по-скъпи от липсващи.
+
+### Тестове
+
+- Unit (`UnitTests/Features/Tables/Listing/`): 4 спека на `ShouldDelist` — пълна, свободен слот, пресилен състав, вече свалена обява. Без Docker, чиста функция.
+- Integration (`IntegrationTests/Features/Tables/Listing/`): 10 спека — вдигане на двата флага, сваляне, пропуснат `seekingGm`, member → FORBIDDEN, без сесия → FORBIDDEN, непозната маса → NOT_FOUND, delist при пълна/непълна маса, игнориране на напусналите, no-op при свалена/липсваща.
+- `dotnet test backend/PartyUp.slnx` → **67 unit + 57 integration, 0 failed**.
+
+### Обхват
+
+Само `Features/Tables/Listing/**` + двете тестови папки. Domain/Common/Program.cs/csproj/contracts — непипнати. FE — непипнат (без `npm install`, за да не мърда `package-lock.json`).
+
+
+## [2026-08-18 14:05] - Task #8: feat(tables): add createTable mutation with full table profile and founder membership
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** „Създай маса" е едната от двете равностойни входни функционалности (А3, founder flow). Масата се ражда с ПЪЛНИЯ си профил (Е.3) и веднага с членството на създателя — маса без founder не съществува дори за миг. Двата времеви режима на Б (събитие с дата ИЛИ постоянна група със свой график) са взаимно изключващи се и точно един от тях е задължителен.
+
+**Забележка (continuation):** таскът беше прекъснат два пъти от quota limit. Worktree-то съдържаше вече комитната работа на предшественика (`495fe31`, чисто работно дърво) — тя е ВЕРИФИЦИРАНА, а не пренаписана; липсваше само result файлът. Нов commit не се наложи.
+
+**What was done:**
+- RECON: merged таск 1 (`Domain.Table`/`TableMembership`, `TableStatus`/`MembershipRole`/`AdmissionMode`/`GameFormat`, `PartyUpDbContext`, `Result`/`DomainError`, `CurrentUser.GetUserId`), merged таск 2 (`createTable(input: CreateTableInput!): CreateTablePayload!` + `input CreateTableInput`), слайсовете на 5/6 като образец за mutation конвенциите, structure §2а (vertical slices, Result pattern), §4.5, §7а.2/§7а.4 и party-up.md А3/А6/А7, Б, Е.3, Е.8.
+- RED: 8 интеграционни спека (`Features/Tables/CreateTable/CreateTableTests.cs`) срещу истинския пайплайн — happy path с целия профил + `FORMING` + `GROUP_DECISION` дефолт + `listingActive:false`; създателят като `Founder` membership с `IsGm` от входа; отворен GM слот при `founderIsGm:false`; постоянна група със свой график; слотове = 1 → VALIDATION и НИЩО записано; без име → VALIDATION; и двата времеви режима → VALIDATION; нито един времеви режим → VALIDATION; без сесия → FORBIDDEN. Плюс 16 unit спека на валидатора (`CreateTableValidatorTests.cs`) — граници 2/10, дължини 120/80/8, канонизация, UTC нормализация.
+- GREEN: `Features/Tables/CreateTable/` — `TableDraft` (входът като една стойност, откъснат от GraphQL слоя, за да е валидаторът тестваем без Docker); `CreateTableValidator` (име/система/език, слотове 2–10, ТОЧНО един времеви режим, канонизация: trim, lowercase език, дедуп на style таговете, празен свободен текст → null, `OneShotAt` → UTC защото Postgres `timestamptz` не приема отместване ≠ 0, `OneShotPlace` отпада без събитие); `CreateTableHandler` (валидация → проверка за съществуващ founder като СТОЙНОСТ вместо raw FK exception → `Table` със `Status=Forming` + `TableMembership{Role=Founder, IsGm}` в една `SaveChangesAsync`); `CreateTableMutations` (`[MutationType]`, разгънати аргументи → conventions ги събират точно в `CreateTableInput`, `FieldResult<Table, DomainError>`); `TableGraphQLType`.
+
+**Решения по обхвата:**
+- `AdmissionMode` дефолт `GroupDecision` (А7) — прагът под 4 така или иначе дава founder-approve, затова дефолтът не е загуба.
+- `ListingActive` остава `false`: „търсим хора" е ОТДЕЛЕН toggle (А3, таск 10), създаването на маса не е обява.
+- `Table.Memberships` е скрито през дескриптора: инференцията я следва до `TableMembership.User` и изнася ЦЯЛОТО Identity ентити (`passwordHash`, `securityStamp`, lockout полетата) в публичната схема. Съставът по контракт е `members` през проекция към `User` (таск 13).
+- Незадължителните флагове са `bool?` — контрактът ги обявява nullable; липсващ флаг значи „не".
+
+**Verification:**
+- `dotnet test backend/PartyUp.slnx --nologo -v q` → PartyUp.UnitTests **55/55**, PartyUp.IntegrationTests **34/34**, 0 skipped, 0 failed
+- `contracts/schema.graphql` (`CreateTableInput`, ред 595–614) съвпада поле по поле с аргументите на мутацията — контрактът НЕ е пипан (червена линия §4.2)
+- Обхват: пипнати са само `Features/Tables/CreateTable/**` и двете тестови папки. `Program.cs`, `PartyUp.Api.csproj`, `Domain/`, `Common/`, `contracts/`, `frontend/` и паралелните `Tables/Settings` + `Tables/Listing` — непипнати
+- Без секрети в diff-а; работното дърво е чисто, без untracked артефакти
+
+**Files modified:**
+- `backend/src/PartyUp.Api/Features/Tables/CreateTable/TableDraft.cs`
+- `backend/src/PartyUp.Api/Features/Tables/CreateTable/CreateTableValidator.cs`
+- `backend/src/PartyUp.Api/Features/Tables/CreateTable/CreateTableHandler.cs`
+- `backend/src/PartyUp.Api/Features/Tables/CreateTable/CreateTableMutations.cs`
+- `backend/src/PartyUp.Api/Features/Tables/CreateTable/TableGraphQLType.cs`
+- `backend/tests/PartyUp.UnitTests/Features/Tables/CreateTable/CreateTableValidatorTests.cs`
+- `backend/tests/PartyUp.IntegrationTests/Features/Tables/CreateTable/CreateTableTests.cs`
+
+**Git commit:** `495fe31` — `feat(tables): add createTable mutation with full table profile and founder membership`
+
+---
+
+
 ## [2026-08-17 18:20] - Task #7: feat(profile): add myTables query listing memberships with table snapshots
 
 **Status:** ✅ Complete
@@ -1288,6 +1875,28 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
