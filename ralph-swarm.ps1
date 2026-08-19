@@ -69,6 +69,18 @@ if (-not $agentWindows) {
     }
 }
 
+# Window placement (config swarm.window_positions):
+#   "auto"            -> compute a grid for (agents + orchestrator) across all monitors,
+#                        primary first, orchestrator in the last cell. Resolved below,
+#                        after the helper functions are defined.
+#   array of "x,y,w,h" -> explicit per-slot positions (index 0 = SLOT 1), orchestrator
+#                        not touched. Empty string entry = don't move that slot.
+$windowPositionsRaw = $null
+if ($config -and $config.swarm -and $config.swarm.PSObject.Properties['window_positions'] -and $config.swarm.window_positions) {
+    $windowPositionsRaw = $config.swarm.window_positions
+}
+$windowPositions = @()
+
 # Retry budgets (unattended autonomy): a watchdog-killed (timeout/stale) task and a truly
 # failed task are re-queued a BOUNDED number of times instead of blocking their lane for
 # the whole session. Failed retries are INFORMED - see Save-RetryContext below.
@@ -184,6 +196,87 @@ function Try-Claim($id) {
 
 function Release-Claim($id) {
     Remove-Item (Join-Path $claimsDir "task-$id.claim") -Force -ErrorAction SilentlyContinue
+}
+
+# Move a just-spawned agent's window to its slot's configured position. The powershell
+# process itself often has no window handle (Windows Terminal hosts the console in its own
+# WindowsTerminal.exe window), so we hunt by TITLE - ralph-iteration.ps1 sets
+# "Ralph SLOT <n> - task #<id> (...)" within its first seconds. Poll briefly, then give up
+# quietly (a moved-late or never-found window is cosmetic, never worth failing a spawn).
+# NB: if Windows Terminal is set to open new consoles as TABS of one window, per-window
+# placement is meaningless - use "open in a new window" windowing behavior.
+Add-Type -Namespace RalphWin32 -Name Native -MemberDefinition @'
+[DllImport("user32.dll", SetLastError = true)]
+public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+'@ -ErrorAction SilentlyContinue
+
+# Find a top-level window by title prefix and move it. Polls because the window (and its
+# title, set by the hosted process) appears a moment after spawn.
+function Set-WindowByTitle($titlePattern, $spec, $tries = 12) {
+    $parts = "$spec" -split ','
+    if ($parts.Count -ne 4) { Write-Host "[!] window position ignored - expected 'x,y,w,h', got '$spec'" -ForegroundColor Yellow; return }
+    $x = [int]$parts[0]; $y = [int]$parts[1]; $w = [int]$parts[2]; $h = [int]$parts[3]
+    for ($try = 0; $try -lt $tries; $try++) {
+        Start-Sleep -Milliseconds 500
+        $win = Get-Process -ErrorAction SilentlyContinue |
+               Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -like $titlePattern } |
+               Select-Object -First 1
+        if ($win) {
+            # 0x0014 = SWP_NOZORDER | SWP_NOACTIVATE - place it without stealing focus
+            [RalphWin32.Native]::SetWindowPos($win.MainWindowHandle, [IntPtr]::Zero, $x, $y, $w, $h, 0x0014) | Out-Null
+            return
+        }
+    }
+}
+
+function Set-AgentWindowPosition($slot) {
+    if ($slot -gt $windowPositions.Count) { return }
+    $spec = $windowPositions[$slot - 1]
+    if (-not $spec) { return }
+    Set-WindowByTitle "Ralph SLOT $slot - *" $spec
+}
+
+# "auto" layout: one grid cell per window (agents + this orchestrator). Monitors are filled
+# primary-first, up to 4 windows each (2x2) - more only when the fleet doesn't fit at all
+# (then every monitor's grid grows evenly). Within a monitor cells fill row-major; slots
+# take the cells in order, the orchestrator gets the very last one.
+function Get-AutoLayout($slotCount) {
+    Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
+    $screens = @([System.Windows.Forms.Screen]::AllScreens | Sort-Object { -not $_.Primary })
+    $total = $slotCount + 1
+    $cap = [math]::Max(4, [math]::Ceiling($total / [math]::Max(1, $screens.Count)))
+    $cells = @()
+    $left = $total
+    foreach ($s in $screens) {
+        if ($left -le 0) { break }
+        $k = [math]::Min($cap, $left); $left -= $k
+        $wa = $s.WorkingArea
+        $cols = [int][math]::Ceiling([math]::Sqrt($k)); $rows = [int][math]::Ceiling($k / $cols)
+        $cw = [int][math]::Floor($wa.Width / $cols); $ch = [int][math]::Floor($wa.Height / $rows)
+        for ($c = 0; $c -lt $k; $c++) {
+            $col = $c % $cols; $row = [int][math]::Floor($c / $cols)
+            $cells += ("{0},{1},{2},{3}" -f ($wa.X + $col * $cw), ($wa.Y + $row * $ch), $cw, $ch)
+        }
+    }
+    return $cells
+}
+
+# Resolve the configured placement mode. In auto mode the orchestrator also claims its own
+# cell right away (title first, so the hunt finds this very console's window).
+if ($windowPositionsRaw -is [string]) {
+    if ($windowPositionsRaw -eq 'auto') {
+        $layout = @(Get-AutoLayout $agents)
+        if ($layout.Count -eq ($agents + 1)) {
+            $windowPositions = @($layout[0..($agents - 1)])
+            try { $host.UI.RawUI.WindowTitle = "Ralph ORCHESTRATOR" } catch {}
+            Set-WindowByTitle "Ralph ORCHESTRATOR*" $layout[-1] 4
+            Write-Host "[i] Auto window layout: $($agents) agent cells + orchestrator across $(@([System.Windows.Forms.Screen]::AllScreens).Count) monitor(s)" -ForegroundColor Cyan
+        }
+    } elseif ($windowPositionsRaw) {
+        Write-Host "[!] window_positions: unknown mode '$windowPositionsRaw' (expected 'auto' or an array) - ignored" -ForegroundColor Yellow
+    }
+} elseif ($windowPositionsRaw) {
+    $windowPositions = @($windowPositionsRaw)
 }
 
 # Newest agent log for a task. Agents log to logs\iteration-<taskId>-<timestamp>[-TIMEOUT].txt
@@ -623,6 +716,7 @@ function Start-AgentForTask($task, $slot) {
     }
     $proc = Start-Process powershell.exe -ArgumentList ($argList -join ' ') -PassThru -WindowStyle $agentWindows
     Write-Host "[>] SLOT $slot -> task #$($task.id) [$rKey / lane '$(Get-LaneKey $task)'] branch $branchName (pid $($proc.Id))" -ForegroundColor Green
+    if ($agentWindows -eq 'Normal') { Set-AgentWindowPosition $slot }
 
     return @{
         proc = $proc; task = $task; lane = (Get-LaneKey $task); slot = $slot

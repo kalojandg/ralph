@@ -34,6 +34,115 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## [2026-08-19 06:13] - Task #33: feat(fe-tables): add table settings screen with admission mode and listing toggles
+
+**Repo:** partyup (frontend) · **Lane:** fe-table-settings · **Commit:** `fa0f5cc`
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** `table/[id]/settings.tsx` беше placeholder. А7 иска екран, на който founder-ът сменя правилата на масата и режима на прием, а всички останали получават ОБЯСНЕНИЕ вместо мъртви контроли. Предишният опит падна на transient API грешка още преди първия файл — worktree-то беше чисто, затова таскът е изкаран от нулата.
+
+**What was done:**
+- RED: четири спека срещу липсващите модули — `table-settings-screen.test.tsx` (вратата: founder вижда двете секции, не-founder вижда обяснението и НУЛА контроли, loading/грешка/липсваща маса), `table-settings-form.test.tsx` (двата режима са ОБЯСНЕНИ, submit-ът праща верния `UpdateTableSettingsInput`, слот < 2 блокира, FORBIDDEN → човешко изречение), `table-listing-section.test.tsx` (двата тогъла → `SetTableListingInput`), `table-settings-values.test.ts` (маса → полета и обратно). 4 suites червени.
+- GREEN: `features/table-settings/` — `table-settings-screen.tsx` (една заявка за `me` + `table`, за да няма междинно състояние, в което контролите мигат), `table-settings-form.tsx` (секция 1: правилата + режимът на прием), `admission-mode-field.tsx`, `table-listing-section.tsx` (секция 2: обявата), `table-settings-values.ts`, `table-settings-errors.ts`, `table-settings.gql.ts`; `app/table/[id]/settings.tsx` става тънък route; bg/en `tableSettings.json`.
+- А7 дословно: настройките ги сменя ЕДИНСТВЕНО основателят → на не-founder контролите се КРИЯТ, не се disable-ват (бутон, който само отказва, обещава нещо, което няма да стане). Двата режима се обясняват на място, плюс уточнението, че kick-ът винаги остава групово решение — режимът пипа само приема.
+- Обявата е ОТДЕЛНА мутация и отделен бутон: „търсим хора“ и „търсим DM“ се вдигат и свалят в пъти по-често от правилата на масата.
+- FORBIDDEN е единственият код със собствено четене (`settingsErrorMessage`) — не-founder, стигнал до мутацията, получава изречение, не код; останалите минават през `i18nKey`, никога през `message`.
+- Времето на масата остава ЕДНО от двете (Б): смяната на режима изчиства полетата на другия, за да не върне сървърът `timeModeAmbiguous`. Правилата на масата (слотове, дата/час, тагове, формати) и формовите примитиви се ПРЕИЗПОЛЗВАТ от `table-create` през една шевица, не се преписват.
+
+**Verification:**
+- `npm --prefix frontend run typecheck` → codegen + tsc clean (документите валидирани срещу замразения контракт)
+- `npm --prefix frontend test` → 19/19 suites, 78/78 tests pass; четирите нови спека зелени (19 теста)
+- без `.only` / skip-нати тестове; bg/en tableSettings.json — 81 = 81 ключа, нула разминаване; нула хардкоднати низа
+- `contracts/` и `backend/` непипнати; e2e и dev сървъри не са пускани; working tree чист след commit-а
+
+**Files modified:**
+- frontend/src/features/table-settings/table-settings-screen.tsx (нов)
+- frontend/src/features/table-settings/table-settings-form.tsx (нов)
+- frontend/src/features/table-settings/table-listing-section.tsx (нов)
+- frontend/src/features/table-settings/admission-mode-field.tsx (нов)
+- frontend/src/features/table-settings/table-settings-values.ts (нов)
+- frontend/src/features/table-settings/table-settings-errors.ts (нов)
+- frontend/src/features/table-settings/table-settings.gql.ts (нов)
+- frontend/src/features/table-settings/index.ts (нов)
+- frontend/src/features/table-settings/*.test.{ts,tsx} (4 нови спека)
+- frontend/src/app/table/[id]/settings.tsx
+- frontend/src/locales/bg/tableSettings.json + frontend/src/locales/en/tableSettings.json
+
+**Git commit:** `fa0f5cc` — `feat(fe-tables): add table settings screen with admission mode and listing toggles`
+
+---
+
+
+## Task 34 — feat(fe-lfg): add readonly tables showcase with party composition detail
+
+**Кога:** 19.08.2026 · **Репо:** partyup (frontend) · **Бранч:** ralph/task-34 · **Commit:** 8cca549
+
+### Какво е направено
+- `features/showcase/showcase.gql.ts` — `TablesShowcase(filter)` за списъка и `ShowcaseTable(id)` за профила + състава. Селекциите са точно това, което екраните рисуват (§2а.4 read дисциплина в духа ѝ и на FE).
+- `showcase-filter-state.ts` — UI състоянието на филтрите → `TablesShowcaseFilter`. Ключово решение: изключен флаг пътува като `null`, НЕ като `false` (`seekingGm: false` би значело „масите, които НЕ търсят DM").
+- `showcase-screen.tsx` + `showcase-card.tsx` + `showcase-badges.tsx` + `showcase-filters.tsx` — списъкът: име, система, формат·език, слотове, статус бадж, „търси DM" (половинчатият мач = acquisition ъгъл) и „обучителен one-shot" (клинът от В). Филтрите са СЪРВЪРНИ (влизат в заявката), системата е поле със свободен текст и тръгва при потвърждаване, не на всяка буква.
+- `showcase-table-screen.tsx` + `party-composition.tsx` — профилът на масата (система, формат, език, места, място, one-shot дата/място, график, стил, описание) и СЪСТАВЪТ: активните членства с роля, GM флаг, опит и предпочитания. Напусналите (А5) не са част от състава.
+- `locales/{bg,en}/showcase.json` — целият namespace; нула хардкоднати низа (§4.6).
+
+### READONLY (А3) — заковано в тестове
+Витрината няма нито едно действие по маса (pull моделът: масата дърпа, кандидатът не бута). Тестовете проверяват, че на двата екрана няма елемент с роля „бутон", а в детайла — и нито една връзка; единствените натискаеми неща в списъка са филтрите (radio/checkbox) и картите-връзки.
+
+### Тестове
+TDD: 21 теста написани ЧЕРВЕНИ (3 suite-а падаха с „Could not locate module") преди първия ред имплементация. След имплементацията: 21/21 зелени, целият FE suite 80/80, `tsc --noEmit` чист.
+
+### Бележки за следващите
+- Вход към витрината от таб бара/борда НЕ е добавен — `app/(tabs)/*` и бордът са извън `files` обхвата на този таск. Който прави борда (31), да закачи връзка към `/showcase`.
+- Генерираните типове НЕ носят `__typename` (кодгенът го пропуска), а Apollo кешът го иска в мок отговорите → фикстурите не се анотират с генерирания тип, иначе `__typename` минава за излишно поле.
+
+
+## [2026-08-19 06:20] - Task #31: feat(fe-board): add LFG board with filters, player cards and publish-myself CTA
+
+**Repo:** partyup (frontend) · **Lane:** fe-board · **Commit:** `ca80d36`
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** Бордът беше placeholder route. Централният таб трябваше да стане витрина на листнати ИГРАЧИ със спазен pull модел — а три поредни опита паднаха на transient API 529/connection drop (не на код). Този опит завари worktree-то с готов, коммитнат и чист код и липсващ само result файл, затова работата беше запазена и верифицирана наново вместо пренаписана.
+
+**What was done:**
+- RED: три спека — `board-filters.test.ts` (локалният filter state → верните query variables), `pull-targets.test.ts` (кой има право да дърпа), `board-screen.test.tsx` (карти, publish CTA, PROFILE_INCOMPLETE, pull бутонът и mutation-ът). Червени срещу липсващия `board-screen.tsx`.
+- GREEN: `features/board/` — `board-screen.tsx` (екранът), `player-card.tsx` (име, опит, формат, езици, системи, DM бадж), `filter-panel.tsx` (collapse панел: формат/език/система/само-DM), `board-filters.ts`, `pull-targets.ts`, `board.graphql.ts`; `app/(tabs)/board.tsx` става тънък route; bg/en `board.json` namespace-ове.
+- PULL моделът (А, дословно): по картите съзнателно НЯМА „кандидатствай". `pullTargets()` филтрира `membership.active && table.listingActive`, празен резултат → `onPull={null}` → картата е чиста витрина. При няколко маси — избор, при една — директно `pullCandidate`.
+- Publish CTA: `publishMyListing`/`unpublishMyListing` пишат обявата обратно в кеша; `PROFILE_INCOMPLETE` дава съобщение + линк към профила, техническият `message` никога не стига до екрана.
+- Линк „Виж масите" → `/showcase` (само навигация — зоната на 34).
+
+**Verification:**
+- `npm --prefix frontend run typecheck` → codegen + tsc clean (codegen валидира документите срещу frozen contract-а)
+- `npm --prefix frontend test` → 7/7 suites, 31/31 tests pass; `board-filters` / `pull-targets` / `board-screen` зелени
+- без `.only` / skip-нати тестове; bg/en board.json — 44 = 44 ключа, нула разминаване
+- `contracts/` и `backend/` непипнати; working tree чист след пускането
+
+**Files modified:**
+- frontend/src/features/board/board-screen.tsx (нов)
+- frontend/src/features/board/player-card.tsx (нов)
+- frontend/src/features/board/filter-panel.tsx (нов)
+- frontend/src/features/board/board-filters.ts (нов)
+- frontend/src/features/board/pull-targets.ts (нов)
+- frontend/src/features/board/board.graphql.ts (нов)
+- frontend/src/features/board/__tests__/board-screen.test.tsx (нов)
+- frontend/src/features/board/__tests__/board-filters.test.ts (нов)
+- frontend/src/features/board/__tests__/pull-targets.test.ts (нов)
+- frontend/src/app/(tabs)/board.tsx
+- frontend/src/locales/bg/board.json
+- frontend/src/locales/en/board.json
+- frontend/src/__tests__/placeholder-routes.test.tsx (извън `files` списъка — вж. бележката)
+
+**Note (scope):** `placeholder-routes.test.tsx` е извън декларирания `files` обхват, но твърдеше че бордът все още е placeholder („Предстои.") — точно това, което таскът премахва. Махнат е само този един `it` блок, с коментар че бордът вече си носи собствен спек. Останалите placeholder route-ове са непипнати.
+
+**Git commit:** `ca80d36` — `feat(fe-board): add LFG board with filters, player cards and publish-myself CTA`
+
+---
+
+
 ## [2026-08-18 20:14] - Task #26: feat(push): add notifier fan-out decorator sending web push and publishing notification topic
 
 **Repo:** partyup (backend) · **Lane:** be-push-send · **Commit:** `f2a244e`
@@ -1875,6 +1984,9 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
 
 
 

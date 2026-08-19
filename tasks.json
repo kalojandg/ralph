@@ -1290,7 +1290,7 @@
                           "action":  "typecheck + test зелени. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  32,
@@ -1374,7 +1374,7 @@
                           "action":  "typecheck + test зелени. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  34,
@@ -1416,7 +1416,7 @@
                           "action":  "typecheck + test зелени. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  35,
