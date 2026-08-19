@@ -1458,7 +1458,7 @@
                           "action":  "typecheck + test зелени. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  36,
@@ -1501,7 +1501,7 @@
                           "action":  "typecheck + test зелени. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  37,
@@ -1543,7 +1543,7 @@
                           "action":  "typecheck + test зелени. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  38,
@@ -1585,7 +1585,7 @@
                           "action":  "typecheck + test зелени. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  39,
@@ -1627,7 +1627,7 @@
                           "action":  "typecheck + test зелени. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  40,
@@ -1670,7 +1670,7 @@
                           "action":  "typecheck + test зелени. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  41,
@@ -1742,7 +1742,7 @@
                           "action":  "dotnet test + npm typecheck + npm test — ВСИЧКО зелено. Бележката в DESIGN-NOTES.md. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  42,
@@ -1779,6 +1779,6 @@
                           "action":  "npx expo export минава; npx playwright test зелено на 45280 (порт свободен). Пълният verify. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     }
 ]

@@ -388,6 +388,7 @@ function Invoke-ReviewStage($tasks, $repoKeys) {
             $rulesInstr = "The rulebook is the architecture reference at '$refPath' - read it fully and evaluate against it (especially the red lines and review criteria sections)."
         }
         $repoPass = $false
+        $quotaWaited = $false   # one quota wait per repo, so a dead account can't loop forever
         for ($cycle = 1; $cycle -le ($reviewCycles + 1); $cycle++) {
             $stamp = Get-Date -Format "yyyy-MM-dd_HH-mm"
             $verdictPath = Join-Path $outDir "verdict.json"
@@ -406,7 +407,11 @@ function Invoke-ReviewStage($tasks, $repoKeys) {
                 & claude -p "@$pf" --model $model --dangerously-skip-permissions 2>&1 | Out-String
             } -ArgumentList $r.location, $tempP, $agentModel, $useApiKeyCfg
             $done = Wait-Job $job -Timeout 1200
-            if ($done) { Receive-Job $job | Out-String | Out-File (Join-Path $scriptDir "logs\review-$k-cycle$cycle-$stamp.txt") -Encoding UTF8 }
+            $outText = ""
+            if ($done) {
+                $outText = Receive-Job $job | Out-String
+                $outText | Out-File (Join-Path $scriptDir "logs\review-$k-cycle$cycle-$stamp.txt") -Encoding UTF8
+            }
             else { Stop-Job $job -ErrorAction SilentlyContinue }
             Remove-Job $job -Force -ErrorAction SilentlyContinue
             Remove-Item $tempP -ErrorAction SilentlyContinue
@@ -415,6 +420,26 @@ function Invoke-ReviewStage($tasks, $repoKeys) {
                 try { $verdict = Get-Content $verdictPath -Raw -Encoding UTF8 | ConvertFrom-Json } catch {}
             }
             if (-not $verdict) {
+                # QUOTA-AWARE REVIEW (19.08): a multi-day board loves to reach finishing right
+                # when the session window is empty - the reviewer then gets "hit your session
+                # limit", writes no verdict, and the whole finishing (docs/push) aborted for
+                # nothing. Do what the agents do: wait for the reset, then redo THIS cycle.
+                if (-not $quotaWaited -and $outText -match "hit your(?:\s+\w+)?\s+limit") {
+                    $resetWait = 60
+                    if ($outText -match "resets\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)") {
+                        $h = [int]$Matches[1]; $mn = if ($Matches[2]) { [int]$Matches[2] } else { 0 }
+                        if ($Matches[3] -eq 'pm' -and $h -ne 12) { $h += 12 }
+                        if ($Matches[3] -eq 'am' -and $h -eq 12) { $h = 0 }
+                        $target = (Get-Date).Date.AddHours($h).AddMinutes($mn)
+                        if ($target -le (Get-Date)) { $target = $target.AddDays(1) }
+                        $resetWait = [int][math]::Max(5, ($target - (Get-Date)).TotalMinutes + 2)
+                    }
+                    Write-Host "[~] Repo '$k': reviewer hit the QUOTA limit - waiting $resetWait min for reset, then retrying cycle $cycle" -ForegroundColor Yellow
+                    Start-Sleep -Seconds ($resetWait * 60)
+                    $quotaWaited = $true
+                    $cycle--
+                    continue
+                }
                 Write-Host "[!] Repo '$k': no valid verdict.json from reviewer - treating as FAILED review" -ForegroundColor Yellow
                 break
             }

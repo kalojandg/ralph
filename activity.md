@@ -34,6 +34,265 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task 42 — test(e2e): bootstrap Playwright against static web export with smoke navigation specs
+
+**Репо:** partyup · **Lane:** e2e · **Branch:** ralph/task-42 · **Commits:** `36e7e02` (bootstrap) + `67e6924` (retry 1 — гейт фикс)
+
+### Състояние
+
+ФИНАЛНИЯТ таск от board 1-42. Playwright e2e вече съществува — §7 от reference файла („Playwright e2e ОЩЕ НЯМА") е затворена.
+
+### Какво е направено
+
+**Бутстрапът (`36e7e02`, от предшественика — запазен ЦЯЛ):**
+- `frontend/playwright.config.ts` — testDir `e2e/`, baseURL `http://localhost:45280` (**45279/45278 са ЗАЕТИ от флота**, §6), `reuseExistingServer: false`, `locale: 'bg-BG'` за детерминирани i18n текстове, workers 1.
+- `frontend/e2e/` — 3 смоук спека без жив BE: `/` → login с трите провайдъра; чиста конзола при зареждане (console.error + pageerror → fail); непознат маршрут → 404 + not-found екрана. `support.ts` държи единствения stub (`me: null` — мрежова грешка НЕ е анонимен потребител за `AuthGate`) и чете текстовете от `src/locales/bg/auth.json`, а не свой препис.
+- `frontend/package.json` — `e2e:export` / `e2e:serve` / `test:e2e`, `@playwright/test` + `http-server`, и `jest.roots: ["<rootDir>/src"]`, за да не глъта jest Playwright спековете.
+- `frontend/metro.config.js` (+18, **ИЗВЪН обхвата — отбелязано**): `expo export --platform web` не тръгваше изобщо — `tslib` през ESM входа си деструктурира undefined default в node бъндъла. Резолвърът сочи bare `tslib` към `tslib/tslib.es6.mjs` на СЪЩИЯ пакет (нито версия, нито съдържание се менят). Без него DONE критерият на таска е недостижим.
+
+**Гейт фиксът (`67e6924`, retry 1) — един ред:**
+
+Гейтът падна с 3 таймаута по 5000 ms (board-screen, table-screen, navigation), докато в worktree-то суитът беше 268/268. **Причината НЕ е кодът:** добавянето на `jest` ключ в package.json променя хеша на jest конфига → нова кеш директория → първият прогон след merge е СТУДЕН (всичко се трансформира наново през babel).
+
+Възпроизведено точно: `npx jest --clearCache` → 24.7s и board-screen гръмва на 5000 ms; топъл прогон → 8.0s и зелен. Фиксът е `jest.testTimeout: 30000` в `frontend/package.json` (в обхвата). След него СТУДЕНИЯТ прогон е 21.6s / 268 зелени.
+
+⚠ **Това не е нов флейк.** Записът на таск 41 вече описва същото: 7 фалшиви 5000 ms таймаута при сатурирана машина (43s срещу 8.5s). `testTimeout: 30000` го затваря за ЦЕЛИЯ FE suite — гейтът вече не зависи от топлината на кеша и от натоварването на машината.
+
+### Тестове
+
+Пълният gate, пуснат дословно както го пуска оркестраторът (exit 0):
+- `npm --prefix frontend install` — up to date, `package-lock.json` НЕ се размърда.
+- `npm --prefix frontend run typecheck` — чист (покрива и новите e2e файлове).
+- `npm --prefix frontend test` — **268/268, 48 suites**.
+- `dotnet test backend/PartyUp.slnx` — **429/429** (129 unit + 300 integration).
+- `npx playwright test` — **3/3** на порт 45280 (проверен свободен с netstat преди и след; нулеви останали процеси).
+
+### Файлове
+
+- `frontend/playwright.config.ts` (нов) · `frontend/e2e/{smoke.spec.ts,support.ts,prepare-static.mjs}` (нови) · `frontend/package.json` · `frontend/package-lock.json` · `frontend/metro.config.js` (извън обхвата)
+
+### Бележки за СЛЕДВАЩАТА фаза (решение на ЧОВЕКА — `repos.json` НЕ е пипан)
+
+1. **Ако гейтът се разшири с Playwright**, трябва да се добави и почистване: **всеки** Metro прогон мутира `frontend/tsconfig.json` (nativewind го преформатира + добавя `nativewind-env.d.ts` в include) и създава `frontend/nativewind-env.d.ts`. Същата клопка като `package-lock.json` → иска `git checkout -- frontend/tsconfig.json` + изтриване на `nativewind-env.d.ts` (или двата в `.gitignore` — отровен файл, свой таск). В този прогон двата са върнати ръчно — извън обхвата са и `tsconfig.json` е в отровния списък (§5).
+2. **Full-stack e2e** (жив BE + Testcontainers compose) = следващата фаза. Сегашните спекове са НЕАВТЕНТИКИРАНИ пътеки с един stub — по дизайн.
+3. **Локализиран `src/app/+not-found.tsx`** — свой таск. Сега 404 спекът описва вградения екран на expo-router (английски, извън root layout-а, без пазач) — това е текущото поведение, не желаното.
+4. **Ревю на `metro.config.js`** — единствената промяна извън обхвата на таска. Ревъртнете я, ако не сте съгласни — цената е, че `expo export --platform web` престава да работи и e2e отпада.
+
+
+## Task 41 — chore(contracts): export real schema, reconcile drift against the design and realign both sides
+
+**Repo:** partyup · **Lane:** contracts · **Commit:** `d9c254a`
+
+### Какво беше направено
+
+Интеграционната точка: ръчната (contract-first) схема от таск 2 е заменена с РЕАЛНИЯ Hot Chocolate експорт и екзепцията от §3.1 е затворена.
+
+1. **RECON** — експорт в `schema.real.graphql` + структурен diff срещу дизайнерската схема (`graphql-js` normalize: без описания, типовете сортирани — иначе редовият diff е безполезен, HC изнася резолверните полета напред).
+2. **Класификация на разликите:**
+   - **СЪЩИНСКИ (3 операции)** — липсваха от БЕКЕНДА, не от контракта: `myListing` (таск 12), `notifications(unreadOnly)` и `markNotificationRead` (таск 26). Контрактът беше правият: `party-up.md` Е ги изисква, а FE тасковете 31/37 вече ги консумират (`contact.graphql.ts`, `notification-bell.tsx`). Затова е поправена ГРЕШНАТА страна — имплементирани са като vertical slices, без пипане на Program.cs/csproj/Domain.
+   - **КОЗМЕТИКА → приета реалната страна:** ред на полетата, `@cost` директивата, `@specifiedBy` на `UUID`/`DateTime` (метаданни на HC 16).
+   - **Едно съзнателно отклонение, прието в полза на кода:** `chat.messages(skip, take)` — опционални аргумента с таван, не Relay connection; добавъчни са, не чупят FE документ и пазят сървъра от неограничено четене (§2а.4). Документирано в DESIGN-NOTES §0.1.
+3. **Нов BE код:** `Features/Lfg/Publish/MyListingQueries.cs`, `Features/Notifications/NotificationQueries.cs`, `MarkNotificationReadHandler.cs`, `MarkNotificationReadMutations.cs` — всички с `[ObjectType<Query>]` (§7а.5), `AsNoTracking` + Select проекция, Result pattern.
+4. **`schema.graphql` = финалният реален експорт** (`.real` файловете изтрити). Схемата валидира с 0 грешки; 18 query / 25 mutation / 2 subscription — точно колкото §6 обявява.
+5. **DESIGN-NOTES.md:** §0 пренаписана — ръчната фаза е ЗАТВОРЕНА, файлът пак е само-генериран; добавена §0.1 с таблица на намереното. Поправена и остаряла бележка в §4.10, която твърдеше че `Notification.type` е `PascalCase` — и BE (`DECISION_STALE`, `REFOUND_INVITE`), и FE (`contact.json` → `types.*`) отдавна са на `SCREAMING_SNAKE`; разминаваше се само редът в документа, затова е поправен ТЕКСТЪТ, не двете страни.
+
+### Тестове
+
+- `dotnet test backend/PartyUp.slnx` — **429 зелени** (129 unit + 300 integration), 0 червени. От тях 13 нови интеграционни: `MyListingQueryTests` (5) и `NotificationCenterTests` (8) — покриват личния поток, липсата на изтичане на чужди известия/листвания, `unreadOnly`, идемпотентността на `markNotificationRead` и NOT_FOUND (а не FORBIDDEN) за чуждо известие.
+- `npm --prefix frontend run typecheck` — зелен. Codegen тръгна по НОВАТА схема без нито една счупена FE операция (контрактът се оказа надмножество на това, което FE вече ползваше).
+- `npm --prefix frontend test` — **268 зелени / 48 suites**.
+
+### Бележки
+
+- ⚠ Първото пускане на FE suite-а даде 7 фалшиви провала — всичките 5000ms timeout-и, веднага след Testcontainers прогона (машината беше сатурирана: 43s срещу 8.5s при чист прогон). Два последователни чисти прогона след това са напълно зелени. Ако гейтът мигне по същия начин, причината е контенцията, не кодът.
+- Разликите НЕ бяха неочаквано големи — структурен провал няма, човешко ревю не се налага.
+- **ОТ ТУК `contracts/schema.graphql` се променя САМО през C# + ре-експорт.** Ръчна редакция = failed таск.
+
+
+## Task 39 — feat(fe-lifecycle): add leave, kick via decision panel and refound flows
+
+**Репо:** partyup · **Lane:** fe-lifecycle-actions · **Branch:** ralph/task-39 · **Commit:** b75ec0c
+
+### Какво е направено
+- **`frontend/src/features/lifecycle-actions/`** — новата зона на опасните действия:
+  - `lifecycle-actions.gql.ts` — `TableActions` (състав + кой съм аз), `LeaveTable`, `ProposeKick`, `KickDecision` (селекция ОГЛЕДАЛНА на кандидатурата от таск 36), `RefoundTable`, `RefoundInviteTable`, `AcceptRefoundInvite`.
+  - `lifecycle-actions-errors.ts` — Result грешките → изречения. БЕЗ разклоняване по `code`: ключовете в ns-а са наредени точно по пътищата, които бекендът праща (`lifecycle.tooSmallForKick`, `tables.notAMember`, `tables.notInvited`, …).
+  - `use-danger-action.ts` + `action-card.tsx` — общата механика „питай → изчакай → кажи човешки отказа" и рамката на опасния ход (червен бутон, не brand).
+  - `leave-table-action.tsx` (А5: едностранно право, потвърждение, → `/tables`), `kick-member-action.tsx` (А4: „предложи", НЕ „изключи" — отваря решение и подава ID-то нататък), `refound-table-action.tsx` (А5: един клик, цената — чат историята — се казва в потвърждението; → новата маса).
+  - `table-danger-zone.tsx` — кой може да бъде посочен се решава на ЕДНО място: без основателя (А5, постоянен), без себе си (това е напускане), без напусналите.
+  - `kick-decision-panel.tsx` — **преизползва `DecisionPanel` от таск 36** както си е (А4: груповото решение е генеричен примитив); добавя само „за кого се говори".
+  - `table-actions-screen.tsx` — loading/error/липсваща маса/външен човек + превключване към вота.
+  - `refound-invite-screen.tsx` — леко приемане (А5: пресъздаване, не прием), профил на новата маса, един бутон.
+- **`frontend/src/app/table/[id]/actions.tsx`** — НОВ модален route (глобът на таск 36 е конкретно `index.tsx`, папката не е негова). `?decision=<id>` е вторият живот на екрана — предложението води ПРИ вота.
+- **`frontend/src/app/refound-invite.tsx`** — чете `tableId` от адреса, който `notificationCopy` (таск 37) вече слага.
+- **`frontend/src/locales/{bg,en}/lifecycleActions.json`** — целият ns; нула хардкоднати низа (§4.6).
+
+### Тестове
+27 нови RNTL спека (6 файла, RED преди GREEN): потвърждение преди всяка мутация, навигацията след успех, кой е kick-кандидат и кой не, преизползването на вота, отказите като изречения вместо кодове.
+
+- `npm --prefix frontend run typecheck` → зелено
+- `npm --prefix frontend test` → **48 suites / 268 теста, зелено**
+- Backend не е пипан.
+
+### Бележки / следващи стъпки
+- **Липсва входна точка:** `table/[id]/index.tsx` (зона на таск 36) не линква към `/table/[id]/actions`. Route-ът е достижим само по директна навигация — линкът трябва да се добави от собственика на детайл екрана (36) или при интеграцията (41).
+- Ambient `act(...)` warnings в тестовете са отпреди (същият модел го има в suites на 35/36/38) — не са регресия.
+
+
+## [2026-08-19] - Task #36: feat(fe-candidacy): add pull flow with decision chat, visible voting panel and verdict actions
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** СЪРЦЕТО НА ПРОДУКТА — А + А2: масата дърпа човек от борда, обсъжда го в групов чат, гласува ЯВНО и единодушно, един човек говори 1:1 с кандидата и накрая идва вердиктът. Досега `candidacy/[id]` и `table/[id]/index` бяха placeholder-и от таск 3.
+
+**What was done:**
+- RED: 20 спека в `features/candidacy/` — явните гласове с имената, моят вот → `castVote`, ALREADY_VOTED като съобщение, APPROVED_FOR_CONTACT → бутонът за 1:1, IN_CONTACT → вердикт с confirm, детайлът на масата. ЧЕРВЕНИ (липсващи модули).
+- GREEN: `candidacy.gql.ts` (Candidacy + MyTable заявки; castVote / openContactChat / submitVerdict с огледална селекция), `decision-panel.tsx` (ГЕНЕРИЧНИЯТ примитив от А4 — EXPORT-нат за kick-а в 39), `verdict-actions.tsx`, `candidacy-screen.tsx`, `table-screen.tsx`, `candidacy-errors.ts`, `index.ts` + двата route-а + bg/en `candidacy` namespace.
+
+**Design notes:**
+- `DecisionPanel` е един блок от дискусия + вот: гласовете се показват С ИМЕНАТА (А2: никакви анонимни вета), а чаканите гласоподаватели са публични — оттам тръгва алармата от А4. Чатът е `ChatThread` от merged 35, без дублирана заявка/абонамент.
+- Редът вот → контакт → вердикт е в състоянието, не в дисайна: в DISCUSSING бутонът за 1:1 НЕ съществува. „Лицето на групата" НЕ е роля — бутонът стои пред всеки член.
+- `openContactChat` не дописва IN_CONTACT в кеша (payload-ът носи само чата) — презарежда кандидатурата; състоянието го казва сървърът.
+- Вердиктът минава през потвърждение и е НЕУТРАЛЕН към кандидата („не се получи мач" — никога кой/защо); при `seekingGm` приемът може да го сложи като GM (`asGm` от контракта).
+- Детайлът на МОЯТА маса преизползва `PartyComposition` от витрината (същият въпрос отвън и отвътре); празният списък от кандидатури води към БОРДА (pull моделът — ходът е на масата).
+
+**Verification:**
+- `npm --prefix frontend test` → 35 suites / 185 tests pass (20 нови)
+- `npm --prefix frontend run typecheck` → clean
+- contracts/ не е пипано; нула хардкоднати низове (§4.6); server state само в Apollo кеша
+
+**Files modified:**
+- frontend/src/features/candidacy/{candidacy.gql.ts,decision-panel.tsx,verdict-actions.tsx,candidacy-screen.tsx,table-screen.tsx,candidacy-errors.ts,index.ts} + 3 спек файла
+- frontend/src/app/candidacy/[id].tsx, frontend/src/app/table/[id]/index.tsx
+- frontend/src/locales/{bg,en}/candidacy.json
+
+**Git commit:** `df03769` — `feat(fe-candidacy): add pull flow with decision chat, visible voting panel and verdict actions`
+
+---
+
+
+## Task 37 - feat(fe-candidacy): add notification center with candidate-side neutral messaging
+
+**Repo:** partyup (frontend) | **Lane:** fe-contact | **Commit:** 724d8b2
+
+### TDD
+RECON -> RED (3 spec files red on missing modules) -> GREEN -> DONE.
+
+### What was built
+- `features/contact/contact.graphql.ts` - `Notifications` (the centre), `UnreadNotifications` (`unreadOnly: true`, id+readAt only - the bell wants a count, not content), `OnNotification`, `MarkNotificationRead`. Query and subscription selections are mirrored, so what arrives live fits the same list.
+- `features/contact/notification-copy.ts` - the heart of the task: a PURE map from the machine-readable `Notification.type` to i18n keys, interpolation values and a navigation target. All 8 types the backend actually emits (`NEW_MESSAGE`, `CANDIDACY_ACCEPTED`, `CANDIDACY_CLOSED`, `REFOUND_INVITE`, `STAY_OR_LEAVE_PROMPT`, `DECISION_STALE`, `MEMBER_KICKED`, `MEMBER_LEFT`) plus an `unknown` fallback so a future backend type never leaks a raw code to the UI. `readPayload` survives corrupt/foreign JSON; a body whose value is missing is dropped rather than rendered with a hole. `sortByNewest` compares instants, not strings (DateTime carries an offset).
+- **A2 is enforced HERE, with a test:** `CANDIDACY_CLOSED` returns no interpolations and no action - even when the payload carries a table name or a reason. An "open the table" button would by itself reveal which table said no, so the rejected candidate gets the neutral line and nothing else.
+- `features/contact/notification-row.tsx` - presentational row; tapping marks read, the action button marks read AND navigates. Navigation is navigate-only into task 39 (`/refound-invite?tableId=...`) and task 38 (`/table/<id>/lifecycle`) territory.
+- `features/contact/notification-bell.tsx` - `NotificationBell` with the unread badge (9+ cap), `subscribeToMore` on `onNotification`. This is the in-app fallback for Web Push (E): the counter grows even when the service worker is dead.
+- `features/contact/notification-center.tsx` + `notifications-cache.ts` - query + live subscription with id dedupe (shared by both lists), mark-read fire-and-forget (the normalised `readAt` write drops the "new" marker on its own).
+- `app/notifications.tsx` (placeholder replaced) + bg/en `contact` namespace filled.
+
+### Tests
+29 new tests across 3 spec files: the neutral rejection (no table / no name / no reason / no button), ordering, live append, no duplicate on re-delivery, mark-read, the refound invite button navigating, unknown type, corrupt payload, empty/error states, badge counting/capping/live growth, en language.
+
+`npm --prefix frontend test` -> **35 suites / 194 tests green**; `npm --prefix frontend run typecheck` -> clean.
+
+### Notes for whoever is next
+- **"A table got in touch with you" has no dedicated contract type.** `OpenContactChatHandler` emits no notification of its own - the contact moment reaches the candidate as `NEW_MESSAGE` from the 1:1 chat. Since the payload cannot tell a direct chat from a group one, the row is titled "New message" and links to the chat. A dedicated `CANDIDATE_CONTACTED` type on the backend would let this read the way the product text wants.
+- **The bell is rendered inside the notifications screen**, not in the header: `src/app/_layout.tsx` is task 3 territory (poisoned file, S5) and left no slot. `NotificationBell` is exported from `features/contact` - hanging it in a header is one line.
+- The refound invite passes the table as a query param (`/refound-invite?tableId=...`). Task 39 owns that screen; if it wants a different param name, this is the single place to change.
+- `markNotificationRead` and the `notifications` query do not exist on the backend yet (contract-first, S7a.1) - the FE is built against the frozen contract with mocks.
+
+
+## Task #40 — feat(fe-push): add service worker, subscribe flow and iOS install hint as progressive enhancement
+
+**Repo:** partyup (frontend) · **Lane:** fe-push · **Commit:** `ac69f74`
+
+### Какво е направено
+- **`frontend/public/sw.js`** — service worker БЕЗ кеш стратегия (нарочно: това е пощальонът на push-а, не offline слой). `push` → `showNotification` с payload `{title, body, url, tag}`; `notificationclick` → фокусира вече отворен таб и го навигира, иначе `openWindow`. `skipWaiting` + `clients.claim`, за да не увисват известията до затваряне на всички табове.
+- **`frontend/src/features/push/`**:
+  - `push-support.ts` — чиста детекция срещу снимка на средата (`PushEnvironment`). Редът е важен: iOS клонът е ПРЕДИ капабилити теста, защото iOS Safari СКРИВА `PushManager`/`Notification` извън инсталирано PWA — иначе бихме казали „браузърът не може" на потребител, на когото просто липсва икона на началния екран (Е, смекчение 4). Под 16.4 → `iosTooOld` (мълчим).
+  - `push-pipeline.ts` — `urlBase64ToUint8Array` (base64url, не base64 — наивният `atob` дава боклук), `subscribeForPush` (преизползва наличния абонамент; `userVisibleOnly: true`; половин отговор → `null`, не изключение), `readPushBrowser` зад `typeof` пазачи. Коментар за OEM капаните (dontkillmyapp) като котва за бъдещ дебъг.
+  - `use-push-setup.ts` / `push-prompt.tsx` — `armed` флагът е ядката на UX-а: докато екранът не го вдигне след смислено действие, няма банер, няма заявка, няма permission prompt (отказът в браузър е ЗАВИНАГИ). VAPID ключът е **lazy** заявка вътре в `enable`. Отказ и забранен permission се помнят в localStorage (`push-optout.ts`) — банерът не спами.
+  - `index.ts` — фасада: екраните вземат само `<PushPrompt armed />`.
+- **`frontend/app.json` + `frontend/public/manifest.json`** — web манифест (standalone, scope/start_url `/`, икони 512 maskable + 1024 any от наличните assets). Expo с `output: "static"` НЕ генерира манифест от `expo.web`, затова `public/manifest.json` е истинският артефакт, а app.json полетата са същите стойности — спек ги сверява, за да не се разминат тихо.
+- **`src/locales/{bg,en}/push.json`** — namespace-ът на фичата (нула хардкоднати низове).
+
+### Тестове
+- 4 нови спека, 27 теста: матрица на детекцията (native / липсващи API-та / iOS 16.3 vs 16.4 / iPad / инсталирано PWA), pipeline-ът срещу мокнати `pushManager` обекти, целият път permission → SW → subscribe → мутация, отказът и iOS install подсказката, превод на `DomainError` през `i18nKey`.
+- `npm --prefix frontend test` → **29 suites / 148 теста зелени**; `npm --prefix frontend run typecheck` → чист.
+
+### Бележки за следващия
+- `<PushPrompt />` още НЕ е закачен за екран — `src/app/_layout.tsx` е отровен файл извън обхвата на този таск. Който го wire-не, подава `armed` СЛЕД смислено действие, не при mount.
+- `<link rel="manifest">` също иска `src/app/+html.tsx` (извън обхвата) — манифестът съществува и се сервира от корена, остава само да бъде линкнат.
+- `pushUnsubscribe` от контракта е неизползван — отписването е отделна бъдеща стъпка.
+
+
+## Task 35 - feat(fe-chat): add generic chat thread components with realtime subscription wiring
+
+**Repo:** partyup (frontend) | **Lane:** fe-chat | **Commit:** 3cc4a2e
+
+### What was built
+- `features/chat/chat.graphql.ts` - `ChatThread` (chat + `me` in ONE query, so the viewer is known when the first frame renders), `MyChats` (uses `lastMessage`, not the whole thread), `SendMessage`, `OnMessage`. The message selection is mirrored across query/mutation/subscription so all three feed the same list.
+- `features/chat/thread-cache.ts` - `withMessage()`: the single append+dedupe (by id) used by BOTH the `sendMessage` echo and `onMessage`, instead of assuming which arrives first.
+- `features/chat/chat-thread.tsx` - the piece tasks 36/37 consume. `useQuery` + `subscribeToMore(OnMessage)` + `useMutation` with a `cache.updateQuery` append. `showTitle={false}` lets an owning screen (candidacy/table) embed it without a duplicate heading.
+- `features/chat/message-list.tsx` - FlatList; own messages right-aligned (`chat-message-own-*` / `chat-message-peer-*`), peer name only on foreign messages, ordered by `sentAt` so the two delivery paths don't race for the tail.
+- `features/chat/composer.tsx` - presentational (`onSend`/`pending`/`errorMessage`); keeps the text on failure so a server refusal never eats the message.
+- `features/chat/chat-list-screen.tsx` + `chat-titles.ts` - chats have no name in the contract, so the title is DERIVED: group -> table name, direct -> the other participant.
+- Routes `app/chat/index.tsx`, `app/chat/[chatId].tsx`; bg/en `chat` namespace filled (no hardcoded strings, §4.6).
+
+### Tests
+18 new specs across 3 files: subscription arrival appends, re-delivery does not duplicate, send shows the message and clears the field, domain error renders the human i18n text (never `message`), not-found/empty/error states, derived titles, en language.
+
+### Notes / decisions
+- The thread spec splits transports (`ApolloLink.split`): queries/mutations through `MockLink`, `onMessage` through the `test-utils/subscription` emitter - `MockedProvider` mock arrays cannot emit over time. `test-utils` itself was NOT modified (§4.7).
+- Composer uses plain state, not react-hook-form: one free-text field with no fill rules is not a form, and RHF's async submit produced overlapping-`act()` leakage across specs.
+- Added a `type()` test helper that waits for the re-render between `changeText` and `press` - the stale-closure hazard the board spec documents (RNTL v14 + React 19).
+- `src/__tests__/placeholder-routes.test.tsx` had a case asserting the chat route is still a placeholder; it now contradicted the implemented route. Removed it following the precedent set by task 31 (the file itself documents "an implemented route leaves here and brings its own spec"), and preserved the lost `en` coverage both there and in the chat list spec.
+
+### Verification
+`npm --prefix frontend test` - 21 suites / 100 tests green. `npm --prefix frontend run typecheck` - clean. Backend untouched.
+
+
+## [2026-08-19 07:40] - Task #38: feat(fe-lifecycle): add phase stepper, founder transitions and stay-or-leave prompt
+
+**Repo:** partyup (frontend) · **Lane:** fe-lifecycle-trial · **Commit:** `7d19061`
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** `table/[id]/lifecycle.tsx` беше placeholder от таск 3. А6 иска масата да се вижда като ПЪТЕКА (сглобяване → проба Session 0+1 → решение → постоянна), основателят да я движи фаза по фаза, а членът да получи единствения въпрос, който е негов: „оставаш ли?“. Ключовото продуктово решение (18.07) е, че този въпрос НЯМА опция „против“ — има само „оставам / напускам“, и то за самия теб.
+
+**What was done:**
+- RECON: прочетени `contracts/schema.graphql` (lifecycle мутациите + `TableStatus`), `party-up.md` §А6 и Решенията от 18.07, plus merge-натият placeholder и патърните на таск 33/34 (екран-врата, `*.gql.ts`, domain error мапване).
+- RED: 4 спека срещу липсващите модули — `phase-stepper.test.tsx` (цялата пътека, изминато/сега/предстоящо, обяснение на текущата фаза), `founder-transitions.test.tsx` (точно един ход на фаза → вярната мутация; в PERMANENT нула бутони; DomainError и мрежов отказ → човешко изречение), `stay-or-leave-prompt.test.tsx` (РОВНО два бутона, потвърждение преди напускане, `stay: true/false`, вече напуснал вижда изхода си), `lifecycle-screen.test.tsx` (ролите: основател / член / външен, DISBANDED, loading/грешка/липсваща маса). Червени по правилната причина (липсващи модули).
+- GREEN: `features/lifecycle-trial/` — `lifecycle.gql.ts` (фрагмент + query + 4 мутации; всички връщат същия фрагмент, за да влиза новата фаза право в Apollo кеша и степърът да се мести сам), `phase-stepper.tsx`, `founder-transitions.tsx`, `stay-or-leave-prompt.tsx`, `lifecycle-screen.tsx`, `lifecycle-errors.ts`, `index.ts`; `app/table/[id]/lifecycle.tsx` става тънък route; bg/en `lifecycle.json`.
+- А6 дословно: `DISBANDED` НЕ е стъпка от степъра — разпадналата се маса е слязла от пътеката, затова се показва отделно, а не като „фаза“. Степърът показва цялата пътека, защото обещанието на А6 е точно това: тежкият процес се плаща само от групи, които са останали.
+- Решението „няма против“ е заковано в тест, не само в UI: `getAllByRole('button')` в промпта е ТОЧНО 2. Трети избор би върнал въпроса „кой кого изритва“, който целият дизайн избягва. „Напускам“ минава през потвърждение (оставането е поправимо, тръгването — не съвсем); „Оставам“ минава веднага.
+- Основателят не се пита „оставаш ли?“ — неговият изход е А5 (exodus/преоснови), който е чужд обхват (таск 39 / lifecycleActions). Външният получава обяснение и нула контроли.
+- Неактивно членство = изборът вече е направен: на презареден екран човек вижда изхода си, не въпроса пак.
+
+**Verification:**
+- `npm --prefix frontend run typecheck` → codegen + tsc clean (документите валидирани срещу замразения контракт)
+- `npm --prefix frontend test` → 29/29 suites, 146/146 tests pass; четирите нови спека зелени (25 теста)
+- без `.only` / skip-нати тестове; bg/en lifecycle.json — 43 = 43 ключа, нула разминаване; нула хардкоднати низа (§4.6)
+- `contracts/` и `backend/` непипнати; `lifecycleActions.json` (на таск 39) непипнат; e2e и dev сървъри не са пускани; working tree чист след commit-а
+
+**Files modified:**
+- frontend/src/features/lifecycle-trial/lifecycle.gql.ts (нов)
+- frontend/src/features/lifecycle-trial/phase-stepper.tsx (нов)
+- frontend/src/features/lifecycle-trial/founder-transitions.tsx (нов)
+- frontend/src/features/lifecycle-trial/stay-or-leave-prompt.tsx (нов)
+- frontend/src/features/lifecycle-trial/lifecycle-screen.tsx (нов)
+- frontend/src/features/lifecycle-trial/lifecycle-errors.ts (нов)
+- frontend/src/features/lifecycle-trial/index.ts (нов)
+- frontend/src/features/lifecycle-trial/*.test.tsx (4 нови спека)
+- frontend/src/app/table/[id]/lifecycle.tsx
+- frontend/src/locales/bg/lifecycle.json + frontend/src/locales/en/lifecycle.json
+
+**Git commit:** `7d19061` — `feat(fe-lifecycle): add phase stepper, founder transitions and stay-or-leave prompt`
+
+---
+
+
 ## [2026-08-19 06:13] - Task #33: feat(fe-tables): add table settings screen with admission mode and listing toggles
 
 **Repo:** partyup (frontend) · **Lane:** fe-table-settings · **Commit:** `fa0f5cc`
@@ -1984,6 +2243,14 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
+
+
+
 
 
 
