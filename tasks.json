@@ -1,289 +1,169 @@
-﻿[
-    {
-        "id":  101,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "fe-shell",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "frontend/src/components/**",
-                      "frontend/src/app/_layout.tsx",
-                      "frontend/src/locales/bg/common.json",
-                      "frontend/src/locales/en/common.json"
-                  ],
-        "description":  "feat(shell): add global app header with theme toggle, language switch and settings link + desktop max-width container",
-        "specRef":  "party-up-structure.md §4 (FE конвенции) + rules/architecture-rules.md + rules/i18n-rules.md + party-up.md Паркинг (19.08, т.3)",
-        "tddWorkflow":  true,
-        "notes":  "AppHeader — нов компонент в frontend/src/components/, монтиран в app/_layout.tsx така, че да се вижда на ВСИЧКИ екрани, включително /login (т.е. извън AuthGate-скритото съдържание, но вътре в AppProviders — трябват му i18n/Apollo контексти). Съдържа: (1) theme тогъл — cycleThemeMode() от \u0027@/lib/theme\u0027 (light→dark→system, покажи текущия режим с иконка); (2) език — useUiStore setLanguage със стойности null(система)/\u0027bg\u0027/\u0027en\u0027; (3) link към /settings (router.push). Икони от @expo/vector-icons (в Expo е, НЕ добавяй dependency). Плюс: десктоп контейнер — на web съдържанието на приложението се центрира в max-width колона (напр. max-w-4xl mx-auto w-full през NativeWind), native не се пипа (Platform.OS === \u0027web\u0027). Цветове само през токените surface/ink/brand + dark: варианти (tailwind.config). ВСЕКИ низ = i18n ключ в common.json, bg+en ЕДНОВРЕМЕННО (хардкоднат низ = блокер). _layout.tsx е отровен файл — пипа се САМО от този таск.",
-        "steps":  [
-                      {
-                          "id":  "101.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети _layout.tsx, lib/theme.tsx, lib/ui-store.ts, auth-gate.tsx, tailwind.config.js, съществуващ RNTL патърн (test-utils/render.tsx)."
-                      },
-                      {
-                          "id":  "101.2",
-                          "phase":  "RED",
-                          "action":  "RNTL тестове: header се рендерира с трите контроли; cycleThemeMode сменя режима в ui-store; setLanguage сменя езика; settings link навигира. Червени."
-                      },
-                      {
-                          "id":  "101.3",
-                          "phase":  "GREEN",
-                          "action":  "components/app-header.tsx + монтаж в _layout.tsx + max-width контейнер (web-only) + locale ключове bg/en."
-                      },
-                      {
-                          "id":  "101.4",
-                          "phase":  "DONE",
-                          "action":  "npm --prefix frontend run typecheck \u0026\u0026 npm --prefix frontend test зелени. Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  102,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "fe-tabs",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "frontend/src/app/(tabs)/_layout.tsx"
-                  ],
-        "description":  "feat(tabs): add icons and active states to the tab bar",
-        "specRef":  "party-up-structure.md §4 + rules/architecture-rules.md",
-        "tddWorkflow":  true,
-        "notes":  "Трите таба (board/tables/profile) получават икони от @expo/vector-icons (НЕ добавяй dependency) + ясно активно състояние (цвят brand за активния, ink-muted за неактивните, dark: варианти). Етикетите остават съществуващите i18n ключове tabs.* — НЕ добавяй нови locale ключове (locales не са в files зоната на този таск). Пипа се САМО (tabs)/_layout.tsx.",
-        "steps":  [
-                      {
-                          "id":  "102.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети (tabs)/_layout.tsx и как expo-router/js-tabs приема tabBarIcon/options."
-                      },
-                      {
-                          "id":  "102.2",
-                          "phase":  "RED",
-                          "action":  "RNTL тест: трите таба рендерират икони; активният е откроен. Червен. (Тестът живее при компонента — ако трябва нов файл, той е в зоната.)"
-                      },
-                      {
-                          "id":  "102.3",
-                          "phase":  "GREEN",
-                          "action":  "Икони + активни състояния с NativeWind токените."
-                      },
-                      {
-                          "id":  "102.4",
-                          "phase":  "DONE",
-                          "action":  "typecheck + jest зелени. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  103,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "fe-login",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "frontend/src/features/auth/**",
-                      "frontend/src/locales/bg/auth.json",
-                      "frontend/src/locales/en/auth.json"
-                  ],
-        "description":  "feat(auth): surface authError codes on the login screen + polish provider buttons",
-        "specRef":  "party-up-structure.md §4 + rules/i18n-rules.md + backend Features/Auth/Login/AuthRedirect.cs (WithError)",
-        "tddWorkflow":  true,
-        "notes":  "Бекендът връща провалите на OAuth callback-а като ?authError=КОД на login URL-а (кодове: EXTERNAL_LOGIN_FAILED + DomainError кодовете от ProvisioningService) — днес НИКОЙ не ги показва (открито на живо 19.08). Таск: login екранът чете параметъра (expo-router useLocalSearchParams) и показва видим, преведен банер (bg+en, ключ per код + generic fallback). Плюс лек полиш на трите provider бутона (икони на провайдърите от @expo/vector-icons, по-добра йерархия, dark: варианти — екранът ВЕЧЕ има dark стилове, пази ги). Нула нови dependencies.",
-        "steps":  [
-                      {
-                          "id":  "103.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети login-screen.tsx + теста му, oauth.ts, AuthRedirect.cs (за кодовете), auth.json."
-                      },
-                      {
-                          "id":  "103.2",
-                          "phase":  "RED",
-                          "action":  "RNTL: с ?authError=EXTERNAL_LOGIN_FAILED банерът се вижда с bg текст; без параметър — няма банер; непознат код → generic съобщение. Червени."
-                      },
-                      {
-                          "id":  "103.3",
-                          "phase":  "GREEN",
-                          "action":  "Банер + ключове bg/en + полиш на бутоните."
-                      },
-                      {
-                          "id":  "103.4",
-                          "phase":  "DONE",
-                          "action":  "typecheck + jest зелени. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  104,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "fe-table-form",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "frontend/src/features/table-create/**",
-                      "frontend/src/locales/bg/tableForm.json",
-                      "frontend/src/locales/en/tableForm.json"
-                  ],
-        "description":  "feat(table-create): native date/time pickers on web and polished form fields",
-        "specRef":  "party-up-structure.md §4 + rules/architecture-rules.md + party-up.md Паркинг (19.08, т.3а)",
-        "tddWorkflow":  true,
-        "notes":  "Днес «Дата»/«Час» са голи text полета с формат-подсказка (2026-09-05 / 15:00). Таск: на web се рендерират истински \u003cinput type=\"date\"\u003e / \u003cinput type=\"time\"\u003e (react-native-web позволява DOM елементи — през Platform.OS === \u0027web\u0027 клон или .web.tsx вариант на полето в table-form-fields), които пишат в СЪЩИЯ react-hook-form state и пазят съществуващата валидация/формат на стойността (isValidDate/isValidTime остават source of truth — пикърът е UI, не нов формат). Native остава текстовият fallback. БЕЗ нови dependencies (НЕ инсталирай datetimepicker пакети). Плюс Material-ish рестайл на TextField/CheckboxField/RadioGroup в table-form-fields.tsx: радиуси, фокус състояния, spacing, dark: варианти — само през NativeWind токените. Съществуващите тестове на формата НЕ бива да почервеняват (поведенческа промяна = оправи ги в СЪЩИЯ commit).",
-        "steps":  [
-                      {
-                          "id":  "104.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети table-create-form.tsx, table-form-fields.tsx, тестовете им, tableForm.json."
-                      },
-                      {
-                          "id":  "104.2",
-                          "phase":  "RED",
-                          "action":  "Тестове: web вариантът рендерира date/time input и стойността стига до form state; невалидна стойност → съществуващата валидационна грешка. Червени."
-                      },
-                      {
-                          "id":  "104.3",
-                          "phase":  "GREEN",
-                          "action":  "Платформеният picker + рестайл на полетата; съществуващите спекове зелени."
-                      },
-                      {
-                          "id":  "104.4",
-                          "phase":  "DONE",
-                          "action":  "typecheck + jest зелени. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  105,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "fe-board",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "frontend/src/features/board/**",
-                      "frontend/src/locales/bg/board.json",
-                      "frontend/src/locales/en/board.json"
-                  ],
-        "description":  "feat(board): responsive card grid on desktop and polished listing cards",
-        "specRef":  "party-up-structure.md §4 + rules/architecture-rules.md + party-up.md Паркинг (19.08, т.1)",
-        "tddWorkflow":  true,
-        "notes":  "Днес борд картите са разтегнати full-width редове (мобилен лейаут на десктоп). Таск: на web/широк екран картите застават в грид (2-3 колони — NativeWind breakpoints: sm:/md:/lg: работят на web; native остава едноколонен списък) + полиш на самата карта: типографска йерархия (име откроено, полетата опит/формат/езици/системи като компактни редове или chip-ове), радиуси/сенки/spacing, «Това си ти» и pull бутонът ясно различими, dark: варианти. Само NativeWind токени, нула нови dependencies. Внимание: картата се ползва и в собствената обява (self card) — пази двата варианта. Съществуващите board тестове зелени в същия commit.",
-        "steps":  [
-                      {
-                          "id":  "105.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети board-screen.tsx (+ pull-targets, тестовете), board.json."
-                      },
-                      {
-                          "id":  "105.2",
-                          "phase":  "RED",
-                          "action":  "Тестове за новата структура на картата (полетата присъстват, pull CTA за чужда карта, self вариантът без CTA). Червени където има ново поведение."
-                      },
-                      {
-                          "id":  "105.3",
-                          "phase":  "GREEN",
-                          "action":  "Грид + рестайл; съществуващите спекове зелени."
-                      },
-                      {
-                          "id":  "105.4",
-                          "phase":  "DONE",
-                          "action":  "typecheck + jest зелени. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  106,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "fe-settings",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "frontend/src/features/auth-linking/**",
-                      "frontend/src/app/settings.tsx",
-                      "frontend/src/locales/bg/authLinking.json",
-                      "frontend/src/locales/en/authLinking.json"
-                  ],
-        "description":  "feat(settings): polish appearance and linked-accounts sections",
-        "specRef":  "party-up-structure.md §4 + rules/architecture-rules.md",
-        "tddWorkflow":  true,
-        "notes":  "Settings екранът (app/settings.tsx + features/auth-linking: AppearanceSection, LinkedAccountsSection, primitives.tsx ChipButton/Section) получава същия Material-ish полиш: секциите като карти, chip бутоните с ясно избрано състояние (brand фон за активния, dark: варианти), заглавия/подредба, spacing. НЕ добавяй навигация към екрана — вратата идва от header-а (таск 101, друга lane; НЕ пипай _layout файлове). Само NativeWind токени, нула нови dependencies. Съществуващите settings тестове зелени в същия commit.",
-        "steps":  [
-                      {
-                          "id":  "106.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети settings.tsx, appearance-section.tsx, linked-accounts-section.tsx, primitives.tsx + тестовете."
-                      },
-                      {
-                          "id":  "106.2",
-                          "phase":  "RED",
-                          "action":  "Тестове за избраното състояние на chip-овете (тема/език) и структурата на секциите. Червени където има ново поведение."
-                      },
-                      {
-                          "id":  "106.3",
-                          "phase":  "GREEN",
-                          "action":  "Рестайл; спековете зелени."
-                      },
-                      {
-                          "id":  "106.4",
-                          "phase":  "DONE",
-                          "action":  "typecheck + jest зелени. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  107,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "fe-table-doors",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "frontend/src/features/candidacy/**",
-                      "frontend/src/locales/bg/candidacy.json",
-                      "frontend/src/locales/en/candidacy.json"
-                  ],
-        "description":  "feat(table): link lifecycle and actions screens from the table view",
-        "specRef":  "party-up-structure.md §4 + rules/architecture-rules.md + party-up.md Паркинг (19.08, т.5)",
-        "tddWorkflow":  true,
-        "notes":  "Екранът на масата (TableScreen във features/candidacy — route app/table/[id]/index.tsx) днес НЯМА навигация към двата вече билднати екрана: table/[id]/actions (lifecycle-actions: «Напусни масата» с confirm+warning) и table/[id]/lifecycle (lifecycle-trial: фази + founder transitions, вкл. разформироване — открито на живо 19.08: «няма един път вътре — цял живот вътре», а вратата липсва). Таск: добави видими входове от TableScreen към двата route-а (router.push с tableId; например «Действия» и «Жизнен цикъл» в края на екрана). Етикетите = i18n ключове в candidacy.json, bg+en едновременно. Дизайн йерархия: това са secondary/destructive пътища — да НЕ изглеждат като primary CTA (виж бележката в lifecycle-actions/action-card: «напусни» не бива да изглежда като «запази»). НЕ пипай lifecycle-actions/**, lifecycle-trial/**, нито route файловете в app/ — само candidacy фичата + нейните локали. Нула нови dependencies, dark: варианти задължителни.",
-        "steps":  [
-                      {
-                          "id":  "107.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети TableScreen (features/candidacy) + тестовете му, app/table/[id]/{index,actions,lifecycle}.tsx, candidacy.json."
-                      },
-                      {
-                          "id":  "107.2",
-                          "phase":  "RED",
-                          "action":  "RNTL: TableScreen рендерира двата входа и навигира към table/\u003cid\u003e/actions и table/\u003cid\u003e/lifecycle. Червени."
-                      },
-                      {
-                          "id":  "107.3",
-                          "phase":  "GREEN",
-                          "action":  "Входовете + ключове bg/en; съществуващите candidacy спекове зелени."
-                      },
-                      {
-                          "id":  "107.4",
-                          "phase":  "DONE",
-                          "action":  "typecheck + jest зелени. Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    }
+[
+  {
+    "id": 201,
+    "category": "bugfix",
+    "repo": "partyup",
+    "lane": "fe-tabs-theme",
+    "dependsOn": [],
+    "files": [
+      "frontend/src/app/(tabs)/_layout.tsx",
+      "frontend/src/__tests__/tabs-icons.test.tsx"
+    ],
+    "description": "fix(tabs): drive tab bar colors from the ui-store theme so light mode is honored",
+    "specRef": "party-up-structure.md §4 + rules/architecture-rules.md + party-up.md «v0.3 бележки» т.1",
+    "tddWorkflow": true,
+    "notes": "БЪГ, наблюдаван на живо (19.08): на светла тема tab барът остава ЧЕРЕН. Причина: tabs layout-ът чете useColorScheme() на NativeWind, а theme тогълът пише през ui-store → colorScheme.set() (class override на web) — hook-ът НЕ следва override-а. Фикс: източникът на истина е ui-store: const themeMode = useUiStore(s => s.themeMode); isDark = themeMode === 'dark' || (themeMode === 'system' && useColorScheme() от 'react-native' === 'dark'). НЕ пипай lib/theme.tsx и lib/ui-store.ts (чети ги само). Съществуващият token-sync тест (src/__tests__/tabs-icons.test.tsx — сверява 7-те hex стойности с tailwind.config.js) се запазва/адаптира, НЕ се трие. Добави тест за реактивността: при themeMode='light' барът е surface бял, при 'dark' — surface-dark черен.",
+    "steps": [
+      { "id": "201.1", "phase": "RECON", "action": "Прочети (tabs)/_layout.tsx, tabs-icons.test.tsx, lib/theme.tsx, lib/ui-store.ts." },
+      { "id": "201.2", "phase": "RED", "action": "Тест: с ui-store themeMode='light' tabBarStyle.backgroundColor е surface (#ffffff) НЕЗАВИСИМО от NativeWind схемата; с 'dark' — surface-dark. Червен." },
+      { "id": "201.3", "phase": "GREEN", "action": "isDark от ui-store (+ RN useColorScheme за 'system'); token тестът остава зелен." },
+      { "id": "201.4", "phase": "DONE", "action": "npm --prefix frontend run typecheck && npm --prefix frontend test зелени. Commit с description-а дословно." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 202,
+    "category": "feature",
+    "repo": "partyup",
+    "lane": "fe-header-back",
+    "dependsOn": [],
+    "files": [
+      "frontend/src/components/**",
+      "frontend/src/locales/bg/common.json",
+      "frontend/src/locales/en/common.json"
+    ],
+    "description": "feat(shell): add in-app back navigation to the app header on stacked screens",
+    "specRef": "party-up-structure.md §4 + rules/i18n-rules.md + party-up.md «v0.3 бележки» т.2",
+    "tddWorkflow": true,
+    "notes": "Проблем (19.08): от /settings, chat, notifications, table/*, showcase, candidacy НЯМА връщане — потребителят ползва browser back, лоша практика за app-like PWA. Фикс: back бутон в СЪЩЕСТВУВАЩИЯ AppHeader (components/app-header.tsx, v0.2), показван само на stacked екрани (НЕ на трите tab root-а и НЕ на /login): usePathname() от expo-router за определяне + router.back() при router.canGoBack(), иначе router.replace('/'). Икона от @expo/vector-icons + accessibility label през i18n ключ в common.json (bg+en едновременно, хардкоднат низ = блокер). НЕ пипай route файлове, само components/ + локалите. Тестовете на header-а са ко-локирани в components/ (app-header.test.tsx) — разшири тях, НЕ пипай src/__tests__/*.",
+    "steps": [
+      { "id": "202.1", "phase": "RECON", "action": "Прочети app-header.tsx + app-header.test.tsx + app-shell.tsx, изясни как pathname различава tab root от stacked екран." },
+      { "id": "202.2", "phase": "RED", "action": "Тестове: на /settings back бутонът е видим и вика router.back(); на tab root и /login го НЯМА; без история → replace('/'). Червени." },
+      { "id": "202.3", "phase": "GREEN", "action": "Back бутонът + ключове bg/en." },
+      { "id": "202.4", "phase": "DONE", "action": "typecheck + jest зелени. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 203,
+    "category": "feature",
+    "repo": "partyup",
+    "lane": "fe-session-privacy",
+    "dependsOn": [],
+    "files": [
+      "frontend/src/features/auth-linking/**",
+      "frontend/src/locales/bg/authLinking.json",
+      "frontend/src/locales/en/authLinking.json"
+    ],
+    "description": "feat(settings): add logout with Apollo cache clear and redirect to login",
+    "specRef": "party-up-structure.md §4 + contracts/schema.graphql (logout mutation) + party-up.md «v0.3 бележки» т.4",
+    "tddWorkflow": true,
+    "notes": "Logout мутацията СЪЩЕСТВУВА в схемата (contracts/schema.graphql: logout: LogoutPayload!) — никой не я вика. Таск: секция «Сесия» в /settings (features/auth-linking) с logout бутон: (1) вика мутацията (нов .gql документ в slice-а, codegen я генерира); (2) await client.clearStore() (useApolloClient) — ИНАЧЕ кешираният me държи AuthGate отворен като призрак; (3) router.replace('/login'). Destructive визуална йерархия (secondary, не primary CTA). Ключове в authLinking.json bg+en. НЕ пипай lib/auth-gate.tsx, lib/apollo.ts, header-а.",
+    "steps": [
+      { "id": "203.1", "phase": "RECON", "action": "Прочети settings.tsx рендера, auth-linking slice-а, schema.graphql logout payload формата, lib/apollo.ts (клиента)." },
+      { "id": "203.2", "phase": "RED", "action": "Тест: бутонът вика logout мутацията, чисти store-а и навигира към /login (мок на useApolloClient/router). Червен." },
+      { "id": "203.3", "phase": "GREEN", "action": "Секцията + .gql + ключове bg/en." },
+      { "id": "203.4", "phase": "DONE", "action": "typecheck + jest зелени. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 204,
+    "category": "bugfix",
+    "repo": "partyup",
+    "lane": "be-lfg-contains",
+    "dependsOn": [],
+    "files": [
+      "backend/src/PartyUp.Api/Features/Lfg/**",
+      "backend/tests/PartyUp.IntegrationTests/Features/Lfg/**",
+      "backend/tests/PartyUp.UnitTests/Features/Lfg/**"
+    ],
+    "description": "fix(lfg): system filters match case-insensitive substrings on both board and showcase",
+    "specRef": "party-up-structure.md §2а.4 (read дисциплина) + party-up.md «v0.3 бележки» т.5",
+    "tddWorkflow": true,
+    "notes": "БЪГ, наблюдаван на живо (19.08): търсене «dnd» НЕ намира маса със система «dnd 5e». Двете места са РАЗМИНАТИ: LfgBoardQueries.cs:58 ползва row.Profile.Systems.Contains(system) (substring, но case-SENSITIVE в Postgres) — а ShowcaseQueries.cs:78 ползва table.System == system (exact match). Фикс: и двете → case-insensitive contains през EF.Functions.ILike(колоната, \"%\" + system + \"%\") (Npgsql го превежда до ILIKE; escape-ни % и _ в потребителския вход). «Система» е свободен текст ПО РЕШЕНИЕ (не enum) → мекото филтриране е част от договора. НЯМА промяна по schema.graphql (същият filter input, друга семантика) — НЕ пипай contracts/. Integration тестове (Testcontainers) с кейсовете: «dnd»→намира «dnd 5e», «DND»→намира «dnd 5e», празен филтър → всичко.",
+    "steps": [
+      { "id": "204.1", "phase": "RECON", "action": "Прочети LfgBoardQueries.cs, ShowcaseQueries.cs, съществуващите Lfg тестове и как seed-ват данни." },
+      { "id": "204.2", "phase": "RED", "action": "Integration: «dnd» намира «dnd 5e» на board И showcase; «DND» също; несъвпадащ низ не намира. Червени (сега exact/case-sensitive)." },
+      { "id": "204.3", "phase": "GREEN", "action": "EF.Functions.ILike на двете места + escape на wildcard знаците." },
+      { "id": "204.4", "phase": "DONE", "action": "dotnet test backend/PartyUp.slnx зелен. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 211,
+    "category": "feature",
+    "repo": "partyup",
+    "lane": "be-privacy",
+    "dependsOn": [],
+    "files": [
+      "backend/src/PartyUp.Api/Features/Privacy/**",
+      "backend/src/PartyUp.Api/Domain/Privacy/**",
+      "backend/src/PartyUp.Api/Data/PartyUpDbContext.cs",
+      "backend/tests/PartyUp.IntegrationTests/Features/Privacy/**",
+      "backend/tests/PartyUp.UnitTests/Features/Privacy/**",
+      "contracts/schema.graphql"
+    ],
+    "description": "feat(privacy): add deleteAccount mutation with hard delete of personal data and anonymized relational traces",
+    "specRef": "party-up.md «v0.3 бележки» т.6 (GDPR) + party-up-structure.md §2а (вкл. §2а.7) + §3.1 (жив контракт)",
+    "tddWorkflow": true,
+    "notes": "GDPR чл. 17 (изтриване), семантика РЕШЕНА от потребителя: ЛИЧНИТЕ данни се трият твърдо (AppUser, профил, LFG обява, external logins, push абонаменти), РЕЛАЦИОННИТЕ следи се АНОНИМИЗИРАТ, не трият — членства/чат съобщения/вотове остават с показвано име «Изтрит потребител» (иначе се чупи историята на масите на ДРУГИТЕ). Основател на жива (не Disbanded) маса → мутацията ВРЪЩА грешка FOUNDER_HAS_ACTIVE_TABLE (първо преоснови/exodus — flow-ът съществува), НЕ трие. Нов slice Features/Privacy/DeleteAccount/ + Domain/Privacy/PrivacyRequest entity (мини «заявки» лог: тип, поискано, изпълнено — 5 колони, НЕ одит система) + DbSet в PartyUpDbContext (отровен файл — в тази lane е НАРОЧНО, само тя го пипа). Изисква auth (viewer-а трие СЕБЕ СИ). След промяната: schema export (cd backend && dotnet run --project src/PartyUp.Api -- schema export --output ../../../contracts/schema.graphql) и commit-ни новия contracts/schema.graphql В СЪЩИЯ commit (§3.1). Статичен pure service за анонимизационните правила (§2а.6) + unit тестове без база.",
+    "steps": [
+      { "id": "211.1", "phase": "RECON", "action": "Прочети Domain entity-тата (Membership, ChatMessage, Vote, PlayerListing, AppUser), DbContext-а, ProvisioningService, TrialTransitions (Disbanded), IEndpointModule патърна." },
+      { "id": "211.2", "phase": "RED", "action": "Integration: изтриване на обикновен член → user го няма, членството е анонимизирано, чатът му стои като «Изтрит потребител»; founder на жива маса → FOUNDER_HAS_ACTIVE_TABLE, нищо не е пипнато; PrivacyRequest ред е записан. Unit: анонимизационният pure service. Червени." },
+      { "id": "211.3", "phase": "GREEN", "action": "Slice + entity + DbSet + schema export в contracts/." },
+      { "id": "211.4", "phase": "DONE", "action": "dotnet test зелен. Commit (вкл. contracts/schema.graphql)." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 212,
+    "category": "feature",
+    "repo": "partyup",
+    "lane": "be-privacy",
+    "dependsOn": [],
+    "files": [
+      "backend/src/PartyUp.Api/Features/Privacy/**",
+      "backend/src/PartyUp.Api/Domain/Privacy/**",
+      "backend/src/PartyUp.Api/Data/PartyUpDbContext.cs",
+      "backend/src/PartyUp.Api/Program.cs",
+      "backend/tests/PartyUp.IntegrationTests/Features/Privacy/**",
+      "backend/tests/PartyUp.UnitTests/Features/Privacy/**",
+      "contracts/schema.graphql"
+    ],
+    "description": "feat(privacy): add background my-data export with notification and expiring authenticated download",
+    "specRef": "party-up.md «v0.3 бележки» т.6 (GDPR) + party-up-structure.md §2а + §3.1",
+    "tddWorkflow": true,
+    "notes": "GDPR чл. 15/20: mutation requestDataExport (viewer-а за себе си) + query myDataExport (status: Pending/Ready/Expired). Изпълнение ВЪВ ФОНОВ РЕЖИМ: Channel<Guid> опашка + BackgroundService worker В Privacy slice-а, регистрирани през extension AddPrivacyExport() по образеца на AddPushFanout() — в Program.cs се добавя ТОЧНО ЕДИН ред builder.Services.AddPrivacyExport() до AddPushFanout() и НИЩО друго (Program.cs е отровен — затова е в тази lane; таск 211 НЕ го пипа, но двата са в една lane заради споделените Privacy/DbContext/contracts зони). Формат РЕШЕН: ЕДИН JSON файл — профил, обява, маси/членства, кандидатури, СОБСТВЕНИТЕ чат съобщения, известия. Съхранение: DataExport entity (нов DbSet) с JSON-а като text колона + ExpiresAt (напр. 7 дни). Готово → INotifier известие («данните ти са готови») — fan-out механиката съществува (PushSend slice). Сваляне: IEndpointModule GET /privacy/export (авто-map-ва се, БЕЗ Program.cs) — изисква auth cookie, връща application/json attachment само на собственика, 404/410 при липса/изтекъл. Schema export + commit на contracts/schema.graphql в същия commit. Worker-ът се тества integration (enqueue → Ready → съдържанието включва seed данните на точния user и НЕ чужди).",
+    "steps": [
+      { "id": "212.1", "phase": "RECON", "action": "Merged 211: Privacy slice-ът съществува. Прочети PushSend (AddPushFanout + INotifier), AuthEndpoints (IEndpointModule + auth), DataLoader-ите за формата на данните." },
+      { "id": "212.2", "phase": "RED", "action": "Integration: request → Pending → worker-ът произвежда Ready с валиден JSON само с данните на user-а; endpoint-ът дава файла на собственика и 401/404 на чужд; изтекъл → 410. Unit: JSON сглобяването като pure функция. Червени." },
+      { "id": "212.3", "phase": "GREEN", "action": "Slice + worker + AddPrivacyExport() (1 ред в Program.cs) + endpoint + entity + schema export." },
+      { "id": "212.4", "phase": "DONE", "action": "dotnet test зелен. Commit (вкл. contracts/)." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 213,
+    "category": "feature",
+    "repo": "partyup",
+    "lane": "fe-session-privacy",
+    "dependsOn": [211, 212],
+    "files": [
+      "frontend/src/features/auth-linking/**",
+      "frontend/src/locales/bg/authLinking.json",
+      "frontend/src/locales/en/authLinking.json"
+    ],
+    "description": "feat(settings): add data & privacy section with account deletion and my-data export",
+    "specRef": "party-up.md «v0.3 бележки» т.6 + party-up-structure.md §4 + rules/i18n-rules.md",
+    "tddWorkflow": true,
+    "notes": "dependsOn 211+212 е ЗАДЪЛЖИТЕЛЕН: codegen-ът чете contracts/schema.graphql и новите мутации/query трябва да са MERGED (FE никога не пипа contracts — §3.1). Секция «Данни и поверителност» в /settings (същия auth-linking slice като logout от таск 203 — затова е същата lane): (1) «Преглед на данните ми» → requestDataExport + показва статус (Pending: «ще те уведомим, като е готово»; Ready: link/бутон към /privacy/export — обикновен <a>/Linking към бекенд URL-а, cookie-то важи; Expired: предложи нова заявка); (2) «Изтрий акаунта» → confirm диалог с ИЗБРОЕНИ последици (данните се трият, следите в масите стават «Изтрит потребител», необратимо е) + при FOUNDER_HAS_ACTIVE_TABLE грешката показва обяснение «първо преоснови/напусни масите си» с link към Моите маси; при успех: clearStore + replace('/login') (преизползвай logout механиката от 203). Destructive йерархия (изтриването е НАЙ-неударимият бутон на екрана). Ключове bg+en.",
+    "steps": [
+      { "id": "213.1", "phase": "RECON", "action": "Merged 211/212: прегледай новите мутации в contracts/schema.graphql, пусни codegen. Прочети секцията от 203 (logout механиката)." },
+      { "id": "213.2", "phase": "RED", "action": "Тестове: export бутонът вика мутацията и рендерира трите статуса; delete confirm-ът изброява последиците, при грешка FOUNDER_HAS_ACTIVE_TABLE показва обяснението, при успех чисти store и навигира. Червени." },
+      { "id": "213.3", "phase": "GREEN", "action": "Секцията + ключове bg/en." },
+      { "id": "213.4", "phase": "DONE", "action": "typecheck + jest зелени. Commit." }
+    ],
+    "passes": false
+  }
 ]
