@@ -135,6 +135,33 @@ if ($config -and $config.claude_args) {
     $mi = [array]::IndexOf($config.claude_args, "--model")
     if ($mi -ge 0 -and $mi -lt $config.claude_args.Count - 1) { $agentModel = $config.claude_args[$mi + 1] }
 }
+
+# MODEL TIERS (19.08, идея на потребителя): config "models" мапва tier имена към модели,
+# така че цената per таск се управлява от ЕДНО място при квотна криза, без да се пипа
+# board-ът. Тасковете носят "model": "easy" | "heavy" (или конкретен claude-* id);
+# липсва -> heavy. easy = механични/добре сдъвкани таскове; heavy = фичи/диагностика;
+# review = finishing review+fix агентите (качествената летва). Docs агентът върви на
+# easy (механично писане). Липсващ models блок -> всичко пада към claude_args модела
+# (старото поведение, вкл. стари конфизи).
+$modelTiers = @{ easy = $agentModel; heavy = $agentModel; review = $agentModel }
+if ($config -and $config.PSObject.Properties['models'] -and $config.models) {
+    foreach ($tier in @('easy', 'heavy', 'review')) {
+        if ($config.models.PSObject.Properties[$tier] -and $config.models.$tier) { $modelTiers[$tier] = $config.models.$tier }
+    }
+}
+$reviewModel = $modelTiers['review']
+$docsModel   = $modelTiers['easy']
+
+function Resolve-TaskModel($task) {
+    $m = ''
+    if ($task.PSObject.Properties['model'] -and $task.model) { $m = "$($task.model)".Trim() }
+    if (-not $m) { return $modelTiers['heavy'] }
+    if ($modelTiers.ContainsKey($m)) { return $modelTiers[$m] }
+    if ($m -like 'claude-*') { return $m }
+    Write-Host "[!] Task #$($task.id): unknown model tier '$m' - falling back to heavy" -ForegroundColor Yellow
+    return $modelTiers['heavy']
+}
+
 $useApiKeyCfg = $false
 if ($config -and $config.PSObject.Properties['use_api_key']) { $useApiKeyCfg = [bool]$config.use_api_key }
 
@@ -405,7 +432,7 @@ function Invoke-ReviewStage($tasks, $repoKeys) {
                 Set-Location $dir
                 if (-not $useKey) { Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue }
                 & claude -p "@$pf" --model $model --dangerously-skip-permissions 2>&1 | Out-String
-            } -ArgumentList $r.location, $tempP, $agentModel, $useApiKeyCfg
+            } -ArgumentList $r.location, $tempP, $reviewModel, $useApiKeyCfg
             $done = Wait-Job $job -Timeout 1200
             $outText = ""
             if ($done) {
@@ -458,7 +485,7 @@ function Invoke-ReviewStage($tasks, $repoKeys) {
                 Set-Location $dir
                 if (-not $useKey) { Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue }
                 & claude -p "@$pf" --model $model --dangerously-skip-permissions 2>&1 | Out-String
-            } -ArgumentList $r.location, $tempF, $agentModel, $useApiKeyCfg
+            } -ArgumentList $r.location, $tempF, $reviewModel, $useApiKeyCfg
             $done = Wait-Job $job -Timeout 1500
             if ($done) { Receive-Job $job | Out-String | Out-File (Join-Path $scriptDir "logs\reviewfix-$k-cycle$cycle-$stamp.txt") -Encoding UTF8 }
             else { Stop-Job $job -ErrorAction SilentlyContinue }
@@ -538,7 +565,7 @@ Do, in this order:
                 Set-Location $dir
                 if (-not $useKey) { Remove-Item Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue }
                 & claude -p "@$pf" --model $model --dangerously-skip-permissions 2>&1 | Out-String
-            } -ArgumentList $r.location, $tempP, $agentModel, $useApiKeyCfg
+            } -ArgumentList $r.location, $tempP, $docsModel, $useApiKeyCfg
             $done = Wait-Job $job -Timeout 1500
             if (-not $done) {
                 Stop-Job $job -ErrorAction SilentlyContinue
@@ -739,8 +766,31 @@ function Start-AgentForTask($task, $slot) {
             Write-Host "[i] Task #$($task.id): retry mode = $mode" -ForegroundColor Yellow
         }
     }
+    $taskModel = Resolve-TaskModel $task
+    # MODEL ESCALATION (19.08, идея на потребителя): таск, който си е изпросил scope
+    # ескалация, е доказал, че tier преценката му е била оптимистична - вдигни го едно
+    # стъпало по стълбицата easy -> heavy -> review (Fable). Същият брояч и праг като
+    # -retryMode стълбицата (escalate_after), т.е. scope и мозък ескалират ЗАЕДНО;
+    # heavy таск с изчерпани опити получава review модела като последен шанс (Fable
+    # гори ОТДЕЛНИЯ Fable джоб на Max - последният шанс е почти безплатен за swarm
+    # квотата). Quota/timeout re-queues не бумват (не са по вина на агента); равни
+    # съседни tier-ове в конфига = no-op на това стъпало.
+    $fcM = $script:failCounts[$task.id]; if (-not $fcM) { $fcM = 0 }
+    if ($fcM -ge $escalateAfter) {
+        $bumped = $null
+        if ($taskModel -eq $modelTiers['easy'] -and $modelTiers['heavy'] -ne $modelTiers['easy']) {
+            $bumped = $modelTiers['heavy']
+        } elseif ($taskModel -eq $modelTiers['heavy'] -and $modelTiers['review'] -ne $modelTiers['heavy']) {
+            $bumped = $modelTiers['review']
+        }
+        if ($bumped) {
+            Write-Host "[i] Task #$($task.id): model ESCALATED $taskModel -> $bumped after $fcM failed attempts" -ForegroundColor Yellow
+            $taskModel = $bumped
+        }
+    }
+    $argList += @("-modelOverride", $taskModel)
     $proc = Start-Process powershell.exe -ArgumentList ($argList -join ' ') -PassThru -WindowStyle $agentWindows
-    Write-Host "[>] SLOT $slot -> task #$($task.id) [$rKey / lane '$(Get-LaneKey $task)'] branch $branchName (pid $($proc.Id))" -ForegroundColor Green
+    Write-Host "[>] SLOT $slot -> task #$($task.id) [$rKey / lane '$(Get-LaneKey $task)'] branch $branchName (pid $($proc.Id), model $taskModel)" -ForegroundColor Green
     if ($agentWindows -eq 'Normal') { Set-AgentWindowPosition $slot }
 
     return @{

@@ -7,6 +7,12 @@
     "--model", "claude-opus-5",
     "--dangerously-skip-permissions"
   ],
+  "models": {
+    "easy": "claude-sonnet-5",
+    "heavy": "claude-opus-5",
+    "review": "claude-fable-5"
+  },
+  "_models_comment": "MODEL TIERS (19.08): таскът в tasks.json носи \"model\": \"easy\" | \"heavy\" (или конкретен claude-* id); липсва -> heavy. easy = механични/добре сдъвкани таскове (полиш, локали, wiring, готова рецепта в notes); heavy = фичи/диагностика/schema промени; review = finishing review+fix агентите (качествената летва; Fable гори ОТДЕЛНИЯ Fable седмичен джоб на Max плана, не общия). Docs агентът върви на easy. При квотна криза се сменят СТОЙНОСТИТЕ тук (напр. heavy -> claude-sonnet-5, review -> claude-opus-5), board-ът НЕ се пипа. claude_args --model остава за соло режима и като fallback при липсващ models блок.",
   "prerequisite_steps": {
     "enabled": true,
     "steps_file": "prerequisite-steps.md"

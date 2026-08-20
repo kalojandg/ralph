@@ -34,6 +34,250 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task 213 — feat(settings): add data & privacy section with account deletion and my-data export
+
+**Репо:** partyup · **Lane:** fe-session-privacy · **Commit:** `d21e3a3`
+
+### Какво е направено
+
+- **Нови GraphQL документи** в `features/auth-linking/documents.ts` срещу мерджнатия контракт от 211/212: `MyDataExport` (query), `RequestDataExport` и `DeleteAccount` (мутации). При изтриването `code` се селектира НАРОЧНО — по него екранът разклонява, `message` не стига до UI (§4.5, §7б.4).
+- **`use-privacy.ts`** — hook с двете права на потребителя върху данните му. Сървърният state (разписката за експорт) живее само в Apollo кеша; payload-ът на мутацията се пише право в кеша през `update`, без refetch. В React state стоят само трите UI решения: чакащо потвърждение, блокиране на основател, съобщение.
+- **`privacy-section.tsx`** — картата на екрана: „Преглед на данните ми“ (заявка + четирите състояния: няма архив / Pending „ще те уведомим“ / Ready с бутон към `GET /privacy/export` / Expired с покана за нова заявка) и „Изтриване на акаунта“ (confirm диалог, който ИЗБРОЯВА трите последици, преди каквото и да е да тръгне).
+- **`FOUNDER_HAS_ACTIVE_TABLE` не е грешка, а НАСОКА** — рисува се като отделен блок с обяснение и връзка към „Моите маси“, вместо като червено съобщение. При успех: `clearStore()` и чак после `replace('/login')` — същият ред като изхода от таск 203, иначе кешираният `me` държи `AuthGate` отворен като призрак.
+- **Ключове bg+en едновременно** в `locales/{bg,en}/authLinking.json` (§4.6). BE-шкият `i18nKey` `privacy.founderHasActiveTable` ляга естествено в новата `privacy` секция на namespace-а.
+- **Рефактор без промяна на поведение:** частният `domainErrorText` от `use-auth-linking.ts` е изнесен в `domain-error-text.ts` и се ползва от двата hook-а. Съществуващите тестове останаха непипнати и зелени.
+
+### Намерен и затворен реален бъг (не само тестова флейкавост)
+
+Първият прогон на новия спек беше НЕСТАБИЛЕН. Причината не беше в теста: заявка за експорт, пусната ПРЕДИ отговора на `myDataExport`, си пишеше `PENDING` в кеша, а закъснелият отговор на самата заявка (`myDataExport: null`) го презаписваше — състоянието „сглобяваме архива“ изчезваше пред очите на човека. Фикс в източника: действията са спрени, докато разписката не пристигне (пази и от двойно подаване), а „няма архив“ се твърди чак когато отговорът е дошъл — незнанието не се показва като факт. Спекът покрива и двете страни на гарда.
+
+### Обхват — едно съзнателно излизане
+
+Единственият пипнат файл извън обявения `files` списък е `frontend/src/app/settings.tsx` (+6/−1: import и монтиране на секцията най-долу, под изхода). Без него компонентът е мъртъв код и фичата не съществува за потребителя. Прецедентът е в същата lane: таск 203 монтира `SessionSection` по абсолютно същия начин. Файлът НЕ е в отровния списък (§5) и никой друг таск от board-а не го чака.
+
+### Верификация
+
+- `npm --prefix frontend run typecheck` — зелен.
+- `npm --prefix frontend test` — **60 suite-а, 371 теста зелени** (10 нови в `privacy-section.test.tsx` + 1 нов за подредбата на екрана; трикратен прогон без флейк).
+- `contracts/` не е пипан, `src/gql/` не е комитнат, `package-lock.json` е чист.
+- `dotnet test` НЕ е пускан — diff-ът е чисто `frontend/`; BE-то го покрива post-merge гейтът.
+
+
+## [2026-08-20] - Task #212: feat(privacy): add background my-data export with notification and expiring authenticated download
+
+**Repo:** partyup (`D:\Downloads\monk\party-up`) · **Lane:** be-privacy · **Branch:** ralph/task-212 · **Commit:** `77d9560`
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** GDPR чл. 15/20 иска копие на личните данни. Обхождането на цялата история на един човек няма място в GraphQL заявка, която браузърът чака — затова работата е фонова, а мутацията е само разписка.
+
+### Какво е направено
+
+- **`Domain/Privacy/DataExport.cs`** — новото entity: `Status` (Pending/Ready/**Expired**), `Json` като text колона, `RequestedAt`/`ReadyAt`/`ExpiresAt`. ⚠ `Expired` НИКОГА не се записва — то е прочит на часовника, за да няма метачка, поддържаща истина, която едно сравнение дава безплатно. **Един ред на потребител** (уникален индекс по `UserId`): нова заявка ПРЕЗАПИСВА старата, вместо да трупа копия на личните данни, които чакат да изтекат.
+- **`Data/PartyUpDbContext.cs`** (отровен файл — в тази lane нарочно) — 14-и DbSet `DataExports` + уникален индекс, FK към `AppUser` (обратното на `PrivacyRequest`: копието НЕ бива да надживява акаунта си) и `text` колона без таван.
+- **`Features/Privacy/Export/`** — новият slice:
+  - `PersonalData.cs` — форматът: шест раздела (профил, обява, маси, кандидатури, СОБСТВЕНИТЕ реплики, известия). Собствен модел, не домейн entity-тата: сериализиране на entity влачи навигациите (`Message.SenderUser`, `Table.Memberships`) и с тях чуждите хора.
+  - `PersonalDataDocument.cs` — **чистата функция** (unit тествана): camelCase, енуми по име, `UnsafeRelaxedJsonEscaping` (дефолтният encoder превръща българския профил в стена от `\u0420`).
+  - `DataExportCollector.cs` — шест `AsNoTracking` + изрични проекции; филтърът `== userId` Е границата, никакъв `Include`.
+  - `DataExportQueue.cs` (`Channel<Guid>`, unbounded/SingleReader) + `DataExportWorker.cs` (`BackgroundService`, собствен scope на задача, един провал не убива worker-а) + `DataExportProcessor.cs` (събери → сглоби → запиши → извести).
+  - `RequestDataExportHandler.cs` / `RequestDataExportMutations.cs` — без аргументи (viewer-ът иска СВОИТЕ данни), `[UseMutationConvention(PayloadFieldName = "dataExport")]`; вторият клик връща същата разписка, а засеклите се клика получават разписката на победителя вместо сурово `DbUpdateException` (§4.5).
+  - `MyDataExportQueries.cs` — `[ObjectType<Query>]` (§7а.5), проекция БЕЗ `Json` колоната: цената на „готово ли е" не бива да е целият файл.
+  - `DataExportEndpoints.cs` — `IEndpointModule` `GET /privacy/export`, авто-map-нат. Пътят НЯМА аргумент „чий" — сервира експорта НА СЕСИЯТА, тоест правото не е проверка, а самата заявка.
+  - `PrivacyExportServices.cs` — `AddPrivacyExport()` по образеца на `AddPushFanout()`.
+- **`Program.cs`** — ТОЧНО един ред: `builder.Services.AddPrivacyExport();` до `AddPushFanout()` (+ using-а на слайса).
+- **`Features/Privacy/DeleteAccount/DeleteAccountHandler.cs`** — един ред: готовият експорт се трие заедно с останалото лично. Той е ПЪЛНО копие на всичко останало, тоест след „изтрий ме" би бил последното място, където данните още живеят — при това свалимо.
+- **`contracts/schema.graphql`** — ре-експорт от Hot Chocolate в СЪЩИЯ commit (§3.1): `myDataExport: MyDataExport`, `requestDataExport: RequestDataExportPayload!`, `type MyDataExport`, `union RequestDataExportError`, `enum DataExportStatus`.
+
+### Отговорите на endpoint-а
+
+| Случай | Отговор |
+|---|---|
+| собственик, готов и валиден | **200** `application/json`, `Content-Disposition: attachment; filename=party-up-data.json` |
+| без сесия | **401** (ръчна проверка, не `RequireAuthorization()` — дефолтната cookie схема би върнала 302 към login екран) |
+| чужд / никога непоискан / още Pending | **404** (чужд експорт не е „забранен", а не съществува за викащия) |
+| изтекъл | **410** (различимо от „никога не е имало" — по него FE предлага нова заявка) |
+
+### ⚠ Решения, които заслужават преглед
+
+1. **Първият `BackgroundService` в приложението.** `party-up-structure.md` §1а казва „НЯМА hosted services, не въвеждай без решение на потребителя" — този е изричното решение от таска, не изключение по инерция. Референсът иска ъпдейт.
+2. **Опашката е в паметта.** Рестарт губи ПОДКАНИТЕ, не заявките (редовете остават `Pending`). Второ искане ги пуска пак; лечението, ако потрябва, е метач при старт, който преизпраща `Pending` редовете — без промяна в опашката.
+3. **`candidacy.status` е в експорта, гласовете — не.** Изходът на кандидатурата е негов (вече го е научил от известието), но кой как е гласувал и защо остава извън файла (А2, §7в.4).
+
+**Verification:**
+- `dotnet test backend/PartyUp.slnx` → 155 unit + 336 integration, 0 fail
+- нови: `PersonalDataDocumentTests` (5), `DataExportLifetimeTests` (5), `DataExportTests` (17 integration, вкл. „експортът НЕ носи нищо чуждо" срещу seed с двама души на една маса)
+- `schema export` → `contracts/schema.graphql` комитнат в същия commit
+
+**Files modified:**
+- `backend/src/PartyUp.Api/Domain/Privacy/DataExport.cs` (нов)
+- `backend/src/PartyUp.Api/Data/PartyUpDbContext.cs`
+- `backend/src/PartyUp.Api/Features/Privacy/Export/*.cs` (11 нови)
+- `backend/src/PartyUp.Api/Features/Privacy/DeleteAccount/DeleteAccountHandler.cs`
+- `backend/src/PartyUp.Api/Program.cs`
+- `backend/tests/PartyUp.UnitTests/Features/Privacy/{PersonalDataDocumentTests,DataExportLifetimeTests}.cs` (нови)
+- `backend/tests/PartyUp.IntegrationTests/Features/Privacy/{DataExportSeed,DataExportTests}.cs` (нови)
+- `contracts/schema.graphql`
+
+**Git commit:** `77d9560` — `feat(privacy): add background my-data export with notification and expiring authenticated download`
+
+---
+
+
+## Task 211 — feat(privacy): add deleteAccount mutation with hard delete of personal data and anonymized relational traces
+
+**Repo:** partyup (`D:\Downloads\monk\party-up`) · **Lane:** be-privacy · **Branch:** ralph/task-211 · **Commit:** `6a4bac3`
+
+### Какво е направено
+
+- **`Domain/Privacy/PrivacyRequest.cs`** — мини лог на GDPR заявките: `Id`, `UserId`, `Type`, `RequestedAt`, `CompletedAt` (+ `PrivacyRequestTypes.AccountDeletion`). `UserId` е ГОЛ ключ — без навигация и без FK към `AppUser`, защото логът трябва да надживее акаунта, за който разказва.
+- **`Data/PartyUpDbContext.cs`** (отровен файл — в тази lane нарочно) — 13-и DbSet `PrivacyRequests` + `OnModelCreating` конфиг (индекс по `UserId`, `Type` max 64, съзнателно без релация към `AppUser`).
+- **`Features/Privacy/DeleteAccount/AccountAnonymization.cs`** — статичен pure service (§2а.6) с правилата: `DeletedDisplayName = "Изтрит потребител"`, `HoldsItsFounder(TableStatus)`, `Scrub(AppUser)`, `Scrub(UserProfile)`, `AnonymousProfile(userId)`. Тества се unit, без база.
+- **`Features/Privacy/DeleteAccount/DeleteAccountHandler.cs`** — оркестрацията в една транзакция: отказ при основател на жива маса → лог ред → твърдо изтриване на личното → обезличаване на следите.
+- **`Features/Privacy/DeleteAccount/DeleteAccountMutations.cs`** — `[MutationType]` + `[UseMutationConvention(PayloadFieldName = "success")]`, без аргументи (viewer-ът трие СЕБЕ СИ). Program.cs остава непипнат (§7а.2).
+- **`contracts/schema.graphql`** — ре-експорт от Hot Chocolate в СЪЩИЯ commit (§3.1): `deleteAccount: DeleteAccountPayload!`, `type DeleteAccountPayload { success, errors }`, `union DeleteAccountError = DomainError`.
+
+### Семантика (както е решена от потребителя)
+
+| Данни | Какво става |
+|---|---|
+| LFG обява, push абонаменти, известия, external logins/tokens/claims/roles | **твърдо изтрити** |
+| Идентификаторите на акаунта (email, username, телефон, hash, stamps) и всички профилни полета | **изтрити/занулени на място** (SecurityStamp се ротира → отворена сесия не преживява изтриването си) |
+| Членства, чат реплики, гласове, кандидатури, участия в чатове | **остават**, показват се като «Изтрит потребител»; активните членства се деактивират (`Active=false`, `LeftAt`), за да не държи изтритият слот в жив състав |
+| Основател на жива (≠ `Disbanded`) маса | мутацията връща **`FOUNDER_HAS_ACTIVE_TABLE`** и НИЩО не е пипнато — първо преоснови/exodus |
+
+### ⚠ Решение, което заслужава преглед
+
+Редовете на `AppUser` и `UserProfile` НЕ се изтриват физически, а се **обезличават**. Причината е конструктивна, не удобство:
+
+1. `Message.SenderUserId`, `Vote.VoterUserId`, `TableMembership.UserId`, `ChatParticipant.UserId`, `Candidacy.CandidateUserId` са **ненулеви** външни ключове към `AppUser` → по EF конвенция каскадата е `Cascade`. Изтриване на реда би отнесло със себе си точно историята на масите на ОСТАНАЛИТЕ, която решението изрично пази. Нулиране на тези FK-та иска редакция на `Domain/*` — извън `files` обхвата на таска.
+2. `UserProfile` е **единственият** източник на `displayName` в схемата (борд, витрина, чат, вотове минават през него, с fallback `User.Empty` → празно име). Само през обезличен профилен ред анонимното име «Изтрит потребител» реално стига до UI-я.
+
+След обезличаването от акаунта не остава нищо лично — оцелява гол ключ без email, без потребителско име и без нито един external login насреща.
+
+### Тестове
+
+- **Unit (9 нови, `PartyUp.UnitTests/Features/Privacy/AccountAnonymizationTests.cs`):** поименно изброяване на всяко изчистено поле (ново профилно поле, което забравим да занулим, пада тук), ротация на SecurityStamp, раждане на анонимен профил, `HoldsItsFounder` по всичките 5 фази.
+- **Integration (13 нови, `PartyUp.IntegrationTests/Features/Privacy/`):** `PrivacySeed` вдига маса с РЕАЛНА история (членства, групов чат с реплика, решение с глас) + пълната лична купчина. Спекове: личното изчезва · профилът няма разпознаваемо поле · следите оцеляват · основателят чете старата нишка с «Изтрит потребител» · слотът се освобождава · PrivacyRequest е записан · отказ за основател на жива маса във всяка от 4-те фази · при отказ нищо не е пипнато · разпуснатата маса пуска основателя си · анонимен → `FORBIDDEN`.
+
+### Верификация
+
+- `dotnet test backend/PartyUp.slnx` → **138 unit + 313 integration, 0 fail**
+- `npm --prefix frontend run typecheck` → зелен (codegen срещу новия контракт минава)
+- `npm --prefix frontend test` → **356 теста в 59 suite-а, 0 fail**
+- `git status` чист: без `package-lock.json` churn (ползван `npm ci`), без `src/gql/`, без runtime артефакти.
+
+### Червени линии
+
+✅ vertical slice, Program.cs/Domain(извън Privacy)/csproj непипнати · ✅ Result pattern, никакъв exception за очакван провал · ✅ `schema.graphql` е РЕ-ЕКСПОРТ, не ръчна редакция, в същия commit · ✅ integration = Testcontainers, никаква външна връзка · ✅ никакви секрети · ✅ pure service unit-тестван без база
+
+
+## Task 204 — fix(lfg): system filters match case-insensitive substrings on both board and showcase
+
+**Репо:** partyup (BE) · **Lane:** be-lfg-contains · **Commit:** `823ecf9`
+
+**Проблемът (наблюдаван на живо, 19.08):** търсене «dnd» не намираше маса със система «dnd 5e». Двете места бяха разминати И двете счупени:
+- `LfgBoardQueries.cs` — `row.Profile.Systems.Contains(system)` върху `text[]` колона, тоест `system = ANY(...)`: ТОЧЕН елемент, case-sensitive (не подниз, както се предполагаше).
+- `ShowcaseQueries.cs` — `table.System == system`: точен низ, case-sensitive.
+
+**Фиксът:** нов pure static `Features/Lfg/SystemFilter.cs` (§2а.6) с `ToContainsPattern` — увива входа в `%…%` и обезврежда `\`, `%`, `_`. Двете заявки минават през `EF.Functions.ILike(…, pattern, SystemFilter.EscapeCharacter)`; на борда — `Systems.Any(listed => ILike(listed, …))` (Npgsql го превежда през `unnest`). Escape знакът се подава ИЗРИЧНО, за да не зависи поведението от `standard_conforming_strings`. Read дисциплината (AsNoTracking + Select проекция) е непокътната.
+
+**Защо е част от договора, а не удобство:** «системата» е свободен текст по продуктово решение (system-agnostic от ден 1) → едно и също нещо се пише «dnd 5e» / «DND 5E» / «D&D 5e». Точното съвпадение наказва търсещия за правописа на листващия.
+
+**TDD:** RED — 2 integration теста (board + showcase) паднаха точно на case-insensitive подниза, останалите 41 останаха зелени. GREEN — `SystemFilter` + двете заявки. Добавени: 6 integration теста (мек мач «dnd»/«DND»/«5E», несъвпадащ низ → празно, wildcard-ите като чист текст, празен филтър → всичко) + 7 unit теста за шаблона.
+
+**Обхват:** само `Features/Lfg/**` + `tests/*/Features/Lfg/**`. `contracts/schema.graphql` НЕ е пипан — същият filter input, друга семантика (§3.1).
+
+**Тестове:** `dotnet test backend/PartyUp.slnx` → 136 unit + 306 integration, 0 fail.
+
+
+## Task #201 — fix(tabs): drive tab bar colors from the ui-store theme so light mode is honored
+
+**Repo:** partyup · **Lane:** fe-tabs-theme · **Branch:** ralph/task-201 · **Commit:** 79979a8
+
+### Какво беше направено
+
+- **RECON:** прочетени `(tabs)/_layout.tsx`, `src/__tests__/tabs-icons.test.tsx`, `lib/theme.tsx`, `lib/ui-store.ts` (последните два само за четене). `useColorScheme` от NativeWind се ползваше на ЕДНО място в целия FE — точно в tabs layout-а.
+- **RED:** три нови теста в `tabs-icons.test.tsx`. Ключът към детерминирано възпроизвеждане: `colorScheme.set()` СЛЕД рендер не пропагира в jest (пробвано — тестът излизаше зелен срещу счупения код), затова hook-ът `useColorScheme` на NativeWind се мокна с контролируема стойност (`mockNativeWindScheme`) — точно поведението на web, където `set` слага клас върху документа, а hook-ът връща стара схема. Червено по правилната причина: 5 фейла, вкл. двата съществуващи dark теста.
+- **GREEN:** `isDark` вече е `themeMode === 'dark' || (themeMode === 'system' && systemScheme === 'dark')`, където `themeMode` идва от `useUiStore((state) => state.themeMode)`, а `systemScheme` от `useColorScheme` на **react-native**. Импортът от `nativewind` е махнат.
+- Token-sync тестът (седемте hex стойности срещу `tailwind.config.js`) е **запазен непокътнат** — само `beforeEach` е разширен да пинова и системната схема, за да не зависи от машината.
+
+### Verify
+
+- `npm --prefix frontend run typecheck` — зелено.
+- `npm --prefix frontend test` — **58 suites / 336 теста зелени** (`tabs-icons.test.tsx`: 9/9).
+- Обхват: само двата файла от `files` списъка. `src/gql/` не е комитнат, `package-lock.json` не е мърдан (`npm ci`).
+
+### Бележки
+
+- Системната схема (`themeMode: 'system'`) се тества през `jest.mocked(useColorScheme)` — RN jest preset-ът я доставя като `jest.fn(() => 'light')`. `Appearance.setColorScheme` е no-op в jest (нативният модул липсва), затова НЕ е използван.
+- `lib/theme.tsx` и `lib/ui-store.ts` не са пипани — `ThemeProvider` остава мостът към NativeWind за `dark:` класовете; поправено е само мястото, където цветовете минават като props, а не като className.
+
+
+## Task 203 — feat(settings): add logout with Apollo cache clear and redirect to login
+
+**Repo:** partyup (frontend) · **Lane:** fe-session-privacy · **Branch:** ralph/task-203 · **Commit:** 57bd1ea
+
+### Какво е направено
+- **RECON** — прочетени `app/settings.tsx`, целият `features/auth-linking/` slice, `contracts/schema.graphql` (`logout: LogoutPayload!`, `LogoutPayload { success, errors }`) и `features/auth/use-logout.ts`.
+  **Ключова находка:** `useLogout` + `LogoutDocument` ВЕЧЕ съществуват (таск от v0.1) — хукът вика мутацията и вдига кеша наново, но НИКОЙ екран не го монтира. Тоест v0.3 бележка т.4 е липсваща ВРАТА, не липсваща логика.
+- **RED** — нов `__tests__/session-section.test.tsx` (3 спека: мутация → изчистен кеш → `replace("/login")` в ТОЗИ ред; провалила се мутация → alert банер и НИКАКВА навигация; разрушителният chip е контурно червен, не `bg-brand`) + 3 нови спека в `settings-screen.test.tsx` (изход от целия екран, четвърта карта `settings-card-session`, EN „Session“/„Sign out“). Червени по правилната причина (липсващ модул / липсващ текст).
+- **GREEN** —
+  - нов `features/auth-linking/session-section.tsx`: карта „Сесия“ с `useLogout()` + `useRouter().replace("/login")`; при провал — `accessibilityRole="alert"` банер с `common:errors.network` и потребителят ОСТАВА вътре (сесията на сървъра е жива); повторно натискане е защитено с `loading` гард.
+  - `primitives.tsx`: `ChipButton` получи опционален `tone="danger"` (адитивно) — контурен червен акцент (`border-red-300` / `dark:border-red-900`, червен текст) върху `bg-surface`, а НЕ плътният brand primary CTA.
+  - `index.ts`: `SessionSection` във фасадата; `app/settings.tsx`: картата се рендерира НАЙ-ДОЛУ (разрушителното не се среща по пътя към настройка).
+  - `locales/{bg,en}/authLinking.json`: нов `session.title` + `session.subtitle` в двата езика.
+- **DONE** — `npm run typecheck` чист; `npm test`: **59 suite-а / 337 теста зелени**. Работното дърво е чисто (без `package-lock.json` churn, без `src/gql/`).
+
+### Съзнателни отклонения от бележките на таска
+1. **НЕ е добавен нов `.gql` документ в slice-а.** Щеше да е `mutation Logout` втори път → graphql-codegen client-preset пада с „Not all operations have an unique name: Logout“. Вместо това се преизползва съществуващият `LogoutDocument` през `useLogout` — с това пада и мъртвият код (хукът вече не е сирак).
+2. **`client.resetStore()` вместо `client.clearStore()`** — това е, което `useLogout` прави, а то е НАДМНОЖЕСТВО: кешът пада (целта на бележката — кешираният `me` да не държи `AuthGate` отворен като призрак), плюс активните заявки се презареждат. Алтернативата искаше редакция на `features/auth/use-logout.ts` — извън обхвата на таска и с пинован от свой тест `resetStore`.
+
+### ⚠ Изход извън `files` обхвата (за преглед)
+`frontend/src/app/settings.tsx` НЕ е в `files` списъка на таска, но секцията е недостижима без него — route файлът е единственото място, което композира екрана. Промяната е **2 реда** (import + `<SessionSection />`), route файлът остава ТЪНЪК (§7б.10). Прецедент: таск 106 („polish appearance and linked-accounts sections“) е пипал същия файл. Конфликтен риск: нулев — паралелните таскове 201 (`(tabs)/_layout.tsx`) и 202 (`components/**`) не го докосват, а таск 213 е в СЪЩИЯ lane (сериен спрямо този).
+
+### Спазени червени линии
+- Нула нови dependencies. `contracts/` не е пипан. `lib/auth-gate.tsx`, `lib/apollo.ts` и header-ът — недокоснати (както изисква бележката на таска).
+- Нула хардкоднати UI низове: новият текст е в `authLinking` ns bg+en; етикетът на бутона преизползва съществуващия `common:actions.signOut` вместо да го дублира (§4.6).
+- `gitnexus analyze` НЕ е пускан; e2e и dev сървъри НЕ са пускани.
+
+
+## Task #202 — feat(shell): add in-app back navigation to the app header on stacked screens
+
+**Repo:** partyup (FE) · **Lane:** fe-header-back · **Commit:** `1ffc978`
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** Открито на живо 19.08 — от `/settings`, `/chat`, `/notifications`, `/table/*`, `/showcase` и `/candidacy/*` нямаше връщане в самото приложение. Потребителят ползваше browser back, което за app-like PWA е дефект, а на native такъв жест изобщо няма.
+
+**What was done:**
+- RECON: `app-header.tsx` (три контроли: тема, език, настройки), `app-header.test.tsx`, `app-shell.tsx` — хедърът стои в root layout-а ИЗВЪН `AuthGate`, значи се вижда и на `/login`; различаването на екраните може да стане само по `usePathname()`.
+- RED: разширен `app-header.test.tsx` — моката на `expo-router` вече дава `usePathname` + `back`/`replace`/`canGoBack`. 15 нови случая: 5 корена без бутон (`/`, `/board`, `/tables`, `/profile`, `/login`), 9 насложени екрана с бутон, `/board/` (крайна наклонена черта) пак без бутон, `back()` при история, `replace('/')` без история, достъпно име на двата езика. 12 червени по правилната причина (`header-back-button` не съществува), 5 зелени по конструкция.
+- GREEN: в `app-header.tsx` — `ROOT_PATHS` + `normalizePath` + `isStackedPath` (module-private), `goBack()` = `router.canGoBack() ? router.back() : router.replace('/')`. Бутонът е нов `HeaderControl` (същата мишена/фокус като другите три) вляво до името на приложението, с `accessibilityRole="button"`.
+- Икона: текстов глиф `‹`, НЕ `@expo/vector-icons` — пакетът не е в `dependencies`, а §2 („нов пакет = решение на потребителя") + отровният `frontend/package.json` са извън обхвата на таска. Същият декоративен подход като ☀/☾/◐ и ⚙ в същия хедър; достъпността идва от i18n етикета.
+- i18n: нов ключ `header.back` в `locales/bg/common.json` („Върни се назад") и `locales/en/common.json` („Go back") — двата езика едновременно.
+
+**Verification:**
+- `src/components/app-header.test.tsx` → 25/25 pass (13 нови)
+- `npx jest src/components` → 33/33 pass (3 suite-а, вкл. непроменените app-shell спекове)
+- `npm --prefix frontend test` → 352/352 pass в 58 suite-а
+- `npm --prefix frontend run typecheck` → clean
+- BE не е пипан (FE-only diff) → `dotnet test` е оставен на verify гейта
+
+**Files modified:**
+- `frontend/src/components/app-header.tsx`
+- `frontend/src/components/app-header.test.tsx`
+- `frontend/src/locales/bg/common.json`
+- `frontend/src/locales/en/common.json`
+
+**Git commit:** `1ffc978` — `feat(shell): add in-app back navigation to the app header on stacked screens`
+
+---
+
+
 ## Task #107 — feat(table): link lifecycle and actions screens from the table view
 
 **Repo:** partyup (FE) · **Lane:** fe-table-doors · **Commit:** `3c28ee5`
@@ -2436,6 +2680,13 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
+
+
 
 
 

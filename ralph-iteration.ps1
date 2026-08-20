@@ -8,7 +8,8 @@ param(
     [string]$resultFile = "",  # where the agent must write its result JSON (instead of tasks.json/activity.md)
     [int]$agentSlot = 0,       # 1-based slot number -> port offsets, labels
     [string]$retryFile = "",   # failure context from previous attempt(s) - injected so the retry is informed
-    [string]$retryMode = ""    # "continue" = worktree contains the predecessor's work; fix it, don't regenerate
+    [string]$retryMode = "",   # "continue" = worktree contains the predecessor's work; fix it, don't regenerate
+    [string]$modelOverride = "" # resolved model id from the orchestrator's tier map (config.models); empty = claude_args --model
 )
 
 $isParallel = $taskId -gt 0
@@ -39,6 +40,11 @@ if ($config -and $config.claude_args) {
         $model = $config.claude_args[$modelIndex + 1]
     }
 }
+# MODEL TIERS (19.08): in swarm mode the orchestrator resolves the task's tier (config
+# "models": easy/heavy/review) and passes the concrete id here - it WINS over claude_args.
+# Solo mode never passes it, so claude_args --model keeps ruling there. Must stay AFTER
+# the claude_args parse above, or the parse would clobber the override.
+if ($modelOverride) { $model = $modelOverride }
 
 Write-Host "[i] Iteration $iterationNumber starting..." -ForegroundColor Cyan
 Write-Host "[i] Model: $model" -ForegroundColor Cyan
