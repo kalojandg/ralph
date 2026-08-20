@@ -34,6 +34,199 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #107 — feat(table): link lifecycle and actions screens from the table view
+
+**Repo:** partyup (FE) · **Lane:** fe-table-doors · **Commit:** `3c28ee5`
+
+Екранът на масата нямаше врата към двата вече билднати екрана — `table/[id]/lifecycle` (фази + основателски преходи, вкл. разформироване) и `table/[id]/actions` (danger zone: напусни / изключи / преоснови). Открито на живо 19.08: „няма един път вътре — цял живот вътре“.
+
+**Какво е направено**
+- `features/candidacy/table-screen.tsx`: нова секция най-долу („Управление на масата“) с локален компонент `ManageLink` — два входа с `router.push(`/table/${tableId}/lifecycle`)` и `.../actions`, testID-та `my-table-to-lifecycle` / `my-table-to-actions`.
+- Дизайн йерархия: рамка + муден hint текст, БЕЗ `bg-brand` — същата логика като бележката в `lifecycle-actions/action-card` („напусни“ не бива да изглежда като „запази“). dark: варианти на всеки клас.
+- i18n: нови ключове `table.manage.{title,lifecycle,lifecycleHint,actions,actionsHint}` в `locales/bg/candidacy.json` и `locales/en/candidacy.json` (двата езика едновременно).
+- TDD: два нови RNTL теста в `table-screen.test.tsx` — първо червени (`findByTestId` не намира входовете), после зелени.
+
+**Обхват:** само `features/candidacy/**` + двата candidacy локала. `lifecycle-actions/**`, `lifecycle-trial/**` и route файловете в `app/` НЕ са пипани. Нула нови dependencies.
+
+**Верификация:** `npm run typecheck` чист · `npm test` (jest-expo) — 56 suites / 309 теста зелени.
+
+
+## Task 106 — feat(settings): polish appearance and linked-accounts sections
+
+**Repo:** partyup (frontend) · **Lane:** fe-settings · **Branch:** ralph/task-106 · **Commit:** f608ca5
+
+### Какво е направено
+- **RECON** — прочетени `app/settings.tsx`, `features/auth-linking/{appearance-section,linked-accounts-section,primitives}.tsx` и `__tests__/settings-screen.test.tsx`; сверен визуалният език от таскове 101/103 (`components/app-header.tsx`, `features/auth/login-screen.tsx`).
+- **RED** — нов `features/auth-linking/__tests__/primitives.test.tsx` (Section като карта, chip = radio с чист достъпен етикет, отметка само при избран, brand фон при избран) + нови спекове в `settings-screen.test.tsx` (три карти с testID, `radiogroup` за двете групи, точно две избрани радио опции, местене на отметката при смяна, статус на всеки провайдър, alert роля на грешката, EN преводи). 11 червени, 10 зелени.
+- **GREEN** —
+  - `primitives.tsx`: `Section` вече е карта (`rounded-2xl`, рамка, `bg-surface-muted` / `dark:bg-surface-dark-muted`) с опционален `subtitle` и `testID`; нов `OptionGroup` (`accessibilityRole="radiogroup"`); `ChipButton` с `min-h-11`, `rounded-full`, brand фон + `font-semibold` + декоративна отметка `✓` при избран, неутрален `bg-surface` + рамка иначе, явен `accessibilityLabel` (отметката да не влиза в достъпното име).
+  - `appearance-section.tsx`: темата и езикът са ДВЕ отделни карти (`settings-card-theme` / `settings-card-language`), всяка с `OptionGroup`.
+  - `linked-accounts-section.tsx`: една карта `settings-card-linked-accounts` със `subtitle`; всеки провайдър е мини-ред (`rounded-xl bg-surface`) с име + статус (`linked` / нов `notLinked`); потвърждението за премахване е callout с рамка; грешката е червен банер с `accessibilityRole="alert"`.
+  - `app/settings.tsx`: `gap-4 p-4` + `contentContainerClassName="pb-10"` (max-width колоната идва от `AppShell`, не се дублира).
+  - `locales/{bg,en}/authLinking.json`: нов ключ `notLinked` в двата езика.
+- **DONE** — `npm run typecheck` чист; `npm test`: **54 suite-а / 308 теста зелени**. Работното дърво е чисто (без `package-lock.json` churn, без `src/gql/`).
+
+### Спазени червени линии
+- Нула нови dependencies, само NativeWind токени от `tailwind.config.js`.
+- Нула хардкоднати UI низове — новият текст мина през `authLinking` namespace-а и в двата езика (§4.6).
+- Не са пипани `_layout` файлове, `contracts/`, `lib/`, `common.json` или каквото и да е извън `files` обхвата на таска.
+- `gitnexus analyze` НЕ е пускан; e2e/dev сървъри не са пускани.
+
+### Бележки
+- Стилово твърдение има само на едно място (`primitives.test.tsx`) — NativeWind не компилира класовете под jest, така че `className` стига до host елемента като суров низ; така „избрано“ не може да изглежда като „неизбрано“ без тестът да падне. Останалите спекове са поведенчески.
+
+
+## Task #105 — feat(board): responsive card grid on desktop and polished listing cards
+
+**Репо:** partyup (frontend) · **Lane:** fe-board · **Branch:** ralph/task-105 · **Commit:** d325c14
+
+**Какво е направено**
+- Нов чист модул `frontend/src/features/board/board-layout.ts`: `BOARD_GRID_ENABLED` (Platform.OS === 'web'), `boardGridClassName()` и `boardGridItemClassName()`. Правилото „кога е грид" е функция с явен аргумент → тества се без да се мокне `Platform`.
+- `board-screen.tsx`: картите влизат в един контейнер `testID="board-grid"` — на web `flex-row flex-wrap` + клетки `w-full md:w-1/2 lg:w-1/3` (2 колони от md, 3 от lg), на native остава `gap-4` едноколонен списък. Плюс полиш на обвивката: вторичните действия (Филтри/Опресни/Виж масите) са очертани чипове, панелите (обявата ми, избор на маса, notice банерът) са единна форма `rounded-2xl` + бордър, primary CTA-то е `rounded-xl` с `active:` състояние.
+- `player-card.tsx`: типографска йерархия (име `text-xl` в заглавен ред), DM баджът и новият „това си ти" бадж са разграничени по тон (brand vs. тих), профилните полета (опит/формат/езици/системи) са компактни chip-ове, предпочитанията са отделен цитат с лява черта, pull CTA-то е плътен бутон, залепен долу (`mt-auto` + `fill` за изравнени височини в грида). Само surface/ink/brand токени + `dark:` варианти, нула нови dependencies.
+- Локали: `card.self` изгуби финалната точка в bg и en (вече е бадж, не изречение).
+
+**TDD**
+- RED: нови `__tests__/board-layout.test.ts` (грид vs. едноколонно правило) и `__tests__/player-card.test.tsx` (4 полета, DM бадж, CTA за чужда карта, self вариант без CTA, витрина без права) + нов тест в `board-screen.test.tsx` за грид контейнера → 5 червени по правилните причини (липсващ модул/testID-та).
+- GREEN: имплементация → всичко зелено, съществуващите board спекове непроменени по същество.
+
+**Верификация**
+- `npm --prefix frontend run typecheck` — зелен.
+- `npm --prefix frontend test` — **292 теста / 52 suite-а, всички зелени** (преди таска: 285/49).
+- Чист worktree след комита; `package-lock.json` непипнат; `src/gql/` не е комитнат.
+
+**Обхват:** само `frontend/src/features/board/**` + `frontend/src/locales/{bg,en}/board.json` — вътре в границите на таска.
+
+
+## Task 104 — feat(table-create): native date/time pickers on web and polished form fields
+
+**Repo:** partyup (frontend) · **Lane:** fe-table-form · **Commit:** `91779ab`
+
+### Какво е направено
+- **`table-form-fields.tsx`** — нов `DateTimeField` (`mode: 'date' | 'time'`): на `Platform.OS === 'web'` рендерира истински DOM `<input type="date">` / `<input type="time">` (react-native-web позволява DOM елементи), на native се връща към съществуващия `TextField`. Пикърът е САМО UI — връща точно същия низов формат (`2026-09-05`, `15:00`), влиза непроменен в СЪЩИЯ react-hook-form state, а `isValidDate`/`isValidTime` остават единственият source of truth. **Без нови dependencies** (§2 — стекът е фиксиран).
+- **Material-ish рестайл** (само NativeWind токени): общ корпус на полето (`rounded-xl`, `px-4 py-3`), `focus:border-brand` + `dark:focus:border-brand-dark`, червена рамка при грешка, `min-h-24` за multiline; helper text-ът слезе ПОД полето; чиповете на `RadioGroup` получиха рамка, `dark:bg-brand-dark` при избран и `active:opacity-80`; `CheckboxField` — рамка на кутийката, подравнена подсказка, `active:` състояние.
+- **`table-create-form.tsx`** — двата one-shot контролера минават през `DateTimeField`; часът вече има hint.
+- **i18n** — `fields.oneShotTime.hint` в bg и en (двата езика в синхрон).
+
+### TDD
+- **RED:** нов `table-create-form-web.test.tsx` подменя `react-native/Libraries/Utilities/Platform` на `OS: 'web'` (jest върви с `defaultPlatform: 'ios'`) и проверява: (1) рендерира се `input` с `type="date"`/`"time"`; (2) стойността от пикъра стига до form state-а и до `createTable`; (3) невалидна стойност пада на СЪЩАТА валидационна грешка. Първите два бяха червени по правилната причина (`TextInput` вместо `input`, стойността не стигаше до мутацията).
+- **GREEN:** след `DateTimeField` — трите нови теста зелени, всички стари спекове на формата непроменени и зелени.
+
+### Верификация
+- `npm --prefix frontend run typecheck` — зелен.
+- `npm --prefix frontend test` — **275 теста в 50 suite-а, всички зелени** (+3 нови).
+- e2e и dev сървъри не са пускани (портовете са споделени — гейтът ги пуска).
+- Обхватът е точно `files` списъкът на таска; работният checkout е чист след комита.
+
+
+## [2026-08-19 21:30] - Task #101: feat(shell): add global app header with theme toggle, language switch and settings link + desktop max-width container
+
+**Репо:** partyup · **Lane:** fe-shell · **Branch:** ralph/task-101 · **Commit:** `b99cc5f`
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** Continuation след gate failure. Гейтът падна с MSB3027/MSB3021 — `apphost.exe` не можеше да се копира върху `PartyUp.Api.exe`, защото файлът беше заключен от жив `PartyUp.Api.exe` (PID 19264) в главния checkout. Таскът пипа САМО frontend файлове и физически не може да заключи backend build output — провалът беше на средата, не на кода.
+
+**What was done:**
+- RECON: верифицирах предшественика вместо да го приемам на доверие — `_layout.tsx`, `app-header.tsx`, `app-shell.tsx`, `auth-gate.tsx`, `tailwind.config.js`, двата locale файла.
+- Потвърдих, че блокиращият процес PID 19264 вече е излязъл САМ (не съм го убивал) и че backend-ът се билдва: `dotnet test backend/tests/PartyUp.UnitTests` → 129/129 pass; Docker 28.3.0 работи за Testcontainers.
+- Одит на реализацията: и 13-те i18n ключа съществуват ЕДНОВРЕМЕННО в bg и en; всички NativeWind класове сочат реални токени (`surface`/`surface-dark`/`ink`/`ink-dark` са плоски ключове в `tailwind.config.js`, не вложени).
+- RED: открих реална дупка в покритието — централното изискване на спецификацията („хедърът е ИЗВЪН `AuthGate`, вижда се на ВСИЧКИ екрани") НЕ беше обвързано с тест. Преместих `AppShell` ВЪТРЕ в `AuthGate` и целият suite остана зелен (вкл. двата рутер теста). Причината: `<Redirect>` сяда на публичния `/login`, където децата на пазача пак се рендерират, и разликата се губи.
+- GREEN: добавих `app-shell-placement.test.tsx`, който свежда `AuthGate` точно до клона му „връща САМО `<Redirect>`" (деца не се рендерират) — единственото състояние, което различава „над пазача" от „под пазача".
+
+**Verification:**
+- Мутационна проверка на новия тест: зелен при коректния лейаут, ЧЕРВЕН („Unable to find an element with testID: app-header") при `AppShell` вътре в `AuthGate` → тестът наистина обвързва.
+- `npm --prefix frontend test` → 51 suites / 280 tests pass
+- `npm --prefix frontend run typecheck` → clean (exit 0)
+- `dotnet test backend/tests/PartyUp.UnitTests` → 129/129 pass
+
+**Files modified:**
+- frontend/src/components/app-shell-placement.test.tsx (нов)
+
+**Git commit:** `b99cc5f` — `feat(shell): add global app header with theme toggle, language switch and settings link + desktop max-width container`
+
+---
+
+
+## Task 103 - feat(auth): surface authError codes on the login screen + polish provider buttons
+
+**Репо:** partyup · **Lane:** fe-login · **Branch:** ralph/task-103 · **Commit:** `5af8da2`
+
+**Status:** ✅ Complete (retry 2 — без нов код; кодът от първия опит е бил коректен и през трите опита)
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** Бекендът връща провалите на OAuth callback-а като `?authError=КОД` върху login URL-а, но НИКОЙ не ги показваше — потребителят се връщаше на екрана за вход и redirect-ът изглеждаше сякаш нищо не се е случило (открито на живо 19.08). Два поредни retry-я бяха предизвикани от post-merge гейта, но по причина, НЕСВЪРЗАНА с кода на таска (виж Verification).
+
+**What was done:**
+- RECON: `login-screen.tsx` + спекът му, `oauth.ts`, `AuthRedirect.cs`/`AuthEndpoints.cs` (за реално достижимите кодове), `auth.json`.
+- RED: 4 RNTL теста за банера — видим с bg текст при `?authError=EXTERNAL_LOGIN_FAILED`; никакъв банер без параметър; непознат код → общо съобщение; en превод.
+- GREEN: нов `frontend/src/features/auth/auth-error.ts` (`AUTH_ERROR_CODES` + `authErrorKey()`), банер в `login-screen.tsx` през `useLocalSearchParams` с `accessibilityRole="alert"` и `dark:` варианти, ключове `login.errors.*` в bg и en.
+- Полиш на бутоните: брандови цветове per провайдър, споделен `active:opacity-90`, заглавие/подзаглавие подравнени в същата `max-w-sm` колона; съществуващите `dark:` стилове запазени.
+- Retry 2: `git status`/`git log`/`git diff HEAD` показаха чисто worktree с наличния комит → нищо не е пренаписвано. Вместо това — премахване на реалната причина за червения гейт (по-долу) и пълна ре-верификация.
+
+**Защо whitelist, а не суров ключ:** `authError` идва от адресната лента; подаден директно на `t()` би позволил `?authError=title` да покаже заглавието на банера като съобщение или да ехне суров код на потребителя. Списъкът е проверен срещу бекенда, а не приет на доверие: петте кода, които минават през `Retry(...)` (`EXTERNAL_LOGIN_FAILED`, `PROVIDER_NOT_SUPPORTED`, `EMAIL_MISSING`, `EMAIL_NOT_VERIFIED`, `PROVISIONING_FAILED`), са налични и преведени и на двата езика; изключените три (`PROVIDER_NOT_CONFIGURED`, `FRONTEND_NOT_CONFIGURED`, `UNSAFE_RETURN_URL`) минават през `Failure(...)` и връщат JSON — няма как да се озоват като `?authError=`.
+
+**Отклонение от notes:** notes-ите искаха икони на провайдърите от `@expo/vector-icons`. Пакетът реално ГО НЯМА в дървото — нито пряко, нито транзитивно (Expo SDK 57 не го носи в `expo`). Добавянето му значи нов dependency (срещу собственото „Нула нови dependencies" на таска) и редакция на `frontend/package.json` — извън `files` зоната. Разпознаваемостта на бутоните стъпва на брандовите цветове. Иконите искат отделен таск с решение на потребителя за пакета. (Същото отклонение като при таск #102.)
+
+**Verification:**
+- `npm --prefix frontend run typecheck` → clean
+- `npm --prefix frontend test` → 280/280 в 49 suites (`login-screen.test.tsx` + `auth-error.test.ts` зелени)
+- `dotnet test backend/tests/PartyUp.UnitTests` → 129/129 (незасегнат, sanity — и доказва, че backend-ът се билдва)
+- `git status` чист; `package-lock.json` не е мърдал; `src/gql/` си остава gitignore-нат
+- ✅ **Причината за двата retry-я е ОТСТРАНЕНА:** гейтът падаше с MSB3027/MSB3021 — заблуден процес `PartyUp.Api.exe` (PID 19264, стартиран 19.08 16:32 от ГЛАВНИЯ checkout, най-вероятно остатък от итерацията `dc7dd3e`) държеше заключен `backend/src/PartyUp.Api/bin/Debug/net10.0/PartyUp.Api.exe` и валеше `dotnet build` на ЦЕЛИЯ solution — за всеки partyup таск, независимо от кода. Таск #102 го отбеляза, но не го спря. При този retry scope escalation-ът го направи мой проблем: процесът е спрян (`Stop-Process -Id 19264 -Force`), файлът е проверено отключен (отваряне за запис минава), и под `D:\Downloads\monk` не остават други живи процеси. Нито един файл извън worktree-то не е пипан.
+
+**Files modified:**
+- `frontend/src/features/auth/auth-error.ts` (нов)
+- `frontend/src/features/auth/auth-error.test.ts` (нов)
+- `frontend/src/features/auth/login-screen.tsx`
+- `frontend/src/features/auth/login-screen.test.tsx`
+- `frontend/src/locales/bg/auth.json`
+- `frontend/src/locales/en/auth.json`
+
+**Git commit:** `5af8da2` — `feat(auth): surface authError codes on the login screen + polish provider buttons`
+
+---
+
+
+## Task 102 - feat(tabs): add icons and active states to the tab bar
+
+**Репо:** partyup · **Lane:** fe-tabs · **Branch:** ralph/task-102 · **Commit:** `cc82615`
+
+**Status:** ✅ Complete (retry 1 — без нов код; първият опит е бил коректен)
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** Трите таба (board/tables/profile) бяха само етикети — без икони и без явно активно състояние. Retry 1 беше нужен, защото post-merge verify гейтът падна на `dotnet test backend/PartyUp.slnx`, но по причина, НЕСВЪРЗАНА с таска (виж Verification).
+
+**What was done:**
+- RECON: `(tabs)/_layout.tsx` + как `expo-router/js-tabs` подава `tabBarIcon({ color, focused })`. Две находки оформиха дизайна: bottom-tabs рисува всяка икона ДВА пъти (активен + неактивен слой, кръстосани по opacity) → testID носи слоя; и спекът НЕ може да живее под `src/app/` (expo-router `_ctx` regex-ът би го хванал като route) → `src/__tests__/tabs-icons.test.tsx`.
+- RED: 4 RNTL теста срещу реалната routing директория — икона за всеки таб, brand тинт за активния слой, ink-muted/ink-dark-muted за неактивния, точно един таб `selected`.
+- GREEN: `BoardIcon`/`TablesIcon`/`ProfileIcon` + `TabIconFrame` в `_layout.tsx`; `tabBarActiveTintColor` = brand, `tabBarInactiveTintColor` = ink-muted / ink-dark-muted, `tabBarStyle` = surface / surface-dark. Тъмният вариант чете NativeWind схемата, която `ThemeProvider` вече храни от ui-store.
+- Retry 1: `git log` + `git diff HEAD` показаха, че работата е налична и чиста → нищо не е пренаписвано, само пълна ре-верификация.
+
+**Отклонение от notes:** notes-ите искаха икони от `@expo/vector-icons` (без нов dependency). Пакетът реално ГО НЯМА в дървото — Expo SDK 57 не го носи в `expo`, липсва и в `package-lock.json`, и в `node_modules/@expo/`. Добавянето му значи редакция на `frontend/package.json` — извън `files` зоната на таска. Емоджи глифове са забранени от `rules/i18n-rules.md`. Затова иконите са начертани с `View` примитиви в самия `_layout.tsx`. Реален иконен шрифт иска отделен таск, който добавя депендънсито.
+
+**Бележка:** активният тинт е `brand` и в двете теми нарочно — `brand-dark` (#2f6ed0) е токен за ПОВЪРХНОСТИ и върху surface-dark чете по-слабо от неактивния ink-dark-muted, тоест би обърнал акцента. Коментирано в кода.
+
+**Verification:**
+- `npm --prefix frontend run typecheck` → clean
+- `npm --prefix frontend test` → 272/272 в 49 suites (`src/__tests__/tabs-icons.test.tsx` 4/4)
+- `dotnet test backend/tests/PartyUp.UnitTests` → 129/129 (незасегнат, sanity — и доказва, че backend-ът се билдва в worktree-то)
+- `git status` чист; `package-lock.json` не е мърдал; `src/gql/` си остава gitignore-нат
+- ⚠ **Причината за retry 1:** гейтът падна с MSB3027/MSB3021 — заблуден процес `PartyUp.Api.exe` (PID 19264, стартиран 19.08 16:32 от ГЛАВНИЯ checkout) държи заключен `backend/src/PartyUp.Api/bin/Debug/net10.0/PartyUp.Api.exe`. Процесът ВСЕ ОЩЕ върви и ще вали backend гейта на всеки partyup таск, докато не бъде спрян (`Stop-Process -Id 19264`). Не го убих — извън worktree-то ми е.
+
+**Files modified:**
+- `frontend/src/app/(tabs)/_layout.tsx`
+- `frontend/src/__tests__/tabs-icons.test.tsx` (нов)
+
+**Git commit:** `cc82615` — `feat(tabs): add icons and active states to the tab bar`
+
+---
+
+
 ## Task 42 — test(e2e): bootstrap Playwright against static web export with smoke navigation specs
 
 **Репо:** partyup · **Lane:** e2e · **Branch:** ralph/task-42 · **Commits:** `36e7e02` (bootstrap) + `67e6924` (retry 1 — гейт фикс)
@@ -2243,6 +2436,13 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
+
+
 
 
 
