@@ -1,199 +1,343 @@
-[
-  {
-    "id": 301,
-    "category": "feature",
-    "repo": "partyup",
-    "lane": "be-devlogin",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "backend/src/PartyUp.Api/Features/Auth/DevLogin/**",
-      "backend/tests/PartyUp.IntegrationTests/Features/Auth/DevLogin/**"
-    ],
-    "description": "feat(auth): add development-only dev-login endpoint for multi-account testing",
-    "specRef": "party-up.md «v0.3 бележки» т.7 + party-up-structure.md §7а (IEndpointModule) + Features/Auth/Login/* (образците)",
-    "tddWorkflow": true,
-    "notes": "OAuth-only логинът прави многоакаунтово тестване мъчително (потребителят има 1 gmail + 1 discord). Таск: GET /auth/dev-login?user=<име> — НОВ slice Features/Auth/DevLogin/ с IEndpointModule (авто-map, НЕ пипай Program.cs). Поведение: провизионира външна идентичност с провайдър \"dev\" и ключ = името (СЪЩИЯ ProvisioningService от Features/Auth/Login — преизползвай, не копирай), вдига същата Identity cookie сесия (SignInManager), redirect към валидиран returnUrl (AuthRedirect.Resolve — същата валидация като истинския login). ЧЕРВЕНАТА ЛИНИЯ: endpoint-ът се map-ва САМО в Development — модулът проверява IHostEnvironment и в не-Development среда изобщо НЕ регистрира route-а (404 по конструкция, не 403 проверка вътре). Никаква промяна по schema.graphql (чист HTTP endpoint) — НЕ пипай contracts/.",
-    "steps": [
-      { "id": "301.1", "phase": "RECON", "action": "Прочети AuthEndpoints.cs, ProvisioningService, AuthRedirect, ExternalIdentity, IEndpointModule котвата и как тестовете ползват ApiFactory." },
-      { "id": "301.2", "phase": "RED", "action": "Integration: в Development /auth/dev-login?user=alice създава user + сесийна бисквитка и me връща alice; второ извикване със същото име влиза в СЪЩИЯ акаунт; в Production среда endpoint-ът е 404 (изричен тест!). Червени." },
-      { "id": "301.3", "phase": "GREEN", "action": "DevLogin slice-ът по образеца на Login." },
-      { "id": "301.4", "phase": "DONE", "action": "dotnet test backend/PartyUp.slnx зелен. Commit с description-а дословно." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 302,
-    "category": "feature",
-    "repo": "partyup",
-    "lane": "fe-live",
-    "model": "heavy",
-    "dependsOn": [],
-    "files": [
-      "frontend/src/lib/apollo.ts",
-      "frontend/src/features/contact/**",
-      "frontend/src/features/chat/**"
-    ],
-    "description": "feat(live): wire graphql subscriptions for notifications and chat messages",
-    "specRef": "party-up.md «v0.3 бележки» т.8 + contracts/schema.graphql (Subscription: onMessage, onNotification) + party-up-structure.md §7б",
-    "tddWorkflow": true,
-    "notes": "BE издава два subscription-а от board №1 (onMessage(chatId), onNotification — HC InMemorySubscriptions), а FE НЕ слуша нито един (нула useSubscription). Таск: (1) провери/довърши транспорта в lib/apollo.ts — split link-ът съществува, увери се, че subscription операциите вървят (graphql-ws срещу HC websocket endpoint-а или SSE — провери какво поддържа бекендът; ако трябва мъничка dependency graphql-ws, е ПОЗВОЛЕНА — единственото разрешено изключение от «без нови deps»); (2) камбанката (features/contact: notification-bell/center) се абонира за onNotification → badge на живо + запис в кеша през СЪЩЕСТВУВАЩИЯ notifications-cache; (3) отвореният чат (features/chat: chat-thread/message-list) се абонира за onMessage(chatId) → новото съобщение влиза през thread-cache без refetch. Дедупликация: съобщение, пристигнало и от mutation отговора, и от subscription-а, НЕ се дублира (кешът по id). Тестове с мокнат subscription link (Apollo MockedProvider/link). НЕ пипай auth-linking, board, candidacy.",
-    "steps": [
-      { "id": "302.1", "phase": "RECON", "action": "Прочети lib/apollo.ts (split link-а), notifications-cache.ts, thread-cache.ts, chat.graphql.ts, contact.graphql.ts; провери какъв subscription транспорт издава бекендът (MapGraphQL / HC docs в кода)." },
-      { "id": "302.2", "phase": "RED", "action": "Тестове: onNotification event → bell badge се увеличава и center-ът показва записа без refetch; onMessage → съобщението цъфва в отворената нишка; дубъл по id не се появява два пъти. Червени." },
-      { "id": "302.3", "phase": "GREEN", "action": "Транспорт + двата абонамента през кеш helper-ите." },
-      { "id": "302.4", "phase": "DONE", "action": "npm --prefix frontend run typecheck && npm --prefix frontend test зелени. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 303,
-    "category": "feature",
-    "repo": "partyup",
-    "lane": "be-anonym-sentinel",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "backend/src/PartyUp.Api/Features/Privacy/DeleteAccount/**",
-      "backend/tests/PartyUp.IntegrationTests/Features/Privacy/DeleteAccount/**",
-      "backend/tests/PartyUp.UnitTests/Features/Privacy/DeleteAccount/**"
-    ],
-    "description": "fix(privacy): anonymized display name becomes a language-neutral sentinel instead of a Bulgarian literal",
-    "specRef": "C:\\CodeReview\\partyup\\CODE-REVIEW-2026-08-20_20-32-cycle3.md Важно #2 + rules/i18n-rules.md",
-    "tddWorkflow": true,
-    "notes": "Ревю находка: AccountAnonymization.DeletedDisplayName = \"Изтрит потребител\" — БГ низ, който стига до англоезичен UI (състав на маса, чат, вотове). Фикс ДОГОВОРЕН С FE ТАСК 304 (контракт, спазвай ДОСЛОВНО): сентинел стойността е ТОЧНО \"__deleted__\" (lowercase, две подчертавки от двете страни). BE: DeletedDisplayName = \"__deleted__\"; всички съществуващи DeleteAccount тестове, които assert-ват стария низ, се обновяват В СЪЩИЯ commit. Никаква промяна по схема/контракти (стойност на поле е). БЕЗ FE промени в този таск (304 ги прави, отделна lane) — НЕ пипай frontend/.",
-    "steps": [
-      { "id": "303.1", "phase": "RECON", "action": "Прочети AccountAnonymization.cs + тестовете, които цитират стария низ (grep \"Изтрит потребител\" в backend/)." },
-      { "id": "303.2", "phase": "RED", "action": "Тест: след deleteAccount анонимизираните membership/чат следи носят displayName \"__deleted__\". Червен." },
-      { "id": "303.3", "phase": "GREEN", "action": "Сентинелът + обновените assert-и." },
-      { "id": "303.4", "phase": "DONE", "action": "dotnet test зелен. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 304,
-    "category": "feature",
-    "repo": "partyup",
-    "lane": "fe-live",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "frontend/src/lib/user-name.ts",
-      "frontend/src/lib/user-name.test.ts",
-      "frontend/src/features/board/**",
-      "frontend/src/features/candidacy/**",
-      "frontend/src/features/lifecycle-actions/**",
-      "frontend/src/locales/bg/common.json",
-      "frontend/src/locales/en/common.json"
-    ],
-    "description": "feat(i18n): render the deleted-user sentinel as a translated name everywhere a display name shows",
-    "specRef": "C:\\CodeReview\\partyup\\CODE-REVIEW-2026-08-20_20-32-cycle3.md Важно #2 + rules/i18n-rules.md + party-up-structure.md §4",
-    "tddWorkflow": true,
-    "notes": "Двойникът на BE таск 303 (отделна lane, БЕЗ dependsOn — контрактът е ДОГОВОРЕН ДОСЛОВНО): сентинелът е ТОЧНО \"__deleted__\". Таск: (1) нов малък helper frontend/src/lib/user-name.ts: userDisplayName(name, t) → name === \"__deleted__\" ? t('common:user.deleted') : name (+ собствен тест файл); (2) приложи го на ВСЯКО място, което рендерира displayName на ЧУЖД потребител: features/board (player-card, board-screen), features/candidacy (table-screen състава, candidacy-screen, decision-panel), features/lifecycle-actions (kick-*, refound-invite-screen); (3) ключ user.deleted в common.json bg («Изтрит потребител») + en («Deleted user»). ЗАБЕЛЕЖКА ЗА ЗОНАТА: features/chat СЪЩО рендерира имена (chat-list-screen, message-list), но chat е в зоната на таск 302 (същата lane, преди този) — приложи helper-а И там, ако 302 вече е merge-нат в lane реда (той е — lane-ът е последователен). Хардкоднат низ = блокер; двата езика едновременно.",
-    "steps": [
-      { "id": "304.1", "phase": "RECON", "action": "grep displayName в frontend/src/features — списъкът на рендериращите места; прочети helper патърните в lib/." },
-      { "id": "304.2", "phase": "RED", "action": "Тест на helper-а (сентинел → преведено, нормално име → само); компонентен тест: карта/състав със сентинел име показва «Изтрит потребител»/«Deleted user». Червени." },
-      { "id": "304.3", "phase": "GREEN", "action": "Helper + sweep по рендериращите места + ключовете." },
-      { "id": "304.4", "phase": "DONE", "action": "typecheck + jest зелени. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 305,
-    "category": "bugfix",
-    "repo": "partyup",
-    "lane": "fe-privacy-download",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "frontend/src/features/auth-linking/**",
-      "frontend/src/locales/bg/authLinking.json",
-      "frontend/src/locales/en/authLinking.json"
-    ],
-    "description": "fix(privacy): download failures reach the ui as translated errors instead of raw json navigation",
-    "specRef": "C:\\CodeReview\\partyup\\CODE-REVIEW-2026-08-20_20-32-cycle3.md Важно #4",
-    "tddWorkflow": true,
-    "notes": "Ревю находка: downloadExport в use-privacy.ts:106 НАВИГИРА (expo-linking.openURL) към /privacy/export — при 401/404/410 човекът вижда сурова JSON страница (реален път: топъл кеш показва «готово» за изтекъл архив → 410). Фикс по рецептата от доклада: на web — fetch с credentials:'include' → при ok: blob + programmatic download (URL.createObjectURL + <a download>); при не-ok: тялото е DomainError с i18nKey → преведи и покажи в секцията (диспечерът domainErrorText СЪЩЕСТВУВА — преизползвай); след 410 — refetch на myDataExport, за да се обнови статусът на екрана. Native пътят (ако има) остава openURL. Нови ключове (напр. privacy.exportGone) в authLinking.json bg+en. НЕ пипай backend/ — endpoint-ът вече връща правилните кодове.",
-    "steps": [
-      { "id": "305.1", "phase": "RECON", "action": "Прочети use-privacy.ts, privacy-section.tsx, domain-error-text.ts, endpoint отговорите (DataExportEndpoints.cs — само за референция)." },
-      { "id": "305.2", "phase": "RED", "action": "Тестове: ok отговор → сваляне; 410 → преведена грешка в секцията + refetch; 401 → преведена грешка. Червени (мок на fetch)." },
-      { "id": "305.3", "phase": "GREEN", "action": "fetch/blob пътят + ключовете." },
-      { "id": "305.4", "phase": "DONE", "action": "typecheck + jest зелени. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 306,
-    "category": "test",
-    "repo": "partyup",
-    "lane": "be-export-retention-tests",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "backend/tests/PartyUp.IntegrationTests/Features/Privacy/Export/**",
-      "backend/tests/PartyUp.UnitTests/Features/Privacy/Export/**"
-    ],
-    "description": "test(privacy): cover the export retention sweep with unit and integration tests",
-    "specRef": "party-up.md «v0.3 бележки» т.9 + Features/Privacy/Export/DataExportRetention.cs (commit 347fee9)",
-    "tddWorkflow": true,
-    "notes": "Retention фиксът (347fee9) влезе БЕЗ собствени тестове (fix агентът умря на квотата преди да ги напише) — този таск ги дописва, БЕЗ да пипа продукционния код (ако тестовете хванат бъг в него → status failed с описание, НЕ мълчалив фикс — src/ е извън files зоната нарочно). Покрий: (1) ForgetExpiredAsync чисти Json на Ready ред с ExpiresAt в миналото и връща броя; (2) НЕ пипа: неизтекли, вече изчистени (Json null), Pending; (3) редът-разписка ОЦЕЛЯВА (статусът остава прочит Expired — екранът кани към нова заявка); (4) download на изчистен изтекъл ред дава 410 (не 500). Интеграционно през Testcontainers по образеца на съществуващите Export тестове.",
-    "steps": [
-      { "id": "306.1", "phase": "RECON", "action": "Прочети DataExportRetention.cs, DataExportWorker.cs, съществуващите Export тестове + фикстурите им." },
-      { "id": "306.2", "phase": "RED", "action": "Няма RED срещу нов код — тестовете документират 347fee9; пиши ги и ги пусни." },
-      { "id": "306.3", "phase": "GREEN", "action": "Всички нови тестове зелени срещу непипнат src/." },
-      { "id": "306.4", "phase": "DONE", "action": "dotnet test зелен. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 307,
-    "category": "feature",
-    "repo": "partyup",
-    "lane": "fe-tour",
-    "model": "heavy",
-    "dependsOn": [],
-    "files": [
-      "frontend/src/features/tour/**",
-      "frontend/src/lib/ui-store.ts",
-      "frontend/src/__tests__/ui-store.test.ts",
-      "frontend/src/components/**"
-    ],
-    "description": "feat(tour): guided product tour engine with spotlight backdrop and step navigation",
-    "specRef": "party-up.md «v0.3 бележки» т.10 + party-up-structure.md §4, §7б",
-    "tddWorkflow": true,
-    "notes": "Продуктовата обиколка, engine частта (съдържанието на стъпките е таск 308 — той дефинира СТЪПКИТЕ, ти строиш МАШИНАТА + 1-2 примерни стъпки за тестовете). Изисквания: (1) tour store в features/tour (текуща стъпка, старт/стоп) + persist флаг tourSeen в ui-store (добави в state + partialize + setter; обнови ui-store.test.ts); (2) overlay с backdrop и SPOTLIGHT изрез около таргет елемента — web-first: таргетите се намират по data-testid (RNW рендерира testID → data-testid) през document.querySelector + getBoundingClientRect, изрезът със SVG mask; native fallback: затъмнение без изрез е приемливо; (3) тултип, позициониран ДО елемента (не центриран модал) с Next/Previous/Skip tour; (4) стъпка може да НАВИГИРА (router.push към екрана си) и чака таргета да се появи (retry на measure с timeout); (5) mount на overlay-а в app-shell (components/ — зоната е твоя). БЕЗ нови dependencies — in-house. Текстовете на бутоните Next/Previous/Skip: реферирай i18n ключове от БЪДЕЩИЯ tour namespace (напр. t('tour:controls.next')) — самият namespace и json файловете ги създава таск 308 (НЕ пипай locales файловете и lib/i18n.ts — чужда зона); в тестовете ползвай t мок, за да не зависиш от липсващия още namespace. Автостартът при първи login също е на 308.",
-    "steps": [
-      { "id": "307.1", "phase": "RECON", "action": "Прочети app-shell.tsx, app-header.tsx, ui-store.ts + теста му, board-screen (примерни testID-та), как RNW мапва testID." },
-      { "id": "307.2", "phase": "RED", "action": "Тестове: store навигацията next/prev/skip; overlay-ят се рендерира при активна обиколка и изчезва при skip; tourSeen персистира; таргет по testid се измерва (мок на DOM). Червени." },
-      { "id": "307.3", "phase": "GREEN", "action": "Engine + spotlight + тултип + mount." },
-      { "id": "307.4", "phase": "DONE", "action": "typecheck + jest зелени. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 308,
-    "category": "feature",
-    "repo": "partyup",
-    "lane": "fe-tour",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "frontend/src/features/tour/**",
-      "frontend/src/lib/i18n.ts",
-      "frontend/src/locales/bg/tour.json",
-      "frontend/src/locales/en/tour.json",
-      "frontend/src/app/settings.tsx"
-    ],
-    "description": "feat(tour): first-login tour steps across the app and a restart entry in settings",
-    "specRef": "party-up.md «v0.3 бележки» т.10 + rules/i18n-rules.md",
-    "tddWorkflow": true,
-    "notes": "Съдържанието върху engine-а от 307 (същата lane, вече merged като стигнеш дотук). Стъпките (по екрани, всяка с таргет testID — добави testID-та на таргетите, АКО липсват, но САМО в рамките на стъпка-по-стъпка минимални едноредови промени; ако таргет екранът е извън твоите files зони — ползвай СЪЩЕСТВУВАЩ testID или пропусни елемента, НЕ разширявай зоната си): (1) борд + «Публикувай се» CTA; (2) филтрите; (3) «Виж масите»/витрината; (4) Моите маси + «Създай маса»; (5) камбанката; (6) header-а: тема/език/настройки. Автостарт: при първи вход (tourSeen false) обиколката тръгва сама; Skip → tourSeen true. «Пусни обиколката отново» бутон в app/settings.tsx (route файлът, НЕ auth-linking фичата — тя е чужда зона). Нов namespace tour: json bg+en + регистрация в lib/i18n.ts (NAMESPACES + import-ите — отровният файл е в зоната ти нарочно); ВСИЧКИ ключове на обиколката, ВКЛЮЧИТЕЛНО бутоните Next/Previous/Skip, живеят в tour namespace-а (tour.json), НЕ в common.json — common е зона на друга lane (таск 304); съгласувай имената на бутонските ключове с кода на 307 (той е merged и ги реферира). Всички текстове bg+en едновременно; хардкоднат низ = блокер.",
-    "steps": [
-      { "id": "308.1", "phase": "RECON", "action": "Merged 307: прочети tour engine API-то; инвентаризирай съществуващите testID-та по таргет екраните; прочети i18n.ts NAMESPACES." },
-      { "id": "308.2", "phase": "RED", "action": "Тестове: стъпковата дефиниция е валидна (всяка стъпка има екран+таргет+ключ); автостарт при tourSeen=false и НЕ при true; settings бутонът рестартира. Червени." },
-      { "id": "308.3", "phase": "GREEN", "action": "Стъпките + tour namespace + settings бутонът." },
-      { "id": "308.4", "phase": "DONE", "action": "typecheck + jest зелени. Commit." }
-    ],
-    "passes": false
-  }
+﻿[
+    {
+        "id":  301,
+        "category":  "feature",
+        "repo":  "partyup",
+        "lane":  "be-devlogin",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "backend/src/PartyUp.Api/Features/Auth/DevLogin/**",
+                      "backend/tests/PartyUp.IntegrationTests/Features/Auth/DevLogin/**"
+                  ],
+        "description":  "feat(auth): add development-only dev-login endpoint for multi-account testing",
+        "specRef":  "party-up.md «v0.3 бележки» т.7 + party-up-structure.md §7а (IEndpointModule) + Features/Auth/Login/* (образците)",
+        "tddWorkflow":  true,
+        "notes":  "OAuth-only логинът прави многоакаунтово тестване мъчително (потребителят има 1 gmail + 1 discord). Таск: GET /auth/dev-login?user=\u003cиме\u003e — НОВ slice Features/Auth/DevLogin/ с IEndpointModule (авто-map, НЕ пипай Program.cs). Поведение: провизионира външна идентичност с провайдър \"dev\" и ключ = името (СЪЩИЯ ProvisioningService от Features/Auth/Login — преизползвай, не копирай), вдига същата Identity cookie сесия (SignInManager), redirect към валидиран returnUrl (AuthRedirect.Resolve — същата валидация като истинския login). ЧЕРВЕНАТА ЛИНИЯ: endpoint-ът се map-ва САМО в Development — модулът проверява IHostEnvironment и в не-Development среда изобщо НЕ регистрира route-а (404 по конструкция, не 403 проверка вътре). Никаква промяна по schema.graphql (чист HTTP endpoint) — НЕ пипай contracts/.",
+        "steps":  [
+                      {
+                          "id":  "301.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети AuthEndpoints.cs, ProvisioningService, AuthRedirect, ExternalIdentity, IEndpointModule котвата и как тестовете ползват ApiFactory."
+                      },
+                      {
+                          "id":  "301.2",
+                          "phase":  "RED",
+                          "action":  "Integration: в Development /auth/dev-login?user=alice създава user + сесийна бисквитка и me връща alice; второ извикване със същото име влиза в СЪЩИЯ акаунт; в Production среда endpoint-ът е 404 (изричен тест!). Червени."
+                      },
+                      {
+                          "id":  "301.3",
+                          "phase":  "GREEN",
+                          "action":  "DevLogin slice-ът по образеца на Login."
+                      },
+                      {
+                          "id":  "301.4",
+                          "phase":  "DONE",
+                          "action":  "dotnet test backend/PartyUp.slnx зелен. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  302,
+        "category":  "feature",
+        "repo":  "partyup",
+        "lane":  "fe-live",
+        "model":  "heavy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "frontend/src/lib/apollo.ts",
+                      "frontend/src/features/contact/**",
+                      "frontend/src/features/chat/**"
+                  ],
+        "description":  "feat(live): wire graphql subscriptions for notifications and chat messages",
+        "specRef":  "party-up.md «v0.3 бележки» т.8 + contracts/schema.graphql (Subscription: onMessage, onNotification) + party-up-structure.md §7б",
+        "tddWorkflow":  true,
+        "notes":  "BE издава два subscription-а от board №1 (onMessage(chatId), onNotification — HC InMemorySubscriptions), а FE НЕ слуша нито един (нула useSubscription). Таск: (1) провери/довърши транспорта в lib/apollo.ts — split link-ът съществува, увери се, че subscription операциите вървят (graphql-ws срещу HC websocket endpoint-а или SSE — провери какво поддържа бекендът; ако трябва мъничка dependency graphql-ws, е ПОЗВОЛЕНА — единственото разрешено изключение от «без нови deps»); (2) камбанката (features/contact: notification-bell/center) се абонира за onNotification → badge на живо + запис в кеша през СЪЩЕСТВУВАЩИЯ notifications-cache; (3) отвореният чат (features/chat: chat-thread/message-list) се абонира за onMessage(chatId) → новото съобщение влиза през thread-cache без refetch. Дедупликация: съобщение, пристигнало и от mutation отговора, и от subscription-а, НЕ се дублира (кешът по id). Тестове с мокнат subscription link (Apollo MockedProvider/link). НЕ пипай auth-linking, board, candidacy.",
+        "steps":  [
+                      {
+                          "id":  "302.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети lib/apollo.ts (split link-а), notifications-cache.ts, thread-cache.ts, chat.graphql.ts, contact.graphql.ts; провери какъв subscription транспорт издава бекендът (MapGraphQL / HC docs в кода)."
+                      },
+                      {
+                          "id":  "302.2",
+                          "phase":  "RED",
+                          "action":  "Тестове: onNotification event → bell badge се увеличава и center-ът показва записа без refetch; onMessage → съобщението цъфва в отворената нишка; дубъл по id не се появява два пъти. Червени."
+                      },
+                      {
+                          "id":  "302.3",
+                          "phase":  "GREEN",
+                          "action":  "Транспорт + двата абонамента през кеш helper-ите."
+                      },
+                      {
+                          "id":  "302.4",
+                          "phase":  "DONE",
+                          "action":  "npm --prefix frontend run typecheck \u0026\u0026 npm --prefix frontend test зелени. Commit."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  303,
+        "category":  "feature",
+        "repo":  "partyup",
+        "lane":  "be-anonym-sentinel",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "backend/src/PartyUp.Api/Features/Privacy/DeleteAccount/**",
+                      "backend/tests/PartyUp.IntegrationTests/Features/Privacy/DeleteAccount/**",
+                      "backend/tests/PartyUp.UnitTests/Features/Privacy/DeleteAccount/**"
+                  ],
+        "description":  "fix(privacy): anonymized display name becomes a language-neutral sentinel instead of a Bulgarian literal",
+        "specRef":  "C:\\CodeReview\\partyup\\CODE-REVIEW-2026-08-20_20-32-cycle3.md Важно #2 + rules/i18n-rules.md",
+        "tddWorkflow":  true,
+        "notes":  "Ревю находка: AccountAnonymization.DeletedDisplayName = \"Изтрит потребител\" — БГ низ, който стига до англоезичен UI (състав на маса, чат, вотове). Фикс ДОГОВОРЕН С FE ТАСК 304 (контракт, спазвай ДОСЛОВНО): сентинел стойността е ТОЧНО \"__deleted__\" (lowercase, две подчертавки от двете страни). BE: DeletedDisplayName = \"__deleted__\"; всички съществуващи DeleteAccount тестове, които assert-ват стария низ, се обновяват В СЪЩИЯ commit. Никаква промяна по схема/контракти (стойност на поле е). БЕЗ FE промени в този таск (304 ги прави, отделна lane) — НЕ пипай frontend/.",
+        "steps":  [
+                      {
+                          "id":  "303.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети AccountAnonymization.cs + тестовете, които цитират стария низ (grep \"Изтрит потребител\" в backend/)."
+                      },
+                      {
+                          "id":  "303.2",
+                          "phase":  "RED",
+                          "action":  "Тест: след deleteAccount анонимизираните membership/чат следи носят displayName \"__deleted__\". Червен."
+                      },
+                      {
+                          "id":  "303.3",
+                          "phase":  "GREEN",
+                          "action":  "Сентинелът + обновените assert-и."
+                      },
+                      {
+                          "id":  "303.4",
+                          "phase":  "DONE",
+                          "action":  "dotnet test зелен. Commit."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  304,
+        "category":  "feature",
+        "repo":  "partyup",
+        "lane":  "fe-live",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "frontend/src/lib/user-name.ts",
+                      "frontend/src/lib/user-name.test.ts",
+                      "frontend/src/features/board/**",
+                      "frontend/src/features/candidacy/**",
+                      "frontend/src/features/lifecycle-actions/**",
+                      "frontend/src/locales/bg/common.json",
+                      "frontend/src/locales/en/common.json"
+                  ],
+        "description":  "feat(i18n): render the deleted-user sentinel as a translated name everywhere a display name shows",
+        "specRef":  "C:\\CodeReview\\partyup\\CODE-REVIEW-2026-08-20_20-32-cycle3.md Важно #2 + rules/i18n-rules.md + party-up-structure.md §4",
+        "tddWorkflow":  true,
+        "notes":  "Двойникът на BE таск 303 (отделна lane, БЕЗ dependsOn — контрактът е ДОГОВОРЕН ДОСЛОВНО): сентинелът е ТОЧНО \"__deleted__\". Таск: (1) нов малък helper frontend/src/lib/user-name.ts: userDisplayName(name, t) → name === \"__deleted__\" ? t(\u0027common:user.deleted\u0027) : name (+ собствен тест файл); (2) приложи го на ВСЯКО място, което рендерира displayName на ЧУЖД потребител: features/board (player-card, board-screen), features/candidacy (table-screen състава, candidacy-screen, decision-panel), features/lifecycle-actions (kick-*, refound-invite-screen); (3) ключ user.deleted в common.json bg («Изтрит потребител») + en («Deleted user»). ЗАБЕЛЕЖКА ЗА ЗОНАТА: features/chat СЪЩО рендерира имена (chat-list-screen, message-list), но chat е в зоната на таск 302 (същата lane, преди този) — приложи helper-а И там, ако 302 вече е merge-нат в lane реда (той е — lane-ът е последователен). Хардкоднат низ = блокер; двата езика едновременно.",
+        "steps":  [
+                      {
+                          "id":  "304.1",
+                          "phase":  "RECON",
+                          "action":  "grep displayName в frontend/src/features — списъкът на рендериращите места; прочети helper патърните в lib/."
+                      },
+                      {
+                          "id":  "304.2",
+                          "phase":  "RED",
+                          "action":  "Тест на helper-а (сентинел → преведено, нормално име → само); компонентен тест: карта/състав със сентинел име показва «Изтрит потребител»/«Deleted user». Червени."
+                      },
+                      {
+                          "id":  "304.3",
+                          "phase":  "GREEN",
+                          "action":  "Helper + sweep по рендериращите места + ключовете."
+                      },
+                      {
+                          "id":  "304.4",
+                          "phase":  "DONE",
+                          "action":  "typecheck + jest зелени. Commit."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  305,
+        "category":  "bugfix",
+        "repo":  "partyup",
+        "lane":  "fe-privacy-download",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "frontend/src/features/auth-linking/**",
+                      "frontend/src/locales/bg/authLinking.json",
+                      "frontend/src/locales/en/authLinking.json"
+                  ],
+        "description":  "fix(privacy): download failures reach the ui as translated errors instead of raw json navigation",
+        "specRef":  "C:\\CodeReview\\partyup\\CODE-REVIEW-2026-08-20_20-32-cycle3.md Важно #4",
+        "tddWorkflow":  true,
+        "notes":  "Ревю находка: downloadExport в use-privacy.ts:106 НАВИГИРА (expo-linking.openURL) към /privacy/export — при 401/404/410 човекът вижда сурова JSON страница (реален път: топъл кеш показва «готово» за изтекъл архив → 410). Фикс по рецептата от доклада: на web — fetch с credentials:\u0027include\u0027 → при ok: blob + programmatic download (URL.createObjectURL + \u003ca download\u003e); при не-ok: тялото е DomainError с i18nKey → преведи и покажи в секцията (диспечерът domainErrorText СЪЩЕСТВУВА — преизползвай); след 410 — refetch на myDataExport, за да се обнови статусът на екрана. Native пътят (ако има) остава openURL. Нови ключове (напр. privacy.exportGone) в authLinking.json bg+en. НЕ пипай backend/ — endpoint-ът вече връща правилните кодове.",
+        "steps":  [
+                      {
+                          "id":  "305.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети use-privacy.ts, privacy-section.tsx, domain-error-text.ts, endpoint отговорите (DataExportEndpoints.cs — само за референция)."
+                      },
+                      {
+                          "id":  "305.2",
+                          "phase":  "RED",
+                          "action":  "Тестове: ok отговор → сваляне; 410 → преведена грешка в секцията + refetch; 401 → преведена грешка. Червени (мок на fetch)."
+                      },
+                      {
+                          "id":  "305.3",
+                          "phase":  "GREEN",
+                          "action":  "fetch/blob пътят + ключовете."
+                      },
+                      {
+                          "id":  "305.4",
+                          "phase":  "DONE",
+                          "action":  "typecheck + jest зелени. Commit."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  306,
+        "category":  "test",
+        "repo":  "partyup",
+        "lane":  "be-export-retention-tests",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "backend/tests/PartyUp.IntegrationTests/Features/Privacy/Export/**",
+                      "backend/tests/PartyUp.UnitTests/Features/Privacy/Export/**"
+                  ],
+        "description":  "test(privacy): cover the export retention sweep with unit and integration tests",
+        "specRef":  "party-up.md «v0.3 бележки» т.9 + Features/Privacy/Export/DataExportRetention.cs (commit 347fee9)",
+        "tddWorkflow":  true,
+        "notes":  "Retention фиксът (347fee9) влезе БЕЗ собствени тестове (fix агентът умря на квотата преди да ги напише) — този таск ги дописва, БЕЗ да пипа продукционния код (ако тестовете хванат бъг в него → status failed с описание, НЕ мълчалив фикс — src/ е извън files зоната нарочно). Покрий: (1) ForgetExpiredAsync чисти Json на Ready ред с ExpiresAt в миналото и връща броя; (2) НЕ пипа: неизтекли, вече изчистени (Json null), Pending; (3) редът-разписка ОЦЕЛЯВА (статусът остава прочит Expired — екранът кани към нова заявка); (4) download на изчистен изтекъл ред дава 410 (не 500). Интеграционно през Testcontainers по образеца на съществуващите Export тестове.",
+        "steps":  [
+                      {
+                          "id":  "306.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети DataExportRetention.cs, DataExportWorker.cs, съществуващите Export тестове + фикстурите им."
+                      },
+                      {
+                          "id":  "306.2",
+                          "phase":  "RED",
+                          "action":  "Няма RED срещу нов код — тестовете документират 347fee9; пиши ги и ги пусни."
+                      },
+                      {
+                          "id":  "306.3",
+                          "phase":  "GREEN",
+                          "action":  "Всички нови тестове зелени срещу непипнат src/."
+                      },
+                      {
+                          "id":  "306.4",
+                          "phase":  "DONE",
+                          "action":  "dotnet test зелен. Commit."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  307,
+        "category":  "feature",
+        "repo":  "partyup",
+        "lane":  "fe-tour",
+        "model":  "heavy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "frontend/src/features/tour/**",
+                      "frontend/src/lib/ui-store.ts",
+                      "frontend/src/__tests__/ui-store.test.ts",
+                      "frontend/src/components/**"
+                  ],
+        "description":  "feat(tour): guided product tour engine with spotlight backdrop and step navigation",
+        "specRef":  "party-up.md «v0.3 бележки» т.10 + party-up-structure.md §4, §7б",
+        "tddWorkflow":  true,
+        "notes":  "Продуктовата обиколка, engine частта (съдържанието на стъпките е таск 308 — той дефинира СТЪПКИТЕ, ти строиш МАШИНАТА + 1-2 примерни стъпки за тестовете). Изисквания: (1) tour store в features/tour (текуща стъпка, старт/стоп) + persist флаг tourSeen в ui-store (добави в state + partialize + setter; обнови ui-store.test.ts); (2) overlay с backdrop и SPOTLIGHT изрез около таргет елемента — web-first: таргетите се намират по data-testid (RNW рендерира testID → data-testid) през document.querySelector + getBoundingClientRect, изрезът със SVG mask; native fallback: затъмнение без изрез е приемливо; (3) тултип, позициониран ДО елемента (не центриран модал) с Next/Previous/Skip tour; (4) стъпка може да НАВИГИРА (router.push към екрана си) и чака таргета да се появи (retry на measure с timeout); (5) mount на overlay-а в app-shell (components/ — зоната е твоя). БЕЗ нови dependencies — in-house. Текстовете на бутоните Next/Previous/Skip: реферирай i18n ключове от БЪДЕЩИЯ tour namespace (напр. t(\u0027tour:controls.next\u0027)) — самият namespace и json файловете ги създава таск 308 (НЕ пипай locales файловете и lib/i18n.ts — чужда зона); в тестовете ползвай t мок, за да не зависиш от липсващия още namespace. Автостартът при първи login също е на 308.",
+        "steps":  [
+                      {
+                          "id":  "307.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети app-shell.tsx, app-header.tsx, ui-store.ts + теста му, board-screen (примерни testID-та), как RNW мапва testID."
+                      },
+                      {
+                          "id":  "307.2",
+                          "phase":  "RED",
+                          "action":  "Тестове: store навигацията next/prev/skip; overlay-ят се рендерира при активна обиколка и изчезва при skip; tourSeen персистира; таргет по testid се измерва (мок на DOM). Червени."
+                      },
+                      {
+                          "id":  "307.3",
+                          "phase":  "GREEN",
+                          "action":  "Engine + spotlight + тултип + mount."
+                      },
+                      {
+                          "id":  "307.4",
+                          "phase":  "DONE",
+                          "action":  "typecheck + jest зелени. Commit."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  308,
+        "category":  "feature",
+        "repo":  "partyup",
+        "lane":  "fe-tour",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "frontend/src/features/tour/**",
+                      "frontend/src/lib/i18n.ts",
+                      "frontend/src/locales/bg/tour.json",
+                      "frontend/src/locales/en/tour.json",
+                      "frontend/src/app/settings.tsx"
+                  ],
+        "description":  "feat(tour): first-login tour steps across the app and a restart entry in settings",
+        "specRef":  "party-up.md «v0.3 бележки» т.10 + rules/i18n-rules.md",
+        "tddWorkflow":  true,
+        "notes":  "Съдържанието върху engine-а от 307 (същата lane, вече merged като стигнеш дотук). Стъпките (по екрани, всяка с таргет testID — добави testID-та на таргетите, АКО липсват, но САМО в рамките на стъпка-по-стъпка минимални едноредови промени; ако таргет екранът е извън твоите files зони — ползвай СЪЩЕСТВУВАЩ testID или пропусни елемента, НЕ разширявай зоната си): (1) борд + «Публикувай се» CTA; (2) филтрите; (3) «Виж масите»/витрината; (4) Моите маси + «Създай маса»; (5) камбанката; (6) header-а: тема/език/настройки. Автостарт: при първи вход (tourSeen false) обиколката тръгва сама; Skip → tourSeen true. «Пусни обиколката отново» бутон в app/settings.tsx (route файлът, НЕ auth-linking фичата — тя е чужда зона). Нов namespace tour: json bg+en + регистрация в lib/i18n.ts (NAMESPACES + import-ите — отровният файл е в зоната ти нарочно); ВСИЧКИ ключове на обиколката, ВКЛЮЧИТЕЛНО бутоните Next/Previous/Skip, живеят в tour namespace-а (tour.json), НЕ в common.json — common е зона на друга lane (таск 304); съгласувай имената на бутонските ключове с кода на 307 (той е merged и ги реферира). Всички текстове bg+en едновременно; хардкоднат низ = блокер.",
+        "steps":  [
+                      {
+                          "id":  "308.1",
+                          "phase":  "RECON",
+                          "action":  "Merged 307: прочети tour engine API-то; инвентаризирай съществуващите testID-та по таргет екраните; прочети i18n.ts NAMESPACES."
+                      },
+                      {
+                          "id":  "308.2",
+                          "phase":  "RED",
+                          "action":  "Тестове: стъпковата дефиниция е валидна (всяка стъпка има екран+таргет+ключ); автостарт при tourSeen=false и НЕ при true; settings бутонът рестартира. Червени."
+                      },
+                      {
+                          "id":  "308.3",
+                          "phase":  "GREEN",
+                          "action":  "Стъпките + tour namespace + settings бутонът."
+                      },
+                      {
+                          "id":  "308.4",
+                          "phase":  "DONE",
+                          "action":  "typecheck + jest зелени. Commit."
+                      }
+                  ],
+        "passes":  true
+    }
 ]

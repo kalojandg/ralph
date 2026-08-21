@@ -34,6 +34,165 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+### Task 308: feat(tour): first-login tour steps across the app and a restart entry in settings
+
+- Built the tour **content** on top of the task-307 engine (machine untouched): 8 steps — board+publish CTA, filters, showcase link, my-tables+create-table, notification bell, header theme/language/settings — each anchored to an **existing** testID where the target screen was in scope's reach, or `targetTestId: null` (centered panel, no spotlight) where the target element/screen was outside this task's files zone (board publish button, filter panel, showcase link — all in `board-screen.tsx`/`filter-panel.tsx`, not owned by this task). The notification bell isn't mounted on any screen yet (a documented, pre-existing gap from task 40) so its step gracefully falls back to a plain backdrop until a future task wires it — no change needed here when that happens.
+- Added `frontend/src/features/tour/tour-content.ts` (`TOUR_STEPS`), `tour-autostart.ts` (`useTourAutostart` hook — starts the tour once per resolved, non-anonymous session when `tourSeen` is false), and `tour-mount.tsx` (wraps the raw `TourOverlay` with the autostart hook; `index.ts` now exports this wrapper *as* `TourOverlay` so `app-shell.tsx` — outside this task's zone — needed zero changes).
+- Added `RestartTourSection` (`restart-tour-section.tsx`) and wired it into `/settings` between Appearance and Session (kept Privacy last, matching an existing ordering test in the auth-linking suite that this task must not break).
+- New `tour` i18n namespace (bg+en), registered in `lib/i18n.ts` (`NAMESPACES` + resource imports). Includes the machine's control keys (`controls.next/previous/skip/done/progress`) per the house rule that ALL tour text — including Next/Previous/Skip — lives in `tour.json`, not `common.json`.
+- New tests: `tour-content.test.ts` (step shape + bg/en key coverage), `tour-autostart.test.tsx` (autostart gating: loading / anonymous / seen / first-login), `restart-tour-section.test.tsx` (button restarts the tour, bilingual copy).
+- Verify: `npm --prefix frontend run typecheck` ✅, `npm --prefix frontend test` ✅ (70 suites / 434 tests, including the untouched `tour-overlay.test.tsx`, `app-shell-tour.test.tsx`, and `settings-screen.test.tsx`). No backend files touched, so `dotnet test` wasn't run locally (covered by the merge-time gate).
+- Commit: `4c3ad79c8b8a353899cbb07844a5ec87f58d30d1`.
+
+
+## Таск 307 — feat(tour): guided product tour engine with spotlight backdrop and step navigation
+
+**Репо:** partyup (lane fe-tour) · **Клон:** ralph/task-307 · **Комит:** `ed3d25a`
+
+**Какво е направено (TDD: RED → GREEN):**
+
+1. **RED** — 41 нови теста преди имплементацията: сторът (навигация next/prev/skip, край на обиколката, повторно пускане), геометрията (изрез около таргета, ленти без отрицателни размери, тултип под/над/центриран и клампнат в екрана), измерването по `data-testid` (намерен / липсващ / нулев размер / без DOM), овърлеят (рендер само при активна обиколка, изрез, четирите ленти, Next/Previous/Skip, навигация към екрана на стъпката, изчакване на таргета, fallback без изрез) и монтирането в обвивката. Червени по правилната причина (`setTourSeen is not a function`, липсващи модули).
+
+2. **GREEN — `frontend/src/features/tour/` (нова област):**
+   - `tour-step.ts` — типът на стъпката (чисти данни: `targetTestId`, i18n ключове, `route`) + `TOUR_CONTROL_KEYS` — инвентарът на ключовете, които машината реферира, за да знае таск 308 какво да преведе.
+   - `tour-store.ts` — zustand стор (само UI state, §7б.7): `startTour/nextStep/previousStep/skipTour` + `selectCurrentStep`. И пропуснатата, и доизкараната обиколка вдигат `tourSeen`.
+   - `tour-target.ts` — RNW рендерира `testID` като `data-testid`, така че таргетите се намират с `document.querySelector` + `getBoundingClientRect` по СЪЩИТЕ идентификатори, които тестовете вече ползват — нула нови ref-ове в екраните. Native няма DOM → `null`.
+   - `use-tour-target.ts` — повтарящо се измерване (100 ms / 2 s таван), защото след навигация таргетът се появява със закъснение; отказът е тих.
+   - `tour-geometry.ts` — прожекторът и позицията на тултипа като чисти функции.
+   - `tour-overlay.tsx` — затъмнение с изрез, рамка около осветеното, тултип ДО елемента с Назад/Напред/Пропусни + брояч; стъпка с `route` навигира сама (веднъж на стъпка).
+   - `index.ts` — фасада (овърлей, стор, тип на стъпката).
+
+3. **`lib/ui-store.ts`** — `tourSeen` в state, в `partialize` и `setTourSeen`; `resetUiStore` го връща. Тестът на стора проверява персистенцията явно през `persist.getOptions().partialize`.
+
+4. **`components/app-shell.tsx`** — `<TourOverlay />` виси най-отгоре, ИЗВЪН центрираната колона (изрезът се смята в координати на прозореца, а стъпките навигират между екраните). Без активна обиколка не рендерира нищо.
+
+**Решения:**
+- **Без SVG маска.** `react-native-svg` не е в стека, а нов пакет е решение на потребителя (§2) → изрезът е четири затъмнени ленти. Визуално е същият правоъгълен прожектор, а бонусът е, че дупката е истинска: осветеният елемент остава натискаем (`pointerEvents="box-none"`).
+- **`tour` namespace-ът НЕ е пипан** — `lib/i18n.ts` и `locales/` са зона на таск 308. Машината реферира `t('tour:controls.*')`, а тестовете ползват `t` мок, за да не зависят от още несъздадения namespace.
+- Тултипът не се мери (`onLayout`) — оценена височина + клампване в екрана дава същия избор „под/над" без втори рендер.
+
+**Проверка:** `npm --prefix frontend test` → 66 suite-а / 418 теста зелени; `npm --prefix frontend run typecheck` → чисто. BE не е докосван (FE-only таск). Комитнати са само файлове от обхвата на таска; `src/gql/` и `package-lock.json` остават непроменени.
+
+**Остава за 308:** съдържанието на стъпките, `tour` namespace (bg+en, включително `controls.next/previous/skip/done/progress`), автостарт при първи логин срещу `tourSeen` и бутон „Пусни обиколката" в /settings.
+
+
+### Task 304 — feat(i18n): render the deleted-user sentinel as a translated name everywhere a display name shows
+
+**Repo:** partyup · **Lane:** fe-live · **Commit:** `4c74979`
+
+- New `frontend/src/lib/user-name.ts`: `userDisplayName(name, t)` — maps the BE hard-delete sentinel `__deleted__` (contract with BE task 303, `AccountAnonymization.DeletedDisplayName`) to `t('user.deleted', {ns:'common'})`, passes through any other name unchanged. Own test file `user-name.test.ts` (bg/en translation + pass-through).
+- Applied at every render of a *foreign* user's displayName within scope:
+  - `features/board`: `player-card.tsx` (name text + pull a11y label), `board-screen.tsx` (pulled-notice name).
+  - `features/candidacy`: `table-screen.tsx` (candidacy row candidate name), `candidacy-screen.tsx` (candidate name), `decision-panel.tsx` (vote names + pending-voters list).
+  - `features/lifecycle-actions`: `kick-decision-panel.tsx` (decision subject), `kick-member-action.tsx` (confirm question/warning + candidate list), `refound-invite-screen.tsx` (founder name).
+  - `features/chat` (explicit zone note in task 304: task 302 already merged this lane, so the chat zone was open): `chat-list-screen.tsx` (chat title + last-message preview sender), `message-list.tsx` (message sender name).
+- New key `user.deleted` in `src/locales/{bg,en}/common.json` ("Изтрит потребител" / "Deleted user").
+- Component tests: `player-card.test.tsx` and `table-screen.test.tsx` each got a case asserting the sentinel renders as the translated string and the raw `__deleted__` literal never reaches the screen.
+- **Known gaps (documented, not silently skipped):** `features/showcase/party-composition.tsx` (shared component, rendered inside the in-scope `table-screen.tsx` but itself outside `files` scope for this task and outside the chat exception) and `features/chat/chat-thread.tsx` (same `chatTitleName()` helper as `chat-list-screen.tsx`, but not named in the task's zone note) both still show the raw sentinel. Neither is owned by another task today.
+- Verify: `npm --prefix frontend run typecheck` clean; `npm --prefix frontend test` → 62 suites / 380 tests passed.
+
+
+### Task 305: fix(privacy): download failures reach the ui as translated errors instead of raw json navigation
+
+- **Repo:** partyup (frontend)
+- **Files:** `frontend/src/features/auth-linking/use-privacy.ts`, new `frontend/src/features/auth-linking/trigger-file-download.ts`, `frontend/src/features/auth-linking/__tests__/privacy-section.test.tsx`, `frontend/src/locales/{bg,en}/authLinking.json`
+- **What changed:** `downloadExport()` no longer blindly `openURL`-navigates to `GET /privacy/export` on all platforms. On web it does `fetch(url, {credentials:'include'})`: 2xx -> blob download via a new mockable `triggerFileDownload` helper (obj URL + `<a download>` click, isolated so tests don't need a real DOM); non-2xx -> parses the `DomainError` JSON body and shows the translated message in the existing `privacy-error` banner via `domainErrorText`; a 410 (expired archive) additionally triggers a `refetch()` of `myDataExport` so the UI's export status catches up with the server's truth instead of staying stuck on a stale "READY". Non-web platforms keep the original `redirectTo`/`openURL` behavior untouched.
+- **i18n:** added `privacy.exportExpired` / `privacy.exportNotReady` to `authLinking.json` (bg+en), matching the backend's `i18nKey` values (`privacy.exportExpired`, `privacy.exportNotReady`) so `domainErrorText` resolves them directly.
+- **Tests:** rewrote the download test to cover ok (web, fetch+blob mocked), native fallback (ios still uses `redirectTo`), 410 (translated error + refetch confirmed via updated `export-status-expired`), and 401 (translated fallback error, no raw code/JSON leaking to UI).
+- **Verify:** `npm --prefix frontend run typecheck` clean; `npx jest` (frontend) → 374/374 passed across 60 suites. Backend untouched (endpoint already correct per report).
+
+
+## [2026-08-21 HH:MM] - Task #306: test(privacy): cover the export retention sweep with unit and integration tests
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** The retention fix (347fee9) that nulls out `DataExport.Json` for expired `Ready` rows landed without its own tests (the fix agent was killed by quota mid-cycle before writing them).
+
+**What was done:**
+- RED: N/A per task notes — no failing test against new code; tests characterize the already-merged 347fee9 behavior.
+- GREEN: wrote `DataExportRetentionTests` (integration, Testcontainers Postgres) covering: `ForgetExpiredAsync` clears `Json` on a `Ready` row past `ExpiresAt` and returns the count; leaves alone a not-yet-expired row, an already-cleared row, a `Pending` row, and a corrupted `Pending`-with-past-expiry edge case (status filter, not just expiry+json); the receipt row survives with `Status`/`ReadyAt`/`ExpiresAt` unchanged; zero-expired sweep returns 0; the exact-deadline second is treated as expired. Also characterized `Download` of a swept expired export: it returns **404** (not 410) because `DataExportEndpoints`'s first guard is `Json: not null`, which short-circuits before the expiry check — this is the real, unmodified behavior, documented rather than "fixed" (src/ is out of this task's scope by design). Added one small unit test (`PartyUp.UnitTests`) locking `DataExportRetention.SweepInterval == 6h`, since the sweep itself needs `ExecuteUpdateAsync` against a real relational provider and can't be unit-tested (no EF InMemory package in that project).
+
+**Verification:**
+- `dotnet test backend/PartyUp.slnx --nologo -v q` → 157 unit + 351 integration, all green.
+- src/ untouched (`git status` before commit showed only the two new test files).
+
+**Files modified:**
+- backend/tests/PartyUp.IntegrationTests/Features/Privacy/Export/DataExportRetentionTests.cs (new)
+- backend/tests/PartyUp.UnitTests/Features/Privacy/Export/DataExportRetentionTests.cs (new)
+
+**Git commit:** `3ece846` — `test(privacy): cover the export retention sweep with unit and integration tests`
+
+---
+
+
+## [2026-08-21 19:07] - Task #302: feat(live): wire graphql subscriptions for notifications and chat messages
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → (RED неприложим) → GREEN → DONE
+
+**Problem:** Retry след ЧЕРВЕН verify gate. Гейтът върна `dotnet test backend/PartyUp.slnx` exit 1 с **Failed: 339, Passed: 0** за 1m40s. Диагноза: НЕ е причинено от таска — единствената промяна в клона е един frontend тестов файл, който физически не може да счупи .NET тестове. Провал на ЦЯЛАТА integration колекция с 0 успели и timeout-подобна продължителност = Testcontainers не е намерил Docker (Docker Desktop е бил свален по време на гейта). Пуснато наново при вдигнат Docker (server 28.3.0): същите 339 теста минават за 27s.
+
+**What was done:**
+- RECON: премисата на таска („FE НЕ слуша нито един subscription, нула useSubscription“) е СТАРА. Wiring-ът съществува от 3cc4a2e/724d8b2, но през `subscribeToMore`, не `useSubscription` — оттам и грешният прочит. Проверено едно по едно: и трите изисквания на таска са налице И покрити с тестове (`дописва пристигналото по абонамента` + `не дублира ...` в chat-thread, notification-bell и notification-center).
+- Оставено непроменено, защото е коректно: `apollo.ts` (split link с graphql-ws), камбанка/център (`onNotification` → `withNotification`), нишка (`onMessage` → `withMessage`). Дедупликацията по id минава през ЕДИН и същ helper за ехото от мутацията и за абонамента.
+- GREEN (в предходния commit 467ae21): единствената реална дупка в обхвата — `lib/apollo.ts` без нито един тест. Добавен `frontend/src/lib/apollo.test.ts` (4 теста, `graphql-ws` мокнат — без мрежа). Mutation-проверени: обръщането на split-а чупи 2 от 4.
+- В ТАЗИ итерация не е добавен код: нямаше какво да се поправи: провалът беше на средата. Нов commit щеше да е шум.
+
+**Verification:**
+- `npm --prefix frontend run typecheck` → clean
+- `npm --prefix frontend test` → 61 suites / 375 tests pass
+- `dotnet test backend/PartyUp.slnx` → 155/155 unit + **339/339 integration** pass (беше 0/339 при гейта — потвърдено environmental)
+- Работното дърво остава чисто след codegen
+
+**Files modified:**
+- (няма нови промени в тази итерация — 467ae21 стои непроменен)
+
+**Git commit:** `467ae21` — `feat(live): wire graphql subscriptions for notifications and chat messages`
+
+**⚠ Блокер ИЗВЪН обхвата (иска си собствен таск):** `backend/src/PartyUp.Api/Program.cs` няма `app.UseWebSockets()` — нула съвпадения за `UseWebSockets|WebSocket` в целия backend. Налице са `.AddInMemorySubscriptions()` (ред 111) и `app.MapGraphQL()` (ред 134), но без WebSocket middleware Kestrel не публикува `IHttpWebSocketFeature` и graphql-ws handshake-ът не може да се upgrade-не → В РЕАЛЕН РУН НИТО ЕДИН subscription не се закача, колкото и правилен да е FE-ът. Не се лови от тестовете, защото `SubscriptionTestBase` минава директно през `IRequestExecutor` и заобикаля HTTP слоя. НЕ е пипано: Program.cs е извън `files` границата на таска. Поправка: един ред преди `MapGraphQL()` + тест с истински сокет срещу `ApiFactory`.
+
+---
+
+
+## Task 301 — feat(auth): add development-only dev-login endpoint for multi-account testing
+
+**Репо:** partyup · **Lane:** be-devlogin · **Commit:** `eaad0b8`
+
+### Какво е направено
+
+- **Нов slice** `Features/Auth/DevLogin/DevLoginEndpoints.cs` — `IEndpointModule` (auto-discovered, Program.cs непипнат). `GET /auth/dev-login?user=<име>&returnUrl=<url>` провизионира external identity с провайдър `"dev"` и ключ = подаденото име, преизползвайки СЪЩИЯ `ProvisioningService` и `AuthRedirect.Resolve` като реалния OAuth login (Features/Auth/Login/*), после вдига Identity cookie сесия през `SignInManager.SignInAsync` и redirect-ва към валидирания `returnUrl`.
+- **ЧЕРВЕНАТА ЛИНИЯ:** `Map()` първо проверява `IHostEnvironment.IsDevelopment()` и връща без да регистрира route-а извън Development — 404 по конструкция на рутера, не проверка вътре в handler-а. Тествано изрично (`OutsideDevelopment_TheRouteDoesNotExist`, срещу `Testing` environment-a на `ApiFactory`).
+- **Интеграционни тестове** (`DevLoginEndpointsTests.cs`, 6 сценария): создава акаунт + вдига cookie сесия + `me` вижда провизионирания потребител; второ извикване със същото име влиза в СЪЩИЯ акаунт (без дублиране в Users/UserLogins/UserProfiles); празно име → 400 `DEV_USER_REQUIRED`; чужд returnUrl → 400 `UNSAFE_RETURN_URL` (същата валидация като реалния login); извън Development → 404.
+- Никаква промяна по `Program.cs` или `contracts/schema.graphql` — чист HTTP endpoint, авто-map.
+
+### Контекст на изпълнението
+Worktree-ът съдържаше недовършена (некомитната) работа от прекъснат предишен run — файловете вече бяха написани коректно и следваха образеца от Login feature-а. Верифицирах имплементацията срещу `ProvisioningService`/`AuthRedirect`/`ExternalIdentity`/`IEndpointModule`, пуснах целия backend test suite и комитнах.
+
+### Verification
+- `dotnet test PartyUp.slnx` → PartyUp.UnitTests: 155/155 pass · PartyUp.IntegrationTests: 345/345 pass (вкл. 6-те нови DevLogin теста).
+- `git status` scope check: само двете нови директории от `files` списъка на таска.
+
+### Files modified
+- `backend/src/PartyUp.Api/Features/Auth/DevLogin/DevLoginEndpoints.cs`
+- `backend/tests/PartyUp.IntegrationTests/Features/Auth/DevLogin/DevLoginEndpointsTests.cs`
+
+**Git commit:** `eaad0b8` — `feat(auth): add development-only dev-login endpoint for multi-account testing`
+
+---
+
+
+## Task #303: fix(privacy): anonymized display name becomes a language-neutral sentinel instead of a Bulgarian literal
+
+Changed `AccountAnonymization.DeletedDisplayName` from the Bulgarian literal `"Изтрит потребител"` to the contracted language-neutral sentinel `"__deleted__"` (per FE task #304 contract, matched literally). Added a RED unit test that verified the failure against the old string, then made it GREEN; updated existing `DeleteAccountTests` assertions in the same commit. No frontend files touched.
+
+**Re-verification this iteration (retry 3):** the prior two verify-gate failures (`dotnet test backend/PartyUp.slnx` reporting all 339 integration tests failing post-merge) were diagnosed as environmental — Docker Desktop/Testcontainers unreachable at verify time — not a regression, since the failing tests included suites entirely unrelated to this change (GraphQL pipeline smoke tests, domain model round-trips, table settings). Confirmed by re-running the full suite now that Docker is reachable: `PartyUp.UnitTests` 156/156 passed, `PartyUp.IntegrationTests` 339/339 passed, 0 failures. No new commit was needed; `d214d53` already reflects the complete, correct fix.
+
+Committed as `d214d53`.
+
+
 ## Task 213 — feat(settings): add data & privacy section with account deletion and my-data export
 
 **Репо:** partyup · **Lane:** fe-session-privacy · **Commit:** `d21e3a3`
@@ -2680,6 +2839,14 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
+
+
+
 
 
 
