@@ -651,7 +651,10 @@ Do, in this order:
             $logF = Join-Path $scriptDir "logs\gitnexus-$k-$ts.txt"
             # Minimized (not Hidden): the taskbar console IS the progress indicator -
             # it disappears when indexing completes. Log keeps the full output.
-            Start-Process powershell.exe -ArgumentList "-NoProfile", "-Command", "`$host.UI.RawUI.WindowTitle = 'GitNexus re-index: $k'; Set-Location '$($r.location)'; npx --no-install gitnexus analyze *> '$logF'" -WindowStyle Minimized | Out-Null
+            # Analyze пренаписва броячите в AGENTS.md/CLAUDE.md СЛЕД push-а (22.08, уловено
+            # от потребителя) -> мръсен checkout -> MERGE SKIPPED на следващия board. Затова
+            # detached процесът сам комитва и пуша ДВАТА header файла, ако analyze ги е пипнал.
+            Start-Process powershell.exe -ArgumentList "-NoProfile", "-Command", "`$host.UI.RawUI.WindowTitle = 'GitNexus re-index: $k'; Set-Location '$($r.location)'; npx --no-install gitnexus analyze *> '$logF'; if ((git status --porcelain -- AGENTS.md CLAUDE.md) -ne `$null) { git add -- AGENTS.md CLAUDE.md; git commit -m 'chore: gitnexus re-index headers' --quiet; git push --quiet *>> '$logF' }" -WindowStyle Minimized | Out-Null
             Write-Host "[f] GitNexus re-index launched for '$k' (detached console in taskbar; gone = done; log: logs\gitnexus-$k-$ts.txt)" -ForegroundColor Cyan
         }
     }
@@ -1032,6 +1035,20 @@ foreach ($t0 in (Read-Tasks)) {
     if ($t0.PSObject.Properties['repo'] -and $t0.repo -and $reposMap.repos.$($t0.repo)) {
         $gr0 = $reposMap.repos.$($t0.repo).gitRoot
         if (-not $script:startShas.ContainsKey($gr0)) {
+            # GITNEXUS HEADER SELF-HEAL (22.08): finish_index-ът на ПРЕДИШНИЯ run пренаписва
+            # броячите в AGENTS.md/CLAUDE.md след push-а (detached, може да завърши по всяко
+            # време) -> завареното мръсно дърво би SKIP-нало всички merges. Ако мръсотията е
+            # САМО тези два файла - комитни ги и продължи; всичко друго си остава фатално
+            # мръсно и се улавя от merge проверката както досега.
+            $dirt0 = @(& git -C $gr0 status --porcelain 2>$null)
+            if ($dirt0.Count -gt 0) {
+                $nonHeader = @($dirt0 | Where-Object { $_ -notmatch '^\s*M\s+(AGENTS|CLAUDE)\.md$' })
+                if ($nonHeader.Count -eq 0) {
+                    & git -C $gr0 add -- AGENTS.md CLAUDE.md 2>$null
+                    & git -C $gr0 commit -m "chore: gitnexus re-index headers" --quiet 2>$null
+                    Write-Host "[i] Repo at '$gr0': leftover gitnexus header changes auto-committed (from a previous finish_index)" -ForegroundColor Cyan
+                }
+            }
             $script:startShas[$gr0] = (& git -C $gr0 rev-parse HEAD 2>$null)
         }
     }
