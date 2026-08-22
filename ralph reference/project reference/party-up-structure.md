@@ -4,8 +4,15 @@
 > Приложение: TTRPG matchmaking (pull модел — играчите се публикуват на LFG борд,
 > МАСИТЕ дърпат кандидати). Монорепо, TDD от commit 1. Пълната продуктова
 > спека: `party-up.md` в D:\Downloads\monk\ (секции А–Е + Решения лога).
-> **Състояние: board 1–42 (v0.1) е ЗАТВОРЕН и мерджнат в `main`.** Всички 42 таска са зелени
-> през гейта. Файлът описва РЕАЛНОСТТА след него, не скелета.
+> **Състояние: board 1–42 (v0.1), 101–108, 201–213 и 301–308 са ЗАТВОРЕНИ и мерджнати в
+> `main`.** Всички таскове са зелени през гейта (fix-цикли по code review след 201–213 и
+> след 301–308 са си отделни комити, вече слети). Файлът описва РЕАЛНОСТТА след тях, не скелета.
+> Board 101–108 добави desktop/responsive полиране на екраните; 201–213 добави in-app навигация,
+> logout, tab theming, LFG филтри и „Данни и поверителност" (deleteAccount, my-data export);
+> 301–308 добави dev-login за multi-account тестване, живо потвърждение на subscriptions-a,
+> privacy fix-ове (език-неутрален сентинел, преведени грешки при сваляне, ретеншън тестове) и
+> продуктовата обиколка (tour). Секции §7а/§7б/§7в все още описват предимно board 1–42 —
+> детайлите на 101–308 живеят в §1а/§1б/§7/§7г по-долу, обновени на място.
 
 ## §1. Файлова карта (монорепо)
 
@@ -33,8 +40,9 @@ party-up/
 │   ├── src/app/                  ← Expo Router — ТЪНКИ route файлове (виж §1б)
 │   ├── src/features/<област>/    ← ЦЯЛАТА екранна логика: компоненти, hooks, *.gql.ts документи, тестове
 │   ├── src/lib/                  ← apollo.ts, providers.tsx, auth-gate.tsx, theme.tsx, ui-store.ts,
-│   │                                i18n.ts, session.ts, config.ts
-│   ├── src/locales/{bg,en}/      ← по 15 namespace JSON файла на език (виж §7г)
+│   │                                i18n.ts, session.ts, config.ts, user-name.ts (таск 304 — единственото
+│   │                                място, което познава `__deleted__` сентинела и го превежда)
+│   ├── src/locales/{bg,en}/      ← по 16 namespace JSON файла на език (виж §7г)
 │   ├── src/components/           ← само placeholder-screen.tsx (generic споделеното е малко — по дизайн)
 │   ├── src/test-utils/           ← render.tsx (renderWithProviders), subscription.ts, css-mock.js
 │   ├── src/gql/                  ← ГЕНЕРИРАН codegen изход — GITIGNORED, никога не се комитва
@@ -65,11 +73,12 @@ party-up/
 
 ### §1а. BE slice инвентар (`Features/<Област>/<UseCase>/`)
 
-Схемата излиза с **18 query, 25 mutation, 2 subscription**. Кой slice какво издава:
+Схемата излиза с **19 query, 27 mutation, 2 subscription** (растежът от 18/25/2 е от board 211–213:
+`myDataExport`, `deleteAccount`, `requestDataExport`). Кой slice какво издава:
 
 | Slice | Use case папки | GraphQL операции |
 |---|---|---|
-| `Auth` | Login, Logout, Me | HTTP `GET /auth/login/{provider}`, `GET /auth/callback` (НЕ GraphQL); `logout`; `me` |
+| `Auth` | Login, Logout, Me, **DevLogin** (таск 301) | HTTP `GET /auth/login/{provider}`, `GET /auth/callback`, `GET /auth/dev-login?user=&returnUrl=` (НЕ GraphQL, само `Development`); `logout`; `me` |
 | `AuthLinking` | (плосък) | `linkedProviders`, `linkProviderUrl(provider)`, `unlinkProvider` |
 | `Profiles` | MyProfile, UpdateProfile | `myProfile`, `updateProfile` |
 | `MyTables` | (плосък) | `myTables` |
@@ -83,6 +92,23 @@ party-up/
 | `Lifecycle` | Trial, Leave, Kick, Refound | `startTrial`, `startDecidingPhase`, `finalizeDeciding`, `stayOrLeave`, `leaveTable`, `proposeKick`, `refoundTable`, `acceptRefoundInvite` |
 | `Push` | Subscriptions, Vapid | `pushSubscribe`, `pushUnsubscribe`, `vapidPublicKey` |
 | `PushSend` | (плосък) | **няма GraphQL** — инфраструктурен slice (FanoutNotifier, WebPushSender, `AddPushFanout()`) |
+| `Privacy` | DeleteAccount, Export (board 211–213, полирана в 303–306) | `deleteAccount` (hard delete на личните данни + `AccountAnonymization.Scrub`); `myDataExport`, `requestDataExport` (mutation-ът пуска фонова обработка); `GET /privacy/export` (HTTP файл, НЕ GraphQL — сваля готовия архив на СЕСИЯТА, без `:id` аргумент) |
+
+**`Privacy` в детайли** (структурата не беше документирана след board 211–213, наваксва се тук):
+- `DeleteAccount/AccountAnonymization.cs` — статичните правила „какво остава от изтрит човек":
+  профилният ред и identity полетата се ОБЕЗЛИЧАВАТ на място (relational следите — членства,
+  реплики, гласове — трябва да останат валидни FK-та), самият `AppUser` ред оцелява гол.
+  `DeletedDisplayName = "__deleted__"` (**от таск 303**: беше literal `"Изтрит потребител"` —
+  сменено на език-неутрален сентинел, защото displayName е СТОЙНОСТ на данни, не UI низ, и FE
+  трябва да го разпознае и преведе, не да го покаже суров на англоезичен потребител). Отказва
+  изтриване, ако акаунтът все още държи основател на жива маса (`FOUNDER_HAS_ACTIVE_TABLE`) —
+  насочва към „преоснови"/„напусни", не exception.
+- `Export/` — `requestDataExport` пуска заявка (Pending), `DataExportWorker` я сглобява асинхронно
+  (виж по-долу за background service изключението), `myDataExport` чете разписката, `GET
+  /privacy/export` сваля готовия JSON. **Таск 305** премести UI грешките от суров JSON в браузъра
+  към преведени съобщения в екрана (fetch + credentials вместо навигация, освен на native, където
+  няма `fetch`/`Blob`/DOM за programmatic download). **Таск 306** покри ретеншън суийпа
+  (`DataExportRetention.ForgetExpiredAsync`) с unit + integration тестове.
 
 **Домейн (13 entity-та, `Domain/`):** `AppUser`, `UserProfile`, `PlayerListing`, `Table`, `TableMembership`,
 `Candidacy`, `GroupDecision`, `Vote`, `Chat`, `ChatParticipant`, `Message`, `Notification`, `PushSubscription`.
@@ -93,10 +119,18 @@ CandidacyStatus, DecisionTopic, DecisionStatus, ChatType (+ `AuthProvider` и `P
 намира се с reflection), `INotifier` (`DefaultNotifier` → декориран от `FanoutNotifier`, който публикува топик
 и праща Web Push), `IPushSender` (`WebPushSender`; тестови двойници `StubPushSender`/`RecordingPushSender`).
 
-**⚠ НЯМА hosted/background services.** Авто-поведенията са МЪРЗЕЛИВИ, задействат се при заявка:
-`TableDelistService` (сваля обявата при пълна маса), `UnpublishService` (сваля LFG обявата при приемане),
+**⚠ Почти няма hosted/background services — но вече ИМА ЕДНО, изрично решение, не пропуск.**
+Повечето авто-поведения си остават МЪРЗЕЛИВИ, задействат се при заявка: `TableDelistService`
+(сваля обявата при пълна маса), `UnpublishService` (сваля LFG обявата при приемане),
 `StaleDecisionFinder` + `StaleDecisionRules` (заспал гласоподавател: 3 дни праг, 3 дни макс. snooze,
-`DECISION_STALE`). Не въвеждай `BackgroundService` без решение на потребителя.
+`DECISION_STALE`). **Изключението: `DataExportWorker` (board 211–213, `Features/Privacy/Export/`)
+е ПЪРВИЯТ `BackgroundService`** — регистриран през `PrivacyExportServices.AddPrivacyExport()`
+(Program.cs не е пипан за това). Върши две неща едновременно: (1) чете `DataExportQueue` канал и
+сглобява заявените архиви асинхронно — прекалено бавно за GraphQL заявка, която браузърът чака;
+(2) на `PeriodicTimer` (6 часа, `DataExportRetention.SweepInterval`) забравя съдържанието
+(`Json = null`, без да материализира редове) на архиви с изтекъл `ExpiresAt` — статусът остава
+`Ready`/`Expired` е прочит на часовника, редът оцелява като разписка. Не въвеждай СЛЕДВАЩ
+`BackgroundService` без решение на потребителя — този е обоснованото изключение, не прецедент.
 
 ### §1б. FE маршрути и области
 
@@ -106,7 +140,7 @@ CandidacyStatus, DecisionTopic, DecisionStatus, ChatType (+ `AuthProvider` и `P
 | Маршрут | Екран | Област (`src/features/`) |
 |---|---|---|
 | `/login` | LoginScreen (3 OAuth бутона) | `auth` |
-| `/settings` | тема + UI език + линкнати профили | `auth-linking` |
+| `/settings` | линкнати профили, тема, „Пусни обиколката отново" (таск 308), изход, Данни и поверителност (export/delete) | `auth-linking` (+ `RestartTourSection` от `tour`) |
 | `/board` (таб) | LFG борд с филтри, player cards, publish CTA | `board` |
 | `/tables` (таб) | моите маси + status badges + create CTA | `my-tables` |
 | `/profile` (таб) | профилна форма (react-hook-form) | `profile` |
@@ -125,8 +159,39 @@ CandidacyStatus, DecisionTopic, DecisionStatus, ChatType (+ `AuthProvider` и `P
 подобрение**: `PushPrompt`/`usePushSetup` още не са закачени за екран, `NotificationBell` също. Това е
 осъзнато състояние от таск 40, не пропуск на wiring.
 
+**`/auth/dev-login?user=<име>&returnUrl=<път>` (таск 301) НЯМА FE екран/линк** — гол backend URL,
+хвърлен ръчно в браузъра от разработчика за многоакаунтово тестване (виж §1а `Auth`); маршрутизира се
+само в `Development`. FE-то не знае за него.
+
 **Няма `src/hooks/`** — hook-овете живеят в своята област (`use-session`, `use-logout`, `use-auth-linking`,
 `use-danger-action`, `use-push-setup`) или в `src/lib` (`useThemeMode`, `useUiLanguage`, `useUiStore`).
+
+### §1в. Продуктова обиколка (`src/features/tour/`, board 307–308)
+
+Спотлайт-гид върху цялото приложение — 8 стъпки: борд → филтри → витрина → моите маси → камбанка →
+тема/език/настройки в header-а. Овърлеят виси в `AppShell` (§1б — извън центрираната web колона,
+координатите му са спрямо целия прозорец), не в отделен route, за да преживее навигацията между
+стъпките.
+
+- `tour-store.ts` — Zustand машина: `steps`/`index`/`active`, чисто UI състояние (§7б.7), нищо
+  персистиращо. И довършена, и пропусната обиколка вдига `tourSeen` в `ui-store` (персистиращия
+  стор) — иначе „Пропусни" би я връщала при всяко влизане.
+- `tour-content.ts` — самите 8 стъпки (`TOUR_STEPS`), всяка сочи `targetTestId` (съществуващ testID
+  за spotlight изрез) или `null` (центриран панел без изрез — за CTA-та без testID на екрани извън
+  files зоната на този таск: публикувай се, отвори филтрите, „виж масите"). `bell`-стъпката пада на
+  затъмнение без изрез, докато `NotificationBell` не бъде закачена за екран (виж §9 т.4 — все още
+  чака).
+- `tour-geometry.ts` / `tour-target.ts` / `use-tour-target.ts` — смятат spotlight изреза (банди
+  затъмнение около правоъгълника на таргета) и позицията на тултипа; мерят реалния DOM с ретраи
+  (елементът може все още да не е monut-нат при навигация между стъпки).
+- `tour-overlay.tsx` / `tour-mount.tsx` — видимата част: затъмнен фон + изрез + тултип с
+  „Назад / Напред / Пропусни" (`TOUR_CONTROL_KEYS`); `TourMount` е фасадата, монтирана в
+  `AppShell`.
+- `tour-autostart.ts` — автостарт при първи вход: САМО за истинска сесия (`resolved && user`),
+  пази от старт докато сесията се проверява, спира при вече видяна обиколка (`tourSeen`).
+- `restart-tour-section.tsx` — картата в `/settings` (`RestartTourSection`, таск 308):
+  единственият начин обиколката да се види пак ръчно, след като автостартът е замлъкнал.
+- `tour.json` (bg/en, нов namespace) — заглавия/текстове на стъпките + бутоните на овърлея.
 
 ## §2. Стек (ФИКСИРАН — агентите НЕ избират депендънсита)
 
@@ -246,13 +311,16 @@ Party Up ползва: **5001/5000** (BE dev, OAuth redirect-ите сочат 5
 (Комитнатият `src/lib/nativewind-env.d.ts` е ДРУГ файл — той остава.) Именно затова Playwright НЕ е в
 гейта: добавянето му иска първо решение как се чисти това.
 
-## §7. Тестово състояние (към 19.08.2026, след board 1–42)
+## §7. Тестово състояние (към 22.08.2026, след board 301–308 — преброено с реален прогон, не оценка)
 
-- **BE: 429 теста зелени** — 129 unit (15 файла с тестове; 88 `[Fact]`/`[Theory]` + `[InlineData]` редове)
-  + 300 integration (37 файла с тестове; 291 атрибута). Integration-ите са срещу истински Postgres
-  в Testcontainers, споделен през `PostgresCollectionFixture`; автентикацията минава през `TestAuthHandler`.
-- **FE: 268 jest теста в 48 suite-а** — 4 крос-екранни в `src/__tests__/`, останалите в областите
-  (`__tests__/` подпапка или до файла). Топъл прогон ~8 сек, СТУДЕН (след промяна на jest конфига) ~21 сек.
+- **BE: 508 теста зелени** — 157 unit (20 файла с `[Fact]`/`[Theory]`) + 351 integration (41 файла).
+  Integration-ите са срещу истински Postgres в Testcontainers, споделен през `PostgresCollectionFixture`;
+  автентикацията минава през `TestAuthHandler`. Ръстът спрямо board 1–42 (429 теста) идва от board
+  101–213 (settings/lifecycle полиране, privacy) и 301–308 (`DevLoginEndpointsTests`,
+  `DataExportRetentionTests` unit+integration, `AccountAnonymizationTests`).
+- **FE: 436 jest теста в 70 suite-а** — расте спрямо board 1–42 (268/48) най-вече от `features/tour/`
+  (7 нови suite-а) и privacy/apollo/user-name покритието на 301–308. Топъл прогон ~30 сек в CI
+  контейнер (по-бавно от старите ~8 сек локално — машинно-зависимо, не регресия).
 - **Пълен verify гейт (install + typecheck + jest + dotnet): порядък минути**, доминиран от `dotnet test`
   с Testcontainers. `verify_timeout_min 45` остава с достатъчен запас.
 - **e2e: Playwright съществува от таск 42 — 3 смоук спека, зелени на 45280, но НЕ са в гейта.**
@@ -291,6 +359,34 @@ Party Up ползва: **5001/5000** (BE dev, OAuth redirect-ите сочат 5
 6. **`[UseMutationConvention(PayloadFieldName = "...")]`** е ЗАДЪЛЖИТЕЛЕН, когато името на data полето в
    payload-а трябва да е различно от camelCase на върнатия C# тип (`success`, `linkedProviders`,
    `pushSubscription`). Иначе следващият ре-експорт вкарва drift. Детайлите: `contracts/DESIGN-NOTES.md` §1.2.
+
+## §7а1. Амендмънти за board 211–308 — ИСТОРИЯ, всички ЗАТВОРЕНИ
+
+Board 101–108 и 201–210 бяха предимно UI полиране (desktop grid, header навигация, tab theming,
+LFG филтри) без нови архитектурни решения извън вече записаните по-горе. Следните са изричните:
+
+1. **Първият `BackgroundService` (board 211–212, потвърдено изключение).** `DataExportWorker`
+   чупи „няма hosted services" — виж §1а по-горе за пълното описание. Решено съзнателно (коментар
+   в кода цитира точно тази структурна забрана), не пропуск.
+2. **Анонимизираното displayName е език-неутрален сентинел, не BG литерал (таск 303, поправя board
+   211).** `AccountAnonymization.DeletedDisplayName` тръгна като `"Изтрит потребител"` — стигаше
+   необработено до англоезичен UI. Сменено на `"__deleted__"`; FE-то (`user-name.ts`, таск 304) е
+   ЕДИНСТВЕНОТО място, което го разпознава и превежда (`t('user.deleted')`, `common` namespace).
+   Договорът е буквалният низ между двете lanes — не се преизчислява.
+3. **Файлово сваляне (`GET /privacy/export`) с преведени грешки, не сурова навигация (таск 305).**
+   На web свалянето минава през `fetch({credentials:'include'})` + `Blob` вместо browser navigation
+   към endpoint-а — иначе провал (410 изтекъл архив, 401 изгубена сесия) показва суров JSON
+   директно в браузъра. Native остава на обикновено пренасочване (няма `fetch`/DOM там).
+   Endpoint-ът сам сяда с `Cache-Control: no-store` — личен архив не бива да оцелее в дисков кеш.
+4. **`dev-login` е чист development escape hatch, не auth провайдър (таск 301).**
+   Мапва се от `IEndpointModule` само ако `IHostEnvironment.IsDevelopment()` — 404 по конструкция
+   на рутера извън dev, не runtime проверка. Провайдър-таг `"dev"` НЕ е в затвореното
+   `ExternalAuthProviders` множество (§2а.7/DESIGN-NOTES §1.4) и не трябва да е.
+5. **`onMessage`/`onNotification` subscriptions бяха жични от по-рано (3cc4a2e, 724d8b2) — таск 302
+   само добави недостигащия regression тест** (`apollo.test.ts`): split link избира ws транспорт за
+   subscription и HTTP+credentials за query/mutation; счупен split link не гърми, пада обратно на
+   HTTP.
+6. **Продуктова обиколка (`tour`, board 307–308)** — виж §1в по-горе за пълното описание.
 
 ## §7б. REVIEW КРИТЕРИИ (за finishing review stage — ревюърът оценява diff-а СПРЯМО ТЯХ)
 
@@ -346,9 +442,9 @@ Party Up ползва: **5001/5000** (BE dev, OAuth redirect-ите сочат 5
 
 `src/lib/i18n.ts`: i18next + react-i18next, език от `expo-localization` или ръчен override в ui-store-а;
 `fallbackLng: 'en'`, `DEFAULT_NAMESPACE = 'common'`, нов инстанс при смяна на език (без `changeLanguage`).
-**15 namespace-а × 2 езика (bg/en) = 30 файла** в `src/locales/`:
+**16 namespace-а × 2 езика (bg/en) = 32 файла** в `src/locales/` (`tour` е нов, board 307–308):
 `common`, `auth`, `authLinking`, `profile`, `tables`, `tableForm`, `tableSettings`, `board`, `showcase`,
-`candidacy`, `contact`, `chat`, `lifecycle`, `lifecycleActions`, `push`.
+`candidacy`, `contact`, `chat`, `lifecycle`, `lifecycleActions`, `push`, `tour`.
 `domainErrorMessage(t, i18nKey)` мапва BE `DomainError.i18nKey` → текст, с fallback `common:errors.unknown`.
 
 ## §8. Правила за декомпозиция (за /ralph-plan)
@@ -358,17 +454,25 @@ Party Up ползва: **5001/5000** (BE dev, OAuth redirect-ите сочат 5
 - Всеки таск декларира `repo: "partyup"` (полето е задължително, дефолт НЯМА).
 - Verify е общ за монорепото (BE+FE) — счупен FE тест блокира merge на BE таск и обратно. Това е НАРОЧНО (контрактът е общ).
 
-## §9. Известни отворени точки след board 1–42 (кандидати за следваща фаза)
+## §9. Известни отворени точки след board 301–308 (кандидати за следваща фаза)
 
-Не са бъгове — съзнателно оставени. Всяка иска свой таск и решение на ЧОВЕКА:
+Не са бъгове — съзнателно оставени. Всяка иска свой таск и решение на ЧОВЕКА. Списъкът е от board
+1–42 и остава непроменен през 101–308 — никоя от точките не е засегната или затворена от по-новите
+board-ове:
 
 1. **Playwright не е в verify гейта.** Влизането му иска първо чистене на Metro замърсяването (§6):
-   `frontend/tsconfig.json` + root `nativewind-env.d.ts`. `repos.json` НЕ е пипан от board-а.
+   `frontend/tsconfig.json` + root `nativewind-env.d.ts`. `repos.json` НЕ е пипан нито от board 1–42,
+   нито от следващите.
 2. **Full-stack e2e** (жив BE + Testcontainers compose) — сегашните 3 спека са неавтентикирани пътеки с един стъб.
 3. **Локализиран `src/app/+not-found.tsx`** — 404 сега е вграденият англоезичен екран на expo-router,
    извън root layout-а и без пазач. Спекът описва ТЕКУЩОТО, не желаното поведение.
 4. **Push прогресивното подобрение не е закачено за екран** — `PushPrompt`/`usePushSetup` и `NotificationBell`
-   съществуват и са тествани, но никой екран не ги монтира.
+   съществуват и са тествани, но никой екран не ги монтира. Обиколката (§1в, board 307–308) вече го
+   знае и си трае: `bell` стъпката пада на затъмнение без изрез, докато `NotificationBell` не се
+   закачи — тогава ще проблесне сама, без промяна в `tour-content.ts`.
 5. **EF migrations** (§3.5) — иска се преди първи прод deploy.
 6. **`metro.config.js` tslib резолвърът** беше единствената промяна извън обхвата на таск 42. Ревертът му
    чупи `expo export --platform web` и с това целия e2e — ревюирайте съзнателно.
+7. **`dev-login` (таск 301) няма rate limit/аудит и НЕ е защитен от нищо друго освен
+   `IsDevelopment()`.** Достатъчно за локално multi-account тестване; ако някога влезе в shared dev
+   deploy (не само localhost), иска собствено решение (auth пред него или премахване).
