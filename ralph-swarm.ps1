@@ -130,6 +130,12 @@ if ($config -and $config.swarm) {
     if ($config.swarm.PSObject.Properties['finish_review_cycles']) { $reviewCycles = [int]$config.swarm.finish_review_cycles }
     if ($config.swarm.PSObject.Properties['review_dir']) { $reviewDirBase = $config.swarm.review_dir }
 }
+# Acceptance семантика на финалния ревю цикъл: 'blockers' (default) = блокерите спират,
+# important-ите са advisory; 'strict' = старото 0 blockers + 0 important.
+$reviewAcceptance = 'blockers'
+if ($config -and $config.swarm -and $config.swarm.PSObject.Properties['review_acceptance'] -and $config.swarm.review_acceptance) {
+    $reviewAcceptance = "$($config.swarm.review_acceptance)"
+}
 $agentModel = "claude-opus-5"
 if ($config -and $config.claude_args) {
     $mi = [array]::IndexOf($config.claude_args, "--model")
@@ -470,10 +476,24 @@ function Invoke-ReviewStage($tasks, $repoKeys) {
                 Write-Host "[!] Repo '$k': no valid verdict.json from reviewer - treating as FAILED review" -ForegroundColor Yellow
                 break
             }
-            $bad = [int]$verdict.blockers + [int]$verdict.important
-            Write-Host "[r] Repo '$k' cycle ${cycle}: blockers=$($verdict.blockers) important=$($verdict.important) recommendations=$($verdict.recommendations)" -ForegroundColor $(if ($bad -eq 0) { 'Green' } else { 'Yellow' })
+            $blockers  = [int]$verdict.blockers
+            $important = [int]$verdict.important
+            $bad = $blockers + $important
+            Write-Host "[r] Repo '$k' cycle ${cycle}: blockers=$blockers important=$important recommendations=$($verdict.recommendations)" -ForegroundColor $(if ($bad -eq 0) { 'Green' } else { 'Yellow' })
             if ($bad -eq 0) { $repoPass = $true; break }
-            if ($cycle -gt $reviewCycles) { break }
+            if ($cycle -gt $reviewCycles) {
+                # ACCEPTANCE BAR (22.08, решение на потребителя след 3 поредни ABORT-а при 0
+                # блокера): на ФИНАЛНИЯ цикъл блокерите спират, important-ите ИНФОРМИРАТ.
+                # Ревюер вариацията (всеки свеж поглед намира по нещо "важно") прави "0
+                # important" непостижима летва - гейт, който не може да мине, не е гейт.
+                # Fix цикли все така гонят blockers+important; само присъдата омеква.
+                # Конфиг: swarm.review_acceptance = 'blockers' (default) | 'strict' (старото).
+                if ($reviewAcceptance -ne 'strict' -and $blockers -eq 0) {
+                    Write-Host "[r] Repo '$k': review ACCEPTED with $important advisory important finding(s) - carried in the report as input for the next board" -ForegroundColor Yellow
+                    $repoPass = $true
+                }
+                break
+            }
             # ---- FIX cycle: one agent addresses blockers+important, then must survive the gate
             $preFixSha = (& git -C $r.gitRoot rev-parse HEAD 2>$null)
             $fixPrompt = "You are the FIX agent after a code review. Read the newest CODE-REVIEW-*.md in '$outDir' (cycle $cycle). Fix ONLY the items listed under the Blockers (must fix) and Important (should fix) sections - surgically, nothing else. $rulesInstr You may run the repo's unit tests if any; do NOT run e2e/servers. Commit your fixes in '$($r.location)' with message 'fix: address code review findings (board $taskIds, cycle $cycle)'. If a finding is WRONG (the reviewer misread the code), do not change code for it - instead append a short justification section at the bottom of the review file explaining why, so the next review cycle can account for it."
