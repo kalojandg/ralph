@@ -34,6 +34,45 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #820 — feat(npc): add slash-aware search across name and faction plus details accordion
+
+**Repo:** combat (monk_combat_app) · **Lane:** campaign-npc · **Branch:** ralph/task-820 · **Commit:** d8b6277
+
+**Какво е направено:**
+- `modules/campaign-npc.js`: чиста функция `npcMatches(npc, query)`, изложена като `window.npcMatches` (прецедентът `spendGold`) — сплит на `name` и `faction` по `/[\/\\]/`, trim + lowercase на всяка част, празно query → `true`, match ако някоя част `.includes(q)`. Покрива реалните кампанийни примери „кралицата на Кислев/руснаците“ и „Кулсталтин/Распутин“.
+- Живо филтриране: `input` listener на `#npcSearch` → `renderNpcTable()` рендерира само match-ващите редове, но пази **реалния** индекс в `data-npc-idx`, така че edit/delete/детайли работят върху нефилтрирания масив. Празен резултат → „Няма съвпадения.“.
+- Детайлен ред: бутон 📖 (icon-btn, пръв в действията) toggle-ва `<tr class="npc-details-row">` с colspan под NPC-то — блокове **Description** и **Where to find** като свободен текст (pre-wrap), празният блок се пропуска, и двата празни → „Няма детайли.“. Точно един expanded (`__npcExpandedIdx`, реалният индекс); повторен клик колапсира; re-render пази expanded-а, докато редът е видим; delete коригира индекса.
+- Sortable drag се **изключва** при активен филтър (преподреждане на филтриран изглед би разбъркало скритите редове); `onEnd` вече чете новия ред от DOM-а по `tr[data-npc-idx]` (вместо `evt.oldIndex/newIndex`), за да не го подведе вмъкнатият детайлен ред. Поведението при нефилтриран изглед е идентично.
+- `styles.css`: минимални `.npc-details-row td` / `.npc-details-block` / `.npc-details-text` / `.npc-details-empty` стилове в езика на съществуващия NPC блок (muted uppercase label-и, `white-space: pre-wrap`).
+- `test/e2e/campaign-npc.spec.js`: +17 спека — директни `window.npcMatches` тестове (слаш във фракцията, слаш в името, case-insensitivity, трим на query-то, includes в част, negative, празно query), UI филтър (филтриране, изчистване, „Няма съвпадения.“, edit на видим ред при активен филтър → правилният запис) и детайлният ред (показване, единствен expanded, колапс, „Няма детайли.“, пропуснат празен блок, преживяване на re-render).
+
+**TDD:** RED първо — 17 нови спека червени по правилната причина (`window.npcMatches` undefined, липсващи 📖 бутони, без филтриране), 8-те спека от 810 зелени. GREEN след имплементацията.
+
+**Тестове:** `npx playwright test campaign-npc` → **25/25 passed** (42.8s). `npx playwright test campaign-npc tabs-navigation critical-path` → **68/68 passed** (1.4 мин). Пълният suite остава за гейта.
+
+**Обхват:** само `modules/campaign-npc.js`, `styles.css`, `test/e2e/campaign-npc.spec.js` — `index.html` / `app.js` / `tabs/*.html` не са пипани (всичко нужно дойде от 810), други спекове също не.
+
+
+## Task #810 — feat(npc): add Campaign NPCs tab with name/faction table, add-edit dialog and persistent state
+
+**Repo:** combat (monk_combat_app) · **Lane:** campaign-npc · **Branch:** ralph/task-810 · **Commit:** 449f1dc
+
+### Какво е направено
+- **RECON:** monk-combat-structure.md §«Campaign NPCs таб» + «Модел»/«Червени линии»; modules/inventory.js и tabs/inventory.html като еталон; app.js регионите (tabMap ред 4, defaultState ~116-138, renderAll() ~483, showTab ~1642); crud-inventory.spec.js и tabs-navigation.spec.js.
+- **RED:** нов `test/e2e/campaign-npc.spec.js` със 7 теста (empty state; add с 4-те полета + проверка на `st.campaignNpcs[0]`; празно име → alert и нищо записано; edit модалът попълва и 4-те полета; edit на фракция обновява реда без нов запис; delete с confirm; персистенция след reload). Добавен `'campaignNpc'` в масива `tabs` на tabs-navigation.spec.js. Резултат: 8 червени (7 нови + «All tabs are clickable»), 17 зелени — червено по правилната причина (табът липсва).
+- **GREEN:**
+  - `index.html` — nav бутон «Campaign NPCs» след Names, `<div id="tab-campaignNpc">`, `<script src="modules/campaign-npc.js">` преди app.js.
+  - `app.js` — САМО 4-те региона: tabMap запис, `campaignNpcs: []` в defaultState (bundle v2 го round-trip-ва даром — без отделен localStorage ключ), `window.renderNpcTable()` в renderAll(), attach hook в showTab (setTimeout 100 по inventory модела).
+  - `tabs/campaignNpc.html` — заглавие, `#npcSearch` (markup-ът е сложен сега, wiring-ът е за 820), `#btnNpcAdd`, `#npcTableRoot`, `#npcModal` с npcModalTitle/npcName/npcFaction/npcDescription/npcLocation/npcSave/npcCancel — и 4-те полета се виждат и при add, и при edit.
+  - `modules/campaign-npc.js` — IIFE по inventory.js: `__npcEditIndex`/`__npcAttached`, `renderNpcTable()` (☰ | Име | Фракция | ✏️/🗑️, escape, empty state «Няма записани NPC-та още.»), edit/delete с confirm, Sortable drag (handle `.npc-drag-handle`, filter `button, .icon-btn`), save с задължително име (alert), exports `window.attachCampaignNpcs` / `window.renderNpcTable`.
+  - `styles.css` — само дребното липсващо: `.npc-drag-handle` / `.npc-dragging` (огледало на inventory) и височина/ширина на `#npcSearch`.
+- **DONE:** `npx playwright test campaign-npc tabs-navigation critical-path` → **50 passed**. Допълнителна регресионна проверка `import-export styles tabs-accordion-regression` → **18 passed**. Без runtime боклук в commit-а (test-results/, playwright-report/, .cache/ са извън staging-а).
+
+### Бележки
+- `st.campaignNpcs` е отделен от съществуващия `st.npcNames` (Names таба) — не е пипан.
+- 📖 детайлният ред и slash-aware `npcMatches()` търсенето остават за таск 820, както е по контракта.
+
+
 ## Task #415 — feat(push): per-category notification preference toggles in settings
 
 **Repo:** partyup (frontend)
@@ -3323,6 +3362,8 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
 
 
 

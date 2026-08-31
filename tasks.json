@@ -746,5 +746,88 @@
                       }
                   ],
         "passes":  true
+    },
+    {
+        "id":  810,
+        "category":  "feature",
+        "repo":  "combat",
+        "lane":  "campaign-npc",
+        "files":  [
+                      "index.html",
+                      "app.js",
+                      "styles.css",
+                      "tabs/campaignNpc.html",
+                      "modules/campaign-npc.js",
+                      "test/e2e/campaign-npc.spec.js",
+                      "test/e2e/tabs-navigation.spec.js"
+                  ],
+        "verify":  [
+                       "npm test -- campaign-npc tabs-navigation critical-path"
+                   ],
+        "description":  "feat(npc): add Campaign NPCs tab with name/faction table, add-edit dialog and persistent state",
+        "specRef":  "monk-combat-structure.md §«Campaign NPCs таб» (ЦЕЛИЯТ контракт — чети го ПЪРВИ); modules/inventory.js + tabs/inventory.html + test/e2e/crud-inventory.spec.js са ЕТАЛОНЪТ",
+        "tddWorkflow":  true,
+        "notes":  "ЦЕЛ НА ФИЧАТА (2 таска, СЕРИЙНА lane): дневник на срещнатите NPC-та — име + фракция, add/edit/delete, детайли и slash-aware търсене (търсенето и детайлите са таск 820; ТУК е табът, таблицата, модалът и персистенцията). Потребителят: „такива таблици с добавяне има много и можеш да видиш“ — inventory е еталонът, следвай го дословно.\n\n=== ДАННИ ===\nst.campaignNpcs: [] в defaultState на app.js — bundle v2 го round-trip-ва АВТОМАТИЧНО (buildBundle прави {...st}) — НЕ добавяй отделен localStorage ключ (червена линия §3, урокът от familiars). Запис: { name, faction, description, location } — 4 стринга. ⚠ НЕ бъркай със st.npcNames (Names таба — друга фича, не я пипай).\n\n=== ТАБ MECHANIKA (4 хирургични докосвания в app.js — нищо друго там!) ===\n1. index.html: \u003cbutton class=\"tab-btn\" data-tab=\"campaignNpc\"\u003eCampaign NPCs\u003c/button\u003e в tab-nav СЛЕД namegen бутона + \u003cdiv id=\"tab-campaignNpc\" class=\"tab hidden\"\u003e\u003c!-- Loading... --\u003e\u003c/div\u003e при другите tab дивове.\n2. app.js loadTabs tabMap: \u0027campaignNpc\u0027: \u0027tabs/campaignNpc.html\u0027.\n3. app.js defaultState: campaignNpcs: [].\n4. app.js render(): if (typeof window.renderNpcTable === \u0027function\u0027) window.renderNpcTable(); — при другите render викания (~ред 791). app.js showTab: if (tabKey === \u0027campaignNpc\u0027) { setTimeout(() =\u003e { window.attachCampaignNpcs?.(); window.renderNpcTable?.(); }, 100); } — по inventory модела (~ред 1642).\nindex.html добавя и \u003cscript src=\"modules/campaign-npc.js\"\u003e\u003c/script\u003e при другите модулни скриптове (преди app.js).\n\n=== ПАРТИАЛ tabs/campaignNpc.html ===\nПо образеца на tabs/inventory.html: заглавие, търсачка \u003cinput id=\"npcSearch\" type=\"search\" placeholder=\"Търси по име или фракция…\"\u003e (wiring-ът ѝ е таск 820 — сложи Я в markup-а СЕГА, за да не пипа 820 партиала), бутон \u003cbutton id=\"btnNpcAdd\"\u003e+ Add NPC\u003c/button\u003e, \u003cdiv id=\"npcTableRoot\"\u003e\u003c/div\u003e, модал npcModal по образеца на invModal: npcModalTitle, поле Име* (npcName), поле Фракция (npcFaction, placeholder „кралицата на Кислев/руснаците“), textarea Description (npcDescription), textarea Where to find (npcLocation), бутони npcSave/npcCancel. ВСИЧКИ 4 полета се виждат и при add, и при edit (изискване). styles.css: САМО ако липсва нещо дребно (модалът/таблицата ползват съществуващите класове .alias-table/.icon-btn/.modal — виж inventory).\n\n=== МОДУЛ modules/campaign-npc.js ===\nIIFE по модела на inventory.js: __npcEditIndex (null=add), __npcAttached guard, renderNpcTable() чете window.st.campaignNpcs → таблица ☰ | Име | Фракция | ✏️/🗑️ (📖 идва в 820): safe() escape както inventory, empty state „Няма записани NPC-та още.“. Edit → отваря модала попълнен; Delete → confirm(\u0027Изтриване на този NPC?\u0027) → splice + window.save(). Save: name задължително (alert(\u0027Името е задължително.\u0027)), останалите опционални (trim); add = push (конвенцията на апа), edit = замяна по индекс; window.save(). Sortable drag по inventory модела (handle клетка ☰, filter: \u0027button, .icon-btn\u0027, splice+splice+save). window.attachCampaignNpcs / window.renderNpcTable exports.\n\n=== СПЕКОВЕ ===\nНов test/e2e/campaign-npc.spec.js по образеца на crud-inventory.spec.js (beforeEach: goto + изчакай window.__tabsLoaded, клик на таба; state сетвай/чети през page.evaluate(() =\u003e window.st...)): (а) табът се отваря и показва empty state; (б) Add: отвори модала, попълни 4-те полета, Save → ред с име и фракция в таблицата, st.campaignNpcs[0] носи 4-те стойности; (в) name празно → alert (page.on(\u0027dialog\u0027)), нищо не е записано; (г) Edit: промени фракцията → редът и st-то обновени, БЕЗ нов запис; (д) Delete с confirm → редът изчезва; (е) персистенция: reload → записът е там (localStorage); (ж) модалът при edit показва И 4-те полета попълнени. tabs-navigation.spec.js: добави \u0027campaignNpc\u0027 в масива tabs (той е „1:1 с реалния tab-nav“ — изрично ПОЗВОЛЕНО тук; коментарът за реда също се обновява) — НИЩО друго в него.\n\n=== ЧЕРВЕНИ ЛИНИИ ===\napp.js се пипа САМО в 4-те региона от notes. Легаси auto-Monk resolver-ите в спековете НЕ се пипат. Порт 45278: npm run serve НЕ се пуска; локално пускаш САМО filtered: npm test -- campaign-npc tabs-navigation (verify командата на гейта е същата + critical-path). Не commit-вай playwright-report/, test-results/.",
+        "steps":  [
+                      {
+                          "id":  "810.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети monk-combat-structure.md §«Campaign NPCs таб» + «Модел»/«Червени линии», modules/inventory.js ИЗЦЯЛО (еталонът), tabs/inventory.html (модалният markup), app.js: loadTabs tabMap (редове 1-40), defaultState (~90-140), render() региона с renderInventoryTable (~791), showTab inventory hook-а (~1642), test/e2e/crud-inventory.spec.js ИЗЦЯЛО и tabs-navigation.spec.js масива tabs (~ред 85)."
+                      },
+                      {
+                          "id":  "810.2",
+                          "phase":  "RED",
+                          "action":  "Създай test/e2e/campaign-npc.spec.js със 7-те теста от notes + добави \u0027campaignNpc\u0027 в tabs масива на tabs-navigation.spec.js. Пусни npm test -- campaign-npc tabs-navigation — новият спек ЧЕРВЕН по правилната причина (табът/елементите липсват), tabs-navigation ЧЕРВЕН само на новия таб (бутонът липсва още)."
+                      },
+                      {
+                          "id":  "810.3",
+                          "phase":  "GREEN",
+                          "action":  "index.html: nav бутонът + tab дивът + script тагът. app.js: 4-те региона по notes. Създай tabs/campaignNpc.html (търсачка + Add + npcTableRoot + npcModal) и modules/campaign-npc.js по notes."
+                      },
+                      {
+                          "id":  "810.4",
+                          "phase":  "DONE",
+                          "action":  "npm test -- campaign-npc tabs-navigation critical-path — зелено. git status: без runtime боклук (playwright-report/, test-results/). Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  820,
+        "category":  "feature",
+        "repo":  "combat",
+        "lane":  "campaign-npc",
+        "files":  [
+                      "modules/campaign-npc.js",
+                      "styles.css",
+                      "test/e2e/campaign-npc.spec.js"
+                  ],
+        "description":  "feat(npc): add slash-aware search across name and faction plus details accordion",
+        "specRef":  "monk-combat-structure.md §«Campaign NPCs таб» — секцията «Търсене» е ядрото; window.spendGold е прецедентът за изложена чиста функция",
+        "tddWorkflow":  true,
+        "notes":  "Надгражда 810 (същата lane, върви след него). ДВЕ добавки: търсенето и детайлният ред.\n\n=== ТЪРСЕНЕ (изискването на потребителя — дословно) ===\nИ името, И фракцията могат да носят НЯКОЛКО стойности, разделени с / ИЛИ \\ — реални примери от кампанията: фракция „кралицата на Кислев/руснаците“ (Катарин), име „Кулсталтин/Распутин“ (окултен лидер, кръстен от партито). ЧИСТА функция npcMatches(npc, query), изложена като window.npcMatches (прецедентът spendGold — спековете я тестват директно):\n- q = String(query||\u0027\u0027).trim().toLowerCase(); празно q → true (всички се виждат);\n- части = [npc.name, npc.faction].flatMap(v =\u003e String(v||\u0027\u0027).split(/[\\/\\\\]/)).map(s =\u003e s.trim().toLowerCase()).filter(Boolean);\n- връща части.some(p =\u003e p.includes(q)).\nWiring: \u0027input\u0027 listener на #npcSearch (markup-ът е от 810) → renderNpcTable() рендерира САМО match-ващите (пази РЕАЛНИЯ индекс в data-npc-idx — edit/delete/детайли работят по него върху НЕфилтрирания масив; Sortable drag при АКТИВЕН филтър се ИЗКЛЮЧВА — преподреждане на филтриран изглед разбърква скрити редове). Празен резултат → „Няма съвпадения.“.\n\n=== ДЕТАЙЛЕН РЕД (📖) ===\nБутон 📖 (icon-btn, ПЪРВИ в действията, преди ✏️) toggle-ва детайлен \u003ctr class=\"npc-details-row\"\u003e ВЕДНАГА под реда (colspan цялата ширина): два блока — \u003cstrong\u003eDescription\u003c/strong\u003e + текстът и \u003cstrong\u003eWhere to find\u003c/strong\u003e + текстът, свободен текст с white-space:pre-wrap (НЕ таблица — изискване). Празно поле → блокът се пропуска; и двете празни → „Няма детайли.“. Точно ЕДИН expanded (модулна променлива __npcExpandedIdx, реалният индекс); повторен 📖 колапсира; re-render (филтър/save) пази expanded ако редът е още видим. styles.css: .npc-details-row td { pre-wrap, muted label-и } — минимално, в езика на съществуващите стилове.\n\n=== СПЕКОВЕ (разширяваш test/e2e/campaign-npc.spec.js — СВОЯ файл от 810) ===\nСийдни през page.evaluate st.campaignNpcs с Катарин {name:\u0027Катарин\u0027, faction:\u0027кралицата на Кислев/руснаците\u0027}, {name:\u0027Кулсталтин/Распутин\u0027, faction:\u0027окултен лидер\u0027} и трети без слашове; после: (а) window.npcMatches: \u0027руснаци\u0027→true за Катарин, \u0027РУСНАЦИ\u0027→true (case-insens), \u0027распутин\u0027→true за Кулсталтин (слаш в ИМЕТО), \u0027 кислев \u0027→true (трим на query-то), \u0027наци\u0027→true (includes в част), \u0027елф\u0027→false, \u0027\u0027→true; (б) UI: пиши \u0027руснаци\u0027 в #npcSearch → само редът на Катарин; изчисти → всички; без съвпадение → „Няма съвпадения.“; (в) при активен филтър edit-ът на видимия ред пипа ПРАВИЛНИЯ запис в st (реалният индекс); (г) 📖 показва детайлния ред с description/location текста, втори 📖 на друг ред мести expanded-а, повторен — колапсира; NPC без детайли → „Няма детайли.“. Съществуващите тестове от 810 остават зелени.\n\n=== ЧЕРВЕНИ ЛИНИИ ===\nindex.html/app.js/tabs/*.html НЕ се пипат в този таск (всичко нужно е от 810). Другите спекове не се пипат. Порт 45278: локално САМО filtered npm test -- campaign-npc. Това е ФИНАЛНИЯТ таск на фичата — БЕЗ verify override, пълният gate (452+ спека, ~15 мин) е задната мрежа.",
+        "steps":  [
+                      {
+                          "id":  "820.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети modules/campaign-npc.js от 810 (render цикъла, индексирането), tabs/campaignNpc.html (#npcSearch), test/e2e/campaign-npc.spec.js (какво вече покрива), структурния § за търсенето."
+                      },
+                      {
+                          "id":  "820.2",
+                          "phase":  "RED",
+                          "action":  "Разшири test/e2e/campaign-npc.spec.js с тестовете от notes (npcMatches директно + UI филтър + детайли). Пусни npm test -- campaign-npc — новите ЧЕРВЕНИ по правилната причина, старите от 810 зелени."
+                      },
+                      {
+                          "id":  "820.3",
+                          "phase":  "GREEN",
+                          "action":  "Имплементирай npcMatches (window export) + search wiring + детайлния ред в modules/campaign-npc.js; дребните стилове в styles.css."
+                      },
+                      {
+                          "id":  "820.4",
+                          "phase":  "DONE",
+                          "action":  "npm test -- campaign-npc tabs-navigation critical-path — зелено локално (пълният suite е на гейта). Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
     }
 ]
