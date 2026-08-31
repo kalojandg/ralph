@@ -11,13 +11,14 @@ shared-inventory/
 ├── index.html            ← страницата: markup + (до таск 2) целият JS inline; (до таск 1) целият CSS inline
 ├── styles.css            ← след таск 1: целият CSS (извлечен от <style> блока)
 ├── app.js                ← след таск 2: целият JS (извлечен verbatim от <script type="module">) + exports
-├── modules/              ← след фаза REFACTOR (таскове 20-26): firebase.js, state.js, gold.js, items.js, quests.js, ui.js; след фаза 3 MAPS (410-450): maps.js, image.js, viewer.js; след фаза 4 BASES (610-650): bases.js, base-detail.js, base-tables.js
+├── modules/              ← след фаза REFACTOR (таскове 20-26): firebase.js, state.js, gold.js, items.js, quests.js, ui.js; след фаза 3 MAPS (410-450): maps.js, image.js, viewer.js; след фаза 4 BASES (610-650): bases.js, base-detail.js, base-tables.js; след фаза 5 CRAFTING (710-740): router.js, crafting.js, crafting-search.js, crafting-data.js
+├── tools/                ← след фаза 5: gen-crafting-data.cjs (регенерира modules/crafting-data.js от .xlsx източниците, ad-hoc `npm i xlsx` — не е committed dependency)
 ├── sw.js                 ← service worker (регистрира се от малък inline classic script — ОСТАВА в index.html)
 ├── manifest.json         ← PWA manifest
 ├── vitest.config.js      ← след таск 3 (unit test инфраструктура)
 ├── test/
-│   ├── e2e/              ← Playwright specs (items-accordion, quests-accordion, maps-accordion, bases-accordion) — съществуващите НЕ СЕ ПИПАТ (maps-* добавен от таск 450, bases-* от таск 650)
-│   ├── fixtures/         ← standalone HTML фикстури за e2e (items-, quests-, maps-, bases-fixture.html) — НЕ СЕ ПИПАТ (те са собственост на e2e)
+│   ├── e2e/              ← Playwright specs (items-accordion, quests-accordion, maps-accordion, bases-accordion, bases-routing, crafting-routing) — съществуващите НЕ СЕ ПИПАТ (maps-* добавен от таск 450, bases-* от таск 650, crafting-routing от таск 740)
+│   ├── fixtures/         ← standalone HTML фикстури за e2e (items-, quests-, maps-, bases-, bases-routing-, crafting-fixture.html) — НЕ СЕ ПИПАТ (те са собственост на e2e)
 │   ├── mocks/            ← след таск 3: firebase-app.js, firebase-firestore.js (виж §5)
 │   ├── helpers/          ← след таск 3: dom.js (bootApp helper, виж §6)
 │   └── unit/             ← unit тестове (фаза 1: 10-14; фаза 3 maps: image/maps/maps-modal/viewer — виж §9; фаза 4 bases: bases-foundation/bases/bases-detail/bases-tables — виж §10)
@@ -48,6 +49,7 @@ shared-inventory/
 DOM id-та: `sync, syncStatus, dispPP/GP/SP/CP, inPP/GP/SP/CP, goldError, invBody, invFooter, questBody, itemModal (iName,iCat,iQty,iWeight,iValue,iCarrier,iNote), questModal (qName,qStatus,qGiver,qDesc,qReward,qNote), btnInstall`.
 Maps (фаза 3): таб `tab-maps` (tab-btn `data-tab="maps"`), `mapTable/mapBody`, `mapModal` (`mapModalTitle, mShort, mDetails, mFile, mPreview, mMapError`), overlay `#mapViewer` (създава се от viewer.js, не е в index.html).
 Bases (фаза 4): таб `tab-bases` (tab-btn `data-tab="bases"`), `baseTable/baseBody`, `baseModal` (`baseModalTitle, bName, bLocation`), детайл `#baseDetail` (`btnBaseBack, bdName, bdLocation, bdHistory, btnBaseSave` + `bdBuildingsBody/bdPopulaceBody/bdProductionBody`), общ под-модал `bsModal` (`bsModalTitle, bsName, bsDetails`) — §10.
+Crafting (фаза 5): ⚒ бутон в header реда (`onclick="openCrafting()"`, БЕЗ таб), страница `#craftingPage` (СЛЕД `#baseDetail`) — `btnCraftBack`, `.craft-controls` (`craftSearch, craftBadge`), `nav#craftTabs` (chips), `table#craftTable` (`craftHead, craftBody`), `#craftInfo` (за type:'info' таблици) — §11.
 
 ## §3. Червени линии (нарушение = failed таск)
 
@@ -217,9 +219,9 @@ Playwright browsers са инсталирани глобално на машин
 - E2e (Playwright): `test/e2e/bases-accordion.spec.js` (6) + фикстура `test/fixtures/bases-fixture.html` (огледални на maps-двойката, 650); `test/e2e/bases-routing.spec.js` (4) + `bases-routing-fixture.html` (реалния styles.css, хотфиксите). Съществуващите items/quests/maps e2e непроменени.
 - Security rules за `bases` — ръчна стъпка на собственика, НЕ на агент.
 
-## §11. Crafting Reference фича (фаза 5 — ПЛАНИРАНА, таскове 710-740, lanes `crafting-core` → `crafting-ui` ∥ `crafting-search` → `crafting-e2e`)
+## §11. Crafting Reference фича (фаза 5 — РЕАЛИЗИРАНА, таскове 710-740, lanes `crafting-core` → `crafting-ui` ∥ `crafting-search` → `crafting-e2e`)
 
-Референтни крафтинг таблици (harvesting + experimental alchemy) зад икона **⚒** в header реда (БЕЗ нов таб — решение на потребителя). Пълната спека: `crafting-feature-plan.md` в корена на репото.
+Референтни крафтинг таблици (harvesting + experimental alchemy) зад икона **⚒** в header реда (БЕЗ нов таб — решение на потребителя). Пълната спека: `crafting-feature-plan.md` в корена на репото. **Статус: доставена и merge-ната в main, verify gate зелен.** Реалността потвърждава контракта по-долу — доставено е точно както е планирано (routing рефактор + двата паралелни модула + фиксирания DOM контракт), без хотфиксове.
 
 **Данни (ГОТОВИ — не се генерират от агент):** `modules/crafting-data.js` е КОМИТНАТ, генериран ES модул (~44KB): `export const CRAFTING_TABLES = [...]` — 9 таблици: `{ key, label, group, type: 'table'|'info', nameCol, badgeCol (или null), filterable, columns, rows: [{col: value}] }`; info таблиците имат `entries: [{k, v}]` вместо rows. НЕ се редактира на ръка (регенерация: `tools/gen-crafting-data.cjs`). НИКАКЪВ Firestore — данните са статични (нула reads, решение на потребителя). „Rarity" колона в данните няма — ролята играе `badgeCol` (Size/Potion Tier/Property), затова филтърът е per таблица и се крие при `filterable: false`.
 
@@ -246,3 +248,8 @@ Playwright browsers са инсталирани глобално на машин
 **app.js добавя (всичко във фундамента 710):** import на router/crafting/crafting-search, `window.openCrafting`, facade re-exports (`renderCrafting, renderCraftingRoute, openCrafting` / `populateBadgeOptions`). Firestore wiring НЕ се пипа (освен дето renderRoute викането остава както е).
 
 **Тестове:** unit `crafting-foundation.spec.js` (710 — икона, markup контракт, router: '#crafting' скрива табовете/показва страницата, boot strip на всеки hash, данните: 9 таблици/animals 54 rows/CRAFTING_TABLES схема, bases-тестовете остават зелени), `crafting.spec.js` (720), `crafting-search.spec.js` (730); e2e `crafting-routing.spec.js` + `crafting-fixture.html` (740 — фикстурата линква РЕАЛНИЯ /styles.css по прецедента на bases-routing: икона → страница/скрити табове, търсене, badge филтър, акордеон, back). Съществуващите e2e/fixtures НЕ се пипат; нови `crafting-*` файлове там са разрешени.
+
+**Test state (фаза 5 — доставено, всичко зелено):**
+- Unit (Vitest): `crafting-foundation.spec.js` (10 — икона/markup/router/данни, 710), `crafting.spec.js` (19 — chips/списък/акордеон/info изглед, 720), `crafting-search.spec.js` (10 — търсене+badge филтър, 730). Общо unit spec-ове след фаза 5: **18 файла** (15 от фаза 4 + 3 crafting), **225 теста**, `npm run test:unit` зелен.
+- E2e (Playwright): `test/e2e/crafting-routing.spec.js` (7) + `crafting-fixture.html` (740, реалния styles.css). Съществуващите items/quests/maps/bases e2e непроменени.
+- Доставката следва плана 1:1 — БЕЗ хотфикс рунд (за разлика от maps §9 и bases §10).
