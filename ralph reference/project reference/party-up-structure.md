@@ -4,15 +4,22 @@
 > Приложение: TTRPG matchmaking (pull модел — играчите се публикуват на LFG борд,
 > МАСИТЕ дърпат кандидати). Монорепо, TDD от commit 1. Пълната продуктова
 > спека: `party-up.md` в D:\Downloads\monk\ (секции А–Е + Решения лога).
-> **Състояние: board 1–42 (v0.1), 101–108, 201–213 и 301–308 са ЗАТВОРЕНИ и мерджнати в
-> `main`.** Всички таскове са зелени през гейта (fix-цикли по code review след 201–213 и
-> след 301–308 са си отделни комити, вече слети). Файлът описва РЕАЛНОСТТА след тях, не скелета.
+> **Състояние: board 1–42 (v0.1), 101–108, 201–213, 301–308 и 401–431 са ЗАТВОРЕНИ и мерджнати
+> в `main`.** Всички таскове са зелени през гейта (fix-цикли по code review след всяко от тези
+> board-ове са си отделни комити, вече слети). Файлът описва РЕАЛНОСТТА след тях, не скелета.
 > Board 101–108 добави desktop/responsive полиране на екраните; 201–213 добави in-app навигация,
 > logout, tab theming, LFG филтри и „Данни и поверителност" (deleteAccount, my-data export);
 > 301–308 добави dev-login за multi-account тестване, живо потвърждение на subscriptions-a,
 > privacy fix-ове (език-неутрален сентинел, преведени грешки при сваляне, ретеншън тестове) и
-> продуктовата обиколка (tour). Секции §7а/§7б/§7в все още описват предимно board 1–42 —
-> детайлите на 101–308 живеят в §1а/§1б/§7/§7г по-долу, обновени на място.
+> продуктовата обиколка (tour). **401–431 (v0.5 SCOPE) добави:** отворени walk-in маси с мек
+> лимит на местата (402/412), cursor пагинация (Relay connections) на борда и витрината, вкл.
+> infinite scroll на борда (401/411), гео регистър на населени места с български seed и
+> typeahead (403/414 — типаход-ът е ПОСТРОЕН, но СЪЗНАТЕЛНО не е закачен за формите, виж §9),
+> публична витрина за отворени маси с гост CTA (413), preferences по категория известия,
+> отгласени от фан-аута (404/415) и МОНТИРАНИ в `/settings` (431), rate limiting на auth/GraphQL/
+> export (421), лифтнат `ProvisioningService` над login/dev-login (422) и опционален споделен
+> token пред dev-login (423). Секции §7а/§7б/§7в описват board 1–42 — детайлите на 101–308 живеят
+> в §1а/§1б/§7/§7г, а на 401–431 в §7а2 по-долу, обновени на място.
 
 ## §1. Файлова карта (монорепо)
 
@@ -22,11 +29,15 @@ party-up/
 │   ├── PartyUp.slnx              ← .NET 10 solution (СЛЪНЦЕТО Е .slnx, НЕ .sln!)
 │   ├── src/PartyUp.Api/          ← единственият BE проект: minimal API + Hot Chocolate
 │   │   ├── Program.cs            ← DI + GraphQL pipeline + RunWithGraphQLCommandsAsync (дава schema export)
-│   │   ├── Domain/               ← ЦЕЛИЯТ модел (13 entity-та + Enums.cs) — фича таск НЕ добавя тук
-│   │   ├── Data/PartyUpDbContext.cs  ← IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>, 12 DbSet-а
+│   │   ├── Domain/               ← ЦЕЛИЯТ модел (17 entity-та вкл. AppUser + Enums.cs, 10 enum-а)
+│   │   │                            — фича таск по правило НЕ добавя тук; таск 402/403 са
+│   │   │                            изричното изключение (AdmissionKind, Domain/Geo/Settlement)
+│   │   ├── Data/PartyUpDbContext.cs  ← IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>, 16 DbSet-а
 │   │   ├── Common/               ← Results/ (Result, DomainError), GraphQL/MutationResult.cs,
 │   │   │                            Notifications/INotifier.cs, Endpoints/IEndpointModule.cs,
-│   │   │                            CurrentUser.cs, FrontendOptions.cs, TableRules.cs
+│   │   │                            CurrentUser.cs, FrontendOptions.cs, TableRules.cs,
+│   │   │                            RateLimiting/ (RateLimitingSetup, RateLimitingOptions — таск 421,
+│   │   │                            класифицира по PATH, не по slice, затова живее в Common)
 │   │   ├── GraphQL/              ← Query.cs (root, само `hello`) + TypeModule.cs
 │   │   │                            ([assembly: Module("PartyUpTypes")] — котвата на генератора)
 │   │   ├── Features/             ← ВСИЧКАТА фича логика, vertical slices (виж §1а)
@@ -60,7 +71,7 @@ party-up/
 │   ├── tsconfig.json             ← strict, types:["jest"], paths @/* → ./src/*
 │   └── expo-env.d.ts             ← НАРОЧНО в git (против Expo конвенцията): без него tsc пада на чист clone
 ├── contracts/
-│   ├── schema.graphql            ← ЖИВИЯТ КОНТРАКТ BE↔FE (реален експорт от Hot Chocolate, 629 реда)
+│   ├── schema.graphql            ← ЖИВИЯТ КОНТРАКТ BE↔FE (реален експорт от Hot Chocolate, 808 реда)
 │   ├── DESIGN-NOTES.md           ← конвенции, карта operation→таск, съзнателните опростявания на v0.1
 │   ├── README.md                 ← процедурата по ре-експорт
 │   └── schema-settings.json      ← Hot Chocolate export метаданни
@@ -73,26 +84,41 @@ party-up/
 
 ### §1а. BE slice инвентар (`Features/<Област>/<UseCase>/`)
 
-Схемата излиза с **19 query, 27 mutation, 2 subscription** (растежът от 18/25/2 е от board 211–213:
-`myDataExport`, `deleteAccount`, `requestDataExport`). Кой slice какво издава:
+Схемата излиза с **21 query, 28 mutation, 2 subscription** (растежът от 19/27/2 е от board 401–431:
+`settlements(search)` + `myNotificationPreferences` на query страната, `setNotificationPreference`
+на mutation страната; `lfgBoard`/`tablesShowcase` останаха отделни полета, но смениха форма —
+виж реда `Lfg` по-долу). Кой slice какво издава:
 
 | Slice | Use case папки | GraphQL операции |
 |---|---|---|
-| `Auth` | Login, Logout, Me, **DevLogin** (таск 301) | HTTP `GET /auth/login/{provider}`, `GET /auth/callback`, `GET /auth/dev-login?user=&returnUrl=` (НЕ GraphQL, само `Development`); `logout`; `me` |
+| `Auth` | Login, Logout, Me, **DevLogin** (таск 301, опционален token таск 423) | HTTP `GET /auth/login/{provider}`, `GET /auth/callback`, `GET /auth/dev-login?user=&returnUrl=&token=` (НЕ GraphQL, само `Development`); `logout`; `me`; `ProvisioningService.cs` виси директно в `Features/Auth/` (плосък, таск 422 — споделен между Login и DevLogin, не собственост на нито един от двата) |
 | `AuthLinking` | (плосък) | `linkedProviders`, `linkProviderUrl(provider)`, `unlinkProvider` |
 | `Profiles` | MyProfile, UpdateProfile | `myProfile`, `updateProfile` |
 | `MyTables` | (плосък) | `myTables` |
-| `Tables` | CreateTable, Settings, Listing | `createTable`, `updateTableSettings`, `setTableListing` |
-| `Lfg` | Board, Publish, Showcase | `lfgBoard(filter)`, `myListing`, `publishMyListing`, `unpublishMyListing`, `tablesShowcase(filter)`, `table(id)` |
+| `Tables` | CreateTable, Settings, Listing | `createTable`, `updateTableSettings`, `setTableListing` — и двата мутатора носят `admissionKind`/`slotsFirm` от таск 402/412 (walk-in маси, мек лимит на местата — `SlotLimitRules.AllowsSlots`) |
+| `Geo` | Import, Search (таск 403/414) | `settlements(search)` — публичен typeahead reg. на населени места (БЕЗ `[Authorize]`, четe го и анонимната витрина); **няма mutation** — реестърът се пълни само през `settlements import` CLI команда, не през GraphQL |
+| `Lfg` | Board, Publish, Showcase | `lfgBoard(filter, first, after, last, before): LfgBoardConnection`, `tablesShowcase(filter, ...): TablesShowcaseConnection` — cursor connections от таск 401 (`[UsePaging]`, `LfgPagingDefaults`: `DefaultPageSize=20`, `MaxPageSize=50`); `myListing`, `publishMyListing`, `unpublishMyListing`, `table(id)` |
 | `Decisions` | (плосък) | `groupDecision(id)`, `castVote` |
 | `DecisionAlerts` | (плосък) | `staleDecisions`, `snoozeDecision` |
 | `Candidacies` | Pull, Contact, Verdict | `candidacy(id)`, `myTableCandidacies(tableId)`, `pullCandidate`, `openContactChat`, `submitVerdict` |
 | `Chats` | Messaging, Subscriptions | `myChats`, `chat(id)`, `sendMessage`, `onMessage(chatId)`, `onNotification` |
 | `Notifications` | (плосък) | `notifications(unreadOnly)`, `markNotificationRead` |
 | `Lifecycle` | Trial, Leave, Kick, Refound | `startTrial`, `startDecidingPhase`, `finalizeDeciding`, `stayOrLeave`, `leaveTable`, `proposeKick`, `refoundTable`, `acceptRefoundInvite` |
-| `Push` | Subscriptions, Vapid | `pushSubscribe`, `pushUnsubscribe`, `vapidPublicKey` |
-| `PushSend` | (плосък) | **няма GraphQL** — инфраструктурен slice (FanoutNotifier, WebPushSender, `AddPushFanout()`) |
+| `Push` | Subscriptions, Vapid, **Preferences** (таск 404) | `pushSubscribe`, `pushUnsubscribe`, `vapidPublicKey`, `myNotificationPreferences`, `setNotificationPreference(category, enabled)` |
+| `PushSend` | (плосък) | **няма GraphQL** — инфраструктурен slice (FanoutNotifier, WebPushSender, `AddPushFanout()`); `FanoutNotifier` пита `NotificationPreferenceHandler.AllowsPushAsync` ПРЕДИ да прати Web Push (таск 404 — виж бележката за посоката на зависимостите по-долу) |
 | `Privacy` | DeleteAccount, Export (board 211–213, полирана в 303–306) | `deleteAccount` (hard delete на личните данни + `AccountAnonymization.Scrub`); `myDataExport`, `requestDataExport` (mutation-ът пуска фонова обработка); `GET /privacy/export` (HTTP файл, НЕ GraphQL — сваля готовия архив на СЕСИЯТА, без `:id` аргумент) |
+
+**`Common/RateLimiting/` в детайли (таск 421, инфраструктура над всички slice-ове, не свой slice):**
+вграденият ASP.NET `PartitionedRateLimiter`, ЕДИН глобален лимитер (не именувани политики по
+endpoint) — класификацията по път живее в `RateLimitingSetup.Classify`: `/auth/*` и
+`/privacy/export` са строги fixed-window (10/мин, партиция по user id ако има сесия, иначе IP);
+автентикираният `POST /graphql` е умерен sliding-window (60/мин); **анонимният** `POST /graphql`
+(витрина, `settlements` typeahead) е ПО-ЩЕДЪР (300/мин) — IP партицията му е споделена зад NAT
+(„QR кодът на бармана", cycle 2 находка). `Development` НИКОГА не се дросълва. Testing средата
+взима щедри лимити по подразбиране (споделената интеграционна фикстура минава стотици заявки в
+един прозорец); тестове, които искат РЕАЛНИТЕ лимити, ги завъртат надолу сами
+(`Foundation/RateLimiting/RateLimitingTests.cs` — нова top-level папка в IntegrationTests за
+инфраструктурни тестове, извън `Features/`).
 
 **`Privacy` в детайли** (структурата не беше документирана след board 211–213, наваксва се тук):
 - `DeleteAccount/AccountAnonymization.cs` — статичните правила „какво остава от изтрит човек":
@@ -110,10 +136,46 @@ party-up/
   няма `fetch`/`Blob`/DOM за programmatic download). **Таск 306** покри ретеншън суийпа
   (`DataExportRetention.ForgetExpiredAsync`) с unit + integration тестове.
 
-**Домейн (13 entity-та, `Domain/`):** `AppUser`, `UserProfile`, `PlayerListing`, `Table`, `TableMembership`,
-`Candidacy`, `GroupDecision`, `Vote`, `Chat`, `ChatParticipant`, `Message`, `Notification`, `PushSubscription`.
-**9 enum-а в `Domain/Enums.cs`:** ExperienceLevel, GameFormat, TableStatus, AdmissionMode, MembershipRole,
-CandidacyStatus, DecisionTopic, DecisionStatus, ChatType (+ `AuthProvider` и `PushDelivery` в своите slice-ове).
+**`Geo` в детайли** (таск 403/414, `Features/Geo/`): регистър на населени места, референтни
+данни, НЕ потребителско съдържание (продуктова спека, Паркинг т.13 — списъкът идва от GeoNames,
+не от админ панел). `Import/SettlementTsvParser` чете GeoNames TSV формата; `SettlementImporter`
+прави upsert по естествен ключ (`SettlementKey`, изведен, НЕ раздаден от базата — оттам
+идемпотентността на повторен импорт); `SettlementSeeder.SeedIfEmptyAsync` зарежда комитнатия
+стартов набор (`Data/Seed/settlements-bg-core.tsv`, областните градове) на dev старт, но САМО ако
+таблицата е празна — ръчно изтрит град остава изтрит, а внесеният от потребителя списък е
+по-силен от seed-а. Пълният GeoNames списък е РЪЧНА операторска стъпка:
+`dotnet run --project src/PartyUp.Api -- settlements import <geonames.tsv> [--replace]`
+(`SettlementsImportCommand`, обслужва се в `Program.cs` ПРЕДИ `RunWithGraphQLCommandsAsync`, по
+образеца на `schema export`). Търсенето (`SettlementQueries.settlementsAsync`) е ПУБЛИЧНО
+(без `[Authorize]` — витрината без вход и typeahead-ът го викат анонимно), ILIKE по `Name` ИЛИ
+`AsciiName` с escape-нати wildcard знаци (`SettlementSearch.ToContainsPattern`), таван 20 реда.
+**FE компонентът `SettlementTypeahead` (`table-create/`) е ПОСТРОЕН и тестван, но СЪЗНАТЕЛНО
+никъде не е монтиран** (`CreateTableInput`/`UpdateTableSettingsInput` още нямат `settlementId` в
+контракта) — виж §9.
+
+**`Push`→`Preferences` в детайли** (таск 404/415/431, `Features/Push/Preferences/`): превключвател
+по `NotificationCategory` (Candidacies/Chat/Decisions/Lifecycle/Privacy — ЕДРО деление, не по
+`Notification.type`, за да не се множи с всеки нов тип). `NotificationCategories.ByType` е
+буквалната карта тип→категория (типовете са изписани буквално, НЕ взети от чужд slice — §7б.2).
+Липсващ ред = включено (таблицата пази само отклоненията); непозната категория/липсваща
+настройка → `AllowsPushAsync` връща `true` (заглушаването е ИЗРИЧЕН избор, мълчание по
+подразбиране би угасило push слоя за всички при първата фича, забравила картата). Камбанката/
+`Notifications` реда винаги се пише — превключвателят спира само Web Push пратката, не истината.
+**TODO, отворено от code review 2026-08-31:** `NotificationPreference` живее временно в
+`Features/Push/Preferences/`, което обръща посоката на зависимостите (`Data` internal-va слайс
+код, `FanoutNotifier` от slice `PushSend` вика хендлъра на slice `Push`) — фундаментен таск в
+началото на следващата фаза трябва да качи ентитито + `NotificationCategories` в `Domain`/`Common`.
+Екранната част (`PushSettingsSection`/`NotificationPreferences`, таск 431) е МОНТИРАНА в
+`/settings` — виж §1б.
+
+**Домейн (17 entity-та вкл. `AppUser`, `Domain/`):** `AppUser`, `UserProfile`, `PlayerListing`, `Table`,
+`TableMembership`, `Candidacy`, `GroupDecision`, `Vote`, `Chat`, `ChatParticipant`, `Message`,
+`Notification`, `PushSubscription`, `PrivacyRequest`, `DataExport` (board 211–213, доброто пропуснато
+преброяване на времето — наваксва се тук), `NotificationPreference` (таск 404), `Settlement`
+(таск 403, `Domain/Geo/`). **10 enum-а в `Domain/Enums.cs`:** ExperienceLevel, GameFormat, TableStatus,
+AdmissionMode, **AdmissionKind** (таск 402 — `Candidacy`/`Open`, по-едрото решение НАД `AdmissionMode`:
+церемонията по прием е смислена само при `Candidacy`), MembershipRole, CandidacyStatus, DecisionTopic,
+DecisionStatus, ChatType (+ `AuthProvider` и `PushDelivery` в своите slice-ове).
 
 **Интерфейси — точно ТРИ (§2а.3 се спазва):** `IEndpointModule` (единствена имплементация `AuthEndpoints`,
 намира се с reflection), `INotifier` (`DefaultNotifier` → декориран от `FanoutNotifier`, който публикува топик
@@ -140,24 +202,27 @@ CandidacyStatus, DecisionTopic, DecisionStatus, ChatType (+ `AuthProvider` и `P
 | Маршрут | Екран | Област (`src/features/`) |
 |---|---|---|
 | `/login` | LoginScreen (3 OAuth бутона) | `auth` |
-| `/settings` | линкнати профили, тема, „Пусни обиколката отново" (таск 308), изход, Данни и поверителност (export/delete) | `auth-linking` (+ `RestartTourSection` от `tour`) |
-| `/board` (таб) | LFG борд с филтри, player cards, publish CTA | `board` |
+| `/settings` | линкнати профили, тема, „Пусни обиколката отново" (таск 308), **секция „Известия"** (таск 431 — статус на push абонамента + тогъли по категория), изход, Данни и поверителност (export/delete) | `auth-linking` (+ `RestartTourSection` от `tour`, `PushSettingsSection` от `push`) |
+| `/board` (таб) | LFG борд с филтри, player cards, publish CTA, **infinite scroll** (таск 411 — скрол до дъното дърпа следваща cursor страница, `pagination.loadMore` е fallback бутонът) | `board` |
 | `/tables` (таб) | моите маси + status badges + create CTA | `my-tables` |
 | `/profile` (таб) | профилна форма (react-hook-form) | `profile` |
-| `/table/create` | форма за нова маса (one-shot полета, обучителен таг) | `table-create` |
+| `/table/create` | форма за нова маса (one-shot полета, обучителен таг, **`AdmissionKindField`** — candidacy/open + мек лимит на местата, таск 402/412) | `table-create` |
 | `/table/[id]` | детайл на масата + кандидатури | `candidacy` |
-| `/table/[id]/settings` | admission mode + listing toggle (founder-only) | `table-settings` |
+| `/table/[id]/settings` | admission mode + listing toggle (founder-only), **`AdmissionKindField`** преизползван непроменен (таск 412) | `table-settings` |
 | `/table/[id]/lifecycle` | phase stepper, founder преходи, stay-or-leave | `lifecycle-trial` |
 | `/table/[id]/actions` | danger zone: leave, kick, refound | `lifecycle-actions` |
 | `/candidacy/[id]` | pull flow: решение чат, панел за гласуване, вердикт | `candidacy` |
 | `/chat`, `/chat/[chatId]` | списък чатове и нишка с realtime абонамент | `chat` |
-| `/showcase`, `/showcase/[id]` | readonly витрина + състав на партито | `showcase` |
+| `/showcase`, `/showcase/[id]` | readonly витрина + състав на партито, **cursor connection** (само първа страница, таск 401 — infinite scroll НЕ стигна до витрината, само до борда), open-табло бадж + `GuestCta` за анонимен посетител (таск 413) | `showcase` |
 | `/notifications` | нотификационен център (неутрални текстове към кандидата) | `contact` |
 | `/refound-invite` | приемане на покана след преосноваване | `lifecycle-actions` |
 
-Плюс `push` (без свой маршрут — service worker, subscribe pipeline, iOS install подсказка) — **прогресивно
-подобрение**: `PushPrompt`/`usePushSetup` още не са закачени за екран, `NotificationBell` също. Това е
-осъзнато състояние от таск 40, не пропуск на wiring.
+`push` (без свой маршрут — service worker, subscribe pipeline, iOS install подсказка) — **прогресивно
+подобрение, ЧАСТИЧНО закачено от таск 431**: `PushSettingsSection`/`usePushSetup` вече е монтирана в
+`/settings` (ръчен вход — потребителят е дошъл нарочно), тогълите по категория (`NotificationPreferences`,
+таск 404/415) висят под нея. **`PushPrompt` (арматурираният банер след смислено действие) и
+`NotificationBell` СЕ ОСТАВАТ незакачени за екран** — таск 431 монтира само настройковия вход, не
+и проактивния nudge. Виж §9.
 
 **`/auth/dev-login?user=<име>&returnUrl=<път>` (таск 301) НЯМА FE екран/линк** — гол backend URL,
 хвърлен ръчно в браузъра от разработчика за многоакаунтово тестване (виж §1а `Auth`); маршрутизира се
@@ -241,9 +306,14 @@ CandidacyStatus, DecisionTopic, DecisionStatus, ChatType (+ `AuthProvider` и `P
    приложението (и `schema export`) тръгва без него, вместо да гърми.
 5. **⚠ НЯМА EF migrations.** Схемата в тестовете се вдига с `EnsureCreated`; migrations са deploy грижа и
    идват със свой таск, когато има прод deploy. Не генерирай migrations „в движение".
-6. **DbContext-ът е с 12 DbSet-а** плюс Identity таблиците. Ключови ограничения в `OnModelCreating`:
-   уникален `Vote(DecisionId, VoterUserId)`, уникален `PushSubscription.Endpoint`, уникален
-   `ChatParticipant(ChatId, UserId)`, `text[]` колони за `SessionLanguages`/`Systems`/`StyleTags`.
+6. **DbContext-ът е с 16 DbSet-а** плюс Identity таблиците (растежът от 12 е board 211–213:
+   `PrivacyRequest`, `DataExport`; и board 401–431: `NotificationPreference`, `Settlement`).
+   Ключови ограничения в `OnModelCreating`: уникален `Vote(DecisionId, VoterUserId)`, уникален
+   `PushSubscription.Endpoint`, уникален `ChatParticipant(ChatId, UserId)`, `text[]` колони за
+   `SessionLanguages`/`Systems`/`StyleTags`; `NotificationPreference` е съставен ключ
+   `(UserId, Category)` без сурогатно Id (таск 404); `Settlement.Id` е ИЗВЕДЕН от естествения
+   ключ (`SettlementKey`), не раздаден от базата — оттам идемпотентността на повторен импорт
+   (таск 403).
 
 ## §4. ЧЕРВЕНИ ЛИНИИ (нарушение = failed таск)
 
@@ -266,7 +336,7 @@ CandidacyStatus, DecisionTopic, DecisionStatus, ChatType (+ `AuthProvider` и `P
 | `backend/PartyUp.slnx` | нов проект = редакция тук |
 | `backend/src/PartyUp.Api/Program.cs` | всяко DI/pipeline wiring минава оттук (изяден от таскове 1 и 26) |
 | `backend/src/PartyUp.Api/PartyUp.Api.csproj` | нов пакет/reference |
-| `backend/src/PartyUp.Api/Domain/*` + `Common/*` | целият модел е от таск 1 — фича таск НЕ добавя entity |
+| `backend/src/PartyUp.Api/Domain/*` + `Common/*` | целият модел е от таск 1 — фича таск по правило НЕ добавя entity (таск 402/403/421 са изрични, документирани изключения — §1) |
 | `contracts/schema.graphql` | ре-експортира се при ВСЯКА схема промяна — BE фаза го променя серийно |
 | `frontend/package.json` + `package-lock.json` | нов пакет/скрипт + jest конфигът живее вътре |
 | `frontend/tsconfig.json` | компилаторни опции — И: **всеки Metro прогон го преформатира** (виж §6) |
@@ -288,6 +358,7 @@ npm --prefix frontend run typecheck                 # codegen + tsc --noEmit
 npm --prefix frontend run codegen                   # само регенерация на src/gql
 npm --prefix frontend run test:e2e                  # Playwright (сам си вдига статиката) — НЕ е в гейта
 cd backend && dotnet run --project src/PartyUp.Api -- schema export --output ../../../contracts/schema.graphql
+cd backend && dotnet run --project src/PartyUp.Api -- settlements import <geonames.tsv> [--replace]  # операторска, таск 403 — НЕ е в гейта, НЕ се вика от агент/тест
 ```
 
 ⚠ **`codegen` е префикс на `test` и `typecheck`** — гола `npx tsc --noEmit` пада, защото `src/gql` може да не
@@ -321,6 +392,29 @@ Party Up ползва: **5001/5000** (BE dev, OAuth redirect-ите сочат 5
 - **FE: 436 jest теста в 70 suite-а** — расте спрямо board 1–42 (268/48) най-вече от `features/tour/`
   (7 нови suite-а) и privacy/apollo/user-name покритието на 301–308. Топъл прогон ~30 сек в CI
   контейнер (по-бавно от старите ~8 сек локално — машинно-зависимо, не регресия).
+
+### §7 (продължение). Тестово състояние след board 401–431 (файлово преброено от диф-а — ЧИСТО
+ДОКУМЕНТАЦИОННА задача, без `dotnet test`/`npm test` прогон в тази сесия; следващият реален verify
+гейт да освежи точните бройки по-долу с фактически изпълнения, не само файлове)
+
+- **BE test suite файлове** (съдържащи `[Fact]`/`[Theory]`): unit **20 → 26** (+6: `Geo/BulgarianCoreSeedTests`,
+  `Geo/SettlementKeyTests`, `Geo/SettlementSearchTests`, `Geo/SettlementTsvParserTests`,
+  `Geo/SettlementsImportCommandTests`, `Tables/Settings/SlotLimitRulesTests`); integration
+  **41 → 51** (+10: `Geo/SettlementImportTests`, `Geo/SettlementSeedTests`, `Geo/SettlementsQueryTests`,
+  `Candidacies/OpenTableGuardTests`, `Push/NotificationPreferenceTests`,
+  `PushSend/FanoutPreferenceTests`, `Tables/CreateTable/CreateTableWalkInTests`,
+  `Tables/Settings/UpdateTableSettingsWalkInTests`, `Lfg/Showcase/TablesShowcaseWalkInTests`,
+  `Foundation/RateLimiting/RateLimitingTests` — нова `Foundation/` папка в IntegrationTests за
+  инфраструктурни тестове извън `Features/`). Плюс разширени файлове: `LfgBoardTests`,
+  `TablesShowcaseTests` (cursor pagination/infinite scroll), `DevLoginEndpointsTests` (token guard).
+- **FE test suite файлове:** `70 → 73` (нови: `push/__tests__/notification-preferences.test.tsx`,
+  `push/__tests__/push-settings-section.test.tsx`, `table-create/settlement-typeahead.test.tsx`,
+  `lib/auth-gate.test.tsx`; разширени: `board/__tests__/board-screen.test.tsx` (infinite scroll),
+  `showcase/__tests__/showcase-screen.test.tsx` (walk-in бадж + гост CTA), `table-create-form.test.tsx`,
+  `table-settings-form.test.tsx`).
+- **Нова backend тест зона:** `Common/RateLimiting/RateLimitingTests.cs` живее под ново поддърво
+  `Foundation/` в `PartyUp.IntegrationTests` (не `Features/`) — прецедент за бъдещи cross-cutting
+  Common тестове (structure §7б.1 остава в сила: инфраструктурата се тества отделно от slice-овете).
 - **Пълен verify гейт (install + typecheck + jest + dotnet): порядък минути**, доминиран от `dotnet test`
   с Testcontainers. `verify_timeout_min 45` остава с достатъчен запас.
 - **e2e: Playwright съществува от таск 42 — 3 смоук спека, зелени на 45280, но НЕ са в гейта.**
@@ -388,6 +482,48 @@ LFG филтри) без нови архитектурни решения изв
    HTTP.
 6. **Продуктова обиколка (`tour`, board 307–308)** — виж §1в по-горе за пълното описание.
 
+## §7а2. Амендменти за board 401–431 — ИСТОРИЯ, всички ЗАТВОРЕНИ
+
+1. **Пагинацията (§7а.1 по-горе, „без пагинация") е ЧАСТИЧНО отменена (таск 401).** `lfgBoard` и
+   `tablesShowcase` вече са Relay connections (`LfgBoardConnection`/`TablesShowcaseConnection`,
+   вграденото Hot Chocolate `[UsePaging]`, споделени граници в `Features/Lfg/LfgPagingDefaults`:
+   `DefaultPageSize=20`, `MaxPageSize=50`). `myChats`, `chat.messages`, `notifications` си остават
+   плоски списъци — не са пипани. Истинското infinite scroll (скрол до дъното дърпа `after: endCursor`,
+   дедупликация по `id`) стигна само до борда (таск 411); витрината показва само първата страница.
+2. **Отворени (walk-in) маси, мек лимит на местата (таск 402/412).** `AdmissionKind` (`Candidacy`/`Open`)
+   е по-едрото решение НАД `AdmissionMode` — церемонията по прием е смислена само при `Candidacy`,
+   отворената маса няма кандидатски flow изобщо. `SlotsFirm` (default `true`) е независим флаг:
+   твърдият лимит пази старото желязно правило (не смаляваш под текущия състав — изгонването е
+   групово решение, настройка няма право да го предизвиква мълчаливо); мекият го отменя САМО за
+   walk-in маси (`SlotLimitRules.AllowsSlots` — чиста функция, тества се без база).
+3. **Гео регистър на населени места (таск 403/414)** — виж „`Geo` в детайли" по-горе. Ключовото
+   решение: списъкът е референтни данни от GeoNames (seed + операторски импорт), НЕ потребителско
+   съдържание и НЕ админ панел; FE компонентът е построен, но съзнателно НЕ монтиран, докато
+   контрактът няма `settlementId` поле (виж §9).
+4. **Публична витрина за отворени маси с гост CTA (таск 413).** Анонимен посетител на витрината
+   вижда `OpenBadge`/`formatOpenInvite` (кога/къде, вместо кандидатски бутон) и `GuestCta`
+   (readonly витрина + „Влез, за да…" ЛИНК, не бутон — витрината няма право да носи действие по
+   маса). `useIsGuest` чете ЯСНИЯ отговор на сесията (`resolved && !user`), не липсата на отговор —
+   мрежова грешка не е гост, същият рефлекс като `AuthGate`.
+5. **Per-category push preferences (таск 404/415), монтирани в екрана (таск 431)** — виж
+   „`Push`→`Preferences` в детайли" по-горе за схемата/фан-аута и §1б за екранния wiring. Отвореният
+   TODO (временният адрес на `NotificationPreference` в `Features/Push/Preferences/`, обратна
+   посока на зависимостите) остава за фундаментен таск в следваща фаза.
+6. **Rate limiting (таск 421).** Вграден ASP.NET лимитер, класифициран по PATH в `Common/RateLimiting/`
+   (не именувани policy-та по endpoint) — виж пълното описание в §1а по-горе. Deploy бележка,
+   записана в кода: честното клиентско IP зад reverse proxy (`ASPNETCORE_FORWARDEDHEADERS_ENABLED`
+   / `UseForwardedHeaders`) е грижа на deploy таска, НЕ на този.
+7. **`ProvisioningService` лифтнат над Login/DevLogin (таск 422).** Класът за „кой влезе → кой акаунт
+   е това" (email-ключуван акаунт, авто-linking на провайдъри) стоеше дублиран/вътре в login slice-а;
+   вдигнат е директно в `Features/Auth/` (плосък файл, не UseCase папка) — И `Login`, И `DevLogin` го
+   инстанцират наравно, никой от двата не му е собственик.
+8. **Опционален споделен token пред dev-login (таск 423).** `DevLogin:Token` конфиг ключ
+   (user-secrets/env, НЕ в git); ако е зададен, заявката носи `?token=` (constant-time сравнение);
+   грешен/липсващ токен → 404, НЕРАЗЛИЧИМО от изключен endpoint (не издава дали пътят съществува).
+   Незададен ключ → старото поведение (само `IsDevelopment()` гейт) — нулево търкане за локален dev.
+   Не затваря §9 т.7 напълно — endpoint-ът все още няма rate limit/аудит от само себе си (сега го
+   покрива общият `/auth/*` лимитер от таск 421).
+
 ## §7б. REVIEW КРИТЕРИИ (за finishing review stage — ревюърът оценява diff-а СПРЯМО ТЯХ)
 
 > Обвързващият текст живее в самото репо: `rules/architecture-rules.md` + `rules/i18n-rules.md`.
@@ -431,8 +567,10 @@ LFG филтри) без нови архитектурни решения изв
    Няколко маси могат да гледат един човек паралелно.
 6. **`stayOrLeave` НЕ е `GroupDecision`** — само „оставам"/„напускам".
 7. **`refoundTable` връща НОВАТА маса**; старата остава на founder-а, поканите тръгват като нотификации.
-8. **Без пагинация, без сортиране, без relay `node(id)`** — плоски списъци, `UUID` вместо `ID`.
-   Единственото отклонение: `chat.messages(skip, take)` — опционални аргументи с таван, не Relay connection.
+8. **Без сортиране, без глобален relay `node(id)`** — `UUID` вместо `ID` навсякъде. Пагинацията вече
+   НЕ е универсално отсъстваща (виж §7а2.1): `lfgBoard`/`tablesShowcase` са Relay connections от
+   таск 401; `myChats`, `chat.messages(skip, take)`, `notifications` си остават плоски списъци
+   (`chat.messages` е опционални аргументи с таван, не Relay connection).
 9. **`Notification.type` е `SCREAMING_SNAKE` низ**, payload-ът е `payloadJson: String!`. Живите типове:
    `DECISION_STALE`, `REFOUND_INVITE`, `NEW_MESSAGE`, `CANDIDACY_ACCEPTED`, `CANDIDACY_CLOSED`,
    `MEMBER_KICKED`, `MEMBER_LEFT`, `STAY_OR_LEAVE_PROMPT`.
@@ -454,11 +592,11 @@ LFG филтри) без нови архитектурни решения изв
 - Всеки таск декларира `repo: "partyup"` (полето е задължително, дефолт НЯМА).
 - Verify е общ за монорепото (BE+FE) — счупен FE тест блокира merge на BE таск и обратно. Това е НАРОЧНО (контрактът е общ).
 
-## §9. Известни отворени точки след board 301–308 (кандидати за следваща фаза)
+## §9. Известни отворени точки след board 401–431 (кандидати за следваща фаза)
 
 Не са бъгове — съзнателно оставени. Всяка иска свой таск и решение на ЧОВЕКА. Списъкът е от board
-1–42 и остава непроменен през 101–308 — никоя от точките не е засегната или затворена от по-новите
-board-ове:
+1–42 и остана непроменен през 101–308; board 401–431 ЗАТВОРИ т.4 (частично) и т.7 (частично) отдолу
+и добави три нови точки (9–11):
 
 1. **Playwright не е в verify гейта.** Влизането му иска първо чистене на Metro замърсяването (§6):
    `frontend/tsconfig.json` + root `nativewind-env.d.ts`. `repos.json` НЕ е пипан нито от board 1–42,
@@ -466,13 +604,32 @@ board-ове:
 2. **Full-stack e2e** (жив BE + Testcontainers compose) — сегашните 3 спека са неавтентикирани пътеки с един стъб.
 3. **Локализиран `src/app/+not-found.tsx`** — 404 сега е вграденият англоезичен екран на expo-router,
    извън root layout-а и без пазач. Спекът описва ТЕКУЩОТО, не желаното поведение.
-4. **Push прогресивното подобрение не е закачено за екран** — `PushPrompt`/`usePushSetup` и `NotificationBell`
-   съществуват и са тествани, но никой екран не ги монтира. Обиколката (§1в, board 307–308) вече го
-   знае и си трае: `bell` стъпката пада на затъмнение без изрез, докато `NotificationBell` не се
-   закачи — тогава ще проблесне сама, без промяна в `tour-content.ts`.
+4. **Push прогресивното подобрение — ЧАСТИЧНО закачено (таск 431).** `PushSettingsSection` (статус +
+   тогъли по категория) вече е монтирана в `/settings`. `PushPrompt` (арматурираният банер след
+   смислено действие) и `NotificationBell` СИ ОСТАВАТ незакачени за екран — таск 431 покри само
+   настройковия вход. Обиколката (§1в, board 307–308) все още знае и си трае: `bell` стъпката пада
+   на затъмнение без изрез, докато `NotificationBell` не се закачи.
 5. **EF migrations** (§3.5) — иска се преди първи прод deploy.
 6. **`metro.config.js` tslib резолвърът** беше единствената промяна извън обхвата на таск 42. Ревертът му
    чупи `expo export --platform web` и с това целия e2e — ревюирайте съзнателно.
-7. **`dev-login` (таск 301) няма rate limit/аудит и НЕ е защитен от нищо друго освен
-   `IsDevelopment()`.** Достатъчно за локално multi-account тестване; ако някога влезе в shared dev
-   deploy (не само localhost), иска собствено решение (auth пред него или премахване).
+7. **`dev-login` (таск 301) вече ИМА защита отвъд `IsDevelopment()` — ЧАСТИЧНО затворена.** Опционален
+   споделен token (таск 423, `DevLogin:Token`) + общият `/auth/*` rate limiter (таск 421, 10/мин)
+   покриват брутфорса. Все още НЯМА собствен аудит лог на dev-login опитите — ако някога влезе в
+   shared dev deploy, тази точка остава за решение.
+8. **`NotificationPreference` живее временно в грешния слой (таск 404, code review TODO).**
+   `Features/Push/Preferences/` вместо `Domain`/`Common` — обръща посоката на зависимостите
+   (`Data` internal-va слайс код; `FanoutNotifier` от slice `PushSend` вика хендлъра на slice
+   `Push`). Планираният фикс: фундаментен таск в началото на следващата фаза изкачва ентитито +
+   `NotificationCategories` нагоре, преди втори такъв прецедент да се появи.
+9. **`SettlementTypeahead` (таск 414) е построен и тестван, но НИКЪДЕ не е монтиран.** Точно като
+   старата push история (т.4 по-горе): `CreateTableInput`/`UpdateTableSettingsInput` още нямат
+   `settlementId` в контракта, а видим контрол, чийто избор мълчаливо се губи, е UI, който лъже.
+   Формите го монтират, когато BE таск добави полето и изборът реално пътува към сървъра.
+10. **Витрината няма infinite scroll** (таск 411 покри само борда) — `tablesShowcase` е вече cursor
+    connection (таск 401), но `showcase-screen.tsx` чете само първата страница/`nodes`. `pageInfo`
+    съществува в отговора, чака wiring.
+11. **Rate limiter деплой допускането е недовършено.** Класификацията по IP (`RateLimitingSetup.Subject`)
+    разчита на честно `HttpContext.Connection.RemoteIpAddress` — зад reverse proxy това е адресът на
+    proxy-то, не на клиента, докато deploy таскът не включи
+    `ASPNETCORE_FORWARDEDHEADERS_ENABLED`/`UseForwardedHeaders(KnownProxies:...)`. Записано изрично
+    в кода (таск 421) като deploy грижа, не пропуск на този таск.
