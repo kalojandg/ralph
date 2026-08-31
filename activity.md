@@ -34,6 +34,490 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #415 — feat(push): per-category notification preference toggles in settings
+
+**Repo:** partyup (frontend)
+**Commit:** 6a042f8
+
+Built the FE half of task #404's per-category push preferences: a `NotificationPreferences` component mounted inside `PushSettingsSection` (below the existing enable/status block) that:
+
+- Queries `myNotificationPreferences` (5 categories always returned by the backend, including unset ones defaulted to enabled).
+- Renders one `Switch` per category with label + short hint text, driven by the contract's `NotificationCategory` enum values — no invented categories.
+- Mutates via `setNotificationPreference` with an optimistic local-state overlay (flips immediately on toggle, rolls back on a returned domain error or a network failure) since `NotificationPreference` has no `id` field for Apollo cache normalization.
+- Disables all toggles + shows a hint line whenever `pushEnabled` (i.e. `status === 'enabled'` from `usePushSetup`) is false — covers unsupported browsers, blocked permission, and the not-yet-subscribed idle state uniformly.
+- Explainer line (bg+en): the bell always shows everything; this only stops the push buzz.
+
+Added `MyNotificationPreferencesDocument` / `SetNotificationPreferenceDocument` to `push.gql.ts`, new bg/en `preferences.*` keys in `locales/{bg,en}/push.json`, a new `notification-preferences.test.tsx` (7 tests: server-state render, optimistic flip pre-resolution, rollback on error, disabled+hint state, enabled state, empty/loading no-render, EN translation), and updated `push-settings-section.test.tsx` to mock the new preferences query across its existing cases.
+
+**Verify:** `npm --prefix frontend run typecheck` clean; `npm --prefix frontend test` — 73 suites / 483 tests green (full suite, no skips).
+
+
+## Task #404 — feat(push): per-category notification preferences honored by the fan-out
+
+**Repo:** partyup · **Lane:** be-contract · **Commit:** `fdfe982` · **Тестове:** ✅ 629 зелени (203 unit + 426 integration)
+
+### Какво е направено
+
+**RECON.** Извадени са РЕАЛНИТЕ категории от кода, не от главата: 9 живи `Notification.type` константи (`CANDIDACY_ACCEPTED`, `CANDIDACY_CLOSED`, `NEW_MESSAGE`, `DECISION_STALE`, `MEMBER_KICKED`, `MEMBER_LEFT`, `STAY_OR_LEAVE_PROMPT`, `REFOUND_INVITE`, `DATA_EXPORT_READY`) → 5 категории: `CANDIDACIES`, `CHAT`, `DECISIONS`, `LIFECYCLE`, `PRIVACY`.
+
+**RED → GREEN.** Първо 26 интеграционни теста (24 червени за правилната причина — липсващи полета в схемата), после минималната имплементация. Тестовете задават преференции през ПУБЛИЧНАТА mutation, не със seed в базата — доказва се целият път настройка → фан-аут.
+
+**Нов slice `Features/Push/Preferences/`:**
+- `NotificationCategory` — enum (5 стойности) + `NotificationCategories.Of(type)` чиста карта тип→категория; непознат тип → `null` = пращай (нова фича не се заглушава от настройка, която потребителят не е виждал).
+- `NotificationPreference` — ентити със СЪСТАВЕН ключ `(UserId, Category)`, без сурогатно Id. Липсващ ред = включено, тоест таблицата пази само отклоненията.
+- `NotificationPreferenceHandler` — `ListAsync` (пълните 5 превключвателя, съхранените допълнени с дефолти), `SetAsync` (идемпотентен upsert), `AllowsPushAsync` (въпросът на фан-аута).
+- GraphQL: `myNotificationPreferences` (`[ObjectType<Query>]`, НЕ `[QueryType]` — §7а.5) + `setNotificationPreference` (`[UseMutationConvention(PayloadFieldName = "notificationPreference")]`); `UserId` е скрит от типа.
+
+**`FanoutNotifier`** проверява преференцията ПРЕДИ да зареди регистъра — изключената категория не струва дори обиколка на устройствата. Спира се САМО Web Push: редът в `Notifications` вече е записан от вътрешния notifier и остава, тоест камбанката продължава да показва всичко. „Не ме буди" ≠ „не ми казвай".
+
+**`contracts/schema.graphql`** — реален ре-експорт (`dotnet run -- schema export`), адитивен: +1 query, +1 mutation, +`NotificationPreference` тип, +`NotificationCategory` enum, +input/payload/error union.
+
+### Защо ентитито НЕ е в `Domain/`
+
+Предишните два опита фейлнаха с „няма къде да се персистира": `PushSubscription` се ключира по `Endpoint`, значи потребител без разрешен push има 0 реда (няма къде да легне избор, направен предварително), а с телефон и лаптоп — 2 реда (кой е истината при разминаване?). JSON колона там не решава нито едното.
+
+Решението: ентитито живее в САМИЯ slice (`Features/Push/Preferences/`), с което `Domain/`, `Common/`, `Program.cs` и `.csproj` остават непипнати — точно каквото §5/§7б.1 изискват.
+
+### ⚠ Файл извън обхвата (SCOPE ESCALATION)
+
+`backend/src/PartyUp.Api/Data/PartyUpDbContext.cs` — **единственият** пипнат файл извън `files` списъка: `DbSet<NotificationPreference>` + един `builder.Entity<>` блок (съставен ключ, `HasConversion<string>`, FK към `AppUser`). Не е в отровния списък на §5, нито в забраната на §7б.1. Регистрацията е в ЕДИНСТВЕНИЯ модел нарочно — втори DbContext би останал невидим за `ApiFactory.ResetDatabaseAsync` (тя трункейтва по `db.Model.GetEntityTypes()`) и щеше да разлива състояние между интеграционните тестове.
+
+
+## [2026-08-31 13:30] - Task #414: feat(tables): settlement typeahead next to the free-text place
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** The place field on create/settings was free text only (§DESIGN-NOTES «мястото е описание, не гео-поле»); v0.5 SCOPE's geo block (party-up.md т.13, decision 22.08) adds a structured «which city» via the settlements(search) query from task #403, without replacing the free-text arrangement.
+
+**What was done:**
+- RED: `settlement-typeahead.test.tsx` — 4 failing tests (no query under 2 chars; debounced search fires and renders results; selecting an option calls `onSelect` with the settlement id and hides suggestions; clearing the text is valid and calls `onClear`).
+- GREEN: `SettlementTypeahead` (table-create/settlement-typeahead.tsx + settlement-typeahead.gql.ts) — debounced (300ms) `useQuery(SettlementsDocument, {skip})` typeahead, reusing `FormField`/`fieldShellClassName` from `table-form-fields.tsx` (exported `fieldShellClassName` for reuse). Wired via `Controller` into `CreateTableForm` and `TableSettingsForm` (imported unchanged into settings, same pattern as `AdmissionKindField`) right after `placeDescription`. Added `settlementId: string` to `TableFormValues`/`TableSettingsFormValues` (default `''`), documented that `CreateTableInput`/`UpdateTableSettingsInput` don't carry this field yet in the contract (BE task for another day) so `toCreateTableInput`/`toUpdateTableSettingsInput` intentionally omit it. Added bg/en keys under `tableForm.fields.settlement`.
+
+**Verification:**
+- `settlement-typeahead.test.tsx` → 4/4 pass
+- `npm --prefix frontend test` → 476/476 pass (72 suites), including all table-create/table-settings suites unchanged and green
+- `npm --prefix frontend run typecheck` → clean
+- No edits to `contracts/schema.graphql` or backend; scope stayed inside `frontend/src/features/table-create/**`, `frontend/src/features/table-settings/**`, `frontend/src/locales/{bg,en}/tableForm.json`
+
+**Files modified:**
+- frontend/src/features/table-create/settlement-typeahead.tsx (new)
+- frontend/src/features/table-create/settlement-typeahead.gql.ts (new)
+- frontend/src/features/table-create/settlement-typeahead.test.tsx (new)
+- frontend/src/features/table-create/table-form-fields.tsx
+- frontend/src/features/table-create/table-form-values.ts
+- frontend/src/features/table-create/table-create-form.tsx
+- frontend/src/features/table-settings/table-settings-values.ts
+- frontend/src/features/table-settings/table-settings-form.tsx
+- frontend/src/locales/bg/tableForm.json
+- frontend/src/locales/en/tableForm.json
+
+**Git commit:** `540b5aa` — `feat(tables): settlement typeahead next to the free-text place`
+
+---
+
+
+## [2026-08-31 12:40] - Task #403: feat(geo): settlement registry with bulgarian seed and typeahead search
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** Полето „населено място" на масата беше свободен текст. Решението от Паркинг т.13 е реестър от GeoNames seed данни (НЕ админ панел; GPS радиус НЕ влиза — само списъци).
+
+**What was done:**
+- RECON: schema export CLI пътят (`RunWithGraphQLCommandsAsync(args)` в Program.cs), dev `EnsureCreated` блокът, `SystemFilter` / `EF.Functions.ILike` патърнът, `ApiFactory.ResetDatabaseAsync` (TRUNCATE между тестове — затова seed-ът НЕ може да е `HasData`).
+- RED: 8 нови тестови файла срещу несъществуващ `Features/Geo` slice → build FAILED с 18 × CS0234/CS0246 (правилната причина: липсващ slice, не грешно очакване).
+- GREEN:
+  - `Domain/Geo/Settlement.cs` (Id, Name, AsciiName, CountryCode, AdminRegion, Lat, Lng — координатите влизат СЕГА, безплатни са от GeoNames и захранват бъдещия радиус) + `Domain/Geo/SettlementKey.cs`: Id-то е ИЗВЕДЕНО (SHA-256) от естествения ключ (държава + asciiname + област), не раздадено от базата — оттам идва идемпотентността. `geonameid` НЕ се пази като колона НАРОЧНО: ръчно съставеният seed няма как да носи истински GeoNames идентификатори, а ключ по geonameid би дублирал всеки областен град при първото внасяне на истинския BG.txt.
+  - `PartyUpDbContext`: `DbSet<Settlement>` + уникален индекс по естествения ключ + индекси по двете имена.
+  - `Features/Geo/Import/`: `SettlementTsvParser` (19-колонният GeoNames формат, инвариантна култура за координатите, приема САМО feature class "P", прескача нечетимите редове вместо да сваля целия импорт), `SettlementImporter` (upsert + опционален `--replace`, който прави файла истина за държавите в него), `SettlementSeeder` / `SettlementSeedFile`, `SettlementsImportCommand` (`settlements import <tsv> [--replace]`).
+  - `Data/Seed/settlements-bg-core.tsv`: 27 областни града в GeoNames формат, съставен на ръка (нищо не се тегли от мрежата — §4.3).
+  - `Features/Geo/Search/SettlementQueries.cs`: `settlements(search: String!)` — `[ObjectType<Query>]` (НЕ `[QueryType]`, §7а.5), АНОНИМНО (без `[Authorize]`), ILIKE подниз по Name И AsciiName, cap 20, `AsNoTracking` + Select проекция.
+  - `contracts/schema.graphql`: ре-експорт от Hot Chocolate (+1 query поле, +1 тип `Settlement`).
+
+**⚠ Отклонение от `files` списъка на таска:** `backend/src/PartyUp.Api/Program.cs` НЕ е в него, но е пипнат — 2 хука, ~8 реда: (1) маршрутизиране на `settlements import` по `args` пътя (HC командният рутер отказва чужди команди, а notes т.2 иска командата изрично „по образеца на schema export — RunWithGraphQLCommandsAsync args пътя"); (2) `SeedIfEmptyAsync` в СЪЩЕСТВУВАЩИЯ dev `EnsureCreated` блок (notes т.3 иска точно „при dev старт, ако таблицата е празна"). Без тях т.2 и т.3 са неизпълними. Никой друг pending таск не пипа Program.cs (404 е Push/PushSend, 411/413/414/415 са FE) → конфликтен риск няма.
+
+**Verification:**
+- `dotnet test backend/PartyUp.slnx` → 203 unit + 400 integration = **603 pass, 0 fail**.
+- Нови: 5 unit файла (46 теста) + 3 integration файла (22 теста) — идемпотентност на импорта, „Бург"→Бургас и „burg"→Бургас (и в двата регистъра), cap-ът, wildcard escape-ът, анонимният достъп, seed при празна таблица / мълчание при пълна.
+- `npm --prefix frontend run typecheck` → clean (codegen мина срещу новата схема).
+- `npm --prefix frontend test` → 456 pass / 71 suites.
+- Ръчен smoke на CLI wiring-а: `-- settlements import missing.tsv` → „Файлът не е намерен"; `-- settlements` → usage; `-- schema export` продължава да работи (експортът мина ПРЕЗ новия хук).
+- `git status` чист: package-lock.json непокътнат, `src/gql/` не е комитнат, няма runtime артефакти.
+
+**Files modified:**
+- backend/src/PartyUp.Api/Domain/Geo/{Settlement,SettlementKey}.cs
+- backend/src/PartyUp.Api/Data/PartyUpDbContext.cs
+- backend/src/PartyUp.Api/Data/Seed/settlements-bg-core.tsv
+- backend/src/PartyUp.Api/Features/Geo/{SettlementSearch.cs, Import/*, Search/SettlementQueries.cs}
+- backend/src/PartyUp.Api/Program.cs (извън обхвата — виж бележката горе)
+- backend/tests/PartyUp.UnitTests/Features/Geo/* (5 файла)
+- backend/tests/PartyUp.IntegrationTests/Features/Geo/* (3 файла)
+- contracts/schema.graphql
+
+**Git commit:** `5474666` — `feat(geo): settlement registry with bulgarian seed and typeahead search`
+
+---
+
+
+### Task 411 — feat(board): infinite scroll over the paginated lfg board
+
+- Repo: partyup (frontend only)
+- Changed `frontend/src/features/board/board.graphql.ts`: `LfgBoardDocument` now selects `edges { cursor node {...} } pageInfo { hasNextPage endCursor }` with `$first`/`$after` variables instead of the flat `nodes` list (needed cursors for pagination).
+- Changed `frontend/src/features/board/board-screen.tsx`: added `BOARD_PAGE_SIZE` (20, matches BE `@listSize` default), `onLoadMore` (fetchMore + local `updateQuery` merge that dedups by listing id — kept entirely local to the hook, no edits to the poison-listed `lib/apollo.ts`), and `onScroll` (near-bottom detection, `LOAD_MORE_THRESHOLD_PX`) on the existing `ScrollView` (kept, not switched to `FlatList`, to preserve the nativewind grid layout from `board-layout.ts`). Added a «Зареди още» button fallback and «край»/loading-more states below the grid.
+- Changed `frontend/src/features/board/player-card.tsx`: `BoardListing` type now derives from `edges[number]['node']` instead of `nodes[number]`.
+- Changed `frontend/src/locales/{bg,en}/board.json`: added `pagination.{loadMore,loadingMore,end}` keys.
+- Changed `frontend/src/features/board/__tests__/board-screen.test.tsx`: updated `boardMock` helper to the new Connection shape (`edges`+`pageInfo`, `first`/`after` variables) and added a `пейджирането на борда` describe block (first page, fetchMore dedup, filter-change reset, end state, scroll-triggered load) — RED confirmed failing against the old component before implementation, GREEN after.
+- Verify: `npm --prefix frontend run typecheck` clean; `npm --prefix frontend test` — 71 suites / 461 tests green (board suite: 5 files / 37 tests).
+- Filters resetting pagination needed no special-case code: Apollo's default field-cache key includes all query variables (including `filter`), so a filter change is naturally a distinct cache entry starting at page 1 — the accumulated pages from the old filter never leak in.
+
+
+## Task #413 — feat(showcase): public no-login showcase for open tables with a guest call-to-action
+
+**Repo:** partyup · **Lane:** fe-tables · **Branch:** ralph/task-413 · **Commit:** `9f72c4d`
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** The acquisition channel of v0.5: an unregistered person scanning the bartender's QR code should see „в сряда има one-shot" instead of the login screen. `AuthGate` had the `PUBLIC_SEGMENTS` mechanism but it held only `['login']`, so every guest on `/showcase` was redirected away — the public, read-only showcase (А3) was unreachable without an account.
+
+**What was done:**
+- RECON: read `auth-gate.tsx` + its spec, both showcase screens, the tour step definitions, and — the blocker check — the BE `Features/Lfg/Showcase/ShowcaseQueries.cs` plus `TablesShowcaseTests`/`TablesShowcaseWalkInTests`. `tablesShowcase`/`table` carry no `[Authorize]`, there is no fallback policy in `Program.cs`, and the integration tests query them anonymously by design ("Всички заявки тръгват АНОНИМНО"). No blocker → `backend/` was not touched. Also verified the header claim: `AppHeader` reads theme/language from `ui-store` (no session) and hides only `/settings` for a resolved-anonymous user — already covered by `app-header.test.tsx` („крие входа към Настройки, докато няма сесия"), left untouched.
+- RED: 8 failing tests — guest on `['showcase']` and on the deep link `['showcase','[id]']` is not redirected; no session splash over the showcase (with a `login` counter-test that the splash *stays* where the session changes the screen); guest sees the Open table in full (invite, limit, badge); guest gets a `/login` CTA on the list, in the empty state and on the table profile; a signed-in user gets none of it; the `openTables` tour step exists on `/showcase`. The two gate tests initially passed against unchanged code because a negative assertion lands before `me` resolves — added a `SessionProbe` child so they wait for the clear "no session" answer and go red for the right reason.
+- GREEN: `PUBLIC_SEGMENTS` gained `'showcase'`, plus a separate `SESSION_FREE_SEGMENTS` (only `showcase`) that suppresses the splash where the session answer changes nothing on screen — `login` is deliberately excluded, since a live session redirects it to `/board` and the splash guards that frame. New `features/showcase/guest-cta.tsx`: `useIsGuest()` (`resolved && !user`, the same reflex as the gate — a network error is not a guest) and a presentational `GuestCta` rendered as a **link**, never a button, so the showcase's „no action on a table" invariant survives. Wired into both showcase screens; the empty state's „Публикувай се на борда" (board is behind the guard) becomes „Влез, за да се публикуваш" for guests. Added the `openTables` tour step anchored on the new `showcase-tables` testID, and `guest.*` / `steps.openTables.*` keys in bg **and** en.
+
+**Verification:**
+- `npm --prefix frontend test` → 467/467 pass, 71/71 suites (was 459/70 before the task)
+- `npm --prefix frontend run typecheck` → clean
+- `dotnet test backend/tests/PartyUp.UnitTests` → 161/161 pass (FE-only diff; sanity check that the worktree builds)
+- Working tree after commit: clean, no `src/gql/`, no `package-lock.json` churn, no runtime artifacts
+
+**Files modified:**
+- frontend/src/lib/auth-gate.tsx
+- frontend/src/lib/auth-gate.test.tsx
+- frontend/src/features/showcase/guest-cta.tsx (new)
+- frontend/src/features/showcase/showcase-screen.tsx
+- frontend/src/features/showcase/showcase-table-screen.tsx
+- frontend/src/features/showcase/__tests__/showcase-screen.test.tsx
+- frontend/src/features/showcase/__tests__/showcase-table-screen.test.tsx
+- frontend/src/features/tour/tour-content.ts
+- frontend/src/features/tour/__tests__/tour-content.test.ts
+- frontend/src/locales/{bg,en}/showcase.json
+- frontend/src/locales/{bg,en}/tour.json
+
+**Git commit:** `9f72c4d` — `feat(showcase): public no-login showcase for open tables with a guest call-to-action`
+
+---
+
+
+## [2026-08-31 11:05] - Task #401: feat(lfg): cursor pagination on the board and the tables showcase
+
+**Status:** ✅ Complete (retry 2 — merge conflict resolution)
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** Клонът беше готов и зелен, но оркестраторът не можа да го слее в `main`: докато 401 живееше, таск #412 (FE частта на walk-in режима) добави пет нови полета в `TablesShowcase` заявката, а 401 обви същата селекция в `nodes` на новия cursor Connection — един и същ блок, две различни промени → CONFLICT в `frontend/src/features/showcase/showcase.gql.ts`.
+
+**What was done:**
+- `git merge main` в worktree-то (разрешено изключение за тази итерация). Един-единствен конфликт — `showcase.gql.ts`; всичко останало (Auth рефакторът от #422/#423, walk-in FE от #412, `showcase-card.tsx`, `__tests__/showcase-screen.test.tsx`) се сля автоматично.
+- Конфликтът е разрешен като СБОР на двете намерения, не като избор: пълният набор полета от main (`placeDescription`, `oneShotPlace`, `meetingSchedule`, `admissionKind`, `slotsFirm`) влиза ВЪТРЕ в `nodes { ... }` на Connection-а.
+- Проверени и семантично (не само текстово) автоматично слетите места: `ShowcaseTableCard` типът вече сочи `NonNullable<...['tablesShowcase']>['nodes']` и главата на картата от #412 (`OpenBadge`/`formatOpenInvite`) работи върху него; `showcase-screen.tsx` чете `data?.tablesShowcase?.nodes`; `showcaseMock` хелперът обвива фикстурите на #412 в `TablesShowcaseConnection`.
+- Re-export на схемата след merge-а → нула разлика: #412 е чисто FE таск, контрактът от 401 стои непокътнат.
+
+**Verification:**
+- `npm --prefix frontend run typecheck` (codegen + tsc --noEmit) → clean
+- `npm --prefix frontend test` → 71/71 suite-а, 456/456 теста pass (включително 3-те нови walk-in теста на витрината от #412 срещу Connection формата)
+- `dotnet test backend/PartyUp.slnx` → 161/161 unit + 378/378 integration pass
+- `dotnet run -- schema export` → `contracts/schema.graphql` без промяна; `git status` чист, нула runtime артефакти
+
+**Files modified:**
+- frontend/src/features/showcase/showcase.gql.ts (разрешен конфликт)
+- (merge commit — останалото идва от main без ръчна намеса)
+
+**Git commit:** `bfbf4a2` — `Merge branch 'main' into ralph/task-401`
+
+---
+
+
+## [2026-08-31 10:15] - Task #740: test(crafting): add e2e fixture and spec for crafting page routing, search and details
+
+**Status:** ✅ Complete
+
+**Problem:** Фаза 5 (crafting reference, 710-730) е доставена, но видимостта при рутиране не е покрита от e2e. Unit тестовете проверяват classList, а jsdom не смята CSS — точно този пропуск скри бъга с липсващото глобално `.hidden` правило във фаза 4. Финалният таск на фичата затваря дупката по прецедента на bases-routing.
+
+**What was done:**
+- RECON: прочетени `test/fixtures/bases-routing-fixture.html` + `test/e2e/bases-routing.spec.js` (еталонът), `modules/crafting.js`, `modules/crafting-search.js`, `modules/router.js`, crafting markup-ът в `index.html` и craft правилата в `styles.css`.
+- Нова фикстура `test/fixtures/crafting-fixture.html` — standalone, с `<link rel="stylesheet" href="/styles.css">` (РЕАЛНИЯ, не инлайн копие): header ред с ⚒, `.tab-nav` с 4 бутона, празен `#tab-bases.tab.active`, огледален `#craftingPage` с контролите/chips/таблицата. Инлайн скриптът репликира `renderCraftingRoute`/`renderRoute`/`dispatchRoute` (класовете hidden, crafting последен → печели), `renderCrafting`/`detailsRow` (`.craft-row`/`.craft-badge`/`.craft-expanded`/`.craft-details-row`), `populateBadgeOptions`/`applyFilter` и boot strip-а на router.js. Данните са ИНЛАЙН — ЕДНА таблица, 5 реда, 2 Size стойности (Tiny/Small); последният ред е с празни „Notes", за да се вижда и пропускането на празните стойности в детайла. `crafting-data.js` НЕ се импортва.
+- Нов спек `test/e2e/crafting-routing.spec.js` (7 теста, Playwright визибилити асершъни, НЕ classList): (а) боот — табовете видими, `#craftingPage` скрит; (б) ⚒ → страницата видима, `.tab-nav` и `#tab-bases` `toBeHidden` (computed styles); (в) търсене „fox" → 1 ред, изчистване → 5; (г) badge филтър „Tiny" → 2 реда, „Всички" → 5; (д) акордеон — клик на ред → `.craft-details-row` видим с „Harvest DC: 5"/„Leather / Hide: Pelt", повторен клик → скрит; (е) `#btnCraftBack` → табовете видими, страницата скрита; (ж) F5 в страницата → каца на табовете, hash-ът празен.
+
+**Verification:**
+- `npm run test:unit` → 18 файла / 225 теста pass (регресия: нищо от 710-730 не е пипано). Първото пускане в чистия worktree дигна timeout на един crafting тест заради студен vite transform кеш (transform 137s); при второто пускане suite-ът минава за 7s изцяло зелен — не е регресия.
+- Логиката на фикстурата е изпълнена end-to-end в jsdom (route класове, търсене, badge филтър, акордеон, пропускане на празни стойности, back + boot strip) — агентът НЕ пуска `npm test`, портът 45279 е на verify gate-а, който ще пусне реалния спек след merge.
+- `git status` → само двата НОВИ файла; нито един съществуващ файл в `test/e2e/` или `test/fixtures/` не е променен (§3.5 / §11).
+
+**Files modified:**
+- test/fixtures/crafting-fixture.html (нов)
+- test/e2e/crafting-routing.spec.js (нов)
+
+**Git commit:** `4f83426` — `test(crafting): add e2e fixture and spec for crafting page routing, search and details`
+
+
+## Task #412 — feat(tables): open walk-in mode and soft slot limit in create, settings and showcase
+
+**Repo:** partyup · **Lane:** fe-tables · **Branch:** ralph/task-412 · **Commit:** `8107fe6`
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** Task 402 (BE) added `admissionKind` (CANDIDACY/OPEN) and `slotsFirm` to the `Table` contract for open walk-in tables. The FE twin needed to expose the choice at creation, make it editable in settings, and distinguish open tables on the showcase card — without touching the untouched candidacy flow (402 owns that server-side).
+
+**What was done:**
+- RECON: read `party-up.md` v0.5 SCOPE + `party-up-structure.md` §4, the merged `contracts/schema.graphql` (`AdmissionKind`, `Table.slotsFirm`), and the existing `admission-mode-field.tsx` primitive pattern.
+- RED: added failing tests asserting the create/settings forms send `admissionKind`+`slotsFirm`, that the soft-limit toggle only appears for OPEN, and that the showcase card shows an „отворена" badge, a firmness-aware limit string, and a place/time invite instead of the seat count for open tables.
+- GREEN: built a shared `AdmissionKindField` (in `table-create/`, reused by `table-settings/` — its own comment explains why it stays on the `tableForm` i18n namespace even when rendered in settings, since `tableSettings.json` was out of this task's file scope) and wired it into both forms; extended `table-form-values.ts` / `table-settings-values.ts` with the new field + defaults (`CANDIDACY`/`true`, mirroring the BE's `?? Candidacy` / `?? true`); added `OpenBadge` + `format-open-invite.ts` helpers and updated `showcase-card.tsx`/`showcase.gql.ts`; added bg+en keys to `tableForm.json` and `showcase.json`.
+- Updated pre-existing fixtures (table-create/table-settings/showcase tests) to the new non-null `admissionKind`/`slotsFirm` schema fields so typecheck stayed clean.
+
+**Verification:**
+- `npm --prefix frontend run typecheck` → clean
+- `npm --prefix frontend test` → 71 suites / 456 tests pass
+- Scope respected: only `frontend/src/features/{table-create,table-settings,showcase}/**` + `frontend/src/locales/{bg,en}/{tableForm,showcase}.json` touched; `src/gql/` and `package-lock.json` left uncommitted/unchanged.
+
+**Files modified:**
+- frontend/src/features/table-create/admission-kind-field.tsx (new)
+- frontend/src/features/table-create/table-create-form.tsx
+- frontend/src/features/table-create/table-form-values.ts
+- frontend/src/features/table-create/table-create-form.test.tsx, table-create-form-web.test.tsx, table-form-values.test.ts
+- frontend/src/features/table-settings/table-settings-form.tsx
+- frontend/src/features/table-settings/table-settings-values.ts
+- frontend/src/features/table-settings/table-settings.gql.ts
+- frontend/src/features/table-settings/table-settings-form.test.tsx, table-settings-values.test.ts, table-listing-section.test.tsx
+- frontend/src/features/showcase/showcase-card.tsx
+- frontend/src/features/showcase/showcase-badges.tsx
+- frontend/src/features/showcase/showcase.gql.ts
+- frontend/src/features/showcase/format-open-invite.ts (new)
+- frontend/src/features/showcase/__tests__/showcase-screen.test.tsx
+- frontend/src/locales/{bg,en}/tableForm.json
+- frontend/src/locales/{bg,en}/showcase.json
+
+**Git commit:** `8107fe6` — `feat(tables): open walk-in mode and soft slot limit in create, settings and showcase`
+
+---
+
+
+## Task #730 — feat(crafting): implement name search and per-table badge filter
+
+**Repo:** inventory (shared-inventory) · **Lane:** crafting-search · **Branch:** ralph/task-730 · **Commit:** `0bfce26`
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+### Какво е направено
+- **RECON:** stub-ът от 710, `crafting-data.js` (кои таблици са `filterable` и техните `badgeCol`), `.craft-controls` в index.html (само четене), `state.js`, setup патърнът на `crafting-foundation.spec.js` / `crafting.spec.js` (bootApp прави `vi.resetModules()` → модулите се импортват СЛЕД него).
+- **RED:** нов `test/unit/crafting-search.spec.js` (10 теста) преди имплементацията — при boot селектът е видим с „Всички“ (value '') + 5-те distinct Size стойности по ред на поява (Tiny/Small/Medium/Large/Huge); `input` в #craftSearch пише `state.craftingFilter.q` (trim-нат) и dispatch-ва `crafting-filter`; `change` в #craftBadge пише `.badge`; двете се комбинират в един филтър обект; `crafting-tab` към `ingredients` (filterable false) крие селекта, изчиства value-то му и #craftSearch; към `brewing` показва Potion Tier стойностите; към `outcomes` — точно 15-те Property стойности (от 90 реда); info таблица (`harvestRules`) също няма филтър; връщане към filterable таблица напълва селекта наново. Всички 10 червени по правилната причина (stub-ът е празен).
+- **GREEN:** `modules/crafting-search.js` — `populateBadgeOptions()` (distinct `badgeCol` през `Set` по ред на поява, `String()` върху стойността, `esc()` при рендера; non-table/non-filterable → празен select + клас `hidden`), `applyFilter()` (чете двете контроли → `state.craftingFilter = { q, badge }` + `CustomEvent('crafting-filter')`, без debounce — таблиците са ≤90 реда), wiring на `input`/`change` при module init, listener за `crafting-tab` (чисти #craftSearch и repopulate-ва) и едно извикване на `populateBadgeOptions()` при init за дефолтния таб animals.
+
+### Контракт
+Модулът НЕ импортва и не вика `crafting.js` — само `state.js` + `crafting-data.js` + document events (паралелни lanes, §11). Exports списъкът остава идентичен (`populateBadgeOptions`), така facade re-export-ът в app.js не се пипа.
+
+### Verification
+- `test/unit/crafting-search.spec.js` → 10/10 pass
+- `npm run test:unit` (пълен suite) → 18 файла / 225 теста pass
+- `git status` → пипнати са САМО `modules/crafting-search.js` и собственият спек
+
+### Червени линии
+`crafting-data.js` непокътнат · никакъв Firestore · UI на български („Всички“) · index.html / styles.css / app.js / crafting.js (чужда собственост, lane 720) непокътнати.
+
+**Files modified:**
+- `modules/crafting-search.js`
+- `test/unit/crafting-search.spec.js` (нов)
+
+**Git commit:** `0bfce26` — `feat(crafting): implement name search and per-table badge filter`
+
+
+## Task #720 — feat(crafting): implement reference page with table chips, name/badge list and accordion details
+
+**Repo:** inventory (shared-inventory) · **Lane:** crafting-ui · **Branch:** ralph/task-720 · **Commit:** `fdad6a9`
+
+### Какво е направено
+- **RED:** нов `test/unit/crafting.spec.js` (19 теста) преди имплементацията — chips (9 на брой, animals активен, клик сменя таблицата и dispatch-ва `crafting-tab`, нулира филтър+expanded), таблица (thead Animal/Size, 54 реда, име в `<strong>`, `.craft-badge`, 📖, без drag-handle/Sortable), акордеон (ред-клик и 📖 toggle-ват същото, точно един разгънат, `.craft-details-row` с ключ: стойност без nameCol/badgeCol и без празни стойности, реалният индекс оцелява филтриране), филтър (`q` substring, `badge` exact, `.empty` „Няма съвпадения.“), info изглед (9 `.craft-info-row`, таблицата скрита и обратно), route (излизане от `#crafting` + btnCraftBack). Червени по правилната причина — stubs-овете от 710.
+- **GREEN:** `modules/crafting.js` — `renderCrafting()` (chips по `CRAFTING_TABLES`, info/table разклонение, филтриран рендер с реален `data-idx`, акордеон през `state.expandedCraftIdx` с re-render), `selectTab()`, `toggleRow()`, `detailsRow()`; wiring при module init: `btnCraftBack` (hash = '' + `renderCraftingRoute()`, патърнът на btnBaseBack) и `document.addEventListener('crafting-filter', …)`.
+- Кликът върху 📖 бълбука до listener-а на реда — един handler покрива и двата жеста.
+- Детайлите излизат като ключ: стойност (НЕ таблица) и носят и `.craft-k`/`.craft-v` класовете, които `styles.css` (чужд файл, от 710) вече стилизира.
+
+### Проверки
+- `npm run test:unit` → **17 файла / 215 теста зелени** (вкл. crafting-foundation и всички стари спекове).
+- `git status` → пипнати САМО `modules/crafting.js` и `test/unit/crafting.spec.js`.
+
+### Червени линии
+- `modules/crafting-data.js` само се импортва (не е пипан), никакъв Firestore, exports списъкът е идентичен на stub-а, UI на български, `esc()` от `ui.js`.
+- Чуждите файлове на паралелния lane 730 (`index.html`, `styles.css`, `app.js`, `router.js`, `crafting-search.js`) не са докосвани.
+
+
+## Task #423: feat(auth): optional shared token guard on the dev-login endpoint
+
+**Repo:** partyup | **Lane:** be-auth
+
+- RECON: reviewed the post-#422 `Features/Auth/DevLogin/DevLoginEndpoints.cs` (moved shared `ProvisioningService`/`AuthRedirect`) and the `IsConfigured` pattern in `Program.cs` (OAuth ClientId/ClientSecret presence check) referenced by the task notes and party-up.md §12.
+- RED: added three test scenarios to `DevLoginEndpointsTests.cs` (as a 4-test split: no-config unchanged behavior, correct token logs in, wrong/missing token → 404 via `[Theory]`), using `builder.UseSetting("DevLogin:Token", ...)` on the existing `WithWebHostBuilder` Development host. Confirmed red against the unmodified endpoint.
+- GREEN: `CompleteAsync` now takes an optional `token` query param + injected `IConfiguration`. Reads `DevLogin:Token`; if set and the token doesn't match (constant-time `CryptographicOperations.FixedTimeEquals`), returns `Results.NotFound()` before any other validation — identical to the route not existing, so it never leaks whether dev-login exists. If the key is unset, old behavior (env gate only) is preserved untouched.
+- DONE: `dotnet test backend/tests/PartyUp.UnitTests` — 161/161 green (no regressions). `dotnet test backend/tests/PartyUp.IntegrationTests --filter Features.Auth` — 35/35 green (10 in `DevLoginEndpointsTests`, incl. the 4 new). Commit `c5f0ccac26a95f41f064a5e3375e96c2ce7f0aab`.
+- Scope note: left `appsettings.json`/`appsettings.Development.json` untouched (no empty `DevLogin:Token` placeholder added) since those files are outside this task's `files` boundary (`Features/Auth/**` + its tests only); the config key works purely via user-secrets/env/test-host settings, same functional behavior as the OAuth secrets pattern.
+
+
+## Task 710 — feat(crafting): add crafting reference foundation with hammer icon, page markup, unified hash router and module stubs
+
+**Repo:** inventory (shared-inventory) · **Lane:** crafting-core · **Branch:** ralph/task-710 · **Commit:** `23c8ff9`
+
+### Какво е направено
+- **RED:** нов `test/unit/crafting-foundation.spec.js` (10 теста) — икона, markup контракт, схемата на данните, router-ът и boot strip-ът. 6 от тях червени по правилната причина (липсващ `#craftingPage`, липсващ router, липсващ `window.openCrafting`); 4-те за данните минаха веднага, защото `modules/crafting-data.js` е вече комитнат. Всички 15 стари спека останаха зелени.
+- **index.html:** `<button class="btn-ghost" onclick="openCrafting()" aria-label="Крафтинг референции">⚒</button>` в header реда (БЕЗ нов таб) + целият `#craftingPage` блок СЛЕД `#baseDetail`: `btnCraftBack`, `.craft-controls` (`craftSearch` + `craftBadge`), `nav#craftTabs`, `.tbl-wrap > table#craftTable` (`craftHead`/`craftBody`), `#craftInfo`.
+- **styles.css:** `#craftingPage` (огледало на `#baseDetail` — 900px, центриран), `.craft-tabs` (хоризонтално скролируеми chips с `.active` акцент), `.craft-controls` (flex, търсачката расте, wrap на телефон), `.craft-badge`, `tr.craft-expanded` + `.craft-details` / `#craftInfo` (key: value, НЕ таблица).
+- **modules/router.js (нов):** единственият hashchange владетел. `dispatchRoute()` вика `renderRoute()` и СЛЕД това `renderCraftingRoute()` (последният печели за `#crafting`). Boot strip с `history.replaceState` за ВСЕКИ остатъчен hash — решението от bases хотфикс 2, вече обобщено. Самоинициализира се при import (документирано в кода и в app.js).
+- **modules/base-detail.js:** махнати САМО `window.addEventListener('hashchange', renderRoute)` и boot-strip блокът; `renderRoute` export-ът, btnBaseBack/btnBaseSave wiring-ът и цялата логика са непипнати.
+- **Stubs:** `modules/crafting.js` — `renderCraftingRoute()` е РЕАЛЕН (той е самият route: крие `.tab-nav`/`.tab`/`#baseDetail`, показва страницата), `renderCrafting()` е stub за 720, `openCrafting()` сетва hash + рендерира (патърнът на `openBaseDetail` — hashchange е ненадежден в jsdom). `modules/crafting-search.js` — `populateBadgeOptions()` stub за 730.
+- **modules/state.js:** `craftingTab: 'animals'`, `craftingFilter: { q: '', badge: '' }`, `expandedCraftIdx: null`.
+- **app.js:** import на router/crafting/crafting-search, `window.openCrafting`, facade re-exports `{ renderCrafting, renderCraftingRoute, openCrafting, populateBadgeOptions }`. Firestore wiring-ът е непипнат — `BASES_DOC` snapshot-ът продължава да вика `renderRoute()`.
+
+### Верификация
+`npm run test:unit` → **16 файла / 196 теста зелени** (3 последователни пускания, без флейк). Регресионната мрежа `bases-detail.spec.js` + `bases-foundation.spec.js` мина без да е пипана — router рефакторът не им личи.
+
+### Червени линии
+Никакъв Firestore за фичата (данните са статични); `modules/crafting-data.js` не е пипан; `test/e2e/` и fixtures не са пипани; `npm test`/`npm run serve` не са пускани (само `test:unit`); UI е на български.
+
+### За следващите lanes
+DOM контрактът и state полетата са на място — 720 (crafting-ui) пише САМО в `modules/crafting.js`, 730 (crafting-search) САМО в `modules/crafting-search.js`, комуникацията е през `state.craftingTab`/`state.craftingFilter` + document events `crafting-tab` / `crafting-filter`.
+
+
+## [2026-08-31 —] - Task #422: refactor(auth): lift shared provisioning primitives above the login and dev-login slices
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** v0.4 review finding: `DevLoginEndpoints` (Features/Auth/DevLogin) referenced `ProvisioningService`, `AuthRedirect` and `ExternalIdentity` from the sibling `Login` slice's internals — a slice→slice edge, violating architecture-rules.md 1.2 (dependencies only inward, no cross-slice references).
+
+**What was done:**
+- RECON: read the Features/Auth tree and grepped `using Features.Auth.Login` across backend/src and backend/tests to find every consumer.
+- Move: `git mv` ProvisioningService.cs, AuthRedirect.cs, ExternalIdentity.cs from `Features/Auth/Login/` up to `Features/Auth/` and changed their namespace from `PartyUp.Api.Features.Auth.Login` to `PartyUp.Api.Features.Auth`.
+- Updated consumers: `Login/AuthEndpoints.cs` and `DevLogin/DevLoginEndpoints.cs` now `using PartyUp.Api.Features.Auth;` and consume the shared types from above instead of a sibling slice.
+- `ExternalAuthProviders` (the closed OAuth provider set) intentionally stayed in `Login/` per the review's exact recipe — only the three named types moved. `ExternalIdentity.cs` picked up a `using PartyUp.Api.Features.Auth.Login;` to keep resolving it (its `FromExternalLogin` factory, used only by the real OAuth flow).
+- Fixed fallout in the three Auth test files whose `using` pointed at the old namespace (`ProvisioningTests.cs`, `AuthRedirectTests.cs`, `ExternalIdentityTests.cs`) — namespace/using updates only, no test logic touched.
+
+**Verification:**
+- `dotnet build backend/PartyUp.slnx` → succeeded, 0 errors.
+- `dotnet test backend/tests/PartyUp.UnitTests` → 157/157 pass.
+- `dotnet test backend/tests/PartyUp.IntegrationTests --filter Features.Auth` → 31/31 pass.
+- `dotnet test backend/PartyUp.slnx` (full suite, Docker Desktop up) → 157 unit + 356 integration, 0 failed.
+
+**Files modified:**
+- backend/src/PartyUp.Api/Features/Auth/AuthRedirect.cs (moved from Login/)
+- backend/src/PartyUp.Api/Features/Auth/ExternalIdentity.cs (moved from Login/)
+- backend/src/PartyUp.Api/Features/Auth/ProvisioningService.cs (moved from Login/)
+- backend/src/PartyUp.Api/Features/Auth/Login/AuthEndpoints.cs
+- backend/src/PartyUp.Api/Features/Auth/DevLogin/DevLoginEndpoints.cs
+- backend/tests/PartyUp.IntegrationTests/Features/Auth/ProvisioningTests.cs
+- backend/tests/PartyUp.UnitTests/Features/Auth/AuthRedirectTests.cs
+- backend/tests/PartyUp.UnitTests/Features/Auth/ExternalIdentityTests.cs
+
+**Git commit:** `139c572` — `refactor(auth): lift shared provisioning primitives above the login and dev-login slices`
+
+---
+
+
+## [2026-08-31 —] - Task #402: feat(tables): add open walk-in table mode with soft slot limits
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** FB патърнът „сряда 18ч в Другия замък, feel free to join" няма как да бъде обявен в Party Up: всяка маса минава през кандидатски flow (борд → дърпане → обсъждане → контакт → verdict), а бройката места е желязна. v0.5 иска и другия режим — обявата Е поканата.
+
+**What was done:**
+- **RECON:** Table.cs / Enums.cs / TableRules, трите Tables слайса (CreateTable, Settings, Listing), ShowcaseQueries проекцията, трите Candidacies слайса и съществуващите им спекове; party-up.md «v0.5 SCOPE» + Паркинг «Публична отворена маса».
+- **RED:** 15 нови теста преди имплементацията — 11 integration (`CreateTableWalkInTests`, `UpdateTableSettingsWalkInTests`, `TablesShowcaseWalkInTests`, `OpenTableGuardTests`) + 4 unit (`SlotLimitRulesTests`). Първо compile-червено (липсващи `AdmissionKind` / `SlotLimitRules`), после — след голия домейн — поведенческо червено: 10 паднали integration теста заради непознати GraphQL полета и липсващи guard-ове.
+- **GREEN:** нов enum `AdmissionKind { Candidacy, Open }` + `Table.SlotsFirm` (дефолт `true`) и `Table.AdmissionKind` (дефолт `Candidacy`) — старото поведение НЕ мърда; двете полета минаха през `TableDraft`/`CreateTableHandler`/`CreateTableMutations` и `TableSettingsPatch`/`UpdateTableSettingsHandler`/`UpdateTableSettingsMutations` (липсващо поле = „не го пипай", липсващ вход при създаване = кандидатска маса с твърд лимит); `ShowcaseQueries.Projection` ги изнесе на витрината и на страницата на масата.
+- **Мекият лимит** излезе като чиста функция `SlotLimitRules.AllowsSlots(slotsFirm, slotsTotal, activeMembers)` (§2а.6, по модела на `TableDelistService.ShouldDelist`). Твърдостта се чете СЛЕД смяната, затова „омекоти и свий" е една заявка, а „втвърди и свий" остава CONFLICT.
+- **Семантика на Open:** `CandidacyService.WalkInGuard` / `WalkInGuardAsync` (`TABLE_IS_OPEN`, i18nKey `candidacies.tableIsOpen`) — един адрес за трите входа. Закачен е СЛЕД проверката за права („правата първо" остава) и ПРЕДИ всякакъв запис: дърпането не отваря кандидатура/решение, контактът не създава чат и не синхронизира, verdict-ът не сяда никого.
+- **Контракт:** `contracts/schema.graphql` е ре-експортиран от Hot Chocolate (никаква ръчна редакция, §3.1) и е в СЪЩИЯ commit — добавени `Table.slotsFirm`/`Table.admissionKind`, двете input полета на `createTable`/`updateTableSettings` и `enum AdmissionKind`.
+
+**Verification:**
+- `dotnet test backend/PartyUp.slnx` → 161/161 unit + 362/362 integration (Testcontainers Postgres) ✅
+- `npm --prefix frontend run typecheck` → clean (codegen срещу новата схема) ✅
+- `npm --prefix frontend test` → 436/436 в 70 suite-а ✅ (първият прогон веднага след Docker суита даде 4 таймаут-флейка; чист прогон — зелено)
+- Червени линии: без ръчна редакция на схемата, без секрети, без migrations, без комитнат `src/gql`, `package-lock.json` непипнат.
+
+**Files modified:**
+- backend/src/PartyUp.Api/Domain/{Table,Enums}.cs
+- backend/src/PartyUp.Api/Features/Tables/CreateTable/{TableDraft,CreateTableHandler,CreateTableMutations}.cs
+- backend/src/PartyUp.Api/Features/Tables/Settings/{TableSettingsPatch,UpdateTableSettingsHandler,UpdateTableSettingsMutations,SlotLimitRules}.cs
+- backend/src/PartyUp.Api/Features/Lfg/Showcase/ShowcaseQueries.cs
+- backend/src/PartyUp.Api/Features/Candidacies/{Pull/CandidacyService,Pull/PullCandidateHandler,Contact/OpenContactChatHandler,Verdict/SubmitVerdictHandler}.cs
+- backend/tests/PartyUp.IntegrationTests/Features/{Tables/CreateTable/CreateTableWalkInTests,Tables/Settings/UpdateTableSettingsWalkInTests,Lfg/Showcase/TablesShowcaseWalkInTests,Candidacies/OpenTableGuardTests}.cs
+- backend/tests/PartyUp.UnitTests/Features/Tables/Settings/SlotLimitRulesTests.cs
+- contracts/schema.graphql
+
+**Отворено за следващ таск (извън `files` зоната на 402):** `MyTablesQueries` проекцията и `RefoundTableHandler.Clone` изброяват полетата на масата поименно и още не носят `admissionKind`/`slotsFirm` — `myTables` ще чете дефолти, а преоснованата walk-in маса ще се роди кандидатска. И двете са едноредови допълнения в чужди слайсове (Features/MyTables, Features/Lifecycle).
+
+**Git commit:** `b2955ed` — `feat(tables): add open walk-in table mode with soft slot limits`
+
+---
+
+
+## [2026-08-31] - Task #421: feat(security): rate limiting on auth, graphql mutations and export download
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** Auth endpoints (incl. dev-login, which has zero protection beyond IsDevelopment()), the privacy data-export download, and POST /graphql had no throttling — open to brute force / cost bombs / a runaway bill.
+
+**What was done:**
+- RECON: read Program.cs pipeline order, AuthEndpoints/DevLoginEndpoints/DataExportEndpoints, and ApiFactory (Testing env, TestAuthHandler, WithWebHostBuilder+UseSetting pattern already used by VapidPublicKeyTests/DevLoginEndpointsTests).
+- Chose a single GLOBAL PartitionedRateLimiter<HttpContext> classifying by request path, all living in `Common/RateLimiting/` — this keeps Program.cs down to two registration lines and avoids touching AuthEndpoints.cs/DevLoginEndpoints.cs/DataExportEndpoints.cs (all outside this task's file scope) since no per-endpoint `.RequireRateLimiting()` is needed.
+- `RateLimitingOptions.cs`: Auth/PrivacyExport (strict, 10 req/60s fixed window) and GraphQl (moderate, 60 req/60s sliding window, 4 segments) — these are the C# property defaults, i.e. what Production gets with no extra config.
+- `RateLimitingSetup.cs`: `AddPartyUpRateLimiting(IConfiguration)` binds `RateLimitingOptions` (env-aware default → optional config override, in that order) and registers the global limiter; `Classify(HttpContext)` — Development ⇒ `GetNoLimiter` always; else `/auth*` ⇒ fixed window; `/privacy/export` ⇒ fixed window; POST `/graphql` ⇒ sliding window; everything else ⇒ unthrottled. Partition key = `user:{id}` when `ClaimsPrincipal` has a session, else `ip:{RemoteIpAddress}`. `OnRejected` writes `Retry-After` (from the lease's `MetadataName.RetryAfter` metadata) + a `DomainError.Of("RATE_LIMITED", "errors.rateLimited")` JSON body via `RejectionStatusCode = 429`.
+- Test hygiene fix baked into the same setup: when `IHostEnvironment.EnvironmentName == "Testing"`, the bound options are overridden to a generous 100000/60s before any real config is applied — the shared `PostgresCollectionFixture`/`ApiFactory` host (used serially by the whole 350+ integration suite) never trips the limiter by accident, since most of those requests would otherwise collide on the same anonymous IP bucket.
+- RED/GREEN: `backend/tests/PartyUp.IntegrationTests/Foundation/RateLimiting/RateLimitingTests.cs` (5 tests) — each spins its own `Api.WithWebHostBuilder(...).UseSetting("RateLimiting:<Policy>:PermitLimit"/"WindowSeconds", ...)` host with a deliberately tiny limit (2, or 1 for the bucket-isolation case) to actually trigger 429s fast: (1) auth N+1th request → 429 + Retry-After + RATE_LIMITED code; (2) privacy export N+1th request → 429; (3) two different authenticated users on a 1-request export limit do NOT share the bucket (both first calls pass, Alice's second doesn't); (4) graphql N+1th POST → 429; (5) Development with a 1-request graphql limit is never throttled (red-line check).
+- Program.cs: added `using PartyUp.Api.Common.RateLimiting;`, `builder.Services.AddPartyUpRateLimiting(builder.Configuration);` (near the other service registrations) and `app.UseRateLimiter();` placed AFTER `UseAuthentication()`/`UseAuthorization()` so the partition-by-user-id check sees a populated `HttpContext.User`.
+
+**Verification:**
+- `dotnet build backend/PartyUp.slnx` → clean.
+- `dotnet test backend/PartyUp.slnx --nologo -v q` → **157/157 unit + 356/356 integration** (351 pre-existing + 5 new), all green, no regressions — confirms the Testing-environment generous defaults actually protect the shared fixture.
+- Manually re-ran just `--filter FullyQualifiedName~RateLimitingTests` first (RED confirmed failing before `AddPartyUpRateLimiting`/`UseRateLimiter` existed, GREEN after) before the full-suite run.
+
+**Bonus check (per task notes, not implemented):** `contracts/schema.graphql` has 65 `@cost` directives, but there is no `AddCostAnalyzer`/`CostOptions`/`MaxAllowedCost` anywhere in `backend/src` — Hot Chocolate's cost limiter is registered nowhere, so the `@cost` weights are currently decorative. Recommend a follow-up task to wire the cost analyzer (max cost per request) in Program.cs.
+
+**Files modified:**
+- backend/src/PartyUp.Api/Program.cs
+- backend/src/PartyUp.Api/Common/RateLimiting/RateLimitingOptions.cs (new)
+- backend/src/PartyUp.Api/Common/RateLimiting/RateLimitingSetup.cs (new)
+- backend/tests/PartyUp.IntegrationTests/Foundation/RateLimiting/RateLimitingTests.cs (new)
+
+**Git commit:** `3e7d999417a8e8fa2914d2941d1c3081ccf11e6e` — `feat(security): rate limiting on auth, graphql mutations and export download`
+
+---
+
+
+### Task 431 — feat(push): mount the existing push prompt and subscribe flow into the app
+
+**Repo:** partyup (frontend)
+
+**What changed:**
+- New `frontend/src/features/push/push-settings-section.tsx` (`PushSettingsSection`) — the settings-screen mount point for the push slice. Unlike `PushPrompt` (armed banner, hides forever after opt-out), this card is always visible in `/settings` and reports an honest status: `enabled` / `disabled` (+ "Включи известията" button) / browser doesn't support / iOS needs install / blocked by browser (+ how to re-enable via site settings).
+- `frontend/src/app/settings.tsx` — mounted `<PushSettingsSection />` between `RestartTourSection` and `SessionSection` (destructive actions stay last).
+- `frontend/src/features/push/push-pipeline.ts` — `PushBrowser` gained a `permission: NotificationPermission` snapshot (`readPushBrowser` reads `Notification.permission` once at mount, guarded by `typeof`).
+- `frontend/src/features/push/use-push-setup.ts` — initial `status` now seeds to `'blocked'` when `support === 'supported'` and the browser already denied permission before this session, so the status is honest without requiring a click (benefits `PushPrompt` too).
+- `frontend/src/locales/{bg,en}/push.json` — added `settings.{title,subtitle,disabled,unsupported,blocked}`; reused existing `banner.enable/working/failed`, `install.body`, and `enabled` keys where copy is identical.
+- Tests: new `push-settings-section.test.tsx` (12 cases: default disabled+button, full enable flow, opt-out doesn't hide the card, blocked after click, blocked immediately from a pre-denied permission, unsupported, iOS install hint, domain-error translation, EN i18n, working/spinner state). Updated `push-prompt.test.tsx`'s `browser()` helper for the new required `permission` field.
+
+**Verification:** `npx tsc --noEmit` clean; `npx jest` full frontend suite green (447/447, up from 436 baseline — the 4 new push-settings tests plus existing push tests); the foreign `auth-linking/__tests__/settings-screen.test.tsx` (settings screen ordering/card assertions) still passes unmodified. dotnet backend suite untouched (no BE files in scope).
+
+**Note for the human:** RECON found no `Push:VapidPublicKey`/`Push:VapidPrivateKey` placeholders in backend appsettings — worth confirming `dotnet user-secrets` actually has them before relying on this end-to-end outside of tests (FE tests are fully mocked, so this doesn't block the task).
+
+
 ### Task 308: feat(tour): first-login tour steps across the app and a restart entry in settings
 
 - Built the tour **content** on top of the task-307 engine (machine untouched): 8 steps — board+publish CTA, filters, showcase link, my-tables+create-table, notification bell, header theme/language/settings — each anchored to an **existing** testID where the target screen was in scope's reach, or `targetTestId: null` (centered panel, no spotlight) where the target element/screen was outside this task's files zone (board publish button, filter panel, showcase link — all in `board-screen.tsx`/`filter-panel.tsx`, not owned by this task). The notification bell isn't mounted on any screen yet (a documented, pre-existing gap from task 40) so its step gracefully falls back to a plain backdrop until a future task wires it — no change needed here when that happens.
@@ -2839,6 +3323,23 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
