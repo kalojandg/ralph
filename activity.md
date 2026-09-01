@@ -34,6 +34,35 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## [2026-09-01 09:15] - Task #910: test(crafting): cover the raw materials economy tables with rarity filter coverage
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → DONE
+
+**Problem:** Третият източник (DnD_Raw_Materials_Economy.xlsx) вече беше налят в `modules/crafting-data.js` с две нови таблици (`materials` — 120 реда, badgeCol 'Rarity', единствената ИСТИНСКА rarity колона в цялата референция; `rarityRules` — 6 реда, без филтър). Data-driven UI-ят ги показваше даром, но нямаха нито един тест по същество.
+
+**What was done:**
+- RECON: прочетени shared-inventory-structure.md §11 («Данни» + червените линии §3), crafting-feature-plan.md таблицата key/label/badgeCol, schema banner-а + главите на materials/rarityRules в modules/crafting-data.js, плюс modules/crafting.js, modules/crafting-search.js и трите целеви спека изцяло (патърните bootApp / hash '#crafting' + hashchange / state + document events).
+- RED (тук = проверка на очакванията, не на липсваща имплементация — поведението е вече доставено): добавени 9 характеризационни теста:
+  - `crafting-foundation.spec.js` (+3, в «static data module»): materials — type 'table', 120 rows, nameCol 'Raw Material', badgeCol 'Rarity', filterable true, columns съдържа 'Category' и 'Raw Value / lb (gp)'; закотвящ assert ред 0 = 'Common soil' / 'Common' (хваща разместване при регенерация); rarityRules — 6 rows, nameCol 'Rarity', badgeCol null, filterable false.
+  - `crafting.spec.js` (+4, нов describe «raw materials economy»): chip 'materials' → thead 'Raw Material'/'Rarity', 120 реда, ред 0 с 'Common soil' в `<strong>` и 'Common' в `.craft-badge`; акордеонът показва 'Category' и 'Typical Refined Product / Notes' със стойностите им, БЕЗ 'Raw Material'/'Rarity'; ФИЛТЪРЪТ Е ТОЧНО СЪВПАДЕНИЕ — badge 'Rare' дава точно редовете с Rarity === 'Rare' и НИКОГА 'Very Rare' (очакването е изведено от данните + асерт, че и двете стойности реално съществуват); rarityRules chip → 6 реда, 2 колони в thead, без `.craft-badge`.
+  - `crafting-search.spec.js` (+2): `crafting-tab` за 'materials' → #craftBadge видим, опция 0 „Всички“ + DISTINCT Rarity стойностите ПО РЕД НА ПОЯВА (изведени от `materials.rows`, не хардкоднати; + assert че 'Very Rare' е ОТДЕЛНА опция след 'Rare'); 'rarityRules' → селектът hidden и празен.
+- Всички 9 нови теста са ЗЕЛЕНИ от първото пускане — НИКАКЪВ продуктов код не е пипан, не е намерен реален бъг.
+
+**Verification:**
+- `npm run test:unit` → 18 файла, **234/234 pass** (225 стари + 9 нови), 0 skipped, без `.only`
+- `git status` → пипнати САМО трите спека; `modules/**`, `test/e2e/`, `test/fixtures/` недокоснати
+- Не е пускано `npm test` / `npm run serve` (порт 45279 е на гейта), нито `gitnexus analyze`
+
+**Files modified:**
+- test/unit/crafting-foundation.spec.js
+- test/unit/crafting.spec.js
+- test/unit/crafting-search.spec.js
+
+**Git commit:** `2671c9a` — `test(crafting): cover the raw materials economy tables with rarity filter coverage`
+
+
 ## Task #820 — feat(npc): add slash-aware search across name and faction plus details accordion
 
 **Repo:** combat (monk_combat_app) · **Lane:** campaign-npc · **Branch:** ralph/task-820 · **Commit:** d8b6277
@@ -3362,6 +3391,7 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
 
 
 

@@ -829,5 +829,38 @@
                       }
                   ],
         "passes":  true
+    },
+    {
+        "id":  910,
+        "category":  "testing",
+        "repo":  "inventory",
+        "lane":  "crafting-materials",
+        "files":  [
+                      "test/unit/crafting-foundation.spec.js",
+                      "test/unit/crafting.spec.js",
+                      "test/unit/crafting-search.spec.js"
+                  ],
+        "description":  "test(crafting): cover the raw materials economy tables with rarity filter coverage",
+        "specRef":  "shared-inventory-structure.md §11 (секцията «Данни» — 11-те таблици) + crafting-feature-plan.md (таблицата с key/label/badgeCol)",
+        "tddWorkflow":  true,
+        "notes":  "КОНТЕКСТ: третият източник (DnD_Raw_Materials_Economy.xlsx) е ВЕЧЕ налят в modules/crafting-data.js (комитнат, генериран — НЕ го пипаш, НЕ го регенерираш): нова таблица \u0027materials\u0027 (Суровини, 120 реда, nameCol \u0027Raw Material\u0027, badgeCol \u0027Rarity\u0027 — единствената ИСТИНСКА rarity колона в цялата референция, filterable: true) и \u0027rarityRules\u0027 (Рядкост (правила), 6 реда, nameCol \u0027Rarity\u0027, без филтър). UI-ят е data-driven и ги показва даром; закованата бройка в crafting-foundation.spec.js е вече бутната на 11 и всичко е зелено. ТОЗИ таск добавя ЛИПСВАЩОТО ПОКРИТИЕ за новите таблици — те в момента нямат нито един тест по същество.\n\n=== КАКВО СЕ ДОБАВЯ (само тестове — НИКАКЪВ продуктов код; ако тест хване реален бъг в модулите, опиши го в result summary, НЕ го поправяй тук) ===\n1. crafting-foundation.spec.js (нов describe или разширение на data частта): (а) таблицата materials: type \u0027table\u0027, 120 rows, nameCol \u0027Raw Material\u0027, badgeCol \u0027Rarity\u0027, filterable true, columns съдържа \u0027Category\u0027 и \u0027Raw Value / lb (gp)\u0027; (б) rarityRules: 6 rows, filterable false; (в) ред 0 на materials е \u0027Common soil\u0027 с Rarity \u0027Common\u0027 (закотвя генерацията).\n2. crafting.spec.js: (а) клик на chip \u0027materials\u0027 → thead показва \u0027Raw Material\u0027 и \u0027Rarity\u0027, 120 реда, ред 0 носи \u0027Common soil\u0027 в \u003cstrong\u003e и \u0027Common\u0027 в .craft-badge; (б) акордеонът на materials ред показва в .craft-details \u0027Category\u0027 и \u0027Typical Refined Product / Notes\u0027 стойностите, БЕЗ \u0027Raw Material\u0027/\u0027Rarity\u0027; (в) филтър {q:\u0027\u0027, badge:\u0027Rare\u0027} през state + \u0027crafting-filter\u0027 event → само редовете с Rarity ТОЧНО \u0027Rare\u0027 (не \u0027Very Rare\u0027! — филтърът е точно съвпадение, това е важният assert); (г) rarityRules chip → 6 реда, 2 колони в thead (без badge колона).\n3. crafting-search.spec.js: (а) state.craftingTab=\u0027materials\u0027 + dispatch \u0027crafting-tab\u0027 → #craftBadge видим, опция 0 „Всички“, следват DISTINCT Rarity стойностите ПО РЕД НА ПОЯВА в данните (провери точния ред срещу CRAFTING_TABLES.find(...\u0027materials\u0027).rows — НЕ хардкодвай списък наизуст, изведи очакването от данните в теста); (б) \u0027rarityRules\u0027 + dispatch → селектът hidden.\n\n=== СТИЛ ===\nСледвай ИЗЦЯЛО патърните на съществуващите тестове в тези 3 файла (bootApp, hash \u0027#crafting\u0027 + dispatch, state през import, event dispatch-ове) — чети ги преди да пишеш. Данните се import-ват директно от modules/crafting-data.js където това прави тестовете по-издръжливи (изведени очаквания вместо ковани числа, ОСВЕН закотвящите assert-и от т.1в, които са нарочно ковани).\n\n=== ЧЕРВЕНИ ЛИНИИ ===\nmodules/** НЕ се пипат. test/e2e/ и test/fixtures/ НЕ се пипат (данново-driven UI-ят не е мърдал — crafting-routing фикстурата е standalone с инлайн данни и не се влияе). Порт 45279 е на гейта — пускаш САМО npm run test:unit. Единствен таск в lane-а → БЕЗ verify override, пълният gate (unit + Playwright) е задната мрежа.",
+        "steps":  [
+                      {
+                          "id":  "910.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети shared-inventory-structure.md §11 «Данни», crafting-feature-plan.md таблицата, modules/crafting-data.js (schema banner-а + записите materials/rarityRules — само главите, не 120-те реда), и трите целеви спека ИЗЦЯЛО (патърните за boot/route/state/events)."
+                      },
+                      {
+                          "id":  "910.2",
+                          "phase":  "RED",
+                          "action":  "Добави тестовете от notes т.1-3. Пусни npm run test:unit — новите тестове трябва да са ЗЕЛЕНИ ВЕДНАГА (те са характеризация на вече доставено поведение!); ако някой е ЧЕРВЕН — или очакването ти е грешно (оправи теста), или си хванал реален бъг (документирай в result summary, тествай реалното поведение, НЕ пипай модулите). RED фазата тук е проверка на очакванията, не на липсваща имплементация."
+                      },
+                      {
+                          "id":  "910.3",
+                          "phase":  "DONE",
+                          "action":  "npm run test:unit — всичко зелено (вкл. старите 225). git status — пипнати са САМО трите спека. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
     }
 ]
