@@ -34,6 +34,195 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #517 — fix(table-create): date and time pickers open on click anywhere in the field
+
+**Repo:** partyup · **Lane:** fe-flows
+
+**What changed:**
+- `frontend/src/features/table-create/table-form-fields.tsx`: `DateTimeField`'s web `<input type="date|time">` gained `onClick`/`onFocus` handlers (`openNativePicker`) that call `el.showPicker()` when available, wrapped in `typeof` guard + `try/catch` so unsupported/refusing browsers fall back to the old icon-only behavior without throwing. The input's inline style now includes `colorScheme: isDark ? 'dark' : 'light'`, sourced from the app's theme (not hardcoded), so the browser draws a light picker icon/native UI on dark theme instead of a near-invisible black icon.
+- `frontend/src/lib/theme.tsx`: added `useIsDarkColorScheme()` — resolves the *actual* light/dark theme (ui-store `themeMode` + RN's `useColorScheme` for the `'system'` case), same formula already used by the tab bar in `app/(tabs)/_layout.tsx`. Reused here instead of duplicating the logic.
+- New test file `frontend/src/features/table-create/table-form-fields.test.tsx` (RED → GREEN): click and focus on the field call `showPicker`; a `showPicker`-less environment or a `showPicker` that throws doesn't crash; the existing onChange → form-state wiring stays intact; `color-scheme` on the input tracks `light`/`dark` theme.
+
+**Verification:**
+- `npm --prefix frontend run typecheck` — green.
+- `npx jest` (full unit suite) — 551/551 passed (one unrelated push-settings-section test flaked once in a combined run but passed consistently in isolation and on a second full-suite run — pre-existing flakiness, not caused by this change).
+- e2e/dev servers were NOT run per harness rules.
+
+**Scope:** touched only `table-form-fields.tsx` + its new test + `lib/theme.tsx` (shared theme hook, additive only). `table-settings` reuses the same `DateTimeField`/`FormField` components and picks up the fix for free, as noted in the task — it was not touched directly. Locale files (`tableForm.json` bg/en) needed no changes — no new user-facing strings were introduced.
+
+
+## Task #516: feat(candidacies): the player sees their own candidacies
+
+Built the "Моите кандидатури" (my candidacies) feature for `party-up`:
+- New `/candidacies` route → `MyCandidaciesScreen`, reading the newly-added `MyCandidaciesDocument` GraphQL query (table + status list, links to `/candidacy/[id]`, empty state pointing back to `/board`).
+- New shared `isOpenCandidacyStatus` helper (candidacy is "live" unless ACCEPTED/REJECTED), used both by the new screen and by a new board self-block entry `"Кандидатурите ми (N)"` that counts live candidacies and links to the new screen — composing with, not rewriting, the self block from tasks 514/515.
+- Added bg/en i18n keys in `candidacy.json` and `board.json`.
+
+Followed TDD: wrote failing tests first (module-not-found / missing text), confirmed RED, then implemented until GREEN, without touching any pre-existing test assertions.
+
+**Retry fix:** first attempt (`7edc62b`) passed `npm --prefix frontend run typecheck` in isolation but the verify gate reported TS2345 on the integrated branch — `'/candidacies'` wasn't accepted as a valid `Href` literal in `board-screen.tsx`. Root-caused to the same class of issue the codebase already has a fix for (`notification-row.tsx` casts dynamic hrefs with `as Href` for exactly this reason — the Expo Router typed-routes union in the shared integration checkout can lag behind newly-added `src/app/*.tsx` route files). Applied the identical established pattern: `import { useRouter, type Href } from 'expo-router'` and `router.push('/candidacies' as Href)`.
+
+**Verification:** `npm --prefix frontend run typecheck` clean; `npm --prefix frontend test` → 79/79 suites, 544/544 tests passed. `git status` stayed within the task's `files` scope.
+
+Committed as `1baa5f7` (fix on top of `7edc62b`) with message `feat(candidacies): the player sees their own candidacies`.
+
+
+## Task #515: feat(tables): make listing status visible and decouple pulling from it
+
+**Repo:** partyup (frontend only)
+
+**Changes:**
+- `board/pull-targets.ts` — removed the `table.listingActive` condition; pull is now allowed for every active membership. Open (walk-in) tables are not pre-filtered client-side — the existing BE guard (`CandidacyService.WalkInGuard`, task 402) returns `TABLE_IS_OPEN`, surfaced via the existing generic domain-error fallback, matching how other untranslated domain errors already behave in this codebase.
+- `board/board.graphql.ts` — `BoardViewerDocument.myTables.table` no longer selects `listingActive` (no longer needed).
+- `my-tables/` — added a `TableListingBadge` (status-badge.tsx) showing 'Обявена'/'Необявена' on each My Tables card. Its data comes from a new, separate `MyTablesListingDocument` query (queries.ts) rather than widening the canonical `MyTablesDocument` — that document's shape is written to directly by createTable/refoundTable/acceptRefoundInvite (lifecycle-actions/table-create, out of this task's file scope) per task 514's cache discipline, so widening it would have forced unrelated out-of-scope edits. Apollo normalizes both queries into the same `Table:id` cache entries.
+- `candidacy/table-screen.tsx` + `candidacy.gql.ts` — added `admissionKind` to `MyTableDocument` and a new CTA card ('Масата не е обявена' / 'Обяви масата') shown only for Candidacy tables that aren't listed, linking to `/table/[id]/settings`. Not shown for Open tables (always visible in the showcase per task 502).
+- `table-settings/table-listing-section.tsx` + locales — renamed the toggle label 'Търсим хора' → 'Обявена на витрината', and corrected the hint/intro copy that used to claim turning off the listing 'stops collecting candidates' (no longer true post-decoupling).
+- Updated/added bg+en i18n keys in `tables`, `candidacy`, `tableSettings` namespaces.
+- Updated all directly affected tests (pull-targets, board-screen, my-tables-screen, table-screen, candidacy-cache, table-listing-section, table-settings-screen) to match the new, intentionally-changed behavior.
+
+**Verify:** `npm --prefix frontend run typecheck` clean; `npm --prefix frontend test` — 533/533 passed (one pre-existing unrelated flaky test in `push/__tests__/push-settings-section.test.tsx` failed once in the full run but passed in isolation — not touched by this task).
+
+**Commit:** a57b0bc
+
+
+## Task #514 — fix(cache): mutations update every list they change without a refresh
+
+**Репо:** partyup (FE) · **Lane:** fe-flows · **Commit:** `421bff7`
+
+Системният клас от v0.6 бележки т.3 (три потвърждения на живо на 12.09) е затворен с одит на ВСИЧКИ мутации в петте зони, които раждат/трият/местят неща в списъци.
+
+| Мутация | Списък | Действие |
+|---|---|---|
+| `createTable` | `myTables` | cache update (add) — payload-ът вече носи `table.members`, за да се сглоби основателското членство |
+| `publishMyListing` | `myListing` + `lfgBoard` | cache update (set + нов ръб най-отгоре) |
+| `unpublishMyListing` | `myListing` + `lfgBoard` | cache update (set + махане на ръба) |
+| `pullCandidate` | `myTableCandidacies(tableId)` | cache update (add) в кеша на `MyTable` |
+| `submitVerdict` | състав + `slotsFilled` + статус | НОРМАЛИЗАЦИЯ — масата пътува в payload-а, ръчен update не е нужен |
+| `leaveTable` | `myTables` | `cache.modify` (remove) |
+| `refoundTable` | `myTables` | cache update (add) |
+| `acceptRefoundInvite` | `myTables` | cache update (add) — payload-ът е точно един ред от списъка |
+| `proposeKick` | — | нищо: ражда решение, не мести списък |
+| `castVote` | решението | нормализация (вече работеше) |
+| `openContactChat` | статус на кандидатурата | ОСТАВА `refetchQueries` — payload-ът носи само чата, преходът към `IN_CONTACT` е сървърен |
+
+**Конвенцията** е образецът от `use-privacy` („пишем я право в кеша"): payload-ът се разширява до формата на списъка, после се вписва. Новият фрагмент `BoardListing` е ДОГОВОР между борда и `publishMyListing` — разминаване между двете селекции би направило вписания ръб непълен и кешът би спрял да се чете изобщо.
+
+**Нови модули:** `my-tables/my-tables-cache.ts`, `board/board-cache.ts`, `candidacy/candidacy-cache.ts`.
+
+**Тестове:** 20 unit срещу истински `InMemoryCache` + 8 кръстосани екранни (единият екран действа, другият гледа; мок за презареждане НЯМА, значи „без нов мрежов кръг" е проверено, не обещано). `typecheck` зелен, `jest` 512/512 в 77 suite-а. Backend не е пипан.
+
+**Компромиси, записани съзнателно:** (1) `edge.cursor` е махнат от `LfgBoard` селекцията — обява, родена в кеша, няма сървърен курсор, а скролът продължава от `pageInfo.endCursor`; (2) публикуваната обява влиза във видимата страница независимо от активния филтър — следващо четене от сървъра я коригира. `lib/apollo.ts` НЕ е пипан (няма relayStylePagination политики, затова бордът минава през `cache.updateQuery` с variables-ите на видимата страница).
+
+
+## [2026-09-12] - Task #512: feat(shell): mount the notification bell with live badge and a door to chats
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** КРУПНИЯТ СИРАК: `NotificationBell`/`NotificationCenter` съществуваха от таск 40, но камбанката висеше САМО в екрана на центъра — известията се пишеха в базата и нула UI ги показваше. Към `/chat` (съществуващ екран) нямаше нито една врата в приложението.
+
+**What was done:**
+- RED: 7 нови теста в `app-header.test.tsx` (камбанка с верен брой при сесия; гост — няма камбанка; `onNotification` вдига брояча без refetch; камбанката води към `/notifications`; вратата към `/chat` — видимост, навигация, bg/en етикети) + 1 кеш тест в `notification-bell.test.tsx` (камбанка + център в един кеш: `markNotificationRead` сваля брояча). Потвърдено червени по правилната причина (7 failed / 36 passed).
+- GREEN: `NotificationBell` е монтирана в `AppHeader` зад СЪЩИЯ `isAnonymous` пазач като изхода/настройките (таск 511 — композиция, не преписване); добавен `header-chats-link` → `/chat`; `header.chats` ключ в `common.json` (bg/en).
+- ЖИВ BADGE: механиката вече беше в камбанката (`subscribeToMore` + `withNotification`) — таскът я ДОКАЗВА с тестове и гарантира кеш дисциплината от другата посока: баджът и центърът са ДВЕ заявки (`notifications` със/без `unreadOnly`) върху ЕДИН нормализиран запис, затова `markNotificationRead` сваля брояча без refetch и без ръчен `cache.modify`.
+- ВРАТА КЪМ ЧАТОВЕТЕ — избрана е ИКОНА В ХЕДЪРА, не ред в центъра за известия: разговорът не е известие, а постоянно място — зад ред в центъра той би бил достижим САМО когато има известие и би изчезвал при празен център (и е две нива дълбочина). Хедърът държи вратата отворена отвсякъде, точно както „Настройки".
+- TOUR КОТВА: стъпка 5 (`bell`) очаква `targetTestId: 'notification-bell'` — камбанката вече го носи дословно, разминаване НЯМА → корекция не се наложи и tour файловете (чужда зона) останаха САМО четени. Стъпката престава да пада на затъмнение без изрез (§9 т.4 от reference-а се затваря за `NotificationBell`).
+- ДЕДУПЛИКАЦИЯ: камбанката е МАХНАТА от `NotificationCenter` — глобалният хедър виси и над `/notifications`, така че две камбанки биха държали два абонамента и два брояча за едно и също нещо.
+- `accessibilityRole` на камбанката: `button` → `imagebutton` и стилът й изравнен с `HeaderControl` — хедърът е глобален и попада в `getAllByRole('button')` на `src/__tests__/navigation.test.tsx` (извън обхвата), където се броят точно три таба — същият избор като при изхода в таск 511.
+
+**Verification:**
+- `npm --prefix frontend run typecheck` → clean
+- `npm --prefix frontend test` → 73 suites / **500 tests** зелени (490 след 511 → +10)
+- `dotnet test backend/tests/PartyUp.UnitTests` → 203/203 зелени (BE не е пипан)
+- Без e2e/dev сървъри; `package-lock.json` непроменен; `src/gql/` не е комитнат
+
+**Files modified:**
+- frontend/src/components/app-header.tsx
+- frontend/src/components/app-header.test.tsx
+- frontend/src/features/contact/notification-bell.tsx
+- frontend/src/features/contact/notification-center.tsx
+- frontend/src/features/contact/__tests__/notification-bell.test.tsx
+- frontend/src/features/contact/__tests__/notification-center.test.tsx
+- frontend/src/locales/bg/common.json
+- frontend/src/locales/en/common.json
+
+**Git commit:** `4a31a7c` — `feat(shell): mount the notification bell with live badge and a door to chats`
+
+---
+
+
+### Task 503: feat(candidacies): add myCandidacies query for the player side
+
+**Repo:** partyup (backend)
+
+**Problem (v0.6 бележка т.7в):** the candidate side of a candidacy had no way to see what tables it had applied to — only the table side could query `myTableCandidacies`.
+
+**What was done:**
+- RED: added `backend/tests/PartyUp.IntegrationTests/Features/Candidacies/Pull/MyCandidaciesTests.cs` — 5 failing tests (field didn't exist yet): own candidacies across tables with correct statuses, resolved candidacies keep their verdict, other people's candidacies excluded, missing session errors, ordering by last activity descending.
+- GREEN: added `MyCandidaciesAsync` to `CandidacyQueries.cs` — filters `Candidacy` by `CandidateUserId == viewer` (AsNoTracking + Select projection, reusing the existing `Project`/`Candidacy` GraphQL type, no new type), syncs decision outcomes before the final read (same pattern as `MyTableCandidaciesAsync`), orders by `ResolvedAt ?? CreatedAt` descending. Missing session throws a `GraphQLException` (`NOT_AUTHENTICATED` code) instead of returning `[]`, since the contract has no error channel and a silently-empty personal list would hide a real auth problem — mirrors the `SubscriptionRefusal` precedent for contract shapes without a Result union.
+- Re-exported `contracts/schema.graphql` (`dotnet run --project src/PartyUp.Api -- schema export --output ../../../contracts/schema.graphql` from `backend/`) — one new line: `myCandidacies: [Candidacy!]! @cost(weight: "10")`.
+
+**Verification:**
+- `dotnet test backend/PartyUp.slnx --nologo -v q` → 203 unit + 436 integration tests, all green (including the 5 new tests).
+
+**Files modified:**
+- `backend/src/PartyUp.Api/Features/Candidacies/Pull/CandidacyQueries.cs`
+- `backend/tests/PartyUp.IntegrationTests/Features/Candidacies/Pull/MyCandidaciesTests.cs` (new)
+- `contracts/schema.graphql`
+
+**Git commit:** `66ea19d` — `feat(candidacies): add myCandidacies query for the player side`
+
+
+### Task #511 — feat(shell): logout action in the app header
+
+- Added `header-logout-button` control to `AppHeader` (`frontend/src/components/app-header.tsx`), rendered next to `header-settings-link`, gated by the same `isAnonymous` check (hidden on `/login` and for guests, visible only with a live session).
+- Reused the existing `useLogout` hook from `frontend/src/features/auth/use-logout.ts` (already implements mutate + `client.resetStore()`) — did not touch `auth-linking/session-section.tsx`, which keeps its own independent entry point into the same hook.
+- On press: calls `logout()`, then `router.replace('/login')` on success; swallows failure (server session still alive, user stays where they are), guarded against double-press while `loading`.
+- Added `header.signOut` key to `frontend/src/locales/{bg,en}/common.json` ("Излез" / "Sign out").
+- TDD: added RED tests in `app-header.test.tsx` (visible with session, hidden without session / on `/login`, invokes logout + resetStore + navigates on press, translated accessible label bg/en) before implementing; confirmed failing for the right reason, then implemented to GREEN.
+- Picked `accessibilityRole="imagebutton"` for the new control (vs. plain `"button"`) to avoid colliding with `getAllByRole('button')` in the unrelated `src/__tests__/navigation.test.tsx` smoke test (out of this task's file scope), since the header renders globally including on tab roots.
+- Verify: `npm --prefix frontend run typecheck` ✅, `npm --prefix frontend test` — 73 suites / 490 tests ✅ (no e2e/dev servers run).
+- Commit: `d0f2ec6` — "feat(shell): logout action in the app header".
+
+
+### Task 501 — fix(graphql): enable websockets so subscriptions actually connect
+
+**Repo:** partyup (backend)
+
+**What:** Added `app.UseWebSockets()` in `Program.cs` (after `app.UseCors()`, before `app.UseAuthentication()`/`app.MapGraphQL()`). Without it, the ws upgrade to `/graphql` was silently rejected — FE's `graphql-ws` client never got a socket, so subscriptions never connected (Apollo console error on every chat open).
+
+**Tests:** Added `backend/tests/PartyUp.IntegrationTests/Foundation/GraphQLWebSocketTests.cs` — a handshake smoke test (`connection_init` → `connection_ack` over `graphql-transport-ws`) through the real `Program.cs` pipeline via `ApiFactory`/`TestServer`.
+
+**Known limitation (documented in the test + code comments):** `TestServer.CreateWebSocketClient()` synthesizes the WebSocket feature for its own handshake request regardless of whether `app.UseWebSockets()` is registered — verified empirically that the test stays green even without the fix. So it doesn't strictly *gate* this exact regression at the TestServer layer, but it does prove the graphql-transport-ws protocol/schema/DI wiring works end-to-end, which is a real regression guard for the transport as a whole. A real-Kestrel `WebApplicationFactory` variant (via `CreateHost` override + a genuine `ClientWebSocket`) *does* correctly fail without the fix, but the .NET 10 `Microsoft.AspNetCore.Mvc.Testing` package (10.0.11) unconditionally casts the resolved `IServer` to `TestServer` inside its internal `StartServer()`/`ConfigureHostBuilder()` path, so swapping to Kestrel throws `InvalidCastException` — a framework constraint, not something fixable within this task's file scope (`Program.cs` + `Foundation/**` only).
+
+**Verify:** `dotnet test backend/PartyUp.slnx --nologo -v q` → 203 unit + 431 integration tests, all green.
+
+**Commit:** `103d720` — `fix(graphql): enable websockets so subscriptions actually connect`
+
+
+### Task 502: fix(lfg): showcase hides unlisted candidacy tables and always shows open ones
+
+- Fixed `ShowcaseQueries.TablesShowcase` Where clause so a Candidacy table without an active listing is hidden from the public showcase (matching the table-settings UI copy), while an Open/walk-in table always stays visible regardless of `ListingActive`.
+- Added RED→GREEN integration tests covering all four cases (Candidacy unlisted/listed, Open unlisted, Disbanded), and adjusted test-data helpers so pre-existing tests keep passing.
+- `table(id)` query remains unfiltered (unchanged) — direct link to a candidate's own table still works.
+- Committed as `d6a0e3f`.
+- **Retry note:** the first verify-gate run failed on an unrelated frontend push-notification-settings test (`push-settings-section.test.tsx`) after merging into the integration branch. Confirmed via diff and file history that this task's change never touches `frontend/` or the push feature; backend unit (203/203) and Lfg/Showcase integration (16/16) suites are green in isolation. No changes made in this retry — flagging the frontend failure as belonging to a different task on the integration branch.
+
+
+## Task #513 — chore(auth): disable the facebook login button for now
+
+**Repo:** partyup (frontend) · **Lane:** fe-shell · **Commit:** `9521bdd`
+
+Removed `'facebook'` from `AUTH_PROVIDERS` in `frontend/src/features/auth/oauth.ts`, with an in-code comment explaining why it's disabled (FB OAuth needs https redirect + app review bureaucracy — deferred, per user decision 12.09) and exactly how to bring it back (re-add to the array + configure `Authentication:Facebook:ClientSecret`). The login screen now renders only the Google and Discord buttons; the Facebook color entry in `login-screen.tsx`'s `PROVIDER_STYLE` map is commented out (not deleted) for easy restoration.
+
+TDD: added a RED test in `login-screen.test.tsx` asserting exactly 2 provider buttons with no Facebook button, confirmed it failed against the pre-change code, then implemented the change to make it pass. Updated `oauth.test.ts`'s provider-list expectation accordingly.
+
+Left `frontend/src/locales/{bg,en}/auth.json`'s `facebook` translation key in place (unused but harmless, ready for restore). Did not touch `features/auth-linking/**` (foreign zone, per task notes) — `LinkedAccountsSection` still offers Facebook as a link/unlink option via its own independent `AUTH_PROVIDERS` list in `use-auth-linking.ts`; flagging this for a future task if Facebook should be fully hidden across the app.
+
+**Verify:** `npm --prefix frontend run typecheck` ✅ · `npm --prefix frontend test` ✅ (73 suites / 484 tests green).
+
+
 ## [2026-09-01 09:15] - Task #910: test(crafting): cover the raw materials economy tables with rarity filter coverage
 
 **Status:** ✅ Complete
@@ -3391,6 +3580,16 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
+
+
+
+
+
 
 
 

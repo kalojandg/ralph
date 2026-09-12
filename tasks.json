@@ -1,260 +1,440 @@
-[
-  {
-    "id": 501,
-    "category": "bugfix",
-    "repo": "partyup",
-    "lane": "be-ws",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "backend/src/PartyUp.Api/Program.cs",
-      "backend/tests/PartyUp.IntegrationTests/Foundation/**"
-    ],
-    "description": "fix(graphql): enable websockets so subscriptions actually connect",
-    "specRef": "party-up.md «v0.6 бележки» т.6 + party-up-structure.md §2а",
-    "tddWorkflow": true,
-    "notes": "БЪГ, потвърден на живо (12.09): FE (graphql-ws от v0.5 таск 302) удря ws://…/graphql, но Program.cs НЯМА app.UseWebSockets() → upgrade-ът се отказва → Apollo console error при всяко отваряне на чат, нула живи subscriptions. Фикс: ЕДИН ред app.UseWebSockets() в Program.cs, ПРЕДИ app.MapGraphQL() (прочети pipeline реда). Program.cs е отровен файл — тази lane е единствената, която го пипа този board; НИЩО друго в него. Тест: integration ws smoke в Foundation — websocket клиент през WebApplicationFactory сървъра прави graphql-transport-ws handshake (connection_init → connection_ack) срещу /graphql. Ако пълен subscribe тест е неудобен през TestServer — handshake smoke стига, отбележи в summary.",
-    "steps": [
-      { "id": "501.1", "phase": "RECON", "action": "Прочети Program.cs pipeline реда и как Foundation тестовете вдигат ApiFactory." },
-      { "id": "501.2", "phase": "RED", "action": "WS handshake тест — червен (upgrade отказан без middleware-а)." },
-      { "id": "501.3", "phase": "GREEN", "action": "app.UseWebSockets() на правилното място." },
-      { "id": "501.4", "phase": "DONE", "action": "dotnet test backend/PartyUp.slnx зелен. Commit с description-а дословно." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 502,
-    "category": "bugfix",
-    "repo": "partyup",
-    "lane": "be-lfg",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "backend/src/PartyUp.Api/Features/Lfg/**",
-      "backend/tests/PartyUp.IntegrationTests/Features/Lfg/**"
-    ],
-    "description": "fix(lfg): showcase hides unlisted candidacy tables and always shows open ones",
-    "specRef": "party-up.md «v0.6 бележки» т.5 (решената семантика) + party-up-structure.md §2а.4",
-    "tddWorkflow": true,
-    "notes": "БЪГ, наблюдаван на живо: table-settings UI текстът обещава «маса без обява не се показва на никого», а ShowcaseQueries филтрира само Status != Disbanded → необявена маса се виждаше във витрината. РЕШЕНАТА семантика (12.09): (1) Candidacy маса БЕЗ ListingActive → СКРИТА от tablesShowcase (текстът става верен); (2) Open (AdmissionKind.Open, walk-in от v0.5) маса → вижда се ВИНАГИ, независимо от ListingActive — тя е обява по природа и публичният гост борд разчита на нея. Само Where промяна + тестове (двата случая + Disbanded остава скрит); НИКАКВА промяна по схема/контракти — НЕ пипай contracts/. table(id) заявката НЕ се филтрира (директният линк към маса работи — кандидатът вижда масата си).",
-    "steps": [
-      { "id": "502.1", "phase": "RECON", "action": "Прочети ShowcaseQueries.cs + тестовете; провери, че table(id) не минава през същия филтър." },
-      { "id": "502.2", "phase": "RED", "action": "Тестове: Candidacy+unlisted липсва; Candidacy+listed се вижда; Open+unlisted СЕ ВИЖДА; Disbanded не. Червени." },
-      { "id": "502.3", "phase": "GREEN", "action": "Where семантиката." },
-      { "id": "502.4", "phase": "DONE", "action": "dotnet test зелен. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 503,
-    "category": "feature",
-    "repo": "partyup",
-    "lane": "be-lfg",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "backend/src/PartyUp.Api/Features/Candidacies/**",
-      "backend/tests/PartyUp.IntegrationTests/Features/Candidacies/**",
-      "contracts/schema.graphql"
-    ],
-    "description": "feat(candidacies): add myCandidacies query for the player side",
-    "specRef": "party-up.md «v0.6 бележки» т.7в + party-up-structure.md §2а.4/§3.1",
-    "tddWorkflow": true,
-    "notes": "Схемата има candidacy(id) и myTableCandidacies(tableId) — гледната точка на МАСАТА. Кандидатът-играч няма как да изброи СВОИТЕ кандидатури. Таск: query myCandidacies: [Candidacy!]! — кандидатурите, в които viewer-ът е кандидатът (изисква сесия; AsNoTracking + Select проекция §2а.4; подредени по последна активност desc; ВКЛЮЧИТЕЛНО решените — статусът се вижда). Преизползвай Candidacy GraphQL типа (НЕ прави нов). Schema re-export (процедурата в contracts/README) + commit на contracts/schema.graphql В СЪЩИЯ commit. Тестове: моите се връщат с правилните статуси, чуждите НЕ; без сесия → auth грешка. Ти си втори в lane-а (след 502) — worktree-то ти тръгва от merged 502.",
-    "steps": [
-      { "id": "503.1", "phase": "RECON", "action": "Merged 502. Прочети Candidacies slice-а (типове, DataLoader-и) и viewer-заявъчния патърн (MyTables)." },
-      { "id": "503.2", "phase": "RED", "action": "Тестовете от notes. Червени." },
-      { "id": "503.3", "phase": "GREEN", "action": "Заявката + schema export." },
-      { "id": "503.4", "phase": "DONE", "action": "dotnet test зелен. Commit (вкл. contracts/)." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 513,
-    "category": "chore",
-    "repo": "partyup",
-    "lane": "fe-shell",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "frontend/src/features/auth/**",
-      "frontend/src/locales/bg/auth.json",
-      "frontend/src/locales/en/auth.json"
-    ],
-    "description": "chore(auth): disable the facebook login button for now",
-    "specRef": "party-up.md «v0.6 бележки» т.2",
-    "tddWorkflow": true,
-    "notes": "Решение на потребителя (12.09): FB логинът «и без това не работи» (иска https redirect + app review бюрокрация — отложено още от prerequisites). Таск: махни 'facebook' от AUTH_PROVIDERS (features/auth/oauth.ts) — бутонът пада от login екрана; КОМЕНТАР В КОДА защо и как се връща (връщане в списъка + FB app конфигурация). Обнови тестовете, които изброяват провайдърите. НЕ пипай: BE (условната регистрация е безвредна), auth-linking (чужда зона — ако LinkedAccountsSection показва FB като link опция, само ДОКЛАДВАЙ в summary).",
-    "steps": [
-      { "id": "513.1", "phase": "RECON", "action": "Прочети oauth.ts, login-screen + тестовете; grep facebook из features/auth." },
-      { "id": "513.2", "phase": "RED", "action": "Тест: login екранът рендерира ТОЧНО два provider бутона (google, discord). Червен." },
-      { "id": "513.3", "phase": "GREEN", "action": "Провайдърът вън + коментарът + тестовете." },
-      { "id": "513.4", "phase": "DONE", "action": "npm --prefix frontend run typecheck && npm --prefix frontend test зелени. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 511,
-    "category": "feature",
-    "repo": "partyup",
-    "lane": "fe-shell",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "frontend/src/features/auth/**",
-      "frontend/src/components/**",
-      "frontend/src/locales/bg/common.json",
-      "frontend/src/locales/en/common.json"
-    ],
-    "description": "feat(shell): logout action in the app header",
-    "specRef": "party-up.md «v0.6 бележки» т.1 + party-up-structure.md §4",
-    "tddWorkflow": true,
-    "notes": "Logout е зачукан в /settings. Таск: изход от глобалния header — икона/мини «акаунт» до settings зъбчето, видим САМО при сесия (на /login и за гост — не). Механиката СЪЩЕСТВУВА в auth-linking (мутация → clearStore → replace('/login')) — auth-linking е ЧУЖДА зона: направи преизползваем hook useLogout във features/auth/ (твоя зона; logout мутацията е в схемата — нов .gql документ в auth slice-а) и header-ът го вика; settings секцията НЕ я пипай (двата входа съжителстват; нейният рефактор към общия hook е за друг board). Без confirm диалог (изходът е безобиден). Ключове в common.json bg+en. Ти си след 513 в lane-а.",
-    "steps": [
-      { "id": "511.1", "phase": "RECON", "action": "Прочети app-header.tsx + теста, session-section.tsx (механиката за пренасяне в hook), use-session." },
-      { "id": "511.2", "phase": "RED", "action": "Тестове: при сесия иконата е там и вика logout флоу (мок); на /login и за гост я НЯМА. Червени." },
-      { "id": "511.3", "phase": "GREEN", "action": "useLogout + header входът + ключовете." },
-      { "id": "511.4", "phase": "DONE", "action": "typecheck + jest зелени. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 512,
-    "category": "feature",
-    "repo": "partyup",
-    "lane": "fe-shell",
-    "model": "heavy",
-    "dependsOn": [],
-    "files": [
-      "frontend/src/components/**",
-      "frontend/src/features/contact/**",
-      "frontend/src/locales/bg/common.json",
-      "frontend/src/locales/en/common.json",
-      "frontend/src/locales/bg/contact.json",
-      "frontend/src/locales/en/contact.json"
-    ],
-    "description": "feat(shell): mount the notification bell with live badge and a door to chats",
-    "specRef": "party-up.md «v0.6 бележки» т.7а/т.7б + contracts/schema.graphql (notifications, onNotification)",
-    "tddWorkflow": true,
-    "notes": "КРУПНИЯТ СИРАК (12.09): NotificationBell/NotificationCenter СЪЩЕСТВУВАТ (features/contact), но камбанката НЕ Е МОНТИРАНА НИКЪДЕ — известията се пишат в базата и нула UI ги показва; към /chat (съществуващ екран) НЯМА нито една врата в приложението. Таск: (1) камбанката в глобалния header (само при сесия) + badge с брой непрочетени (виж как center-ът чете notifications — преизползвай кеша/notifications-cache); (2) badge-ът е ЖИВ: onNotification абонаментът (механиката от v0.5/302 + test-utils/subscription.ts) — при event броячът расте БЕЗ refetch; при markNotificationRead — намалява (кеш дисциплина; това е ТВОЯТ дял от кеш одита, таск 514 НЕ пипа contact); (3) врата към чатовете: икона «съобщения» в header-а ИЛИ виден ред в notification center-а → /chat (избери, обоснови в summary); (4) провери testID котвата, която tour стъпка 5 очаква за камбанката — коригирай testID В КАМБАНКАТА при разминаване (tour файловете са ЧУЖДА зона, само четене). Ти си трети в lane-а (след 513, 511) — header-ът вече има logout вход, композирай, не пренаписвай.",
-    "steps": [
-      { "id": "512.1", "phase": "RECON", "action": "Прочети notification-bell/center, notifications-cache, header-а след 511, tour стъпките (само четене), subscription test-utils." },
-      { "id": "512.2", "phase": "RED", "action": "Тестове: камбанка в header-а при сесия с верен брой; onNotification → броячът расте без refetch; markRead → намалява; вратата води към /chat; гост — няма камбанка. Червени." },
-      { "id": "512.3", "phase": "GREEN", "action": "Монтаж + жив badge + врата + ключове." },
-      { "id": "512.4", "phase": "DONE", "action": "typecheck + jest зелени. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 514,
-    "category": "bugfix",
-    "repo": "partyup",
-    "lane": "fe-flows",
-    "model": "heavy",
-    "dependsOn": [],
-    "files": [
-      "frontend/src/features/table-create/**",
-      "frontend/src/features/board/**",
-      "frontend/src/features/my-tables/**",
-      "frontend/src/features/candidacy/**",
-      "frontend/src/features/lifecycle-actions/**"
-    ],
-    "description": "fix(cache): mutations update every list they change without a refresh",
-    "specRef": "party-up.md «v0.6 бележки» т.3 (3/3 потвърдени на живо) + образецът в use-privacy.ts («пишем я право в кеша»)",
-    "tddWorkflow": true,
-    "notes": "СИСТЕМЕН клас, три потвърждения от три опита (12.09): (1) createTable → «Моите маси» не показва новата маса до F5; (2) publishMyListing → банерът «активна», а бордът «никой не е на борда» до F5; (3) pullCandidate → toast «в кандидатите е», а масата «няма кандидатури» до F5. ОДИТ на ВСИЧКИ мутации, раждащи/триещи/местещи неща в списъци, В ЗОНИТЕ ТИ: table-create (create→myTables), board (publish/unpublish→lfgBoard Connection + self блока), candidacy (pullCandidate→myTableCandidacies; submitVerdict/прием→състав+кандидатури), lifecycle-actions (leave/refound/kick→myTables+състав). Конвенцията: payload-ът се пише ПРАВО в кеша (cache update по образеца на use-privacy); за борда — през relayStylePagination merge политиките на Connection кеша (v0.5); refetchQueries САМО където update е непрактичен (обоснови в summary). Тест per случай: мутация → списъкът в кеша се променя БЕЗ нов мрежов кръг. markNotificationRead НЕ е твой (512, contact е чужда зона). НЕ пипай lib/apollo.ts. В summary: таблица мутация→кеш действие.",
-    "steps": [
-      { "id": "514.1", "phase": "RECON", "action": "Инвентаризирай мутациите в петте зони + кои заявки четат засегнатите списъци; прочети use-privacy образеца и board Connection политиката." },
-      { "id": "514.2", "phase": "RED", "action": "Тестове за трите потвърдени + всеки открит случай. Червени." },
-      { "id": "514.3", "phase": "GREEN", "action": "Cache update-ите по конвенцията." },
-      { "id": "514.4", "phase": "DONE", "action": "typecheck + jest зелени. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 515,
-    "category": "feature",
-    "repo": "partyup",
-    "lane": "fe-flows",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "frontend/src/features/board/**",
-      "frontend/src/features/my-tables/**",
-      "frontend/src/features/table-settings/**",
-      "frontend/src/features/showcase/**",
-      "frontend/src/features/candidacy/**",
-      "frontend/src/locales/bg/board.json",
-      "frontend/src/locales/en/board.json",
-      "frontend/src/locales/bg/tables.json",
-      "frontend/src/locales/en/tables.json",
-      "frontend/src/locales/bg/tableSettings.json",
-      "frontend/src/locales/en/tableSettings.json",
-      "frontend/src/locales/bg/candidacy.json",
-      "frontend/src/locales/en/candidacy.json"
-    ],
-    "description": "feat(tables): make listing status visible and decouple pulling from it",
-    "specRef": "party-up.md «v0.6 бележки» т.4 + т.5 (отвореният дизайн въпрос — РЕШЕН: разкачане)",
-    "tddWorkflow": true,
-    "notes": "Сцената от 12.09: авторът сам не откри защо не може да дърпа («нечекването и неможенето да дърпаш е асоциално»). Пакет: (1) РАЗКАЧАНЕ pull↔listing: pull-targets.ts маха table.listingActive условието — дърпаш с всяка активна членска маса (BE pull guard-ът и без това НЕ изисква обявата на масата — проверено 12.09; обявата остава САМО видимост във витрината; Open масите не дърпат — 402 guard-ът остава); (2) обявеността СТАВА ВИДИМА: «Моите маси» картата получава «обявена/необявена» badge; (3) екранът на масата (candidacy/table-screen): «Обяви масата» CTA при Candidacy+необявена, с честно обяснение «невидима си във витрината» (след 502 това е буквално вярно); (4) тогълът в table-settings се преименува: «Търсим хора» → «Обявена на витрината» (или екв.) — авторът сам не го намери под старото име; hint текстът вече е верен след 502, сверѝ го. Ключове bg+en по namespace-ите. Ти си след 514 в lane-а — кешът е дисциплиниран, стъпи на него.",
-    "steps": [
-      { "id": "515.1", "phase": "RECON", "action": "Прочети pull-targets + board self блока, my-tables картата, table-listing-section, table-screen." },
-      { "id": "515.2", "phase": "RED", "action": "Тестове: pull бутон при членска маса БЕЗ обява; my-tables badge по listingActive; table-screen CTA при Candidacy+необявена; преименуваните текстове. Червени." },
-      { "id": "515.3", "phase": "GREEN", "action": "Разкачането + видимостта + rename + ключове." },
-      { "id": "515.4", "phase": "DONE", "action": "typecheck + jest зелени. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 516,
-    "category": "feature",
-    "repo": "partyup",
-    "lane": "fe-flows",
-    "model": "easy",
-    "dependsOn": [503],
-    "files": [
-      "frontend/src/features/candidacy/**",
-      "frontend/src/features/board/**",
-      "frontend/src/app/candidacies.tsx",
-      "frontend/src/locales/bg/candidacy.json",
-      "frontend/src/locales/en/candidacy.json",
-      "frontend/src/locales/bg/board.json",
-      "frontend/src/locales/en/board.json"
-    ],
-    "description": "feat(candidacies): the player sees their own candidacies",
-    "specRef": "party-up.md «v0.6 бележки» т.7в + contracts/schema.graphql (myCandidacies след 503)",
-    "tddWorkflow": true,
-    "notes": "dependsOn 503 (myCandidacies в merged контракта; codegen). Кандидатът днес НЯМА как да разбере, че е дърпан, нито какво става с кандидатурата му. Таск: (1) нов ТЪНЪК route app/candidacies.tsx → екран «Моите кандидатури» (компонентът във features/candidacy) — списък: маса, статус (CandidacyStatus — обсъжда се/приет/отказан), link към candidacy/[id] (екранът с чата СЪЩЕСТВУВА); (2) вход от борда: в self блока ред «Кандидатурите ми (N)» — брои живите; (3) празно състояние, което обяснява pull модела («масите те дърпат — публикувай се и изчакай»). Ключове bg+en. Ти си трети в fe-flows — board self блокът е пипан от 514/515, композирай, не пренаписвай.",
-    "steps": [
-      { "id": "516.1", "phase": "RECON", "action": "Merged 503 + codegen. Прочети candidacy-screen (редове/статуси за преизползване) и board self блока след 515." },
-      { "id": "516.2", "phase": "RED", "action": "Тестове: списъкът с моите + статуси; линкът към кандидатурата; входът от борда с броя; празното състояние. Червени." },
-      { "id": "516.3", "phase": "GREEN", "action": "Екранът + входът + ключовете." },
-      { "id": "516.4", "phase": "DONE", "action": "typecheck + jest зелени. Commit." }
-    ],
-    "passes": false
-  },
-  {
-    "id": 517,
-    "category": "bugfix",
-    "repo": "partyup",
-    "lane": "fe-flows",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "frontend/src/features/table-create/**",
-      "frontend/src/locales/bg/tableForm.json",
-      "frontend/src/locales/en/tableForm.json"
-    ],
-    "description": "fix(table-create): date and time pickers open on click anywhere in the field",
-    "specRef": "party-up.md «v0.6 бележки» (пикърите, 12.09) + v0.4 таск 104 (произходът на полетата)",
-    "tddWorkflow": true,
-    "notes": "UX бъг от живата употреба (12.09): web date/time полетата (v0.4/104 — нативни input type=date/time) се отварят САМО от миниатюрната календарна иконка, която на тъмна тема е черна върху тъмен фон — трудна за виждане И уцелване. Фикс, двоен: (1) КЛИК ВЪРХУ ЦЯЛОТО ПОЛЕ отваря пикъра — onClick/onFocus на input-а вика el.showPicker() (HTMLInputElement.showPicker(), изисква user gesture — клик Е такъв; guard: typeof showPicker === 'function' + try/catch, някои браузъри отказват — тогава поведението си остава старото, НЕ чупи); (2) иконката става ВИДИМА на тъмна тема: правилният начин е CSS color-scheme върху input-а, синхронизиран с темата на приложението (dark тема → color-scheme: dark → браузърът сам рисува светла иконка и тъмен нативен пикър; светла → light) — темата се чете както другите компоненти я четат (ui-store/NativeWind класа), НЕ хардкодвай filter: invert без нужда. Пипа само date/time полевите компоненти в table-create (table-form-fields / web вариантите им); table-settings ползва същите компоненти — печели безплатно, НЕ пипай неговата зона. Тестове: клик върху полето вика showPicker (мок на метода); стойността продължава да тече към form state; при липсващ showPicker кликът не гърми. Ти си последен в fe-flows lane-а.",
-    "steps": [
-      { "id": "517.1", "phase": "RECON", "action": "Прочети date/time полевите компоненти от 104 (table-form-fields, web вариантите) и как компонентите четат текущата тема." },
-      { "id": "517.2", "phase": "RED", "action": "Тестове: клик на полето → showPicker извикан; липсващ showPicker → без грешка; стойността стига до form state. Червени." },
-      { "id": "517.3", "phase": "GREEN", "action": "showPicker wiring + color-scheme синхрон с темата." },
-      { "id": "517.4", "phase": "DONE", "action": "npm --prefix frontend run typecheck && npm --prefix frontend test зелени. Commit с description-а дословно." }
-    ],
-    "passes": false
-  }
+﻿[
+    {
+        "id":  501,
+        "category":  "bugfix",
+        "repo":  "partyup",
+        "lane":  "be-ws",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "backend/src/PartyUp.Api/Program.cs",
+                      "backend/tests/PartyUp.IntegrationTests/Foundation/**"
+                  ],
+        "description":  "fix(graphql): enable websockets so subscriptions actually connect",
+        "specRef":  "party-up.md «v0.6 бележки» т.6 + party-up-structure.md §2а",
+        "tddWorkflow":  true,
+        "notes":  "БЪГ, потвърден на живо (12.09): FE (graphql-ws от v0.5 таск 302) удря ws://…/graphql, но Program.cs НЯМА app.UseWebSockets() → upgrade-ът се отказва → Apollo console error при всяко отваряне на чат, нула живи subscriptions. Фикс: ЕДИН ред app.UseWebSockets() в Program.cs, ПРЕДИ app.MapGraphQL() (прочети pipeline реда). Program.cs е отровен файл — тази lane е единствената, която го пипа този board; НИЩО друго в него. Тест: integration ws smoke в Foundation — websocket клиент през WebApplicationFactory сървъра прави graphql-transport-ws handshake (connection_init → connection_ack) срещу /graphql. Ако пълен subscribe тест е неудобен през TestServer — handshake smoke стига, отбележи в summary.",
+        "steps":  [
+                      {
+                          "id":  "501.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети Program.cs pipeline реда и как Foundation тестовете вдигат ApiFactory."
+                      },
+                      {
+                          "id":  "501.2",
+                          "phase":  "RED",
+                          "action":  "WS handshake тест — червен (upgrade отказан без middleware-а)."
+                      },
+                      {
+                          "id":  "501.3",
+                          "phase":  "GREEN",
+                          "action":  "app.UseWebSockets() на правилното място."
+                      },
+                      {
+                          "id":  "501.4",
+                          "phase":  "DONE",
+                          "action":  "dotnet test backend/PartyUp.slnx зелен. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  502,
+        "category":  "bugfix",
+        "repo":  "partyup",
+        "lane":  "be-lfg",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "backend/src/PartyUp.Api/Features/Lfg/**",
+                      "backend/tests/PartyUp.IntegrationTests/Features/Lfg/**"
+                  ],
+        "description":  "fix(lfg): showcase hides unlisted candidacy tables and always shows open ones",
+        "specRef":  "party-up.md «v0.6 бележки» т.5 (решената семантика) + party-up-structure.md §2а.4",
+        "tddWorkflow":  true,
+        "notes":  "БЪГ, наблюдаван на живо: table-settings UI текстът обещава «маса без обява не се показва на никого», а ShowcaseQueries филтрира само Status != Disbanded → необявена маса се виждаше във витрината. РЕШЕНАТА семантика (12.09): (1) Candidacy маса БЕЗ ListingActive → СКРИТА от tablesShowcase (текстът става верен); (2) Open (AdmissionKind.Open, walk-in от v0.5) маса → вижда се ВИНАГИ, независимо от ListingActive — тя е обява по природа и публичният гост борд разчита на нея. Само Where промяна + тестове (двата случая + Disbanded остава скрит); НИКАКВА промяна по схема/контракти — НЕ пипай contracts/. table(id) заявката НЕ се филтрира (директният линк към маса работи — кандидатът вижда масата си).",
+        "steps":  [
+                      {
+                          "id":  "502.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети ShowcaseQueries.cs + тестовете; провери, че table(id) не минава през същия филтър."
+                      },
+                      {
+                          "id":  "502.2",
+                          "phase":  "RED",
+                          "action":  "Тестове: Candidacy+unlisted липсва; Candidacy+listed се вижда; Open+unlisted СЕ ВИЖДА; Disbanded не. Червени."
+                      },
+                      {
+                          "id":  "502.3",
+                          "phase":  "GREEN",
+                          "action":  "Where семантиката."
+                      },
+                      {
+                          "id":  "502.4",
+                          "phase":  "DONE",
+                          "action":  "dotnet test зелен. Commit."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  503,
+        "category":  "feature",
+        "repo":  "partyup",
+        "lane":  "be-lfg",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "backend/src/PartyUp.Api/Features/Candidacies/**",
+                      "backend/tests/PartyUp.IntegrationTests/Features/Candidacies/**",
+                      "contracts/schema.graphql"
+                  ],
+        "description":  "feat(candidacies): add myCandidacies query for the player side",
+        "specRef":  "party-up.md «v0.6 бележки» т.7в + party-up-structure.md §2а.4/§3.1",
+        "tddWorkflow":  true,
+        "notes":  "Схемата има candidacy(id) и myTableCandidacies(tableId) — гледната точка на МАСАТА. Кандидатът-играч няма как да изброи СВОИТЕ кандидатури. Таск: query myCandidacies: [Candidacy!]! — кандидатурите, в които viewer-ът е кандидатът (изисква сесия; AsNoTracking + Select проекция §2а.4; подредени по последна активност desc; ВКЛЮЧИТЕЛНО решените — статусът се вижда). Преизползвай Candidacy GraphQL типа (НЕ прави нов). Schema re-export (процедурата в contracts/README) + commit на contracts/schema.graphql В СЪЩИЯ commit. Тестове: моите се връщат с правилните статуси, чуждите НЕ; без сесия → auth грешка. Ти си втори в lane-а (след 502) — worktree-то ти тръгва от merged 502.",
+        "steps":  [
+                      {
+                          "id":  "503.1",
+                          "phase":  "RECON",
+                          "action":  "Merged 502. Прочети Candidacies slice-а (типове, DataLoader-и) и viewer-заявъчния патърн (MyTables)."
+                      },
+                      {
+                          "id":  "503.2",
+                          "phase":  "RED",
+                          "action":  "Тестовете от notes. Червени."
+                      },
+                      {
+                          "id":  "503.3",
+                          "phase":  "GREEN",
+                          "action":  "Заявката + schema export."
+                      },
+                      {
+                          "id":  "503.4",
+                          "phase":  "DONE",
+                          "action":  "dotnet test зелен. Commit (вкл. contracts/)."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  513,
+        "category":  "chore",
+        "repo":  "partyup",
+        "lane":  "fe-shell",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "frontend/src/features/auth/**",
+                      "frontend/src/locales/bg/auth.json",
+                      "frontend/src/locales/en/auth.json"
+                  ],
+        "description":  "chore(auth): disable the facebook login button for now",
+        "specRef":  "party-up.md «v0.6 бележки» т.2",
+        "tddWorkflow":  true,
+        "notes":  "Решение на потребителя (12.09): FB логинът «и без това не работи» (иска https redirect + app review бюрокрация — отложено още от prerequisites). Таск: махни \u0027facebook\u0027 от AUTH_PROVIDERS (features/auth/oauth.ts) — бутонът пада от login екрана; КОМЕНТАР В КОДА защо и как се връща (връщане в списъка + FB app конфигурация). Обнови тестовете, които изброяват провайдърите. НЕ пипай: BE (условната регистрация е безвредна), auth-linking (чужда зона — ако LinkedAccountsSection показва FB като link опция, само ДОКЛАДВАЙ в summary).",
+        "steps":  [
+                      {
+                          "id":  "513.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети oauth.ts, login-screen + тестовете; grep facebook из features/auth."
+                      },
+                      {
+                          "id":  "513.2",
+                          "phase":  "RED",
+                          "action":  "Тест: login екранът рендерира ТОЧНО два provider бутона (google, discord). Червен."
+                      },
+                      {
+                          "id":  "513.3",
+                          "phase":  "GREEN",
+                          "action":  "Провайдърът вън + коментарът + тестовете."
+                      },
+                      {
+                          "id":  "513.4",
+                          "phase":  "DONE",
+                          "action":  "npm --prefix frontend run typecheck \u0026\u0026 npm --prefix frontend test зелени. Commit."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  511,
+        "category":  "feature",
+        "repo":  "partyup",
+        "lane":  "fe-shell",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "frontend/src/features/auth/**",
+                      "frontend/src/components/**",
+                      "frontend/src/locales/bg/common.json",
+                      "frontend/src/locales/en/common.json"
+                  ],
+        "description":  "feat(shell): logout action in the app header",
+        "specRef":  "party-up.md «v0.6 бележки» т.1 + party-up-structure.md §4",
+        "tddWorkflow":  true,
+        "notes":  "Logout е зачукан в /settings. Таск: изход от глобалния header — икона/мини «акаунт» до settings зъбчето, видим САМО при сесия (на /login и за гост — не). Механиката СЪЩЕСТВУВА в auth-linking (мутация → clearStore → replace(\u0027/login\u0027)) — auth-linking е ЧУЖДА зона: направи преизползваем hook useLogout във features/auth/ (твоя зона; logout мутацията е в схемата — нов .gql документ в auth slice-а) и header-ът го вика; settings секцията НЕ я пипай (двата входа съжителстват; нейният рефактор към общия hook е за друг board). Без confirm диалог (изходът е безобиден). Ключове в common.json bg+en. Ти си след 513 в lane-а.",
+        "steps":  [
+                      {
+                          "id":  "511.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети app-header.tsx + теста, session-section.tsx (механиката за пренасяне в hook), use-session."
+                      },
+                      {
+                          "id":  "511.2",
+                          "phase":  "RED",
+                          "action":  "Тестове: при сесия иконата е там и вика logout флоу (мок); на /login и за гост я НЯМА. Червени."
+                      },
+                      {
+                          "id":  "511.3",
+                          "phase":  "GREEN",
+                          "action":  "useLogout + header входът + ключовете."
+                      },
+                      {
+                          "id":  "511.4",
+                          "phase":  "DONE",
+                          "action":  "typecheck + jest зелени. Commit."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  512,
+        "category":  "feature",
+        "repo":  "partyup",
+        "lane":  "fe-shell",
+        "model":  "heavy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "frontend/src/components/**",
+                      "frontend/src/features/contact/**",
+                      "frontend/src/locales/bg/common.json",
+                      "frontend/src/locales/en/common.json",
+                      "frontend/src/locales/bg/contact.json",
+                      "frontend/src/locales/en/contact.json"
+                  ],
+        "description":  "feat(shell): mount the notification bell with live badge and a door to chats",
+        "specRef":  "party-up.md «v0.6 бележки» т.7а/т.7б + contracts/schema.graphql (notifications, onNotification)",
+        "tddWorkflow":  true,
+        "notes":  "КРУПНИЯТ СИРАК (12.09): NotificationBell/NotificationCenter СЪЩЕСТВУВАТ (features/contact), но камбанката НЕ Е МОНТИРАНА НИКЪДЕ — известията се пишат в базата и нула UI ги показва; към /chat (съществуващ екран) НЯМА нито една врата в приложението. Таск: (1) камбанката в глобалния header (само при сесия) + badge с брой непрочетени (виж как center-ът чете notifications — преизползвай кеша/notifications-cache); (2) badge-ът е ЖИВ: onNotification абонаментът (механиката от v0.5/302 + test-utils/subscription.ts) — при event броячът расте БЕЗ refetch; при markNotificationRead — намалява (кеш дисциплина; това е ТВОЯТ дял от кеш одита, таск 514 НЕ пипа contact); (3) врата към чатовете: икона «съобщения» в header-а ИЛИ виден ред в notification center-а → /chat (избери, обоснови в summary); (4) провери testID котвата, която tour стъпка 5 очаква за камбанката — коригирай testID В КАМБАНКАТА при разминаване (tour файловете са ЧУЖДА зона, само четене). Ти си трети в lane-а (след 513, 511) — header-ът вече има logout вход, композирай, не пренаписвай.",
+        "steps":  [
+                      {
+                          "id":  "512.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети notification-bell/center, notifications-cache, header-а след 511, tour стъпките (само четене), subscription test-utils."
+                      },
+                      {
+                          "id":  "512.2",
+                          "phase":  "RED",
+                          "action":  "Тестове: камбанка в header-а при сесия с верен брой; onNotification → броячът расте без refetch; markRead → намалява; вратата води към /chat; гост — няма камбанка. Червени."
+                      },
+                      {
+                          "id":  "512.3",
+                          "phase":  "GREEN",
+                          "action":  "Монтаж + жив badge + врата + ключове."
+                      },
+                      {
+                          "id":  "512.4",
+                          "phase":  "DONE",
+                          "action":  "typecheck + jest зелени. Commit."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  514,
+        "category":  "bugfix",
+        "repo":  "partyup",
+        "lane":  "fe-flows",
+        "model":  "heavy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "frontend/src/features/table-create/**",
+                      "frontend/src/features/board/**",
+                      "frontend/src/features/my-tables/**",
+                      "frontend/src/features/candidacy/**",
+                      "frontend/src/features/lifecycle-actions/**"
+                  ],
+        "description":  "fix(cache): mutations update every list they change without a refresh",
+        "specRef":  "party-up.md «v0.6 бележки» т.3 (3/3 потвърдени на живо) + образецът в use-privacy.ts («пишем я право в кеша»)",
+        "tddWorkflow":  true,
+        "notes":  "СИСТЕМЕН клас, три потвърждения от три опита (12.09): (1) createTable → «Моите маси» не показва новата маса до F5; (2) publishMyListing → банерът «активна», а бордът «никой не е на борда» до F5; (3) pullCandidate → toast «в кандидатите е», а масата «няма кандидатури» до F5. ОДИТ на ВСИЧКИ мутации, раждащи/триещи/местещи неща в списъци, В ЗОНИТЕ ТИ: table-create (create→myTables), board (publish/unpublish→lfgBoard Connection + self блока), candidacy (pullCandidate→myTableCandidacies; submitVerdict/прием→състав+кандидатури), lifecycle-actions (leave/refound/kick→myTables+състав). Конвенцията: payload-ът се пише ПРАВО в кеша (cache update по образеца на use-privacy); за борда — през relayStylePagination merge политиките на Connection кеша (v0.5); refetchQueries САМО където update е непрактичен (обоснови в summary). Тест per случай: мутация → списъкът в кеша се променя БЕЗ нов мрежов кръг. markNotificationRead НЕ е твой (512, contact е чужда зона). НЕ пипай lib/apollo.ts. В summary: таблица мутация→кеш действие.",
+        "steps":  [
+                      {
+                          "id":  "514.1",
+                          "phase":  "RECON",
+                          "action":  "Инвентаризирай мутациите в петте зони + кои заявки четат засегнатите списъци; прочети use-privacy образеца и board Connection политиката."
+                      },
+                      {
+                          "id":  "514.2",
+                          "phase":  "RED",
+                          "action":  "Тестове за трите потвърдени + всеки открит случай. Червени."
+                      },
+                      {
+                          "id":  "514.3",
+                          "phase":  "GREEN",
+                          "action":  "Cache update-ите по конвенцията."
+                      },
+                      {
+                          "id":  "514.4",
+                          "phase":  "DONE",
+                          "action":  "typecheck + jest зелени. Commit."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  515,
+        "category":  "feature",
+        "repo":  "partyup",
+        "lane":  "fe-flows",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "frontend/src/features/board/**",
+                      "frontend/src/features/my-tables/**",
+                      "frontend/src/features/table-settings/**",
+                      "frontend/src/features/showcase/**",
+                      "frontend/src/features/candidacy/**",
+                      "frontend/src/locales/bg/board.json",
+                      "frontend/src/locales/en/board.json",
+                      "frontend/src/locales/bg/tables.json",
+                      "frontend/src/locales/en/tables.json",
+                      "frontend/src/locales/bg/tableSettings.json",
+                      "frontend/src/locales/en/tableSettings.json",
+                      "frontend/src/locales/bg/candidacy.json",
+                      "frontend/src/locales/en/candidacy.json"
+                  ],
+        "description":  "feat(tables): make listing status visible and decouple pulling from it",
+        "specRef":  "party-up.md «v0.6 бележки» т.4 + т.5 (отвореният дизайн въпрос — РЕШЕН: разкачане)",
+        "tddWorkflow":  true,
+        "notes":  "Сцената от 12.09: авторът сам не откри защо не може да дърпа («нечекването и неможенето да дърпаш е асоциално»). Пакет: (1) РАЗКАЧАНЕ pull↔listing: pull-targets.ts маха table.listingActive условието — дърпаш с всяка активна членска маса (BE pull guard-ът и без това НЕ изисква обявата на масата — проверено 12.09; обявата остава САМО видимост във витрината; Open масите не дърпат — 402 guard-ът остава); (2) обявеността СТАВА ВИДИМА: «Моите маси» картата получава «обявена/необявена» badge; (3) екранът на масата (candidacy/table-screen): «Обяви масата» CTA при Candidacy+необявена, с честно обяснение «невидима си във витрината» (след 502 това е буквално вярно); (4) тогълът в table-settings се преименува: «Търсим хора» → «Обявена на витрината» (или екв.) — авторът сам не го намери под старото име; hint текстът вече е верен след 502, сверѝ го. Ключове bg+en по namespace-ите. Ти си след 514 в lane-а — кешът е дисциплиниран, стъпи на него.",
+        "steps":  [
+                      {
+                          "id":  "515.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети pull-targets + board self блока, my-tables картата, table-listing-section, table-screen."
+                      },
+                      {
+                          "id":  "515.2",
+                          "phase":  "RED",
+                          "action":  "Тестове: pull бутон при членска маса БЕЗ обява; my-tables badge по listingActive; table-screen CTA при Candidacy+необявена; преименуваните текстове. Червени."
+                      },
+                      {
+                          "id":  "515.3",
+                          "phase":  "GREEN",
+                          "action":  "Разкачането + видимостта + rename + ключове."
+                      },
+                      {
+                          "id":  "515.4",
+                          "phase":  "DONE",
+                          "action":  "typecheck + jest зелени. Commit."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  516,
+        "category":  "feature",
+        "repo":  "partyup",
+        "lane":  "fe-flows",
+        "model":  "easy",
+        "dependsOn":  [
+                          503
+                      ],
+        "files":  [
+                      "frontend/src/features/candidacy/**",
+                      "frontend/src/features/board/**",
+                      "frontend/src/app/candidacies.tsx",
+                      "frontend/src/locales/bg/candidacy.json",
+                      "frontend/src/locales/en/candidacy.json",
+                      "frontend/src/locales/bg/board.json",
+                      "frontend/src/locales/en/board.json"
+                  ],
+        "description":  "feat(candidacies): the player sees their own candidacies",
+        "specRef":  "party-up.md «v0.6 бележки» т.7в + contracts/schema.graphql (myCandidacies след 503)",
+        "tddWorkflow":  true,
+        "notes":  "dependsOn 503 (myCandidacies в merged контракта; codegen). Кандидатът днес НЯМА как да разбере, че е дърпан, нито какво става с кандидатурата му. Таск: (1) нов ТЪНЪК route app/candidacies.tsx → екран «Моите кандидатури» (компонентът във features/candidacy) — списък: маса, статус (CandidacyStatus — обсъжда се/приет/отказан), link към candidacy/[id] (екранът с чата СЪЩЕСТВУВА); (2) вход от борда: в self блока ред «Кандидатурите ми (N)» — брои живите; (3) празно състояние, което обяснява pull модела («масите те дърпат — публикувай се и изчакай»). Ключове bg+en. Ти си трети в fe-flows — board self блокът е пипан от 514/515, композирай, не пренаписвай.",
+        "steps":  [
+                      {
+                          "id":  "516.1",
+                          "phase":  "RECON",
+                          "action":  "Merged 503 + codegen. Прочети candidacy-screen (редове/статуси за преизползване) и board self блока след 515."
+                      },
+                      {
+                          "id":  "516.2",
+                          "phase":  "RED",
+                          "action":  "Тестове: списъкът с моите + статуси; линкът към кандидатурата; входът от борда с броя; празното състояние. Червени."
+                      },
+                      {
+                          "id":  "516.3",
+                          "phase":  "GREEN",
+                          "action":  "Екранът + входът + ключовете."
+                      },
+                      {
+                          "id":  "516.4",
+                          "phase":  "DONE",
+                          "action":  "typecheck + jest зелени. Commit."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  517,
+        "category":  "bugfix",
+        "repo":  "partyup",
+        "lane":  "fe-flows",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "frontend/src/features/table-create/**",
+                      "frontend/src/locales/bg/tableForm.json",
+                      "frontend/src/locales/en/tableForm.json"
+                  ],
+        "description":  "fix(table-create): date and time pickers open on click anywhere in the field",
+        "specRef":  "party-up.md «v0.6 бележки» (пикърите, 12.09) + v0.4 таск 104 (произходът на полетата)",
+        "tddWorkflow":  true,
+        "notes":  "UX бъг от живата употреба (12.09): web date/time полетата (v0.4/104 — нативни input type=date/time) се отварят САМО от миниатюрната календарна иконка, която на тъмна тема е черна върху тъмен фон — трудна за виждане И уцелване. Фикс, двоен: (1) КЛИК ВЪРХУ ЦЯЛОТО ПОЛЕ отваря пикъра — onClick/onFocus на input-а вика el.showPicker() (HTMLInputElement.showPicker(), изисква user gesture — клик Е такъв; guard: typeof showPicker === \u0027function\u0027 + try/catch, някои браузъри отказват — тогава поведението си остава старото, НЕ чупи); (2) иконката става ВИДИМА на тъмна тема: правилният начин е CSS color-scheme върху input-а, синхронизиран с темата на приложението (dark тема → color-scheme: dark → браузърът сам рисува светла иконка и тъмен нативен пикър; светла → light) — темата се чете както другите компоненти я четат (ui-store/NativeWind класа), НЕ хардкодвай filter: invert без нужда. Пипа само date/time полевите компоненти в table-create (table-form-fields / web вариантите им); table-settings ползва същите компоненти — печели безплатно, НЕ пипай неговата зона. Тестове: клик върху полето вика showPicker (мок на метода); стойността продължава да тече към form state; при липсващ showPicker кликът не гърми. Ти си последен в fe-flows lane-а.",
+        "steps":  [
+                      {
+                          "id":  "517.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети date/time полевите компоненти от 104 (table-form-fields, web вариантите) и как компонентите четат текущата тема."
+                      },
+                      {
+                          "id":  "517.2",
+                          "phase":  "RED",
+                          "action":  "Тестове: клик на полето → showPicker извикан; липсващ showPicker → без грешка; стойността стига до form state. Червени."
+                      },
+                      {
+                          "id":  "517.3",
+                          "phase":  "GREEN",
+                          "action":  "showPicker wiring + color-scheme синхрон с темата."
+                      },
+                      {
+                          "id":  "517.4",
+                          "phase":  "DONE",
+                          "action":  "npm --prefix frontend run typecheck \u0026\u0026 npm --prefix frontend test зелени. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    }
 ]
