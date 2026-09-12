@@ -1,866 +1,260 @@
-﻿[
-    {
-        "id":  402,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "be-contract",
-        "model":  "heavy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "backend/src/PartyUp.Api/Domain/Table.cs",
-                      "backend/src/PartyUp.Api/Domain/Enums.cs",
-                      "backend/src/PartyUp.Api/Features/Tables/**",
-                      "backend/src/PartyUp.Api/Features/Lfg/**",
-                      "backend/src/PartyUp.Api/Features/Candidacies/**",
-                      "backend/tests/PartyUp.IntegrationTests/Features/Tables/**",
-                      "backend/tests/PartyUp.IntegrationTests/Features/Lfg/**",
-                      "backend/tests/PartyUp.IntegrationTests/Features/Candidacies/**",
-                      "backend/tests/PartyUp.UnitTests/Features/Tables/**",
-                      "contracts/schema.graphql"
-                  ],
-        "description":  "feat(tables): add open walk-in table mode with soft slot limits",
-        "specRef":  "party-up.md «v0.5 SCOPE» + Паркинг «Публична отворена маса» + party-up-structure.md §1а/§2а",
-        "tddWorkflow":  true,
-        "notes":  "Walk-in режимът (FB патърнът «сряда 18ч в Другия замък, feel free to join»): (1) Table получава AdmissionKind (нов enum: Candidacy | Open) + SlotsFirm bool (мек лимит = «склонен съм да ребалансирам за повече»); (2) createTable/updateTableSettings приемат двете полета (default: Candidacy + firm — съществуващото поведение НЕ се променя, всички стари тестове остават зелени без промяна); (3) tablesShowcase излага двете полета; (4) СЕМАНТИКА НА OPEN: няма кандидатски flow — pullCandidate/openContactChat/submitVerdict за Open маса връщат домейн грешка TABLE_IS_OPEN (изрични тестове!); съставът на Open маса се управлява само от съществуващите membership механики на основателя; slot валидацията при мек лимит НЕ блокира (soft = информативен, hard = сегашната желязна проверка — вж. TableRules). PlaceDescription си остава свободният текст за мястото. Schema re-export + commit на contracts/schema.graphql В СЪЩИЯ commit (§3.1). Domain/Table.cs и Enums.cs са споделени файлове — в тази lane са НАРОЧНО (единствената, която ги пипа).",
-        "steps":  [
-                      {
-                          "id":  "402.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети Table.cs, Enums.cs, TableRules, CreateTable/Settings/Listing slice-овете, ShowcaseQueries, Candidacies slice-а, съществуващите тестове."
-                      },
-                      {
-                          "id":  "402.2",
-                          "phase":  "RED",
-                          "action":  "Тестове: create с Open+soft → полетата се пазят и showcase ги връща; default-ите пазят старото; pull/contact/verdict срещу Open → TABLE_IS_OPEN и НИЩО не е писано; soft лимит не блокира настройка под текущите членове. Червени."
-                      },
-                      {
-                          "id":  "402.3",
-                          "phase":  "GREEN",
-                          "action":  "Enum + полета + guard-ове + schema export."
-                      },
-                      {
-                          "id":  "402.4",
-                          "phase":  "DONE",
-                          "action":  "dotnet test backend/PartyUp.slnx зелен. Commit с description-а дословно (вкл. contracts/)."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  401,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "be-contract",
-        "model":  "easy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "backend/src/PartyUp.Api/Features/Lfg/**",
-                      "backend/tests/PartyUp.IntegrationTests/Features/Lfg/**",
-                      "contracts/schema.graphql"
-                  ],
-        "description":  "feat(lfg): cursor pagination on the board and the tables showcase",
-        "specRef":  "party-up.md «v0.5 SCOPE» т.13а + party-up-structure.md §2а.4",
-        "tddWorkflow":  true,
-        "notes":  "lfgBoard и tablesShowcase връщат голи списъци — счупено при растеж. Фикс: Hot Chocolate [UsePaging] на двете (cursor Connections — вградени, БЕЗ нови deps), разумен defaultPageSize (напр. 20) + MaxPageSize cap. Filter аргументите остават както са. ВНИМАНИЕ: [UsePaging] върху IQueryable проекциите — пази AsNoTracking+Select дисциплината (§2а.4); стабилен ред (OrderBy по CreatedAt/Id) е ЗАДЪЛЖИТЕЛЕН за детерминистични cursor-и — добави го изрично. Всички съществуващи Lfg тестове се адаптират към Connection формата В СЪЩИЯ commit. Schema re-export (Connection/Edge типовете влизат в контракта) + commit на contracts/. Тази lane е СЕРИЙНА заради contracts/schema.graphql — ти си втори, worktree-то ти тръгва от merged 402.",
-        "steps":  [
-                      {
-                          "id":  "401.1",
-                          "phase":  "RECON",
-                          "action":  "Merged 402. Прочети LfgBoardQueries, ShowcaseQueries, тестовете им; HC UsePaging конвенциите в кодовата база (има ли вече някъде)."
-                      },
-                      {
-                          "id":  "401.2",
-                          "phase":  "RED",
-                          "action":  "Тестове: първа страница + pageInfo.hasNextPage; втора страница през endCursor не повтаря редове; филтърът важи вътре в пейджирането; стабилен ред. Червени."
-                      },
-                      {
-                          "id":  "401.3",
-                          "phase":  "GREEN",
-                          "action":  "[UsePaging] + подредба + адаптирани тестове + schema export."
-                      },
-                      {
-                          "id":  "401.4",
-                          "phase":  "DONE",
-                          "action":  "dotnet test зелен. Commit (вкл. contracts/)."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  403,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "be-contract",
-        "model":  "heavy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "backend/src/PartyUp.Api/Domain/Geo/**",
-                      "backend/src/PartyUp.Api/Data/PartyUpDbContext.cs",
-                      "backend/src/PartyUp.Api/Features/Geo/**",
-                      "backend/src/PartyUp.Api/Data/Seed/**",
-                      "backend/tests/PartyUp.IntegrationTests/Features/Geo/**",
-                      "backend/tests/PartyUp.UnitTests/Features/Geo/**",
-                      "contracts/schema.graphql"
-                  ],
-        "description":  "feat(geo): settlement registry with bulgarian seed and typeahead search",
-        "specRef":  "party-up.md Паркинг т.13 «Населени места» (решение: GeoNames, НЕ админ панел) + party-up-structure.md §2а",
-        "tddWorkflow":  true,
-        "notes":  "Settlement реестър (решение: seed данни, НЕ админ панел; GPS радиус НЕ влиза — само списъци). (1) Domain/Geo/Settlement.cs: Id, Name, AsciiName, CountryCode (ISO 3166-1 alpha-2), AdminRegion (област), Lat, Lng (координатите влизат СЕГА — безплатни от GeoNames, захранват бъдещия радиус) + DbSet в PartyUpDbContext (отровен файл — в тази lane нарочно, само 403 го пипа този board); (2) CLI команда по образеца на schema export (RunWithGraphQLCommandsAsync args пътя): settlements import \u003ctsv-файл\u003e — чете GeoNames формат (BG.txt tab-separated: geonameid/name/asciiname/…/latitude/longitude/…/admin1) и upsert-ва; (3) МАЛЪК комитнат seed (Data/Seed/settlements-bg-core.tsv: ~30-те областни града, съставен от теб в GeoNames формат) + при dev старт EnsureCreated пътят го зарежда, ако таблицата е празна — пълният BG.txt остава РЪЧНА стъпка на потребителя през командата (НЕ теглѝ файлове от интернет в таска!); (4) GraphQL: settlements(search: String!) query — case-insensitive contains търсене в Name И AsciiName (кирилица и латиница; ILike като SystemFilter патърна), cap на резултатите (~20), АНОНИМНО ДОСТЪПНА (без Authorize — публичните екрани ще я ползват); (5) Schema re-export + commit contracts/. Тестове: import идемпотентност (upsert без дубли), search «Бург»→Бургас и «burg»→Бургас, cap-ът, dev seed при празна таблица.",
-        "steps":  [
-                      {
-                          "id":  "403.1",
-                          "phase":  "RECON",
-                          "action":  "Merged 401/402. Прочети schema export CLI механиката в Program.cs/README, DbContext, SystemFilter (ILike патърна), EnsureCreated dev пътя."
-                      },
-                      {
-                          "id":  "403.2",
-                          "phase":  "RED",
-                          "action":  "Тестовете от notes. Червени."
-                      },
-                      {
-                          "id":  "403.3",
-                          "phase":  "GREEN",
-                          "action":  "Entity + import команда + seed файл + search query + schema export."
-                      },
-                      {
-                          "id":  "403.4",
-                          "phase":  "DONE",
-                          "action":  "dotnet test зелен. Commit (вкл. contracts/)."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  404,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "be-contract",
-        "model":  "easy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "backend/src/PartyUp.Api/Features/Push/**",
-                      "backend/src/PartyUp.Api/Features/PushSend/**",
-                      "backend/tests/PartyUp.IntegrationTests/Features/Push/**",
-                      "backend/tests/PartyUp.IntegrationTests/Features/PushSend/**",
-                      "contracts/schema.graphql"
-                  ],
-        "description":  "feat(push): per-category notification preferences honored by the fan-out",
-        "specRef":  "party-up.md «v0.5 SCOPE» (push preferences) + party-up-structure.md §1а (Push/PushSend slices)",
-        "tddWorkflow":  true,
-        "notes":  "Настройки «кои известия искам». (1) RECON първо: установи как известията се категоризират днес (Notification записът носи вид/kind — извади РЕАЛНИТЕ категории от кода, НЕ си измисляй; очаквани групи: кандидатури/чат/решения/lifecycle/privacy-export); (2) персистенция per user В Push slice-а — НЕ пипай Domain/ и DbContext (чужда lane собственост този board): ползвай съществуващо хранилище на slice-а (напр. json колона на PushSubscription или каквото RECON покаже); ако РЕАЛНО няма къде без нов DbSet → status failed с обяснение, НЕ пипай отровните файлове; (3) mutation setNotificationPreference(category, enabled) + query myNotificationPreferences; (4) FanoutNotifier проверява преференцията ПРЕДИ Web Push изпращането — изключена категория = БЕЗ push, но записът в Notifications ОСТАВА (камбанката винаги показва всичко — преференцията спира буталката, не истината); (5) Schema re-export + commit contracts/. Тестове: изключена категория → запис има, push sender НЕ е викан; включена → и двете; преференциите се четат/пишат per user.",
-        "steps":  [
-                      {
-                          "id":  "404.1",
-                          "phase":  "RECON",
-                          "action":  "Merged 403. Прочети Notification модела/kind полето, FanoutNotifier, WebPushSender, PushSubscription хранилището."
-                      },
-                      {
-                          "id":  "404.2",
-                          "phase":  "RED",
-                          "action":  "Тестовете от notes. Червени."
-                      },
-                      {
-                          "id":  "404.3",
-                          "phase":  "GREEN",
-                          "action":  "Преференции + fan-out проверка + schema export."
-                      },
-                      {
-                          "id":  "404.4",
-                          "phase":  "DONE",
-                          "action":  "dotnet test зелен. Commit (вкл. contracts/)."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  411,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "fe-board-paging",
-        "model":  "easy",
-        "dependsOn":  [
-                          401
-                      ],
-        "files":  [
-                      "frontend/src/features/board/**",
-                      "frontend/src/locales/bg/board.json",
-                      "frontend/src/locales/en/board.json"
-                  ],
-        "description":  "feat(board): infinite scroll over the paginated lfg board",
-        "specRef":  "party-up.md «v0.5 SCOPE» т.13а + party-up-structure.md §4",
-        "tddWorkflow":  true,
-        "notes":  "dependsOn 401 (Connection формата трябва да е в merged контракта за codegen). Board заявката минава на Connection: fetchMore при стигане до дъното (FlatList onEndReached / scroll handler — каквото RNW поддържа чисто) + «зареди още» бутон като fallback; Apollo cache merge политика за connection-а (relayStylePagination helper-ът на Apollo е вграден — БЕЗ нови deps; typePolicy се дефинира при клиентското създаване — ПРОВЕРИ дали може локално в заявката/hook-а, БЕЗ да пипаш lib/apollo.ts — той е чужда зона; ако РЕАЛНО трябва промяна там → status failed с обяснение). Филтрите ресетват пейджирането. Loading/край състояния с i18n ключове bg+en. Self обявата/publish CTA логиката НЕ се пипа.",
-        "steps":  [
-                      {
-                          "id":  "411.1",
-                          "phase":  "RECON",
-                          "action":  "Merged 401: Connection формата + codegen. Прочети board-screen, gql документите, lib/apollo.ts (САМО чети)."
-                      },
-                      {
-                          "id":  "411.2",
-                          "phase":  "RED",
-                          "action":  "Тестове: първа страница; fetchMore долепя без дубли; филтър промяна ресетва; «край» състоянието. Червени."
-                      },
-                      {
-                          "id":  "411.3",
-                          "phase":  "GREEN",
-                          "action":  "Connection заявка + fetchMore + състояния + ключове."
-                      },
-                      {
-                          "id":  "411.4",
-                          "phase":  "DONE",
-                          "action":  "npm --prefix frontend run typecheck \u0026\u0026 npm --prefix frontend test зелени. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  412,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "fe-tables",
-        "model":  "easy",
-        "dependsOn":  [
-                          402
-                      ],
-        "files":  [
-                      "frontend/src/features/table-create/**",
-                      "frontend/src/features/table-settings/**",
-                      "frontend/src/features/showcase/**",
-                      "frontend/src/locales/bg/tableForm.json",
-                      "frontend/src/locales/en/tableForm.json",
-                      "frontend/src/locales/bg/showcase.json",
-                      "frontend/src/locales/en/showcase.json"
-                  ],
-        "description":  "feat(tables): open walk-in mode and soft slot limit in create, settings and showcase",
-        "specRef":  "party-up.md «v0.5 SCOPE» (отворени маси) + party-up-structure.md §4",
-        "tddWorkflow":  true,
-        "notes":  "FE двойникът на 402 (dependsOn — codegen иска merged контракта). (1) create формата: избор «Как се влиза» — «Через кандидатури» (default) / «Отворена — просто ела» + при Отворена: тогъл твърд/мек лимит с обяснението («мек = склонен съм да ребалансирам за повече»); (2) table-settings: същите полета редактируеми; (3) showcase картата: Open масите се отличават (badge «отворена») + лимитът по човешки: «4 места, твърд лимит» / «4 души, нетвърд лимит»; Open картата НЕ показва кандидатски CTA — показва мястото/времето на едро (това Е поканата). Ключове bg+en. Кандидатската фича НЕ се пипа — 402 пази сървърно.",
-        "steps":  [
-                      {
-                          "id":  "412.1",
-                          "phase":  "RECON",
-                          "action":  "Merged 402: контрактът + codegen. Прочети table-create-form, table-settings, showcase картата."
-                      },
-                      {
-                          "id":  "412.2",
-                          "phase":  "RED",
-                          "action":  "Тестове: формата праща kind+firmness; default-ите пазят старото; Open картата — badge, без кандидатски CTA, лимит текстът по firmness. Червени."
-                      },
-                      {
-                          "id":  "412.3",
-                          "phase":  "GREEN",
-                          "action":  "Формите + картата + ключовете."
-                      },
-                      {
-                          "id":  "412.4",
-                          "phase":  "DONE",
-                          "action":  "typecheck + jest зелени. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  413,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "fe-tables",
-        "model":  "heavy",
-        "dependsOn":  [
-                          402
-                      ],
-        "files":  [
-                      "frontend/src/lib/auth-gate.tsx",
-                      "frontend/src/lib/auth-gate.test.tsx",
-                      "frontend/src/features/showcase/**",
-                      "frontend/src/features/tour/**",
-                      "frontend/src/locales/bg/showcase.json",
-                      "frontend/src/locales/en/showcase.json",
-                      "frontend/src/locales/bg/tour.json",
-                      "frontend/src/locales/en/tour.json"
-                  ],
-        "description":  "feat(showcase): public no-login showcase for open tables with a guest call-to-action",
-        "specRef":  "party-up.md «v0.5 SCOPE» (публичност) + Паркинг «Публична отворена маса» (acquisition ъгъла)",
-        "tddWorkflow":  true,
-        "notes":  "Acquisition каналът: нерегистриран от QR-а на бармана вижда «сряда има one-shot». (1) AuthGate: PUBLIC_SEGMENTS механиката СЪЩЕСТВУВА ([\u0027login\u0027]) — добави \u0027showcase\u0027; гост на /showcase НЕ се изхвърля към /login (и без флаш при deep link); (2) ПРОВЕРИ СЪРВЪРА В RECON: tablesShowcase трябва да минава БЕЗ сесия — ако BE я пази с auth, това е БЛОКЕР за доклад (status failed с обяснение), НЕ пипай backend/ (чужда зона); (3) гост UX: действията, искащи сесия (създай маса, дърпане), за гост стават «Влез, за да…» CTA към /login; Open масите се виждат пълно (място/време = поканата); (4) tour: нова стъпка за отворените маси (tour feature-ът и tour.json са в зоната ти); (5) header-ът на гост екрана: theme/език контролите работят и за гост (те са ui-store, без сесия — провери, не чупи).",
-        "steps":  [
-                      {
-                          "id":  "413.1",
-                          "phase":  "RECON",
-                          "action":  "След 412 в lane-а. Прочети auth-gate.tsx + теста, showcase екрана, tour стъпките; провери в BE integration тестовете дали tablesShowcase минава анонимно (само четене)."
-                      },
-                      {
-                          "id":  "413.2",
-                          "phase":  "RED",
-                          "action":  "Тестове: гост на /showcase не се redirect-ва; гост вижда Open маса; session действие за гост → «Влез, за да…»; логнат — старото; tour стъпката валидна. Червени."
-                      },
-                      {
-                          "id":  "413.3",
-                          "phase":  "GREEN",
-                          "action":  "PUBLIC_SEGMENTS + гост UX + tour стъпка + ключове."
-                      },
-                      {
-                          "id":  "413.4",
-                          "phase":  "DONE",
-                          "action":  "typecheck + jest зелени. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  414,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "fe-tables",
-        "model":  "easy",
-        "dependsOn":  [
-                          403
-                      ],
-        "files":  [
-                      "frontend/src/features/table-create/**",
-                      "frontend/src/features/table-settings/**",
-                      "frontend/src/locales/bg/tableForm.json",
-                      "frontend/src/locales/en/tableForm.json"
-                  ],
-        "description":  "feat(tables): settlement typeahead next to the free-text place",
-        "specRef":  "party-up.md Паркинг т.13 «Населени места» + party-up-structure.md §4",
-        "tddWorkflow":  true,
-        "notes":  "dependsOn 403 (settlements query в merged контракта). Полето «място» в create/settings получава допълнение: typeahead «населено място» (търси settlements(search) при ≥2 знака, debounce, избор → пази settlementId; кирилица И латиница работят — сървърът търси в двете колони). Свободният текст PlaceDescription ОСТАВА (клуб/адрес/уговорка) — settlement-ът е структурираното «кой град», не замяна. Незадължително поле. Ключове bg+en. Лек компонентен таск — table-form-fields патърните са образецът; в lane-а 412 вече е пипал формите — стъпи на неговото.",
-        "steps":  [
-                      {
-                          "id":  "414.1",
-                          "phase":  "RECON",
-                          "action":  "Merged 403: settlements query + codegen. Прочети формите след 412."
-                      },
-                      {
-                          "id":  "414.2",
-                          "phase":  "RED",
-                          "action":  "Тестове: ≥2 знака викат заявката (debounce мокнат); избор пише settlementId; празно е валидно; свободният текст непокътнат. Червени."
-                      },
-                      {
-                          "id":  "414.3",
-                          "phase":  "GREEN",
-                          "action":  "Typeahead + wiring + ключове."
-                      },
-                      {
-                          "id":  "414.4",
-                          "phase":  "DONE",
-                          "action":  "typecheck + jest зелени. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  431,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "fe-push",
-        "model":  "easy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "frontend/src/features/push/**",
-                      "frontend/src/app/settings.tsx",
-                      "frontend/src/locales/bg/push.json",
-                      "frontend/src/locales/en/push.json"
-                  ],
-        "description":  "feat(push): mount the existing push prompt and subscribe flow into the app",
-        "specRef":  "party-up.md «v0.5 SCOPE» (Web Push wiring) + party-up-structure.md §1а (Push slice) + docs бележката «push not wired to a screen»",
-        "tddWorkflow":  true,
-        "notes":  "Машинарията СЪЩЕСТВУВА от двете страни (BE: pushSubscribe/vapidPublicKey/fan-out; FE: push-prompt.tsx, use-push-setup.ts, push-pipeline, push-optout, sw.js) — липсва МОНТАЖЪТ. (1) RECON: разчети use-push-setup/push-prompt договора (support проверка, opt-out памет, кога промптът е допустим); (2) монтаж: секция «Известия» в app/settings.tsx (route файла — auth-linking фичата НЕ се пипа, чужда зона) с бутон «Включи известията» → permission + subscribe; отказът се помни (push-optout) и НЕ се навира повторно; (3) статус честно: включени / изключени / браузърът не поддържа / отказани от браузъра (+ как се връща от site settings); (4) ключове bg+en в push.json. ⚠ PREREQUISITE (проверява ЧОВЕКЪТ преди старт): VAPID ключовете в user-secrets — тестовете минават с мок и без тях, но ако RECON покаже липсваща конфигурация, отбележи го в summary.",
-        "steps":  [
-                      {
-                          "id":  "431.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети push фичата изцяло + sw.js + как settings.tsx композира секции."
-                      },
-                      {
-                          "id":  "431.2",
-                          "phase":  "RED",
-                          "action":  "Тестове: секцията по support/permission състояние; «Включи» вика pipeline-а (мок); отказ → не се промптва пак; статус текстовете. Червени."
-                      },
-                      {
-                          "id":  "431.3",
-                          "phase":  "GREEN",
-                          "action":  "Монтажът + състоянията + ключовете."
-                      },
-                      {
-                          "id":  "431.4",
-                          "phase":  "DONE",
-                          "action":  "typecheck + jest зелени. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  415,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "fe-push",
-        "model":  "easy",
-        "dependsOn":  [
-                          404
-                      ],
-        "files":  [
-                      "frontend/src/features/push/**",
-                      "frontend/src/app/settings.tsx",
-                      "frontend/src/locales/bg/push.json",
-                      "frontend/src/locales/en/push.json"
-                  ],
-        "description":  "feat(push): per-category notification preference toggles in settings",
-        "specRef":  "party-up.md «v0.5 SCOPE» (push preferences) + party-up-structure.md §4",
-        "tddWorkflow":  true,
-        "notes":  "dependsOn 404 (преференциите в merged контракта). В секцията «Известия» (431 я е създал — същата lane): тогъл per категория (категориите идват от 404-та схема — чети контракта, НЕ си измисляй), myNotificationPreferences + setNotificationPreference с optimistic UI; обяснителен ред «камбанката винаги показва всичко — това спира само бутащите известия» (bg+en). Тогълите са неактивни при изключен push, с подсказка.",
-        "steps":  [
-                      {
-                          "id":  "415.1",
-                          "phase":  "RECON",
-                          "action":  "Merged 404 + codegen; прочети секцията от 431 (в lane-а е)."
-                      },
-                      {
-                          "id":  "415.2",
-                          "phase":  "RED",
-                          "action":  "Тестове: тогълите по server състоянието; смяна → мутация optimistic; неактивни при изключен push. Червени."
-                      },
-                      {
-                          "id":  "415.3",
-                          "phase":  "GREEN",
-                          "action":  "Тогълите + ключовете."
-                      },
-                      {
-                          "id":  "415.4",
-                          "phase":  "DONE",
-                          "action":  "typecheck + jest зелени. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  421,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "be-hardening",
-        "model":  "easy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "backend/src/PartyUp.Api/Program.cs",
-                      "backend/src/PartyUp.Api/Common/RateLimiting/**",
-                      "backend/tests/PartyUp.IntegrationTests/Foundation/RateLimiting/**"
-                  ],
-        "description":  "feat(security): rate limiting on auth, graphql mutations and export download",
-        "specRef":  "party-up.md «v0.5 SCOPE» (rate limiting — «да не ми съборят деплоя / колосална сметка»)",
-        "tddWorkflow":  true,
-        "notes":  "Вграденият ASP.NET rate limiter (AddRateLimiter + UseRateLimiter — БЕЗ нови deps). (1) Политиките живеят в Common/RateLimiting/ (нови, твои файлове) — Program.cs получава САМО регистрационните редове (отровен файл — тази lane е единствената, която го пипа този board); (2) partition: по user id при сесия, иначе по IP; (3) прицелно, не килим: строга политика на /auth/* (вкл. dev-login — брутфорсът на име е реален) и /privacy/export; умерена sliding-window на POST /graphql; Development средата НЕ се дросълва (env проверка) — иначе GraphQL IDE-то и dev флоуто страдат; (4) 429 + Retry-After header; (5) БОНУС ПРОВЕРКА (докладвай в summary, не имплементирай без нужда): @cost тежестите стоят в схемата — активен ли е HC cost limiter (max cost per заявка)? Ако не — отбележи като препоръка. ⚠ Тестова хигиена: integration тестовете правят МНОГО заявки — тестовата среда върви с щедри лимити (конфиг), а прицелните лимит тестове си слагат ниски през конфигурация; останалият suite НЕ бива да почервенее.",
-        "steps":  [
-                      {
-                          "id":  "421.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети Program.cs (pipeline реда — limiter-ът иска място спрямо auth), AuthEndpoints, DataExportEndpoints, ApiFactory (как тестовете конфигурират среда)."
-                      },
-                      {
-                          "id":  "421.2",
-                          "phase":  "RED",
-                          "action":  "Тестове: N+1-вата заявка в прозореца → 429 + Retry-After; различни потребители не си делят кофата; останалият suite зелен. Червени."
-                      },
-                      {
-                          "id":  "421.3",
-                          "phase":  "GREEN",
-                          "action":  "Политиките + регистрацията + 429 форматът."
-                      },
-                      {
-                          "id":  "421.4",
-                          "phase":  "DONE",
-                          "action":  "dotnet test зелен. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  422,
-        "category":  "refactor",
-        "repo":  "partyup",
-        "lane":  "be-auth",
-        "model":  "easy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "backend/src/PartyUp.Api/Features/Auth/**",
-                      "backend/tests/PartyUp.IntegrationTests/Features/Auth/**"
-                  ],
-        "description":  "refactor(auth): lift shared provisioning primitives above the login and dev-login slices",
-        "specRef":  "party-up.md Паркинг т.11 (ревю находката) + rules/architecture-rules.md 1.2",
-        "tddWorkflow":  true,
-        "notes":  "Ревю находката от v0.4: DevLogin реферира вътрешностите на Login slice-а (cross-slice ребро срещу правило 1.2). Фиксът по рецептата на ревюера: вдигни ProvisioningService, AuthRedirect и ExternalIdentity ЕДНО ниво нагоре — в Features/Auth/ споделено пространство (namespace PartyUp.Api.Features.Auth) — Login и DevLogin ги консумират отгоре, без slice→slice reference. ЧИСТ MOVE: никаква поведенческа промяна, никаква промяна по схема/контракти — файлове/namespace-и + using-и. Всички Auth тестове зелени само с namespace ъпдейти. FE барелът от същата забележка НЕ е тук (FE е чужда зона).",
-        "steps":  [
-                      {
-                          "id":  "422.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети Features/Auth дървото + grep using Features.Auth.Login."
-                      },
-                      {
-                          "id":  "422.2",
-                          "phase":  "RED",
-                          "action":  "Move рефакторинг — «червеното» е компилаторът: премести и го остави да те води."
-                      },
-                      {
-                          "id":  "422.3",
-                          "phase":  "GREEN",
-                          "action":  "Build чист + Auth тестовете зелени без семантични промени."
-                      },
-                      {
-                          "id":  "422.4",
-                          "phase":  "DONE",
-                          "action":  "dotnet test зелен. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  423,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "be-auth",
-        "model":  "easy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "backend/src/PartyUp.Api/Features/Auth/**",
-                      "backend/tests/PartyUp.IntegrationTests/Features/Auth/**"
-                  ],
-        "description":  "feat(auth): optional shared token guard on the dev-login endpoint",
-        "specRef":  "party-up.md т.12 (docs бележката за dev-login) + Features/Auth/DevLogin",
-        "tddWorkflow":  true,
-        "notes":  "Второ резе на dev-login (пази срещу случайно пуснат Development на достъпна машина). Конфиг ключ DevLogin:Token (user-secrets/env, НЕ в git; празен в appsettings по образеца на OAuth секретите): ако е зададен → /auth/dev-login изисква ?token=\u003cстойността\u003e (constant-time сравнение — CryptographicOperations.FixedTimeEquals), грешен/липсващ → 404 (неразличимо от изключен endpoint — не издавай, че съществува); ако НЕ е зададен → старото поведение (само env гейтът), нулево търкане за локалния dev. Тестове: без конфиг → както преди; с конфиг: верен → login, грешен/липсващ → 404. След 422 в lane-а — стъпи на новата структура.",
-        "steps":  [
-                      {
-                          "id":  "423.1",
-                          "phase":  "RECON",
-                          "action":  "След 422: прочети преместения DevLogin + IsConfigured патърна за конфигурация."
-                      },
-                      {
-                          "id":  "423.2",
-                          "phase":  "RED",
-                          "action":  "Трите теста от notes. Червени."
-                      },
-                      {
-                          "id":  "423.3",
-                          "phase":  "GREEN",
-                          "action":  "Token гардът."
-                      },
-                      {
-                          "id":  "423.4",
-                          "phase":  "DONE",
-                          "action":  "dotnet test зелен. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  710,
-        "category":  "feature",
-        "repo":  "inventory",
-        "lane":  "crafting-core",
-        "files":  [
-                      "index.html",
-                      "styles.css",
-                      "app.js",
-                      "modules/state.js",
-                      "modules/router.js",
-                      "modules/base-detail.js",
-                      "modules/crafting.js",
-                      "modules/crafting-search.js",
-                      "test/unit/crafting-foundation.spec.js"
-                  ],
-        "verify":  [
-                       "npm run test:unit"
-                   ],
-        "description":  "feat(crafting): add crafting reference foundation with hammer icon, page markup, unified hash router and module stubs",
-        "specRef":  "shared-inventory-structure.md §11 (ЦЕЛИЯТ контракт — чети го ПЪРВИ) + crafting-feature-plan.md (в корена на репото)",
-        "tddWorkflow":  true,
-        "notes":  "ЦЕЛ НА ФИЧАТА (4 таска): референтни крафтинг таблици (54 животни за harvesting + алхимична система) зад икона ⚒ в header реда — БЕЗ нов таб (изрично решение). Иконата отваря страница #crafting с back бутон, вътрешни табове-chips за 9-те таблици, търсене по име и badge филтър. ТОЗИ таск е ФУНДАМЕНТЪТ: изяжда всички споделени файлове, за да вървят 720/730 паралелно. Каквото пропуснеш в markup-а, паралелните lanes НЕ могат да го добавят — бъди изчерпателен по DOM контракта в §11.\n\n=== ДАННИТЕ СА ГОТОВИ — НЕ ГИ ГЕНЕРИРАШ, НЕ ГИ РЕДАКТИРАШ ===\nmodules/crafting-data.js е КОМИТНАТ (генериран, ~44KB): export const CRAFTING_TABLES = [...] — 9 таблици със схема { key, label, group, type: \u0027table\u0027|\u0027info\u0027, nameCol, badgeCol|null, filterable, columns, rows: [{col: value}] }, info записите имат entries: [{k, v}]. САМО го import-ваш. НИКАКЪВ Firestore за тази фича — данните са статични (нула reads, пази free tier). Няма нови колекции, firebaseConfig не се пипа, всичко от §3 важи.\n\n=== ROUTER РЕФАКТОР (внимателно — пипаш чужд работещ код) ===\nНов modules/router.js по §11: dispatchRoute() вика renderRoute() (от base-detail.js) и СЛЕД това renderCraftingRoute() (от crafting.js) — редът е ЯВЕН, последният печели за \u0027#crafting\u0027. hashchange listener + boot strip за ВСЕКИ остатъчен hash (history.replaceState — решението от bases хотфикс 2). ОТ base-detail.js МАХНИ: window.addEventListener(\u0027hashchange\u0027, renderRoute) и boot-strip блока (if (parseHash() !== null) ...) — НИЩО ДРУГО там не пипаш: renderRoute export-ът, btnBaseBack/btnBaseSave wiring-ът и цялата логика остават. app.js: import \u0027./modules/router.js\u0027 (самоинициализиращ се при import — документирай го с коментар). Snapshot-ът на BASES_DOC продължава да вика renderRoute() — НЕ го сменяй с dispatchRoute.\n⚠ РЕГРЕСИОННА МРЕЖА: test/unit/bases-detail.spec.js и bases-foundation.spec.js ТРЯБВА да останат зелени БЕЗ да ги пипаш — те dispatch-ват hashchange/викат renderRoute директно; router-ът е зареден през app.js в bootApp, така че поведението е идентично. Ако някой bases тест почервенее — рефакторът ти е грешен, не тестът.\n\n=== MARKUP (DOM контрактът от §11 — дословно) ===\n1. Header реда (div-ът с btnInstall/Export/Import): добави \u003cbutton class=\"btn-ghost\" onclick=\"openCrafting()\" aria-label=\"Крафтинг референции\" style=\"font-size:0.85rem\"\u003e⚒\u003c/button\u003e.\n2. След #baseDetail: \u003cdiv id=\"craftingPage\" class=\"hidden\"\u003e с: бутон id=btnCraftBack „← Назад“ (btn-ghost); div.craft-controls: \u003cinput id=\"craftSearch\" type=\"search\" placeholder=\"Търси по име…\"\u003e + \u003cselect id=\"craftBadge\"\u003e\u003c/select\u003e; \u003cnav id=\"craftTabs\" class=\"craft-tabs\"\u003e\u003c/nav\u003e; div.tbl-wrap с \u003ctable id=\"craftTable\"\u003e\u003cthead id=\"craftHead\"\u003e\u003c/thead\u003e\u003ctbody id=\"craftBody\"\u003e\u003c/tbody\u003e\u003c/table\u003e; \u003cdiv id=\"craftInfo\" class=\"hidden\"\u003e\u003c/div\u003e.\n3. styles.css по §11: .craft-tabs (chips лента, overflow-x auto, бутони btn-ghost стил, .active с --accent), .craft-controls (flex, gap, търсачката flex:1, wrap на телефон; input/select в стила на .field контролите), .craft-badge (по образеца на .badge), tr.craft-expanded + .craft-details (key: value блок — label с --muted + стойност, НЕ таблица), #craftingPage в стила на #baseDetail (max-width 900px, центриран, padding).\n\n=== STUBS ===\nmodules/crafting.js: export function renderCraftingRoute() {} / renderCrafting() {} / openCrafting() { location.hash = \u0027#crafting\u0027; } — openCrafting РЕАЛЕН (той е тривиален; викането на dispatch идва даром от hashchange). modules/crafting-search.js: export function populateBadgeOptions() {}. modules/state.js добавя: craftingTab: \u0027animals\u0027, craftingFilter: { q: \u0027\u0027, badge: \u0027\u0027 }, expandedCraftIdx: null. app.js: imports, window.openCrafting, facade re-exports по §11.\n\n=== ЧЕРВЕНИ ЛИНИИ ===\nНикакъв реален Firestore в тестове; npm test/serve НЕ се пускат от агент (порт 45279 е на гейта) — само npm run test:unit; test/e2e/ и fixtures НЕ се пипат; modules/crafting-data.js НЕ се пипа; UI на български.",
-        "steps":  [
-                      {
-                          "id":  "710.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети shared-inventory-structure.md §11 ИЗЦЯЛО и crafting-feature-plan.md. Прочети modules/base-detail.js ИЗЦЯЛО (какво точно махаш и какво ОСТАВА), modules/crafting-data.js (само схемата — първите ~40 реда + един table запис), app.js, index.html (header реда + #baseDetail блока), styles.css (.badge, #baseDetail стиловете, .hidden utility), test/unit/bases-detail.spec.js (регресионната мрежа, която НЕ пипаш)."
-                      },
-                      {
-                          "id":  "710.2",
-                          "phase":  "RED",
-                          "action":  "Създай test/unit/crafting-foundation.spec.js (bootApp): (а) header реда има ⚒ бутон с aria-label „Крафтинг референции“; (б) markup контрактът: #craftingPage (hidden по подразбиране) с #btnCraftBack/#craftSearch/#craftBadge/#craftTabs/#craftHead/#craftBody/#craftInfo; (в) данните: CRAFTING_TABLES (директен import на modules/crafting-data.js) има 9 таблици, animals има 54 rows и nameCol \u0027Animal\u0027/badgeCol \u0027Size\u0027/filterable true, harvestRules е type \u0027info\u0027 с entries, всяка type \u0027table\u0027 има nameCol в columns; (г) router: location.hash=\u0027#crafting\u0027 + dispatch на hashchange → #craftingPage БЕЗ class hidden, .tab-nav и #baseDetail С class hidden; после hash=\u0027\u0027 + dispatch → обратно; (д) boot strip: hash \u0027#crafting\u0027 сетнат ПРЕДИ bootApp → след boot hash е \u0027\u0027 и страницата е скрита (същото поведение като bases за #base/*); (е) window.openCrafting сетва hash \u0027#crafting\u0027. Пусни npm run test:unit — новият спек ЧЕРВЕН по правилната причина, ВСИЧКИ стари (вкл. bases-detail) зелени."
-                      },
-                      {
-                          "id":  "710.3",
-                          "phase":  "GREEN",
-                          "action":  "index.html: ⚒ бутонът + #craftingPage markup по notes. styles.css: .craft-tabs/.craft-controls/.craft-badge/.craft-details/tr.craft-expanded/#craftingPage по §11."
-                      },
-                      {
-                          "id":  "710.4",
-                          "phase":  "GREEN",
-                          "action":  "Създай modules/router.js по §11 (dispatchRoute, hashchange listener, boot strip за всеки hash, самоинициализация при import). Махни от modules/base-detail.js hashchange listener-а и boot-strip блока (САМО тях). Създай stubs modules/crafting.js и modules/crafting-search.js по notes. modules/state.js: трите нови полета. app.js: import router + crafting + crafting-search, window.openCrafting, facade re-exports { renderCrafting, renderCraftingRoute, openCrafting, populateBadgeOptions }."
-                      },
-                      {
-                          "id":  "710.5",
-                          "phase":  "DONE",
-                          "action":  "npm run test:unit — ВСИЧКИ спекове зелени: новият + 15-те стари, ОСОБЕНО bases-detail.spec.js и bases-foundation.spec.js (router рефакторът не бива да им личи). Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  720,
-        "category":  "feature",
-        "repo":  "inventory",
-        "lane":  "crafting-ui",
-        "dependsOn":  [
-                          710
-                      ],
-        "files":  [
-                      "modules/crafting.js",
-                      "test/unit/crafting.spec.js"
-                  ],
-        "verify":  [
-                       "npm run test:unit"
-                   ],
-        "description":  "feat(crafting): implement reference page with table chips, name/badge list and accordion details",
-        "specRef":  "shared-inventory-structure.md §11 + crafting-feature-plan.md; акордеонният патърн на quests/bases е еталонът за поведение",
-        "tddWorkflow":  true,
-        "notes":  "Пълниш stubs-овете в modules/crafting.js от фундамента 710. ⚠ ПИПАШ САМО modules/crafting.js + собствения си спек — index.html/styles.css/app.js/router.js/crafting-search.js са чужда собственост (730 върви ПАРАЛЕЛНО с теб!). Markup-ът и wiring-ът съществуват от 710. Липсва ти нещо → опиши в result summary, НЕ пипай чужди файлове.\n\n=== renderCraftingRoute() ===\n\u0027#crafting\u0027 → .tab-nav, всички .tab и #baseDetail получават class hidden; #craftingPage губи hidden; извикай renderCrafting(). Всеки друг hash → #craftingPage получава hidden (връщането на табовете е работа на base-detail.renderRoute — router-ът го вика ПРЕДИ теб, не му помагай). btnCraftBack wiring при module init: клик → location.hash = \u0027\u0027 (hashchange-ът на router-а върши останалото; в jsdom викай и renderCraftingRoute() след смяната, както прави btnBaseBack в base-detail.js — прочети го).\n\n=== renderCrafting() ===\n1. CHIPS в #craftTabs: по един \u003cbutton class=\"craft-chip\"\u003e за всяка от CRAFTING_TABLES (текст label), active за state.craftingTab. Клик: state.craftingTab = key; state.craftingFilter = { q: \u0027\u0027, badge: \u0027\u0027 }; state.expandedCraftIdx = null; document.dispatchEvent(new CustomEvent(\u0027crafting-tab\u0027, { detail: { key } })); renderCrafting().\n2. Активната таблица t = CRAFTING_TABLES.find(key === state.craftingTab):\n- type \u0027info\u0027 → #craftInfo губи hidden и се пълни с entries като \u003cdiv class=\"craft-info-row\"\u003e\u003cstrong\u003e${esc(k)}\u003c/strong\u003e\u003cdiv\u003e${esc(v)}\u003c/div\u003e\u003c/div\u003e; .tbl-wrap/таблицата се крие (сложи hidden на родителския .tbl-wrap).\n- type \u0027table\u0027 → #craftInfo hidden, таблицата видима. thead: \u003ctr\u003e\u003cth\u003e${esc(t.nameCol)}\u003c/th\u003e[\u003cth\u003e${esc(t.badgeCol)}\u003c/th\u003e ако badgeCol]\u003cth\u003e\u003c/th\u003e\u003c/tr\u003e. Редове: филтрирай t.rows по state.craftingFilter: q → String(row[nameCol]).toLowerCase().includes(q.toLowerCase()); badge (непразен) → String(row[badgeCol]) === badge. Ред: \u003ctr data-idx\u003e с \u003cstrong\u003e${esc(row[nameCol])}\u003c/strong\u003e | \u003cspan class=\"craft-badge\"\u003e${esc(row[badgeCol])}\u003c/span\u003e (ако badgeCol) | .tbl-actions с 📖 бутон. Данните са СТАТИЧНИ: БЕЗ drag-handle, БЕЗ Sortable, БЕЗ редакция/триене.\n3. АКОРДЕОН (както quests, но и бутонът toggle-ва): state.expandedCraftIdx пази РЕАЛНИЯ индекс в t.rows (не филтрирания — сложи data-idx = истинския индекс, за да оцелява филтриране). Ред-клик И 📖 toggle-ват същото; точно един expanded; клас craft-expanded. Expanded редът получава СЛЕДВАЩ \u003ctr class=\"craft-details-row\"\u003e\u003ctd colspan=\"3\"\u003e\u003cdiv class=\"craft-details\"\u003e…\u003c/div\u003e\u003c/td\u003e\u003c/tr\u003e с ВСИЧКИ колони ОСВЕН nameCol/badgeCol като key: value редове (\u003cdiv\u003e\u003cspan class=\"craft-details-label\"\u003e${esc(col)}:\u003c/span\u003e ${esc(val)}\u003c/div\u003e), ПРОПУСКАЙ празни стойности (\u0027\u0027). НЕ в табличен вид — изискване на потребителя.\n4. Празен резултат след филтър → \u003ctr\u003e\u003ctd colspan class=\"empty\"\u003eНяма съвпадения.\u003c/td\u003e\u003c/tr\u003e.\n5. При module init: document.addEventListener(\u0027crafting-filter\u0027, renderCrafting) — search модулът (730, паралелен) само dispatch-ва; НЕ го import-ваш, НЕ го викаш.\n\n=== ЧЕРВЕНИ ЛИНИИ ===\nmodules/crafting-data.js НЕ се пипа (само import). Никакъв Firestore. Запази exports списъка от stub-а идентичен (+ каквото §11 казва за facade-а — той е в app.js от 710, не го пипаш). UI на български. esc() се import-ва от ui.js.",
-        "steps":  [
-                      {
-                          "id":  "720.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети modules/crafting.js (stubs от 710), modules/crafting-data.js (схемата + по 1 запис от animals/harvestRules/brewing), index.html #craftingPage блока (само ЧЕТИ id-тата), modules/quests.js + modules/bases.js (акордеонният патърн), modules/base-detail.js (btnBaseBack wiring патърна), test/unit/crafting-foundation.spec.js и bases.spec.js (тестовите патърни)."
-                      },
-                      {
-                          "id":  "720.2",
-                          "phase":  "RED",
-                          "action":  "Създай test/unit/crafting.spec.js (bootApp, после hash \u0027#crafting\u0027 + dispatch hashchange или renderCraftingRoute()): (а) #craftTabs има 9 chips, animals е active по подразбиране; клик на chip \u0027brewing\u0027 → active се мести, state.craftingTab=\u0027brewing\u0027, dispatch-нат е \u0027crafting-tab\u0027 event с detail.key; (б) animals: #craftBody има 54 реда, ред 0 съдържа \u0027Rat\u0027 в \u003cstrong\u003e и \u0027Tiny\u0027 в .craft-badge; thead-ът има \u0027Animal\u0027 и \u0027Size\u0027; (в) акордеон: клик на ред → craft-expanded + следващ .craft-details-row с key: value редове, съдържащи \u0027Harvest DC\u0027 и стойността, БЕЗ \u0027Animal\u0027/\u0027Size\u0027 (те са в главния ред) и БЕЗ празни колони; 📖 бутонът също toggle-ва; само един expanded; (г) филтър: state.craftingFilter={q:\u0027rat\u0027, badge:\u0027\u0027} + dispatch \u0027crafting-filter\u0027 → само редове с \u0027rat\u0027 в името (Rat, ...); {q:\u0027\u0027, badge:\u0027Tiny\u0027} → само Tiny редове; {q:\u0027zzz\u0027} → ред .empty „Няма съвпадения.“; (д) harvestRules chip → #craftInfo видим с 9 .craft-info-row, таблицата скрита; обратно към animals → таблицата се връща; (е) смяна на chip нулира филтъра и expanded (сетни filter+expanded, кликни друг chip, провери state); (ж) route: hash \u0027\u0027 + dispatch → #craftingPage hidden. Пусни — ЧЕРВЕНИ по правилната причина (stubs)."
-                      },
-                      {
-                          "id":  "720.3",
-                          "phase":  "GREEN",
-                          "action":  "Имплементирай renderCraftingRoute/renderCrafting + btnCraftBack wiring + \u0027crafting-filter\u0027 listener-а в modules/crafting.js по notes (замени stubs-овете; openCrafting остава какъвто е от 710)."
-                      },
-                      {
-                          "id":  "720.4",
-                          "phase":  "DONE",
-                          "action":  "npm run test:unit — всичко зелено (вкл. crafting-foundation и старите 15). git status — пипнати са САМО modules/crafting.js и test/unit/crafting.spec.js. Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  730,
-        "category":  "feature",
-        "repo":  "inventory",
-        "lane":  "crafting-search",
-        "dependsOn":  [
-                          710
-                      ],
-        "files":  [
-                      "modules/crafting-search.js",
-                      "test/unit/crafting-search.spec.js"
-                  ],
-        "verify":  [
-                       "npm run test:unit"
-                   ],
-        "description":  "feat(crafting): implement name search and per-table badge filter",
-        "specRef":  "shared-inventory-structure.md §11 + crafting-feature-plan.md",
-        "tddWorkflow":  true,
-        "notes":  "Пълниш stubs-овете в modules/crafting-search.js от фундамента 710. ⚠ ПИПАШ САМО modules/crafting-search.js + собствения си спек — index.html/styles.css/app.js/crafting.js са чужда собственост (720 върви ПАРАЛЕЛНО с теб!). В твоя worktree crafting.js е stub — тестовете ти НЕ разчитат на рендера на таблицата, а на state + events.\n\n=== КОНТРАКТЪТ (НЕ викай crafting.js!) ===\nЧетеш CRAFTING_TABLES (import от crafting-data.js) и state (от state.js). Пишеш state.craftingFilter и dispatch-ваш document event \u0027crafting-filter\u0027. Слушаш \u0027crafting-tab\u0027 (dispatch-ва го crafting.js при смяна на chip). Търсенето по „rarity“ на потребителя = badge филтърът: за таблици с filterable:true селектът #craftBadge предлага distinct стойностите на badgeCol (Size за животните, Potion Tier за brewing, Property за ефектите); за останалите се крие.\n\n=== ПОВЕДЕНИЕ ===\n1. При module init: wiring на #craftSearch (\u0027input\u0027 event) и #craftBadge (\u0027change\u0027): сетват state.craftingFilter = { q: craftSearch.value.trim(), badge: craftBadge.value } + dispatch \u0027crafting-filter\u0027. БЕЗ debounce (≤90 реда данни).\n2. populateBadgeOptions(): t = CRAFTING_TABLES.find(key === state.craftingTab); ако t.type===\u0027table\u0027 и t.filterable → опции: \u003coption value=\"\"\u003eВсички\u003c/option\u003e + по един \u003coption\u003e за всяка DISTINCT стойност на t.badgeCol по ред на поява в t.rows (String() върху стойността); селектът губи class hidden; иначе → селектът получава hidden и value \u0027\u0027. Извикай веднъж при init (дефолтният таб animals е filterable).\n3. Listener за \u0027crafting-tab\u0027: нулирай #craftSearch.value = \u0027\u0027 и селекта, извикай populateBadgeOptions() (state.craftingFilter вече е нулиран от crafting.js — не го пипай втори път, но и да го пипнеш е идемпотентно).\n\n=== ЧЕРВЕНИ ЛИНИИ ===\ncrafting-data.js НЕ се пипа. Никакъв Firestore. Запази exports списъка идентичен (populateBadgeOptions). UI на български („Всички“).",
-        "steps":  [
-                      {
-                          "id":  "730.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети modules/crafting-search.js (stub от 710), modules/crafting-data.js (кои таблици са filterable и техните badgeCol), index.html .craft-controls блока (само ЧЕТИ), modules/state.js, test/unit/crafting-foundation.spec.js (setup патърна)."
-                      },
-                      {
-                          "id":  "730.2",
-                          "phase":  "RED",
-                          "action":  "Създай test/unit/crafting-search.spec.js (bootApp; state през import на modules/state.js): (а) при boot (craftingTab \u0027animals\u0027) #craftBadge е видим с опция 0 „Всички“ (value \u0027\u0027) + 5-те distinct Size стойности (Tiny, Small, Medium, Large, Huge — по ред на поява); (б) писане \u0027wolf\u0027 в #craftSearch + input event → state.craftingFilter.q === \u0027wolf\u0027 и document е получил \u0027crafting-filter\u0027; (в) избор \u0027Large\u0027 в селекта + change → state.craftingFilter.badge === \u0027Large\u0027 + event; (г) сетни state.craftingTab = \u0027ingredients\u0027 + dispatch \u0027crafting-tab\u0027 → селектът е hidden (filterable false), #craftSearch e изчистен; (д) state.craftingTab = \u0027brewing\u0027 + dispatch → селектът видим с Potion Tier стойности; (е) state.craftingTab = \u0027outcomes\u0027 + dispatch → опциите са 15-те Property стойности. Пусни — ЧЕРВЕНИ по правилната причина (stub)."
-                      },
-                      {
-                          "id":  "730.3",
-                          "phase":  "GREEN",
-                          "action":  "Имплементирай wiring-а, populateBadgeOptions и \u0027crafting-tab\u0027 listener-а в modules/crafting-search.js по notes (замени stub-а)."
-                      },
-                      {
-                          "id":  "730.4",
-                          "phase":  "DONE",
-                          "action":  "npm run test:unit — всичко зелено. git status — пипнати са САМО modules/crafting-search.js и test/unit/crafting-search.spec.js. Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  740,
-        "category":  "e2e",
-        "repo":  "inventory",
-        "lane":  "crafting-e2e",
-        "dependsOn":  [
-                          710,
-                          720,
-                          730
-                      ],
-        "files":  [
-                      "test/fixtures/crafting-fixture.html",
-                      "test/e2e/crafting-routing.spec.js",
-                      "index.html",
-                      "styles.css",
-                      "modules/crafting.js",
-                      "modules/crafting-search.js"
-                  ],
-        "description":  "test(crafting): add e2e fixture and spec for crafting page routing, search and details",
-        "specRef":  "test/e2e/bases-routing.spec.js + test/fixtures/bases-routing-fixture.html са ЕТАЛОНЪТ (фикстура с РЕАЛНИЯ /styles.css)",
-        "notes":  "Червена линия §3.5 важи за СЪЩЕСТВУВАЩИТЕ e2e/fixtures файлове — НОВИТЕ crafting-* тук са изрично позволени (§11). Съществуващите НЕ се редактират.\n\nФикстурата (test/fixtures/crafting-fixture.html) следва bases-routing прецедента: \u003clink rel=\"stylesheet\" href=\"/styles.css\"\u003e (РЕАЛНИЯ — точката на спека е видимост с истинските правила), минимален markup огледален на index.html (.tab-nav с 4 бутона, #tab-bases.tab.active празен, header ред с ⚒ бутон, #craftingPage с контролите/таблицата) + инлайн скрипт, който репликира: openCrafting/renderCraftingRoute (hide/show класовете), мини-рендер на ЕДНА таблица от 4-5 реда с 2 Size стойности (данните ИНЛАЙН в скрипта — НЕ import-вай crafting-data.js, фикстурата е standalone), търсене по име + badge селект + акордеон детайли (.craft-details-row). Логиката е mirror на crafting.js/crafting-search.js — прочети ги и репликирай същите класове/структура.\n\nСпекът (test/e2e/crafting-routing.spec.js, FIXTURE = \u0027/test/fixtures/crafting-fixture.html\u0027): (а) боот: табовете видими, #craftingPage скрит; (б) клик на ⚒ → страницата ВИДИМА, .tab-nav и #tab-bases РЕАЛНО скрити (toBeHidden — computed styles); (в) търсене: напиши подниз в #craftSearch → само съвпадащите редове видими, изчисти → всички; (г) badge филтър: избери стойност → само нейните редове; (д) акордеон: клик на ред → .craft-details-row видим с key: value текст; повторен клик → скрит; (е) back: клик на #btnCraftBack → табовете видими, страницата скрита; (ж) F5 в страницата → каца на табовете (boot strip). Playwright визибилити асершъни, НЕ classList проверки.\n\n⚠ АГЕНТЪТ НЕ ПУСКА npm test (порт 45279 е на гейта)! Пиши спека КОНСЕРВАТИВНО по образеца — гейтът ще го пусне след merge. Пусни само npm run test:unit за регресия.\n\nТова е ФИНАЛНИЯТ таск на фичата — БЕЗ verify override, пълният гейт е задната мрежа. dependsOn 710+720+730 (всичко е merged). Ако забележиш дребен пропуск от 710-730 (стил, клас, markup дефект), поправи го ТУК — затова index.html/styles.css/crafting.js/crafting-search.js са в ownership-а (към този момент другите crafting lanes са приключили).",
-        "steps":  [
-                      {
-                          "id":  "740.1",
-                          "action":  "Прочети test/fixtures/bases-routing-fixture.html и test/e2e/bases-routing.spec.js ИЗЦЯЛО (еталонът). Прочети готовите modules/crafting.js и modules/crafting-search.js (класовете/структурата, които фикстурата репликира) и styles.css craft правилата."
-                      },
-                      {
-                          "id":  "740.2",
-                          "action":  "Създай test/fixtures/crafting-fixture.html по notes (реалният /styles.css, инлайн данни 4-5 реда, mirror на render/search/акордеон логиката)."
-                      },
-                      {
-                          "id":  "740.3",
-                          "action":  "Създай test/e2e/crafting-routing.spec.js със 7-те теста от notes."
-                      },
-                      {
-                          "id":  "740.4",
-                          "action":  "npm run test:unit за регресия (e2e ще го пусне гейтът). git diff — НИТО един съществуващ файл в test/e2e/ и test/fixtures/ не е променен. Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  810,
-        "category":  "feature",
-        "repo":  "combat",
-        "lane":  "campaign-npc",
-        "files":  [
-                      "index.html",
-                      "app.js",
-                      "styles.css",
-                      "tabs/campaignNpc.html",
-                      "modules/campaign-npc.js",
-                      "test/e2e/campaign-npc.spec.js",
-                      "test/e2e/tabs-navigation.spec.js"
-                  ],
-        "verify":  [
-                       "npm test -- campaign-npc tabs-navigation critical-path"
-                   ],
-        "description":  "feat(npc): add Campaign NPCs tab with name/faction table, add-edit dialog and persistent state",
-        "specRef":  "monk-combat-structure.md §«Campaign NPCs таб» (ЦЕЛИЯТ контракт — чети го ПЪРВИ); modules/inventory.js + tabs/inventory.html + test/e2e/crud-inventory.spec.js са ЕТАЛОНЪТ",
-        "tddWorkflow":  true,
-        "notes":  "ЦЕЛ НА ФИЧАТА (2 таска, СЕРИЙНА lane): дневник на срещнатите NPC-та — име + фракция, add/edit/delete, детайли и slash-aware търсене (търсенето и детайлите са таск 820; ТУК е табът, таблицата, модалът и персистенцията). Потребителят: „такива таблици с добавяне има много и можеш да видиш“ — inventory е еталонът, следвай го дословно.\n\n=== ДАННИ ===\nst.campaignNpcs: [] в defaultState на app.js — bundle v2 го round-trip-ва АВТОМАТИЧНО (buildBundle прави {...st}) — НЕ добавяй отделен localStorage ключ (червена линия §3, урокът от familiars). Запис: { name, faction, description, location } — 4 стринга. ⚠ НЕ бъркай със st.npcNames (Names таба — друга фича, не я пипай).\n\n=== ТАБ MECHANIKA (4 хирургични докосвания в app.js — нищо друго там!) ===\n1. index.html: \u003cbutton class=\"tab-btn\" data-tab=\"campaignNpc\"\u003eCampaign NPCs\u003c/button\u003e в tab-nav СЛЕД namegen бутона + \u003cdiv id=\"tab-campaignNpc\" class=\"tab hidden\"\u003e\u003c!-- Loading... --\u003e\u003c/div\u003e при другите tab дивове.\n2. app.js loadTabs tabMap: \u0027campaignNpc\u0027: \u0027tabs/campaignNpc.html\u0027.\n3. app.js defaultState: campaignNpcs: [].\n4. app.js render(): if (typeof window.renderNpcTable === \u0027function\u0027) window.renderNpcTable(); — при другите render викания (~ред 791). app.js showTab: if (tabKey === \u0027campaignNpc\u0027) { setTimeout(() =\u003e { window.attachCampaignNpcs?.(); window.renderNpcTable?.(); }, 100); } — по inventory модела (~ред 1642).\nindex.html добавя и \u003cscript src=\"modules/campaign-npc.js\"\u003e\u003c/script\u003e при другите модулни скриптове (преди app.js).\n\n=== ПАРТИАЛ tabs/campaignNpc.html ===\nПо образеца на tabs/inventory.html: заглавие, търсачка \u003cinput id=\"npcSearch\" type=\"search\" placeholder=\"Търси по име или фракция…\"\u003e (wiring-ът ѝ е таск 820 — сложи Я в markup-а СЕГА, за да не пипа 820 партиала), бутон \u003cbutton id=\"btnNpcAdd\"\u003e+ Add NPC\u003c/button\u003e, \u003cdiv id=\"npcTableRoot\"\u003e\u003c/div\u003e, модал npcModal по образеца на invModal: npcModalTitle, поле Име* (npcName), поле Фракция (npcFaction, placeholder „кралицата на Кислев/руснаците“), textarea Description (npcDescription), textarea Where to find (npcLocation), бутони npcSave/npcCancel. ВСИЧКИ 4 полета се виждат и при add, и при edit (изискване). styles.css: САМО ако липсва нещо дребно (модалът/таблицата ползват съществуващите класове .alias-table/.icon-btn/.modal — виж inventory).\n\n=== МОДУЛ modules/campaign-npc.js ===\nIIFE по модела на inventory.js: __npcEditIndex (null=add), __npcAttached guard, renderNpcTable() чете window.st.campaignNpcs → таблица ☰ | Име | Фракция | ✏️/🗑️ (📖 идва в 820): safe() escape както inventory, empty state „Няма записани NPC-та още.“. Edit → отваря модала попълнен; Delete → confirm(\u0027Изтриване на този NPC?\u0027) → splice + window.save(). Save: name задължително (alert(\u0027Името е задължително.\u0027)), останалите опционални (trim); add = push (конвенцията на апа), edit = замяна по индекс; window.save(). Sortable drag по inventory модела (handle клетка ☰, filter: \u0027button, .icon-btn\u0027, splice+splice+save). window.attachCampaignNpcs / window.renderNpcTable exports.\n\n=== СПЕКОВЕ ===\nНов test/e2e/campaign-npc.spec.js по образеца на crud-inventory.spec.js (beforeEach: goto + изчакай window.__tabsLoaded, клик на таба; state сетвай/чети през page.evaluate(() =\u003e window.st...)): (а) табът се отваря и показва empty state; (б) Add: отвори модала, попълни 4-те полета, Save → ред с име и фракция в таблицата, st.campaignNpcs[0] носи 4-те стойности; (в) name празно → alert (page.on(\u0027dialog\u0027)), нищо не е записано; (г) Edit: промени фракцията → редът и st-то обновени, БЕЗ нов запис; (д) Delete с confirm → редът изчезва; (е) персистенция: reload → записът е там (localStorage); (ж) модалът при edit показва И 4-те полета попълнени. tabs-navigation.spec.js: добави \u0027campaignNpc\u0027 в масива tabs (той е „1:1 с реалния tab-nav“ — изрично ПОЗВОЛЕНО тук; коментарът за реда също се обновява) — НИЩО друго в него.\n\n=== ЧЕРВЕНИ ЛИНИИ ===\napp.js се пипа САМО в 4-те региона от notes. Легаси auto-Monk resolver-ите в спековете НЕ се пипат. Порт 45278: npm run serve НЕ се пуска; локално пускаш САМО filtered: npm test -- campaign-npc tabs-navigation (verify командата на гейта е същата + critical-path). Не commit-вай playwright-report/, test-results/.",
-        "steps":  [
-                      {
-                          "id":  "810.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети monk-combat-structure.md §«Campaign NPCs таб» + «Модел»/«Червени линии», modules/inventory.js ИЗЦЯЛО (еталонът), tabs/inventory.html (модалният markup), app.js: loadTabs tabMap (редове 1-40), defaultState (~90-140), render() региона с renderInventoryTable (~791), showTab inventory hook-а (~1642), test/e2e/crud-inventory.spec.js ИЗЦЯЛО и tabs-navigation.spec.js масива tabs (~ред 85)."
-                      },
-                      {
-                          "id":  "810.2",
-                          "phase":  "RED",
-                          "action":  "Създай test/e2e/campaign-npc.spec.js със 7-те теста от notes + добави \u0027campaignNpc\u0027 в tabs масива на tabs-navigation.spec.js. Пусни npm test -- campaign-npc tabs-navigation — новият спек ЧЕРВЕН по правилната причина (табът/елементите липсват), tabs-navigation ЧЕРВЕН само на новия таб (бутонът липсва още)."
-                      },
-                      {
-                          "id":  "810.3",
-                          "phase":  "GREEN",
-                          "action":  "index.html: nav бутонът + tab дивът + script тагът. app.js: 4-те региона по notes. Създай tabs/campaignNpc.html (търсачка + Add + npcTableRoot + npcModal) и modules/campaign-npc.js по notes."
-                      },
-                      {
-                          "id":  "810.4",
-                          "phase":  "DONE",
-                          "action":  "npm test -- campaign-npc tabs-navigation critical-path — зелено. git status: без runtime боклук (playwright-report/, test-results/). Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  820,
-        "category":  "feature",
-        "repo":  "combat",
-        "lane":  "campaign-npc",
-        "files":  [
-                      "modules/campaign-npc.js",
-                      "styles.css",
-                      "test/e2e/campaign-npc.spec.js"
-                  ],
-        "description":  "feat(npc): add slash-aware search across name and faction plus details accordion",
-        "specRef":  "monk-combat-structure.md §«Campaign NPCs таб» — секцията «Търсене» е ядрото; window.spendGold е прецедентът за изложена чиста функция",
-        "tddWorkflow":  true,
-        "notes":  "Надгражда 810 (същата lane, върви след него). ДВЕ добавки: търсенето и детайлният ред.\n\n=== ТЪРСЕНЕ (изискването на потребителя — дословно) ===\nИ името, И фракцията могат да носят НЯКОЛКО стойности, разделени с / ИЛИ \\ — реални примери от кампанията: фракция „кралицата на Кислев/руснаците“ (Катарин), име „Кулсталтин/Распутин“ (окултен лидер, кръстен от партито). ЧИСТА функция npcMatches(npc, query), изложена като window.npcMatches (прецедентът spendGold — спековете я тестват директно):\n- q = String(query||\u0027\u0027).trim().toLowerCase(); празно q → true (всички се виждат);\n- части = [npc.name, npc.faction].flatMap(v =\u003e String(v||\u0027\u0027).split(/[\\/\\\\]/)).map(s =\u003e s.trim().toLowerCase()).filter(Boolean);\n- връща части.some(p =\u003e p.includes(q)).\nWiring: \u0027input\u0027 listener на #npcSearch (markup-ът е от 810) → renderNpcTable() рендерира САМО match-ващите (пази РЕАЛНИЯ индекс в data-npc-idx — edit/delete/детайли работят по него върху НЕфилтрирания масив; Sortable drag при АКТИВЕН филтър се ИЗКЛЮЧВА — преподреждане на филтриран изглед разбърква скрити редове). Празен резултат → „Няма съвпадения.“.\n\n=== ДЕТАЙЛЕН РЕД (📖) ===\nБутон 📖 (icon-btn, ПЪРВИ в действията, преди ✏️) toggle-ва детайлен \u003ctr class=\"npc-details-row\"\u003e ВЕДНАГА под реда (colspan цялата ширина): два блока — \u003cstrong\u003eDescription\u003c/strong\u003e + текстът и \u003cstrong\u003eWhere to find\u003c/strong\u003e + текстът, свободен текст с white-space:pre-wrap (НЕ таблица — изискване). Празно поле → блокът се пропуска; и двете празни → „Няма детайли.“. Точно ЕДИН expanded (модулна променлива __npcExpandedIdx, реалният индекс); повторен 📖 колапсира; re-render (филтър/save) пази expanded ако редът е още видим. styles.css: .npc-details-row td { pre-wrap, muted label-и } — минимално, в езика на съществуващите стилове.\n\n=== СПЕКОВЕ (разширяваш test/e2e/campaign-npc.spec.js — СВОЯ файл от 810) ===\nСийдни през page.evaluate st.campaignNpcs с Катарин {name:\u0027Катарин\u0027, faction:\u0027кралицата на Кислев/руснаците\u0027}, {name:\u0027Кулсталтин/Распутин\u0027, faction:\u0027окултен лидер\u0027} и трети без слашове; после: (а) window.npcMatches: \u0027руснаци\u0027→true за Катарин, \u0027РУСНАЦИ\u0027→true (case-insens), \u0027распутин\u0027→true за Кулсталтин (слаш в ИМЕТО), \u0027 кислев \u0027→true (трим на query-то), \u0027наци\u0027→true (includes в част), \u0027елф\u0027→false, \u0027\u0027→true; (б) UI: пиши \u0027руснаци\u0027 в #npcSearch → само редът на Катарин; изчисти → всички; без съвпадение → „Няма съвпадения.“; (в) при активен филтър edit-ът на видимия ред пипа ПРАВИЛНИЯ запис в st (реалният индекс); (г) 📖 показва детайлния ред с description/location текста, втори 📖 на друг ред мести expanded-а, повторен — колапсира; NPC без детайли → „Няма детайли.“. Съществуващите тестове от 810 остават зелени.\n\n=== ЧЕРВЕНИ ЛИНИИ ===\nindex.html/app.js/tabs/*.html НЕ се пипат в този таск (всичко нужно е от 810). Другите спекове не се пипат. Порт 45278: локално САМО filtered npm test -- campaign-npc. Това е ФИНАЛНИЯТ таск на фичата — БЕЗ verify override, пълният gate (452+ спека, ~15 мин) е задната мрежа.",
-        "steps":  [
-                      {
-                          "id":  "820.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети modules/campaign-npc.js от 810 (render цикъла, индексирането), tabs/campaignNpc.html (#npcSearch), test/e2e/campaign-npc.spec.js (какво вече покрива), структурния § за търсенето."
-                      },
-                      {
-                          "id":  "820.2",
-                          "phase":  "RED",
-                          "action":  "Разшири test/e2e/campaign-npc.spec.js с тестовете от notes (npcMatches директно + UI филтър + детайли). Пусни npm test -- campaign-npc — новите ЧЕРВЕНИ по правилната причина, старите от 810 зелени."
-                      },
-                      {
-                          "id":  "820.3",
-                          "phase":  "GREEN",
-                          "action":  "Имплементирай npcMatches (window export) + search wiring + детайлния ред в modules/campaign-npc.js; дребните стилове в styles.css."
-                      },
-                      {
-                          "id":  "820.4",
-                          "phase":  "DONE",
-                          "action":  "npm test -- campaign-npc tabs-navigation critical-path — зелено локално (пълният suite е на гейта). Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  910,
-        "category":  "testing",
-        "repo":  "inventory",
-        "lane":  "crafting-materials",
-        "files":  [
-                      "test/unit/crafting-foundation.spec.js",
-                      "test/unit/crafting.spec.js",
-                      "test/unit/crafting-search.spec.js"
-                  ],
-        "description":  "test(crafting): cover the raw materials economy tables with rarity filter coverage",
-        "specRef":  "shared-inventory-structure.md §11 (секцията «Данни» — 11-те таблици) + crafting-feature-plan.md (таблицата с key/label/badgeCol)",
-        "tddWorkflow":  true,
-        "notes":  "КОНТЕКСТ: третият източник (DnD_Raw_Materials_Economy.xlsx) е ВЕЧЕ налят в modules/crafting-data.js (комитнат, генериран — НЕ го пипаш, НЕ го регенерираш): нова таблица \u0027materials\u0027 (Суровини, 120 реда, nameCol \u0027Raw Material\u0027, badgeCol \u0027Rarity\u0027 — единствената ИСТИНСКА rarity колона в цялата референция, filterable: true) и \u0027rarityRules\u0027 (Рядкост (правила), 6 реда, nameCol \u0027Rarity\u0027, без филтър). UI-ят е data-driven и ги показва даром; закованата бройка в crafting-foundation.spec.js е вече бутната на 11 и всичко е зелено. ТОЗИ таск добавя ЛИПСВАЩОТО ПОКРИТИЕ за новите таблици — те в момента нямат нито един тест по същество.\n\n=== КАКВО СЕ ДОБАВЯ (само тестове — НИКАКЪВ продуктов код; ако тест хване реален бъг в модулите, опиши го в result summary, НЕ го поправяй тук) ===\n1. crafting-foundation.spec.js (нов describe или разширение на data частта): (а) таблицата materials: type \u0027table\u0027, 120 rows, nameCol \u0027Raw Material\u0027, badgeCol \u0027Rarity\u0027, filterable true, columns съдържа \u0027Category\u0027 и \u0027Raw Value / lb (gp)\u0027; (б) rarityRules: 6 rows, filterable false; (в) ред 0 на materials е \u0027Common soil\u0027 с Rarity \u0027Common\u0027 (закотвя генерацията).\n2. crafting.spec.js: (а) клик на chip \u0027materials\u0027 → thead показва \u0027Raw Material\u0027 и \u0027Rarity\u0027, 120 реда, ред 0 носи \u0027Common soil\u0027 в \u003cstrong\u003e и \u0027Common\u0027 в .craft-badge; (б) акордеонът на materials ред показва в .craft-details \u0027Category\u0027 и \u0027Typical Refined Product / Notes\u0027 стойностите, БЕЗ \u0027Raw Material\u0027/\u0027Rarity\u0027; (в) филтър {q:\u0027\u0027, badge:\u0027Rare\u0027} през state + \u0027crafting-filter\u0027 event → само редовете с Rarity ТОЧНО \u0027Rare\u0027 (не \u0027Very Rare\u0027! — филтърът е точно съвпадение, това е важният assert); (г) rarityRules chip → 6 реда, 2 колони в thead (без badge колона).\n3. crafting-search.spec.js: (а) state.craftingTab=\u0027materials\u0027 + dispatch \u0027crafting-tab\u0027 → #craftBadge видим, опция 0 „Всички“, следват DISTINCT Rarity стойностите ПО РЕД НА ПОЯВА в данните (провери точния ред срещу CRAFTING_TABLES.find(...\u0027materials\u0027).rows — НЕ хардкодвай списък наизуст, изведи очакването от данните в теста); (б) \u0027rarityRules\u0027 + dispatch → селектът hidden.\n\n=== СТИЛ ===\nСледвай ИЗЦЯЛО патърните на съществуващите тестове в тези 3 файла (bootApp, hash \u0027#crafting\u0027 + dispatch, state през import, event dispatch-ове) — чети ги преди да пишеш. Данните се import-ват директно от modules/crafting-data.js където това прави тестовете по-издръжливи (изведени очаквания вместо ковани числа, ОСВЕН закотвящите assert-и от т.1в, които са нарочно ковани).\n\n=== ЧЕРВЕНИ ЛИНИИ ===\nmodules/** НЕ се пипат. test/e2e/ и test/fixtures/ НЕ се пипат (данново-driven UI-ят не е мърдал — crafting-routing фикстурата е standalone с инлайн данни и не се влияе). Порт 45279 е на гейта — пускаш САМО npm run test:unit. Единствен таск в lane-а → БЕЗ verify override, пълният gate (unit + Playwright) е задната мрежа.",
-        "steps":  [
-                      {
-                          "id":  "910.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети shared-inventory-structure.md §11 «Данни», crafting-feature-plan.md таблицата, modules/crafting-data.js (schema banner-а + записите materials/rarityRules — само главите, не 120-те реда), и трите целеви спека ИЗЦЯЛО (патърните за boot/route/state/events)."
-                      },
-                      {
-                          "id":  "910.2",
-                          "phase":  "RED",
-                          "action":  "Добави тестовете от notes т.1-3. Пусни npm run test:unit — новите тестове трябва да са ЗЕЛЕНИ ВЕДНАГА (те са характеризация на вече доставено поведение!); ако някой е ЧЕРВЕН — или очакването ти е грешно (оправи теста), или си хванал реален бъг (документирай в result summary, тествай реалното поведение, НЕ пипай модулите). RED фазата тук е проверка на очакванията, не на липсваща имплементация."
-                      },
-                      {
-                          "id":  "910.3",
-                          "phase":  "DONE",
-                          "action":  "npm run test:unit — всичко зелено (вкл. старите 225). git status — пипнати са САМО трите спека. Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    }
+[
+  {
+    "id": 501,
+    "category": "bugfix",
+    "repo": "partyup",
+    "lane": "be-ws",
+    "model": "easy",
+    "dependsOn": [],
+    "files": [
+      "backend/src/PartyUp.Api/Program.cs",
+      "backend/tests/PartyUp.IntegrationTests/Foundation/**"
+    ],
+    "description": "fix(graphql): enable websockets so subscriptions actually connect",
+    "specRef": "party-up.md «v0.6 бележки» т.6 + party-up-structure.md §2а",
+    "tddWorkflow": true,
+    "notes": "БЪГ, потвърден на живо (12.09): FE (graphql-ws от v0.5 таск 302) удря ws://…/graphql, но Program.cs НЯМА app.UseWebSockets() → upgrade-ът се отказва → Apollo console error при всяко отваряне на чат, нула живи subscriptions. Фикс: ЕДИН ред app.UseWebSockets() в Program.cs, ПРЕДИ app.MapGraphQL() (прочети pipeline реда). Program.cs е отровен файл — тази lane е единствената, която го пипа този board; НИЩО друго в него. Тест: integration ws smoke в Foundation — websocket клиент през WebApplicationFactory сървъра прави graphql-transport-ws handshake (connection_init → connection_ack) срещу /graphql. Ако пълен subscribe тест е неудобен през TestServer — handshake smoke стига, отбележи в summary.",
+    "steps": [
+      { "id": "501.1", "phase": "RECON", "action": "Прочети Program.cs pipeline реда и как Foundation тестовете вдигат ApiFactory." },
+      { "id": "501.2", "phase": "RED", "action": "WS handshake тест — червен (upgrade отказан без middleware-а)." },
+      { "id": "501.3", "phase": "GREEN", "action": "app.UseWebSockets() на правилното място." },
+      { "id": "501.4", "phase": "DONE", "action": "dotnet test backend/PartyUp.slnx зелен. Commit с description-а дословно." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 502,
+    "category": "bugfix",
+    "repo": "partyup",
+    "lane": "be-lfg",
+    "model": "easy",
+    "dependsOn": [],
+    "files": [
+      "backend/src/PartyUp.Api/Features/Lfg/**",
+      "backend/tests/PartyUp.IntegrationTests/Features/Lfg/**"
+    ],
+    "description": "fix(lfg): showcase hides unlisted candidacy tables and always shows open ones",
+    "specRef": "party-up.md «v0.6 бележки» т.5 (решената семантика) + party-up-structure.md §2а.4",
+    "tddWorkflow": true,
+    "notes": "БЪГ, наблюдаван на живо: table-settings UI текстът обещава «маса без обява не се показва на никого», а ShowcaseQueries филтрира само Status != Disbanded → необявена маса се виждаше във витрината. РЕШЕНАТА семантика (12.09): (1) Candidacy маса БЕЗ ListingActive → СКРИТА от tablesShowcase (текстът става верен); (2) Open (AdmissionKind.Open, walk-in от v0.5) маса → вижда се ВИНАГИ, независимо от ListingActive — тя е обява по природа и публичният гост борд разчита на нея. Само Where промяна + тестове (двата случая + Disbanded остава скрит); НИКАКВА промяна по схема/контракти — НЕ пипай contracts/. table(id) заявката НЕ се филтрира (директният линк към маса работи — кандидатът вижда масата си).",
+    "steps": [
+      { "id": "502.1", "phase": "RECON", "action": "Прочети ShowcaseQueries.cs + тестовете; провери, че table(id) не минава през същия филтър." },
+      { "id": "502.2", "phase": "RED", "action": "Тестове: Candidacy+unlisted липсва; Candidacy+listed се вижда; Open+unlisted СЕ ВИЖДА; Disbanded не. Червени." },
+      { "id": "502.3", "phase": "GREEN", "action": "Where семантиката." },
+      { "id": "502.4", "phase": "DONE", "action": "dotnet test зелен. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 503,
+    "category": "feature",
+    "repo": "partyup",
+    "lane": "be-lfg",
+    "model": "easy",
+    "dependsOn": [],
+    "files": [
+      "backend/src/PartyUp.Api/Features/Candidacies/**",
+      "backend/tests/PartyUp.IntegrationTests/Features/Candidacies/**",
+      "contracts/schema.graphql"
+    ],
+    "description": "feat(candidacies): add myCandidacies query for the player side",
+    "specRef": "party-up.md «v0.6 бележки» т.7в + party-up-structure.md §2а.4/§3.1",
+    "tddWorkflow": true,
+    "notes": "Схемата има candidacy(id) и myTableCandidacies(tableId) — гледната точка на МАСАТА. Кандидатът-играч няма как да изброи СВОИТЕ кандидатури. Таск: query myCandidacies: [Candidacy!]! — кандидатурите, в които viewer-ът е кандидатът (изисква сесия; AsNoTracking + Select проекция §2а.4; подредени по последна активност desc; ВКЛЮЧИТЕЛНО решените — статусът се вижда). Преизползвай Candidacy GraphQL типа (НЕ прави нов). Schema re-export (процедурата в contracts/README) + commit на contracts/schema.graphql В СЪЩИЯ commit. Тестове: моите се връщат с правилните статуси, чуждите НЕ; без сесия → auth грешка. Ти си втори в lane-а (след 502) — worktree-то ти тръгва от merged 502.",
+    "steps": [
+      { "id": "503.1", "phase": "RECON", "action": "Merged 502. Прочети Candidacies slice-а (типове, DataLoader-и) и viewer-заявъчния патърн (MyTables)." },
+      { "id": "503.2", "phase": "RED", "action": "Тестовете от notes. Червени." },
+      { "id": "503.3", "phase": "GREEN", "action": "Заявката + schema export." },
+      { "id": "503.4", "phase": "DONE", "action": "dotnet test зелен. Commit (вкл. contracts/)." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 513,
+    "category": "chore",
+    "repo": "partyup",
+    "lane": "fe-shell",
+    "model": "easy",
+    "dependsOn": [],
+    "files": [
+      "frontend/src/features/auth/**",
+      "frontend/src/locales/bg/auth.json",
+      "frontend/src/locales/en/auth.json"
+    ],
+    "description": "chore(auth): disable the facebook login button for now",
+    "specRef": "party-up.md «v0.6 бележки» т.2",
+    "tddWorkflow": true,
+    "notes": "Решение на потребителя (12.09): FB логинът «и без това не работи» (иска https redirect + app review бюрокрация — отложено още от prerequisites). Таск: махни 'facebook' от AUTH_PROVIDERS (features/auth/oauth.ts) — бутонът пада от login екрана; КОМЕНТАР В КОДА защо и как се връща (връщане в списъка + FB app конфигурация). Обнови тестовете, които изброяват провайдърите. НЕ пипай: BE (условната регистрация е безвредна), auth-linking (чужда зона — ако LinkedAccountsSection показва FB като link опция, само ДОКЛАДВАЙ в summary).",
+    "steps": [
+      { "id": "513.1", "phase": "RECON", "action": "Прочети oauth.ts, login-screen + тестовете; grep facebook из features/auth." },
+      { "id": "513.2", "phase": "RED", "action": "Тест: login екранът рендерира ТОЧНО два provider бутона (google, discord). Червен." },
+      { "id": "513.3", "phase": "GREEN", "action": "Провайдърът вън + коментарът + тестовете." },
+      { "id": "513.4", "phase": "DONE", "action": "npm --prefix frontend run typecheck && npm --prefix frontend test зелени. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 511,
+    "category": "feature",
+    "repo": "partyup",
+    "lane": "fe-shell",
+    "model": "easy",
+    "dependsOn": [],
+    "files": [
+      "frontend/src/features/auth/**",
+      "frontend/src/components/**",
+      "frontend/src/locales/bg/common.json",
+      "frontend/src/locales/en/common.json"
+    ],
+    "description": "feat(shell): logout action in the app header",
+    "specRef": "party-up.md «v0.6 бележки» т.1 + party-up-structure.md §4",
+    "tddWorkflow": true,
+    "notes": "Logout е зачукан в /settings. Таск: изход от глобалния header — икона/мини «акаунт» до settings зъбчето, видим САМО при сесия (на /login и за гост — не). Механиката СЪЩЕСТВУВА в auth-linking (мутация → clearStore → replace('/login')) — auth-linking е ЧУЖДА зона: направи преизползваем hook useLogout във features/auth/ (твоя зона; logout мутацията е в схемата — нов .gql документ в auth slice-а) и header-ът го вика; settings секцията НЕ я пипай (двата входа съжителстват; нейният рефактор към общия hook е за друг board). Без confirm диалог (изходът е безобиден). Ключове в common.json bg+en. Ти си след 513 в lane-а.",
+    "steps": [
+      { "id": "511.1", "phase": "RECON", "action": "Прочети app-header.tsx + теста, session-section.tsx (механиката за пренасяне в hook), use-session." },
+      { "id": "511.2", "phase": "RED", "action": "Тестове: при сесия иконата е там и вика logout флоу (мок); на /login и за гост я НЯМА. Червени." },
+      { "id": "511.3", "phase": "GREEN", "action": "useLogout + header входът + ключовете." },
+      { "id": "511.4", "phase": "DONE", "action": "typecheck + jest зелени. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 512,
+    "category": "feature",
+    "repo": "partyup",
+    "lane": "fe-shell",
+    "model": "heavy",
+    "dependsOn": [],
+    "files": [
+      "frontend/src/components/**",
+      "frontend/src/features/contact/**",
+      "frontend/src/locales/bg/common.json",
+      "frontend/src/locales/en/common.json",
+      "frontend/src/locales/bg/contact.json",
+      "frontend/src/locales/en/contact.json"
+    ],
+    "description": "feat(shell): mount the notification bell with live badge and a door to chats",
+    "specRef": "party-up.md «v0.6 бележки» т.7а/т.7б + contracts/schema.graphql (notifications, onNotification)",
+    "tddWorkflow": true,
+    "notes": "КРУПНИЯТ СИРАК (12.09): NotificationBell/NotificationCenter СЪЩЕСТВУВАТ (features/contact), но камбанката НЕ Е МОНТИРАНА НИКЪДЕ — известията се пишат в базата и нула UI ги показва; към /chat (съществуващ екран) НЯМА нито една врата в приложението. Таск: (1) камбанката в глобалния header (само при сесия) + badge с брой непрочетени (виж как center-ът чете notifications — преизползвай кеша/notifications-cache); (2) badge-ът е ЖИВ: onNotification абонаментът (механиката от v0.5/302 + test-utils/subscription.ts) — при event броячът расте БЕЗ refetch; при markNotificationRead — намалява (кеш дисциплина; това е ТВОЯТ дял от кеш одита, таск 514 НЕ пипа contact); (3) врата към чатовете: икона «съобщения» в header-а ИЛИ виден ред в notification center-а → /chat (избери, обоснови в summary); (4) провери testID котвата, която tour стъпка 5 очаква за камбанката — коригирай testID В КАМБАНКАТА при разминаване (tour файловете са ЧУЖДА зона, само четене). Ти си трети в lane-а (след 513, 511) — header-ът вече има logout вход, композирай, не пренаписвай.",
+    "steps": [
+      { "id": "512.1", "phase": "RECON", "action": "Прочети notification-bell/center, notifications-cache, header-а след 511, tour стъпките (само четене), subscription test-utils." },
+      { "id": "512.2", "phase": "RED", "action": "Тестове: камбанка в header-а при сесия с верен брой; onNotification → броячът расте без refetch; markRead → намалява; вратата води към /chat; гост — няма камбанка. Червени." },
+      { "id": "512.3", "phase": "GREEN", "action": "Монтаж + жив badge + врата + ключове." },
+      { "id": "512.4", "phase": "DONE", "action": "typecheck + jest зелени. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 514,
+    "category": "bugfix",
+    "repo": "partyup",
+    "lane": "fe-flows",
+    "model": "heavy",
+    "dependsOn": [],
+    "files": [
+      "frontend/src/features/table-create/**",
+      "frontend/src/features/board/**",
+      "frontend/src/features/my-tables/**",
+      "frontend/src/features/candidacy/**",
+      "frontend/src/features/lifecycle-actions/**"
+    ],
+    "description": "fix(cache): mutations update every list they change without a refresh",
+    "specRef": "party-up.md «v0.6 бележки» т.3 (3/3 потвърдени на живо) + образецът в use-privacy.ts («пишем я право в кеша»)",
+    "tddWorkflow": true,
+    "notes": "СИСТЕМЕН клас, три потвърждения от три опита (12.09): (1) createTable → «Моите маси» не показва новата маса до F5; (2) publishMyListing → банерът «активна», а бордът «никой не е на борда» до F5; (3) pullCandidate → toast «в кандидатите е», а масата «няма кандидатури» до F5. ОДИТ на ВСИЧКИ мутации, раждащи/триещи/местещи неща в списъци, В ЗОНИТЕ ТИ: table-create (create→myTables), board (publish/unpublish→lfgBoard Connection + self блока), candidacy (pullCandidate→myTableCandidacies; submitVerdict/прием→състав+кандидатури), lifecycle-actions (leave/refound/kick→myTables+състав). Конвенцията: payload-ът се пише ПРАВО в кеша (cache update по образеца на use-privacy); за борда — през relayStylePagination merge политиките на Connection кеша (v0.5); refetchQueries САМО където update е непрактичен (обоснови в summary). Тест per случай: мутация → списъкът в кеша се променя БЕЗ нов мрежов кръг. markNotificationRead НЕ е твой (512, contact е чужда зона). НЕ пипай lib/apollo.ts. В summary: таблица мутация→кеш действие.",
+    "steps": [
+      { "id": "514.1", "phase": "RECON", "action": "Инвентаризирай мутациите в петте зони + кои заявки четат засегнатите списъци; прочети use-privacy образеца и board Connection политиката." },
+      { "id": "514.2", "phase": "RED", "action": "Тестове за трите потвърдени + всеки открит случай. Червени." },
+      { "id": "514.3", "phase": "GREEN", "action": "Cache update-ите по конвенцията." },
+      { "id": "514.4", "phase": "DONE", "action": "typecheck + jest зелени. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 515,
+    "category": "feature",
+    "repo": "partyup",
+    "lane": "fe-flows",
+    "model": "easy",
+    "dependsOn": [],
+    "files": [
+      "frontend/src/features/board/**",
+      "frontend/src/features/my-tables/**",
+      "frontend/src/features/table-settings/**",
+      "frontend/src/features/showcase/**",
+      "frontend/src/features/candidacy/**",
+      "frontend/src/locales/bg/board.json",
+      "frontend/src/locales/en/board.json",
+      "frontend/src/locales/bg/tables.json",
+      "frontend/src/locales/en/tables.json",
+      "frontend/src/locales/bg/tableSettings.json",
+      "frontend/src/locales/en/tableSettings.json",
+      "frontend/src/locales/bg/candidacy.json",
+      "frontend/src/locales/en/candidacy.json"
+    ],
+    "description": "feat(tables): make listing status visible and decouple pulling from it",
+    "specRef": "party-up.md «v0.6 бележки» т.4 + т.5 (отвореният дизайн въпрос — РЕШЕН: разкачане)",
+    "tddWorkflow": true,
+    "notes": "Сцената от 12.09: авторът сам не откри защо не може да дърпа («нечекването и неможенето да дърпаш е асоциално»). Пакет: (1) РАЗКАЧАНЕ pull↔listing: pull-targets.ts маха table.listingActive условието — дърпаш с всяка активна членска маса (BE pull guard-ът и без това НЕ изисква обявата на масата — проверено 12.09; обявата остава САМО видимост във витрината; Open масите не дърпат — 402 guard-ът остава); (2) обявеността СТАВА ВИДИМА: «Моите маси» картата получава «обявена/необявена» badge; (3) екранът на масата (candidacy/table-screen): «Обяви масата» CTA при Candidacy+необявена, с честно обяснение «невидима си във витрината» (след 502 това е буквално вярно); (4) тогълът в table-settings се преименува: «Търсим хора» → «Обявена на витрината» (или екв.) — авторът сам не го намери под старото име; hint текстът вече е верен след 502, сверѝ го. Ключове bg+en по namespace-ите. Ти си след 514 в lane-а — кешът е дисциплиниран, стъпи на него.",
+    "steps": [
+      { "id": "515.1", "phase": "RECON", "action": "Прочети pull-targets + board self блока, my-tables картата, table-listing-section, table-screen." },
+      { "id": "515.2", "phase": "RED", "action": "Тестове: pull бутон при членска маса БЕЗ обява; my-tables badge по listingActive; table-screen CTA при Candidacy+необявена; преименуваните текстове. Червени." },
+      { "id": "515.3", "phase": "GREEN", "action": "Разкачането + видимостта + rename + ключове." },
+      { "id": "515.4", "phase": "DONE", "action": "typecheck + jest зелени. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 516,
+    "category": "feature",
+    "repo": "partyup",
+    "lane": "fe-flows",
+    "model": "easy",
+    "dependsOn": [503],
+    "files": [
+      "frontend/src/features/candidacy/**",
+      "frontend/src/features/board/**",
+      "frontend/src/app/candidacies.tsx",
+      "frontend/src/locales/bg/candidacy.json",
+      "frontend/src/locales/en/candidacy.json",
+      "frontend/src/locales/bg/board.json",
+      "frontend/src/locales/en/board.json"
+    ],
+    "description": "feat(candidacies): the player sees their own candidacies",
+    "specRef": "party-up.md «v0.6 бележки» т.7в + contracts/schema.graphql (myCandidacies след 503)",
+    "tddWorkflow": true,
+    "notes": "dependsOn 503 (myCandidacies в merged контракта; codegen). Кандидатът днес НЯМА как да разбере, че е дърпан, нито какво става с кандидатурата му. Таск: (1) нов ТЪНЪК route app/candidacies.tsx → екран «Моите кандидатури» (компонентът във features/candidacy) — списък: маса, статус (CandidacyStatus — обсъжда се/приет/отказан), link към candidacy/[id] (екранът с чата СЪЩЕСТВУВА); (2) вход от борда: в self блока ред «Кандидатурите ми (N)» — брои живите; (3) празно състояние, което обяснява pull модела («масите те дърпат — публикувай се и изчакай»). Ключове bg+en. Ти си трети в fe-flows — board self блокът е пипан от 514/515, композирай, не пренаписвай.",
+    "steps": [
+      { "id": "516.1", "phase": "RECON", "action": "Merged 503 + codegen. Прочети candidacy-screen (редове/статуси за преизползване) и board self блока след 515." },
+      { "id": "516.2", "phase": "RED", "action": "Тестове: списъкът с моите + статуси; линкът към кандидатурата; входът от борда с броя; празното състояние. Червени." },
+      { "id": "516.3", "phase": "GREEN", "action": "Екранът + входът + ключовете." },
+      { "id": "516.4", "phase": "DONE", "action": "typecheck + jest зелени. Commit." }
+    ],
+    "passes": false
+  },
+  {
+    "id": 517,
+    "category": "bugfix",
+    "repo": "partyup",
+    "lane": "fe-flows",
+    "model": "easy",
+    "dependsOn": [],
+    "files": [
+      "frontend/src/features/table-create/**",
+      "frontend/src/locales/bg/tableForm.json",
+      "frontend/src/locales/en/tableForm.json"
+    ],
+    "description": "fix(table-create): date and time pickers open on click anywhere in the field",
+    "specRef": "party-up.md «v0.6 бележки» (пикърите, 12.09) + v0.4 таск 104 (произходът на полетата)",
+    "tddWorkflow": true,
+    "notes": "UX бъг от живата употреба (12.09): web date/time полетата (v0.4/104 — нативни input type=date/time) се отварят САМО от миниатюрната календарна иконка, която на тъмна тема е черна върху тъмен фон — трудна за виждане И уцелване. Фикс, двоен: (1) КЛИК ВЪРХУ ЦЯЛОТО ПОЛЕ отваря пикъра — onClick/onFocus на input-а вика el.showPicker() (HTMLInputElement.showPicker(), изисква user gesture — клик Е такъв; guard: typeof showPicker === 'function' + try/catch, някои браузъри отказват — тогава поведението си остава старото, НЕ чупи); (2) иконката става ВИДИМА на тъмна тема: правилният начин е CSS color-scheme върху input-а, синхронизиран с темата на приложението (dark тема → color-scheme: dark → браузърът сам рисува светла иконка и тъмен нативен пикър; светла → light) — темата се чете както другите компоненти я четат (ui-store/NativeWind класа), НЕ хардкодвай filter: invert без нужда. Пипа само date/time полевите компоненти в table-create (table-form-fields / web вариантите им); table-settings ползва същите компоненти — печели безплатно, НЕ пипай неговата зона. Тестове: клик върху полето вика showPicker (мок на метода); стойността продължава да тече към form state; при липсващ showPicker кликът не гърми. Ти си последен в fe-flows lane-а.",
+    "steps": [
+      { "id": "517.1", "phase": "RECON", "action": "Прочети date/time полевите компоненти от 104 (table-form-fields, web вариантите) и как компонентите четат текущата тема." },
+      { "id": "517.2", "phase": "RED", "action": "Тестове: клик на полето → showPicker извикан; липсващ showPicker → без грешка; стойността стига до form state. Червени." },
+      { "id": "517.3", "phase": "GREEN", "action": "showPicker wiring + color-scheme синхрон с темата." },
+      { "id": "517.4", "phase": "DONE", "action": "npm --prefix frontend run typecheck && npm --prefix frontend test зелени. Commit с description-а дословно." }
+    ],
+    "passes": false
+  }
 ]
