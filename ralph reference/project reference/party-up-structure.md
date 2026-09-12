@@ -4,8 +4,8 @@
 > Приложение: TTRPG matchmaking (pull модел — играчите се публикуват на LFG борд,
 > МАСИТЕ дърпат кандидати). Монорепо, TDD от commit 1. Пълната продуктова
 > спека: `party-up.md` в D:\Downloads\monk\ (секции А–Е + Решения лога).
-> **Състояние: board 1–42 (v0.1), 101–108, 201–213, 301–308 и 401–431 са ЗАТВОРЕНИ и мерджнати
-> в `main`.** Всички таскове са зелени през гейта (fix-цикли по code review след всяко от тези
+> **Състояние: board 1–42 (v0.1), 101–108, 201–213, 301–308, 401–431 и 501–517 са ЗАТВОРЕНИ и
+> мерджнати в `main`.** Всички таскове са зелени през гейта (fix-цикли по code review след всяко от тези
 > board-ове са си отделни комити, вече слети). Файлът описва РЕАЛНОСТТА след тях, не скелета.
 > Board 101–108 добави desktop/responsive полиране на екраните; 201–213 добави in-app навигация,
 > logout, tab theming, LFG филтри и „Данни и поверителност" (deleteAccount, my-data export);
@@ -18,8 +18,16 @@
 > публична витрина за отворени маси с гост CTA (413), preferences по категория известия,
 > отгласени от фан-аута (404/415) и МОНТИРАНИ в `/settings` (431), rate limiting на auth/GraphQL/
 > export (421), лифтнат `ProvisioningService` над login/dev-login (422) и опционален споделен
-> token пред dev-login (423). Секции §7а/§7б/§7в описват board 1–42 — детайлите на 101–308 живеят
-> в §1а/§1б/§7/§7г, а на 401–431 в §7а2 по-долу, обновени на място.
+> token пред dev-login (423). **Board 501–517 (fix/finishing вълна) добави:** реално отворени
+> WebSocket ъпгрейди за subscriptions (501 — иначе graphql-ws мълчаливо не се свързваше), поправка
+> на витрината (502 — кандидатска маса без обява вече е скрита, отворената се вижда ВИНАГИ),
+> `myCandidacies` заявка + екран „Моите кандидатури" на `/candidacies` (503/516), спрян Facebook
+> бутон (513), logout директно в глобалния хедър (511), закачена `NotificationBell` в хедъра с
+> врата към чатовете (512 — затваря половината от §9 т.4), write-through Apollo кеш дисциплина за
+> борд/candidacy/my-tables списъците след мутации (514 — виж §1г), разкачване на дърпането от
+> обявата + видим бадж „обявена/необявена" (515), и поправка на date/time picker-а да отваря на клик
+> навсякъде в полето, не само на иконката (517). Секции §7а/§7б/§7в описват board 1–42 — детайлите на
+> 101–308 живеят в §1а/§1б/§7/§7г, на 401–431 в §7а2, а на 501–517 в §7а3 по-долу, обновени на място.
 
 ## §1. Файлова карта (монорепо)
 
@@ -84,10 +92,10 @@ party-up/
 
 ### §1а. BE slice инвентар (`Features/<Област>/<UseCase>/`)
 
-Схемата излиза с **21 query, 28 mutation, 2 subscription** (растежът от 19/27/2 е от board 401–431:
+Схемата излиза с **22 query, 28 mutation, 2 subscription** (растежът от 19/27/2 е от board 401–431:
 `settlements(search)` + `myNotificationPreferences` на query страната, `setNotificationPreference`
 на mutation страната; `lfgBoard`/`tablesShowcase` останаха отделни полета, но смениха форма —
-виж реда `Lfg` по-долу). Кой slice какво издава:
+виж реда `Lfg` по-долу; таск 503 добави `myCandidacies` — 21→22). Кой slice какво издава:
 
 | Slice | Use case папки | GraphQL операции |
 |---|---|---|
@@ -97,10 +105,10 @@ party-up/
 | `MyTables` | (плосък) | `myTables` |
 | `Tables` | CreateTable, Settings, Listing | `createTable`, `updateTableSettings`, `setTableListing` — и двата мутатора носят `admissionKind`/`slotsFirm` от таск 402/412 (walk-in маси, мек лимит на местата — `SlotLimitRules.AllowsSlots`) |
 | `Geo` | Import, Search (таск 403/414) | `settlements(search)` — публичен typeahead reg. на населени места (БЕЗ `[Authorize]`, четe го и анонимната витрина); **няма mutation** — реестърът се пълни само през `settlements import` CLI команда, не през GraphQL |
-| `Lfg` | Board, Publish, Showcase | `lfgBoard(filter, first, after, last, before): LfgBoardConnection`, `tablesShowcase(filter, ...): TablesShowcaseConnection` — cursor connections от таск 401 (`[UsePaging]`, `LfgPagingDefaults`: `DefaultPageSize=20`, `MaxPageSize=50`); `myListing`, `publishMyListing`, `unpublishMyListing`, `table(id)` |
+| `Lfg` | Board, Publish, Showcase | `lfgBoard(filter, first, after, last, before): LfgBoardConnection`, `tablesShowcase(filter, ...): TablesShowcaseConnection` — cursor connections от таск 401 (`[UsePaging]`, `LfgPagingDefaults`: `DefaultPageSize=20`, `MaxPageSize=50`); `myListing`, `publishMyListing`, `unpublishMyListing`, `table(id)`. **Таск 502:** `tablesShowcase` вече филтрира `AdmissionKind == Open OR ListingActive` (преди: само `Status != Disbanded`) — кандидатска маса без обява е скрита от витрината, отворената (walk-in) маса се вижда ВИНАГИ, независимо от `ListingActive` |
 | `Decisions` | (плосък) | `groupDecision(id)`, `castVote` |
 | `DecisionAlerts` | (плосък) | `staleDecisions`, `snoozeDecision` |
-| `Candidacies` | Pull, Contact, Verdict | `candidacy(id)`, `myTableCandidacies(tableId)`, `pullCandidate`, `openContactChat`, `submitVerdict` |
+| `Candidacies` | Pull, Contact, Verdict | `candidacy(id)`, `myTableCandidacies(tableId)`, `myCandidacies` (таск 503 — гледната точка на КАНДИДАТА, филтър по `CandidateUserId` вместо `membership.UserId`; изисква сесия, хвърля GraphQL грешка на анонимен викащ вместо тих празен списък), `pullCandidate`, `openContactChat`, `submitVerdict` |
 | `Chats` | Messaging, Subscriptions | `myChats`, `chat(id)`, `sendMessage`, `onMessage(chatId)`, `onNotification` |
 | `Notifications` | (плосък) | `notifications(unreadOnly)`, `markNotificationRead` |
 | `Lifecycle` | Trial, Leave, Kick, Refound | `startTrial`, `startDecidingPhase`, `finalizeDeciding`, `stayOrLeave`, `leaveTable`, `proposeKick`, `refoundTable`, `acceptRefoundInvite` |
@@ -199,30 +207,41 @@ DecisionStatus, ChatType (+ `AuthProvider` и `PushDelivery` в своите sli
 **Табове — точно 3** (`src/app/(tabs)/_layout.tsx`, `Tabs` от `expo-router/js-tabs`): `board`, `tables`, `profile`.
 `/` пренасочва към `/board`.
 
+**Глобалният хедър** (`src/components/app-header.tsx`, извън `src/features/` — генерично споделено,
+виж §1) вече носи, отляво надясно зад сесийния пазач (`isAnonymous` крие всичко): `NotificationBell`
+(таск 512, `features/contact`) → врата-икона към `/chat` (таск 512) → theme toggle → език → logout
+(таск 511, БЕЗ confirm диалог, `useLogout` — същият hook, който ползва `SessionSection` в
+`/settings`) → settings gear. Всяка контрола е сама с уникален `testID`/роля — logout и камбанката
+са `imagebutton`, не `button`, за да не се броят в кросекранните спекове, които броят
+`getAllByRole('button')` за табовете.
+
 | Маршрут | Екран | Област (`src/features/`) |
 |---|---|---|
 | `/login` | LoginScreen (3 OAuth бутона) | `auth` |
 | `/settings` | линкнати профили, тема, „Пусни обиколката отново" (таск 308), **секция „Известия"** (таск 431 — статус на push абонамента + тогъли по категория), изход, Данни и поверителност (export/delete) | `auth-linking` (+ `RestartTourSection` от `tour`, `PushSettingsSection` от `push`) |
 | `/board` (таб) | LFG борд с филтри, player cards, publish CTA, **infinite scroll** (таск 411 — скрол до дъното дърпа следваща cursor страница, `pagination.loadMore` е fallback бутонът) | `board` |
-| `/tables` (таб) | моите маси + status badges + create CTA | `my-tables` |
+| `/tables` (таб) | моите маси + status badges + **бадж „обявена/необявена"** (таск 515, `TableListingBadge` — отделна заявка `MyTablesListingDocument`, виж §1г бележката в `queries.ts`) + create CTA | `my-tables` |
 | `/profile` (таб) | профилна форма (react-hook-form) | `profile` |
 | `/table/create` | форма за нова маса (one-shot полета, обучителен таг, **`AdmissionKindField`** — candidacy/open + мек лимит на местата, таск 402/412) | `table-create` |
-| `/table/[id]` | детайл на масата + кандидатури | `candidacy` |
+| `/table/[id]` | детайл на масата + кандидатури, **CTA „обяви масата"** за candidacy маса без обява (таск 515 — насочва към `/table/[id]/settings`, отворената маса никога не го вижда) | `candidacy` |
 | `/table/[id]/settings` | admission mode + listing toggle (founder-only), **`AdmissionKindField`** преизползван непроменен (таск 412) | `table-settings` |
 | `/table/[id]/lifecycle` | phase stepper, founder преходи, stay-or-leave | `lifecycle-trial` |
 | `/table/[id]/actions` | danger zone: leave, kick, refound | `lifecycle-actions` |
 | `/candidacy/[id]` | pull flow: решение чат, панел за гласуване, вердикт | `candidacy` |
+| `/candidacies` | «Моите кандидатури» (таск 516) — гледната точка на КАНДИДАТА: маса + статус на церемонията, ред → `/candidacy/[id]`; вход от самоблока на борда, „Кандидатурите ми (N)" (само ЖИВИ, `isOpenCandidacyStatus`) | `candidacy` |
 | `/chat`, `/chat/[chatId]` | списък чатове и нишка с realtime абонамент | `chat` |
 | `/showcase`, `/showcase/[id]` | readonly витрина + състав на партито, **cursor connection** (само първа страница, таск 401 — infinite scroll НЕ стигна до витрината, само до борда), open-табло бадж + `GuestCta` за анонимен посетител (таск 413) | `showcase` |
 | `/notifications` | нотификационен център (неутрални текстове към кандидата) | `contact` |
 | `/refound-invite` | приемане на покана след преосноваване | `lifecycle-actions` |
 
 `push` (без свой маршрут — service worker, subscribe pipeline, iOS install подсказка) — **прогресивно
-подобрение, ЧАСТИЧНО закачено от таск 431**: `PushSettingsSection`/`usePushSetup` вече е монтирана в
-`/settings` (ръчен вход — потребителят е дошъл нарочно), тогълите по категория (`NotificationPreferences`,
-таск 404/415) висят под нея. **`PushPrompt` (арматурираният банер след смислено действие) и
-`NotificationBell` СЕ ОСТАВАТ незакачени за екран** — таск 431 монтира само настройковия вход, не
-и проактивния nudge. Виж §9.
+подобрение, вече закачено на ДВЕ места**: `PushSettingsSection`/`usePushSetup` е монтирана в
+`/settings` (таск 431, ръчен вход — потребителят е дошъл нарочно), тогълите по категория
+(`NotificationPreferences`, таск 404/415) висят под нея; `NotificationBell` е монтирана в ГЛОБАЛНИЯ
+хедър (таск 512, `components/app-header.tsx`) заедно с врата-икона към `/chat` — вижда се на всеки
+екран зад сесийния пазач, а не само в `/notifications` (`NotificationCenter`-ът вече не носи
+собствено копие на камбанката — композира се, не се преписва). **`PushPrompt` (арматурираният
+банер след смислено действие) СЕ ОСТАВА незакачен за екран** — остатъкът от §9 т.4.
 
 **`/auth/dev-login?user=<име>&returnUrl=<път>` (таск 301) НЯМА FE екран/линк** — гол backend URL,
 хвърлен ръчно в браузъра от разработчика за многоакаунтово тестване (виж §1а `Auth`); маршрутизира се
@@ -257,6 +276,42 @@ DecisionStatus, ChatType (+ `AuthProvider` и `PushDelivery` в своите sli
 - `restart-tour-section.tsx` — картата в `/settings` (`RestartTourSection`, таск 308):
   единственият начин обиколката да се види пак ръчно, след като автостартът е замлъкнал.
 - `tour.json` (bg/en, нов namespace) — заглавия/текстове на стъпките + бутоните на овърлея.
+
+### §1г. FE Apollo кеш write-through дисциплина (таск 514)
+
+Проблемът, който затвори таска (12.09 на живо, F5 симптом): мутация публикува/дърпа/напуска, но
+списъчният екран (бордът, «Моите маси», кандидатурите на маса) не виждаше промяната, докато
+потребителят не презаредеше ръчно — `update()` callback-ът на мутацията пишеше само отделния
+обект, не списъка, който го показва. Решението е СЪЩИЯТ образец, който `use-privacy` въведе по-рано:
+payload-ът на мутацията се пише ПРАВО в засегнатите кешове, БЕЗ нов мрежов кръг/refetch.
+
+Три нови модула, по един на засегнат списък — всеки експортира чифт чисти функции (взимат
+`ApolloCache`+данни, връщат `void`), не hook-ове, тестват се без рендиране:
+
+- `features/board/board-cache.ts` — `addListingToBoard`/`removeListingFromBoard`. Публикуваната
+  обява влиза в НЕФИЛТРИРАНАТА страница на борда най-отгоре; филтрираните кеширани страници се
+  ИЗТРИВАТ (`cache.modify` + `DELETE`), не се дописват — дали новата обява минава даден филтър
+  знае сървърът, не клиентът. Свалянето маха ръба от ВСИЧКИ кеширани страници по `id`.
+- `features/candidacy/candidacy-cache.ts` — `addCandidacyToMyTable`: дърпането от БОРДА пише
+  новия кандидат в списъка на ЧУЖД екран (масата) веднага; ако масата още не е отваряна (не е в
+  кеша), няма какво да се пипне — първото ѝ отваряне я дърпа цяла.
+- `features/my-tables/my-tables-cache.ts` — `addMembershipToMyTables`/`removeMembershipFromMyTables`
+  + `foundedTableEntry` (превежда payload-а на `createTable`/`refoundTable` — профил+състав — на
+  формата на `MyTables` реда, вадейки основателското членство). Добавянето минава през
+  `cache.updateQuery` (нов ред отгоре), махането — през `cache.modify` (пренаписване на по-къс
+  масив с `updateQuery` вдига Apollo предупреждение за загуба на данни, липсва merge политика за
+  `myTables` в споделената `lib/apollo.ts`).
+
+**Кой мутатор пише къде** (`update()` callback на `useMutation`): `publishMyListing`/
+`unpublishMyListing` → `board-cache`; `pullCandidate` → `candidacy-cache`; `createTable`,
+`refoundTable`, `acceptRefoundInvite` (виж `RefoundInviteScreen`) → добавяне в `my-tables-cache`;
+`leaveTable` → махане от `my-tables-cache`. За да не се разминат селекциите, `BoardListingFragment`
+е СПОДЕЛЕН fragment между `LfgBoardDocument` и `PublishMyListingDocument` (`board.graphql.ts`) —
+разминаване прави вписания ръб непълен и кешът спира да се чете.
+
+Патърнът е ЗАДЪЛЖИТЕЛЕН за нова мутация, която ражда/маха ред от вече зареден списък — refetch
+на цялата листваща заявка е позволен резервен вариант само когато формата на payload-а не съвпада
+с листващата селекция и превод би бил по-крехък от нов мрежов кръг.
 
 ## §2. Стек (ФИКСИРАН — агентите НЕ избират депендънсита)
 
@@ -334,7 +389,7 @@ DecisionStatus, ChatType (+ `AuthProvider` и `PushDelivery` в своите sli
 | Файл | Защо е отрова |
 |------|---------------|
 | `backend/PartyUp.slnx` | нов проект = редакция тук |
-| `backend/src/PartyUp.Api/Program.cs` | всяко DI/pipeline wiring минава оттук (изяден от таскове 1 и 26) |
+| `backend/src/PartyUp.Api/Program.cs` | всяко DI/pipeline wiring минава оттук (изяден от таскове 1 и 26; таск 501 добави изричен `app.UseWebSockets()` фикс, документиран изключение — §7а3) |
 | `backend/src/PartyUp.Api/PartyUp.Api.csproj` | нов пакет/reference |
 | `backend/src/PartyUp.Api/Domain/*` + `Common/*` | целият модел е от таск 1 — фича таск по правило НЕ добавя entity (таск 402/403/421 са изрични, документирани изключения — §1) |
 | `contracts/schema.graphql` | ре-експортира се при ВСЯКА схема промяна — BE фаза го променя серийно |
@@ -428,6 +483,31 @@ Party Up ползва: **5001/5000** (BE dev, OAuth redirect-ите сочат 5
   дефолтните 5000 ms дават фалшиви таймаути (таскове 41 и 42 удариха точно това). Не го връщай надолу.
 - ВНИМАНИЕ: RNTL v14 — `render` е ASYNC (`await render(...)`); `screen` API-то от v12/13 го НЯМА.
   TS 6.0 НЕ включва @types автоматично — types:["jest"] е вече в tsconfig.
+
+### §7 (продължение 2). Тестово състояние след board 501–517 (файлово преброено от диф-а — ЧИСТО
+ДОКУМЕНТАЦИОННА задача, без `dotnet test`/`npm test` прогон в тази сесия; следващият реален verify
+гейт да освежи точните бройки по-долу с фактически изпълнения, не само файлове)
+
+- **BE test suite файлове:** unit **непроменени, 26**; integration **51 → 53** (+2:
+  `Candidacies/Pull/MyCandidaciesTests` — таск 503, `Foundation/GraphQLWebSocketTests` — таск 501,
+  реален ws upgrade+съобщение round-trip срещу `WebApplicationFactory`). Плюс разширени файлове:
+  `Lfg/Showcase/TablesShowcaseTests` и `TablesShowcaseWalkInTests` (таск 502 — видимост по
+  `AdmissionKind`/`ListingActive`).
+- **FE test suite файлове:** `73 → 80` (+7: `board/__tests__/board-cache.test.ts`,
+  `candidacy/candidacy-cache.test.ts`, `candidacy/candidacy-status.test.ts`,
+  `candidacy/my-candidacies-screen.test.tsx`, `my-tables/__tests__/my-tables-cache.test.ts`,
+  `table-create/table-create-my-tables.test.tsx`, `table-create/table-form-fields.test.tsx`).
+  Значително разширени: `app-header.test.tsx` (logout + камбанка + чат врата, таск 511/512),
+  `board-screen.test.tsx` (кеш вписване + самоблок кандидатури, таск 514/516),
+  `pull-targets.test.ts` (разкачване от `listingActive`, таск 515), `table-screen.test.tsx`
+  (listing CTA, таск 515), `notification-bell.test.tsx`/`notification-center.test.tsx` (преместена
+  камбанка, таск 512), `leave-table-action.test.tsx`/`refound-invite-screen.test.tsx`/
+  `refound-table-action.test.tsx` (кеш update, таск 514), `table-create-form(-web).test.tsx`
+  (кеш update, таск 514), `table-listing-section.test.tsx`/`table-settings-screen.test.tsx`
+  (преномерирана обява, таск 515), `oauth.test.ts`/`login-screen.test.tsx` (facebook спрян, таск 513).
+- **BE integration тест за WebSockets** живее в `Foundation/` (не `Features/`) редом до
+  `RateLimitingTests` — вторият прецедент за cross-cutting инфраструктурни тестове там (§7б.1
+  остава в сила: инфраструктурата се тества отделно от slice-овете).
 
 ## §7а. Амендмънти за фаза v0.1 (board 1-42) — ИСТОРИЯ, всички ЗАТВОРЕНИ
 
@@ -524,6 +604,56 @@ LFG филтри) без нови архитектурни решения изв
    Не затваря §9 т.7 напълно — endpoint-ът все още няма rate limit/аудит от само себе си (сега го
    покрива общият `/auth/*` лимитер от таск 421).
 
+## §7а3. Амендменти за board 501–517 (fix/finishing вълна) — ИСТОРИЯ, всички ЗАТВОРЕНИ
+
+1. **WebSocket ъпгрейдите бяха реално ИЗКЛЮЧЕНИ (таск 501).** `app.UseWebSockets()` липсваше в
+   `Program.cs` — HotChocolate никога не виждаше upgrade заявката, `graphql-ws` на FE удряше
+   `ws://…/graphql` и просто увисваше, subscriptions (`onMessage`/`onNotification`) не се
+   свързваха. Редът има значение: `UseWebSockets()` е ПРЕДИ `UseAuthentication()`/`MapGraphQL()` —
+   точката, която приема upgrade-а. `Program.cs` е отровен файл (§5), но е точно от типа изричен
+   инфраструктурен фикс, за който съществува изключението.
+2. **Витрината криеше грешните маси (таск 502).** `TablesShowcaseAsync` филтрираше само по
+   `Status != Disbanded` — candidacy маса БЕЗ обява се виждаше на витрината, противно на текста в
+   `table-listing-section.tsx` („маса без обява не се показва на никого"). Поправено на
+   `AdmissionKind == Open OR ListingActive`: отворената (walk-in) маса е обява по природа и се
+   вижда ВИНАГИ, кандидатската — само с активна обява.
+3. **`myCandidacies` (таск 503/516) — гледната точка на КАНДИДАТА, за първи път.** Съществуващите
+   „мои ..." заявки бяха всички от гледната точка на масата/членството; кандидатът нямаше начин да
+   провери в какво е кандидатствал. Контрактът тук е СТРОГ (не тих празен списък на анонимен
+   викащ, а top-level GraphQL грешка, `NOT_AUTHENTICATED`) — образецът на subscription-refusal, не
+   на обикновен query resolver. Query 21→22 (виж §1а). FE екранът `/candidacies` (таск 516) и
+   самоблокът на борда „Кандидатурите ми (N)" (само ЖИВИ статуси, `isOpenCandidacyStatus`) четат
+   от нея.
+4. **Facebook логинът е спрян временно (таск 513, решение на потребителя 12.09).** FB редиректът
+   иска https + app review бюрокрация, отложено още от prerequisites; провайдърът е ИЗВАДЕН от
+   `AUTH_PROVIDERS` (`['google', 'discord']`), не изтрит — бутонният цвят стои закоментиран в
+   `login-screen.tsx` за връщане без ровене в git history. Backend страната (§3.4 — OAuth
+   провайдър се регистрира само ако е конфигуриран) не е пипана.
+5. **Logout в глобалния хедър (таск 511)** — вижте §1б, `useLogout` (същият hook, който вече
+   ползваше `SessionSection` в `/settings`). Без confirm диалог: изходът е безобиден, навигацията
+   към `/login` минава само след УСПЕШЕН изход.
+6. **`NotificationBell` мигрира от екрана на центъра в глобалния хедър (таск 512)** — заедно с нова
+   врата-икона към `/chat`. Затваря половината от §9 т.4 (старата версия на тази точка):
+   `PushPrompt` остава единственото незакачено парче push прогресивното подобрение.
+7. **FE Apollo кеш write-through дисциплина (таск 514)** — виж §1г за пълното описание. Затваря
+   класа бъгове „мутацията мина, но списъчният екран показва старото до F5" за борда, «Моите маси»
+   и кандидатурите на маса.
+8. **Дърпането разкачено от обявата (таск 515, решение на потребителя 12.09: „нечекването и
+   неможенето да дърпаш е много асоциално").** Старото правило искаше АКТИВНО членство И `table.
+   listingActive`; сцепването правеше невъзможен легитимния случай „частна маса кани конкретен
+   човек, без да виси на витрината". `pull-targets.ts` вече филтрира само по `membership.active`.
+   Отворената (walk-in) маса продължава да няма кандидатски flow — BE guard-ът
+   (`CandidacyService.WalkInGuard`, таск 402) си остава единствената защита, ако все пак се
+   опиташ (`TABLE_IS_OPEN`). Обявата стана ЧИСТО маркетингов превключвател: видима като бадж
+   „обявена/необявена" в «Моите маси» (`TableListingBadge`, отделна `MyTablesListingDocument` —
+   виж бележката в `queries.ts`, §1б) и като CTA в `/table/[id]`, когато кандидатска маса няма
+   обява.
+9. **Date/time picker-ите отваряха само на клик върху миниатюрната иконка (таск 517).** На тъмна
+   тема иконката е трудна за виждане И уцелване. Клик/фокус върху ЦЯЛОТО поле сега вика
+   `input.showPicker()` (user-gesture изисква, guard-нато в try/catch — тих fallback към старото
+   поведение, ако браузърът откаже). Нов `useIsDarkColorScheme()` в `lib/theme.tsx` дава РЕЗОЛВНАТАТА
+   (light/dark) тема на нативен web `<input>`, който няма собствен `dark:` className.
+
 ## §7б. REVIEW КРИТЕРИИ (за finishing review stage — ревюърът оценява diff-а СПРЯМО ТЯХ)
 
 > Обвързващият текст живее в самото репо: `rules/architecture-rules.md` + `rules/i18n-rules.md`.
@@ -592,11 +722,12 @@ LFG филтри) без нови архитектурни решения изв
 - Всеки таск декларира `repo: "partyup"` (полето е задължително, дефолт НЯМА).
 - Verify е общ за монорепото (BE+FE) — счупен FE тест блокира merge на BE таск и обратно. Това е НАРОЧНО (контрактът е общ).
 
-## §9. Известни отворени точки след board 401–431 (кандидати за следваща фаза)
+## §9. Известни отворени точки след board 501–517 (кандидати за следваща фаза)
 
 Не са бъгове — съзнателно оставени. Всяка иска свой таск и решение на ЧОВЕКА. Списъкът е от board
 1–42 и остана непроменен през 101–308; board 401–431 ЗАТВОРИ т.4 (частично) и т.7 (частично) отдолу
-и добави три нови точки (9–11):
+и добави три нови точки (9–11); board 501–517 ЗАТВОРИ т.4 ОСТАНАЛОТО (NotificationBell), но добави
+две нови точки (12–13):
 
 1. **Playwright не е в verify гейта.** Влизането му иска първо чистене на Metro замърсяването (§6):
    `frontend/tsconfig.json` + root `nativewind-env.d.ts`. `repos.json` НЕ е пипан нито от board 1–42,
@@ -604,11 +735,12 @@ LFG филтри) без нови архитектурни решения изв
 2. **Full-stack e2e** (жив BE + Testcontainers compose) — сегашните 3 спека са неавтентикирани пътеки с един стъб.
 3. **Локализиран `src/app/+not-found.tsx`** — 404 сега е вграденият англоезичен екран на expo-router,
    извън root layout-а и без пазач. Спекът описва ТЕКУЩОТО, не желаното поведение.
-4. **Push прогресивното подобрение — ЧАСТИЧНО закачено (таск 431).** `PushSettingsSection` (статус +
-   тогъли по категория) вече е монтирана в `/settings`. `PushPrompt` (арматурираният банер след
-   смислено действие) и `NotificationBell` СИ ОСТАВАТ незакачени за екран — таск 431 покри само
-   настройковия вход. Обиколката (§1в, board 307–308) все още знае и си трае: `bell` стъпката пада
-   на затъмнение без изрез, докато `NotificationBell` не се закачи.
+4. **Push прогресивното подобрение — ПОЧТИ ЗАКАЧЕНО (таск 431/512).** `PushSettingsSection` (статус +
+   тогъли по категория) е монтирана в `/settings` (431); `NotificationBell` е монтирана в
+   ГЛОБАЛНИЯ хедър с врата към `/chat` (512, виж §1б/§7а3). Само `PushPrompt` (арматурираният
+   банер след смислено действие) СИ ОСТАВА незакачен. Обиколката (§1в, board 307–308) вече МОЖЕ да
+   гради `bell` стъпката около реален изрез — все още не е обновена да го ползва (`tour-content.ts`
+   пада на затъмнение без изрез за тази стъпка; закачването е еднодневен таск, чака решение).
 5. **EF migrations** (§3.5) — иска се преди първи прод deploy.
 6. **`metro.config.js` tslib резолвърът** беше единствената промяна извън обхвата на таск 42. Ревертът му
    чупи `expo export --platform web` и с това целия e2e — ревюирайте съзнателно.
@@ -633,3 +765,13 @@ LFG филтри) без нови архитектурни решения изв
     proxy-то, не на клиента, докато deploy таскът не включи
     `ASPNETCORE_FORWARDEDHEADERS_ENABLED`/`UseForwardedHeaders(KnownProxies:...)`. Записано изрично
     в кода (таск 421) като deploy грижа, не пропуск на този таск.
+12. **Facebook логинът е спрян, не изтрит (таск 513).** За да се върне: добави `'facebook'` обратно
+    в `AUTH_PROVIDERS` (`frontend/src/features/auth/oauth.ts`) И конфигурирай
+    `Authentication:Facebook:ClientSecret` (backend user-secrets/env) — провайдърът се регистрира
+    само ако е конфигуриран (§3.4). Иска решение на потребителя (https redirect + app review при
+    Meta), не е технически дълг.
+13. **`MyTablesListingDocument` е ВТОРА заявка само за баджа „обявена/необявена" (таск 515).**
+    Нарочен избор (виж бележката в `queries.ts`, §1б/§1г): каноничната `MyTablesDocument` селекция
+    остава непипната, за да не задължи трите ѝ чужди писачи в кеша (`createTable`/`refoundTable`/
+    `acceptRefoundInvite`) да носят и полето. Ако „Моите маси" някога стане тежък екран, обединяването
+    на двете заявки в едно поле е задача за отделен таск, не за случаен рефакторинг покрай друга фича.
