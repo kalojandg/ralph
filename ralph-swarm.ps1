@@ -923,7 +923,17 @@ function Complete-Agent($info) {
             $script:fastFails = 0
             Set-TaskPassed $t.id
             if ($result.PSObject.Properties['activity']) { Add-ActivityEntry $result.activity }
+            # Тихият провал тук трупаше гробище (15.09: 52 worktree-та / 16GB — Windows
+            # file locks от esbuild/jest демони държат node_modules). Remove-ът остава
+            # без прекъсване на потока, но провалът вече се ВИЖДА + опит за освобождаване.
             & git -C $info.gitRoot worktree remove --force $info.wtPath 2>$null | Out-Null
+            if (Test-Path $info.wtPath) {
+                cmd /c "rd /s /q `"$($info.wtPath)`"" 2>$null | Out-Null
+                & git -C $info.gitRoot worktree prune 2>$null | Out-Null
+            }
+            if (Test-Path $info.wtPath) {
+                Write-Host "[!] Task #$($t.id): worktree cleanup failed (file locks?) - remove manually: $($info.wtPath)" -ForegroundColor Yellow
+            }
             & git -C $info.gitRoot branch -d $info.branch 2>$null | Out-Null
             # task succeeded -> its retry context is spent; delete so no stale state survives
             Remove-Item (Join-Path $retryDir "task-$($t.id).md") -Force -ErrorAction SilentlyContinue
