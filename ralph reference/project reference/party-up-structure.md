@@ -5,8 +5,16 @@
 > МАСИТЕ дърпат кандидати). Монорепо, TDD от commit 1. Пълната продуктова
 > спека: `party-up.md` в D:\Downloads\monk\ (секции А–Е + Решения лога).
 > **Състояние: board 1–42 (v0.1), 101–108, 201–213, 301–308, 401–431 и 501–517 са ЗАТВОРЕНИ и
-> мерджнати в `main`.** Всички таскове са зелени през гейта (fix-цикли по code review след всяко от тези
-> board-ове са си отделни комити, вече слети). Файлът описва РЕАЛНОСТТА след тях, не скелета.
+> мерджнати в `main`; board 601–621 (деплой вълна) е ЗАТВОРЕН и мерджнат в `develop`, все още
+> НЕ е слят в `main`.** Всички таскове са зелени през гейта (fix-цикли по code review след всяко от
+> тези board-ове са си отделни комити, вече слети). Файлът описва РЕАЛНОСТТА след тях, не скелета.
+> **Board 601–621 (деплой вълна) добави:** EF migrations с начална baseline и автоматичен
+> `Database.MigrateAsync()` на `Production` старт (601), прод-готов hosting — cross-site бисквитки,
+> forwarded headers зад Render прокси-то и CORS от конфигурация, плюс `GET /healthz` (602),
+> `backend/Dockerfile` + `render.yaml` Render blueprint (603), FE `API_BASE_URL` от
+> `EXPO_PUBLIC_API_URL` с localhost fallback (611), и GitHub Actions CI — unit/typecheck на всеки
+> push/PR, Playwright e2e само на push към `main` (621). Затваря §9 т.5 (EF migrations) и т.11
+> (forwarded headers за rate limiter-а) изцяло — виж §7а4.
 > Board 101–108 добави desktop/responsive полиране на екраните; 201–213 добави in-app навигация,
 > logout, tab theming, LFG филтри и „Данни и поверителност" (deleteAccount, my-data export);
 > 301–308 добави dev-login за multi-account тестване, живо потвърждение на subscriptions-a,
@@ -27,7 +35,8 @@
 > борд/candidacy/my-tables списъците след мутации (514 — виж §1г), разкачване на дърпането от
 > обявата + видим бадж „обявена/необявена" (515), и поправка на date/time picker-а да отваря на клик
 > навсякъде в полето, не само на иконката (517). Секции §7а/§7б/§7в описват board 1–42 — детайлите на
-> 101–308 живеят в §1а/§1б/§7/§7г, на 401–431 в §7а2, а на 501–517 в §7а3 по-долу, обновени на място.
+> 101–308 живеят в §1а/§1б/§7/§7г, на 401–431 в §7а2, на 501–517 в §7а3, а на 601–621 в §7а4
+> по-долу, обновени на място.
 
 ## §1. Файлова карта (монорепо)
 
@@ -45,21 +54,46 @@ party-up/
 │   │   │                            Notifications/INotifier.cs, Endpoints/IEndpointModule.cs,
 │   │   │                            CurrentUser.cs, FrontendOptions.cs, TableRules.cs,
 │   │   │                            RateLimiting/ (RateLimitingSetup, RateLimitingOptions — таск 421,
-│   │   │                            класифицира по PATH, не по slice, затова живее в Common)
+│   │   │                            класифицира по PATH, не по slice, затова живее в Common),
+│   │   │                            Hosting/ (HostingSetup, CookieSecurityOptions — таск 602,
+│   │   │                            cross-site бисквитки + forwarded headers, виж „Hosting в
+│   │   │                            детайли" по-долу)
 │   │   ├── GraphQL/              ← Query.cs (root, само `hello`) + TypeModule.cs
 │   │   │                            ([assembly: Module("PartyUpTypes")] — котвата на генератора)
-│   │   ├── Features/             ← ВСИЧКАТА фича логика, vertical slices (виж §1а)
+│   │   ├── Features/             ← ВСИЧКАТА фича логика, vertical slices (виж §1а), вкл.
+│   │   │                            Health/HealthEndpoints.cs (таск 602 — `GET /healthz`, liveness)
+│   │   ├── Migrations/           ← EF migrations (таск 601): DatabaseStartup.cs (решение среда→
+│   │   │                            действие + изпълнение), PartyUpDbContextFactory.cs (design-time
+│   │   │                            factory за `dotnet ef`), `<timestamp>_InitialCreate.cs` +
+│   │   │                            `.Designer.cs` + `PartyUpDbContextModelSnapshot.cs` (генерирани,
+│   │   │                            НЕ се пипат на ръка), README.md (правилото „миграция в СЪЩИЯ
+│   │   │                            commit" + таблица среда→действие, виж §3.6)
 │   │   └── Properties/launchSettings.json  ← портове 5001 (https) / 5000 (http) — OAuth redirect-ите са на 5001!
+│   ├── Dockerfile                ← прод image (таск 603): SDK build stage → aspnet runtime stage,
+│   │                                ENTRYPOINT сглобява ASPNETCORE_URLS от Render-овия $PORT
+│   ├── .dockerignore
 │   └── tests/
 │       ├── PartyUp.UnitTests/        ← xUnit, бързи, БЕЗ Docker
 │       └── PartyUp.IntegrationTests/ ← xUnit + Testcontainers.PostgreSql (истински Postgres в Docker)
+│           ├── Foundation/           ← cross-cutting инфраструктурни тестове, извън Features/
+│           │                           (RateLimitingTests, GraphQLWebSocketTests, DatabaseMigrationTests
+│           │                           — таск 601, Hosting/ — CookiePolicyTests/FrontendOriginsTests/
+│           │                           HealthEndpointTests, таск 602)
 │           └── Support/              ← ApiFactory, ApiTestBase, PostgresCollectionFixture,
 │                                        TestAuthHandler, TestSessionQueries (СПОДЕЛЕНИ — не се преправят)
+├── .github/workflows/ci.yml      ← GitHub Actions (таск 621): frontend (typecheck+test) и backend
+│                                    (dotnet test) на всеки push към develop/main + PR към main;
+│                                    e2e (Playwright) само на push към main, след като горните минат
+├── render.yaml                   ← Render Blueprint за бекенда (таск 603): Docker web service,
+│                                    healthCheckPath /healthz, envVars със sync:false (секретите се
+│                                    слагат ръчно в Render dashboard, НЕ тук)
 ├── frontend/                     ← Expo SDK 57 (web-first PWA + native)
 │   ├── src/app/                  ← Expo Router — ТЪНКИ route файлове (виж §1б)
 │   ├── src/features/<област>/    ← ЦЯЛАТА екранна логика: компоненти, hooks, *.gql.ts документи, тестове
 │   ├── src/lib/                  ← apollo.ts, providers.tsx, auth-gate.tsx, theme.tsx, ui-store.ts,
-│   │                                i18n.ts, session.ts, config.ts, user-name.ts (таск 304 — единственото
+│   │                                i18n.ts, session.ts, config.ts (`API_BASE_URL` от
+│   │                                `EXPO_PUBLIC_API_URL` build-time env, fallback localhost:5000 —
+│   │                                таск 611), user-name.ts (таск 304 — единственото
 │   │                                място, което познава `__deleted__` сентинела и го превежда)
 │   ├── src/locales/{bg,en}/      ← по 16 namespace JSON файла на език (виж §7г)
 │   ├── src/components/           ← само placeholder-screen.tsx (generic споделеното е малко — по дизайн)
@@ -127,6 +161,32 @@ endpoint) — класификацията по път живее в `RateLimiti
 един прозорец); тестове, които искат РЕАЛНИТЕ лимити, ги завъртат надолу сами
 (`Foundation/RateLimiting/RateLimitingTests.cs` — нова top-level папка в IntegrationTests за
 инфраструктурни тестове, извън `Features/`).
+
+**`Common/Hosting/` в детайли (таск 602, `HostingSetup.AddPartyUpHosting`, вика се от Program.cs
+СЛЕД `AddIdentityCookies()` — именуваните options конфигуратори важат по ред на регистрация):**
+две решения на едно място, защото и двете отговарят на въпроса „FE и BE не са на един origin":
+(1) **cross-site бисквитки** — `CookieSecurityOptions.CrossSite` (конфиг `Cookies:CrossSite`,
+`null` = средата решава: Production → `SameSite=None`+`Secure`, всичко друго → днешното `Lax`);
+изрична стойност е за деплой, който не се казва „Production" (preview/Staging на същата
+топология). (2) **forwarded headers** — Render терминира TLS-а пред контейнера, `UseForwardedHeaders()`
+(първият middleware в Program.cs, ПРЕДИ CORS/cookie политиката/rate limiter-а) превежда
+`X-Forwarded-Proto`/`X-Forwarded-For`; `KnownNetworks`/`KnownProxies` са изрично изпразнени —
+безопасно САМО защото контейнерът е достъпен единствено през прокси-то на Render (виж §9, точката
+за VM с отворен порт). Затваря §9 т.11 (rate limiter-ът вече вижда честно клиентско IP). CORS
+origin-ите (`Frontend:Origins`) вече идват от конфигурация, не от твърд списък — СЪЩИЯТ списък е
+whitelist-ът на OAuth `returnUrl` (`FrontendOptions.IsAllowedReturnUrl`), един източник за две
+защити. `GET /healthz` (`Features/Health/HealthEndpoints.cs`) е СЪЗНАТЕЛНО liveness БЕЗ db ping —
+Neon free tier заспива/буди се за секунди, сонда която чака базата би обявила живото приложение за
+мъртво точно при cold start.
+
+**EF migrations в детайли (таск 601, `Migrations/`):** пълната процедура и таблицата
+среда→действие живеят в `backend/src/PartyUp.Api/Migrations/README.md` — не се дублират тук.
+Накратко: `Production` старт вика `DatabaseStartup.ApplyAsync` → `Database.MigrateAsync()` (прод
+базата НИКОГА не се дропва/пресъздава); `Development` си остава `EnsureCreatedAsync` + settlements
+seed (дев опитът е непроменен); тестовите хостове пропускат схемата изрично
+(`Database:SkipSchemaStartup=true` — `ApiFactory` вдига схемата сама). Гейтът за drift между модела
+и снимката: `Foundation/DatabaseMigrationTests.Model_MatchesTheMigrationSnapshot`. Правилото за
+всеки следващ таск: пипаш `Domain/`/`OnModelCreating` → добавяш миграция в СЪЩИЯ commit.
 
 **`Privacy` в детайли** (структурата не беше документирана след board 211–213, наваксва се тук):
 - `DeleteAccount/AccountAnonymization.cs` — статичните правила „какво остава от изтрит човек":
@@ -359,8 +419,12 @@ payload-ът на мутацията се пише ПРАВО в засегна�
 4. **Секрети:** dev = `dotnet user-secrets` (UserSecretsId вече е init-нат в PartyUp.Api). Конфиг ключовете (напр. `Authentication:Google:ClientSecret`) се четат от IConfiguration — стойностите ги слага ПОТРЕБИТЕЛЯТ. Публичните OAuth client ID-та НЕ са секрети (стоят в appsettings.json): Google `438566552589-bqbid79l39j6j8g1j0dhmdtoebgv9bu5.apps.googleusercontent.com`, Discord `1537485903222673490`, Facebook `2139533033575936`.
    OAuth провайдър се регистрира в Program.cs **само ако ClientId И ClientSecret са конфигурирани** — иначе
    приложението (и `schema export`) тръгва без него, вместо да гърми.
-5. **⚠ НЯМА EF migrations.** Схемата в тестовете се вдига с `EnsureCreated`; migrations са deploy грижа и
-   идват със свой таск, когато има прод deploy. Не генерирай migrations „в движение".
+5. **EF migrations СЪЩЕСТВУВАТ от таск 601** (`Migrations/`, начална `InitialCreate`) — прод базата
+   (Production старт) се надгражда САМО през `Database.MigrateAsync()`, никога EnsureCreated/дроп.
+   Тестовете и dev машината продължават да вдигат схемата с `EnsureCreated` (пълната таблица
+   среда→действие: `backend/src/PartyUp.Api/Migrations/README.md`, накратко и в §1а „EF migrations
+   в детайли"). **Правило за всеки следващ таск:** пипаш `Domain/`/`OnModelCreating` → добавяш
+   миграция в СЪЩИЯ commit — гейтът е `DatabaseMigrationTests.Model_MatchesTheMigrationSnapshot`.
 6. **DbContext-ът е с 16 DbSet-а** плюс Identity таблиците (растежът от 12 е board 211–213:
    `PrivacyRequest`, `DataExport`; и board 401–431: `NotificationPreference`, `Settlement`).
    Ключови ограничения в `OnModelCreating`: уникален `Vote(DecisionId, VoterUserId)`, уникален
@@ -389,7 +453,7 @@ payload-ът на мутацията се пише ПРАВО в засегна�
 | Файл | Защо е отрова |
 |------|---------------|
 | `backend/PartyUp.slnx` | нов проект = редакция тук |
-| `backend/src/PartyUp.Api/Program.cs` | всяко DI/pipeline wiring минава оттук (изяден от таскове 1 и 26; таск 501 добави изричен `app.UseWebSockets()` фикс, документиран изключение — §7а3) |
+| `backend/src/PartyUp.Api/Program.cs` | всяко DI/pipeline wiring минава оттук (изяден от таскове 1 и 26; таск 501 добави изричен `app.UseWebSockets()` фикс; таск 601/602 добавиха `DatabaseStartup.ApplyAsync`, `AddPartyUpHosting()` и `UseForwardedHeaders()` — документирани изключения, §7а4) |
 | `backend/src/PartyUp.Api/PartyUp.Api.csproj` | нов пакет/reference |
 | `backend/src/PartyUp.Api/Domain/*` + `Common/*` | целият модел е от таск 1 — фича таск по правило НЕ добавя entity (таск 402/403/421 са изрични, документирани изключения — §1) |
 | `contracts/schema.graphql` | ре-експортира се при ВСЯКА схема промяна — BE фаза го променя серийно |
@@ -414,6 +478,7 @@ npm --prefix frontend run codegen                   # само регенера�
 npm --prefix frontend run test:e2e                  # Playwright (сам си вдига статиката) — НЕ е в гейта
 cd backend && dotnet run --project src/PartyUp.Api -- schema export --output ../../../contracts/schema.graphql
 cd backend && dotnet run --project src/PartyUp.Api -- settlements import <geonames.tsv> [--replace]  # операторска, таск 403 — НЕ е в гейта, НЕ се вика от агент/тест
+cd backend && dotnet ef migrations add <Име> --project src/PartyUp.Api/PartyUp.Api.csproj  # таск 601 — В СЪЩИЯ commit с Domain/OnModelCreating промяната
 ```
 
 ⚠ **`codegen` е префикс на `test` и `typecheck`** — гола `npx tsc --noEmit` пада, защото `src/gql` може да не
@@ -422,7 +487,13 @@ cd backend && dotnet run --project src/PartyUp.Api -- settlements import <geonam
 **Verify гейтът (`repos.json`, дословно):** `npm --prefix frontend install` → `typecheck` → `test` →
 `dotnet test backend/PartyUp.slnx` → `git checkout -- frontend/package-lock.json`.
 Последното е ЗАДЪЛЖИТЕЛНА хигиена (инцидентът от 16.08: `npm install` мърда lock-а → мръсен checkout →
-MERGE SKIPPED за всички следващи таскове).
+MERGE SKIPPED за всички следващи таскове). **Таск 621 добави ОТДЕЛЕН GitHub Actions гейт**
+(`.github/workflows/ci.yml`) за реалния `develop`/`main` push/PR поток — unit+typecheck на всеки
+push/PR, Playwright e2e само на push към `main`. Двата гейта НЕ са едно и също: `repos.json` е
+Ralph-ов merge гейт за swarm таскове (локален, без Docker в CI job-а за backend — GitHub Actions
+хостовете си имат вграден Docker, но интеграционните тестове там вървят на всеки push, не само на
+merge); GitHub Actions пази реалния `main`/`develop` след ВСЯКО сливане, вкл. ръчни комити извън
+Ralph. Playwright все още НЕ е в `repos.json` гейта (§9 т.1 остава отворена за него).
 
 **Портове (флотска сверка):** 45279 (inventory/hero/spells) и 45278 (combat) са ЗАЕТИ от другите репота.
 Party Up ползва: **5001/5000** (BE dev, OAuth redirect-ите сочат 5001), **8081** (Expo dev) и **45280**
@@ -508,6 +579,24 @@ Party Up ползва: **5001/5000** (BE dev, OAuth redirect-ите сочат 5
 - **BE integration тест за WebSockets** живее в `Foundation/` (не `Features/`) редом до
   `RateLimitingTests` — вторият прецедент за cross-cutting инфраструктурни тестове там (§7б.1
   остава в сила: инфраструктурата се тества отделно от slice-овете).
+
+### §7 (продължение 3). Тестово състояние след board 601–621 (деплой вълна, файлово преброено от
+диф-а — ЧИСТО ДОКУМЕНТАЦИОННА задача, без `dotnet test`/`npm test` прогон в тази сесия; следващият
+реален verify гейт да освежи точните бройки по-долу с фактически изпълнения, не само файлове)
+
+- **BE test suite файлове:** unit **непроменени, 26**; integration **53 → 57** (+4, всичките нови
+  под `Foundation/`): `DatabaseMigrationTests` (таск 601 — създава/прилага миграцията срещу празна
+  Testcontainers база, доказва идемпотентност на повторен `MigrateAsync`, модел↔снимка гейт, и
+  unit-стил тестове за `DatabaseStartup.Decide` по среда/CLI команда/липсващ connection string),
+  `Hosting/CookiePolicyTests`, `Hosting/FrontendOriginsTests`, `Hosting/HealthEndpointTests` (таск
+  602 — cross-site/`SameSite` политика по среда, CORS origin-и от конфигурация, `GET /healthz`
+  връща 200 анонимно). Разширен файл: `Foundation/GraphQLWebSocketTests` (регресия срещу
+  forwarded-headers wiring-а от 602, за да не се счупи WebSocket upgrade-ът от таск 501 повторно).
+- **FE test suite файлове:** `80 → 81` (+1: `lib/config.test.ts` — таск 611, покрива
+  `EXPO_PUBLIC_API_URL` override, localhost fallback, и trailing-slash нормализацията).
+- **CI (`.github/workflows/ci.yml`, таск 621) е НОВ, ОТДЕЛЕН от `repos.json` гейт** — виж §6 за
+  разликата между двата. Не сменя нито една бройка по-горе, само ги пуска автоматично на реалния
+  `develop`/`main` push/PR поток.
 
 ## §7а. Амендмънти за фаза v0.1 (board 1-42) — ИСТОРИЯ, всички ЗАТВОРЕНИ
 
@@ -654,6 +743,43 @@ LFG филтри) без нови архитектурни решения изв
    поведение, ако браузърът откаже). Нов `useIsDarkColorScheme()` в `lib/theme.tsx` дава РЕЗОЛВНАТАТА
    (light/dark) тема на нативен web `<input>`, който няма собствен `dark:` className.
 
+## §7а4. Амендмънти за board 601–621 (деплой вълна) — ИСТОРИЯ, всички ЗАТВОРЕНИ
+
+Първата вълна, насочена директно към прод deploy (не фича/полиране). Затваря §9 т.5 и т.11 изцяло.
+⚠ Вълната е мерджната в `develop`, все още НЕ в `main` (виж бележката в началото на файла) — а
+`render.yaml`/CI e2e сочат `main`, тоест реалният деплой и Playwright-по-push стъпват в сила чак
+след `develop`→`main` сливането.
+
+1. **EF migrations, начална baseline (таск 601).** `§3.5` вече НЕ важи — миграции СЪЩЕСТВУВАТ.
+   `DatabaseStartup` (нов `Migrations/` namespace) решава средата вместо флаг: `Production` →
+   `MigrateAsync` (идемпотентно, никога drop/recreate), `Development` → непроменен `EnsureCreated`+
+   seed, тестов хост → изричен `Database:SkipSchemaStartup=true`. Непознат CLI аргумент/липсващ
+   connection string в `Production` е fail-fast (`InvalidOperationException`), не мълчание — иначе
+   `/healthz` (liveness, не db ping) би минал „успешен" деплой, който гърми при първия потребител.
+   Виж „EF migrations в детайли" (§1а) и `Migrations/README.md` за пълната процедура.
+2. **Прод-готов hosting: cross-site бисквитки, forwarded headers, CORS от конфигурация, health
+   endpoint (таск 602).** `Common/Hosting/HostingSetup.AddPartyUpHosting` — виж „Hosting в детайли"
+   (§1а) за пълното описание на двете решения (cookie SameSite/Secure по среда,
+   `UseForwardedHeaders()` с изпразнени `KnownNetworks`/`KnownProxies`, безопасно САМО зад
+   Render-овия прокси). CORS origin-ите минаха от твърд списък към `Frontend:Origins` конфигурация
+   — СЪЩИЯТ списък пази и OAuth `returnUrl` whitelist-а. Нов `GET /healthz` (`Features/Health/`) —
+   liveness БЕЗ db ping, съзнателно (Neon free tier заспива/буди се, readiness с реална база е
+   отделно решение, не взето тук). Затваря §9 т.11 (rate limiter-ът вече вижда честно клиентско IP).
+3. **`backend/Dockerfile` + `render.yaml` (таск 603).** Двустъпков build (SDK restore+publish →
+   aspnet runtime, тестовете НЕ влизат в образа); ENTRYPOINT сглобява `ASPNETCORE_URLS` от Render-овия
+   рънтайм `$PORT` (fallback 8080 за локален `docker run`). Render Blueprint е `plan: free`,
+   `runtime: docker`, `healthCheckPath: /healthz`, `branch: main`; всички секрети (`ConnectionStrings__PartyUp`,
+   OAuth/VAPID ключове, `Frontend__Origins__0`) са `sync: false` — слагат се РЪЧНО в Render dashboard,
+   никога в git.
+4. **FE `API_BASE_URL` от `EXPO_PUBLIC_API_URL` build-time env (таск 611).** Cloudflare Pages build-ът
+   го подава за прод; без него остава днешният `http://localhost:5000` dev fallback. Trailing slash
+   се маха преди конкатенацията (`GRAPHQL_HTTP_URL` и т.н.), за да не се дублира.
+5. **GitHub Actions CI (таск 621).** Нов, ОТДЕЛЕН от Ralph-овия `repos.json` merge гейт (виж §6):
+   frontend (`typecheck`+`test`) и backend (`dotnet test`) на всеки push към `develop`/`main` и PR
+   към `main`; Playwright e2e (`e2e:export` + `test:e2e`) само на push към `main`, СЛЕД като горните
+   две минат — първото място, където Playwright реално се изпълнява автоматично (все още НЕ е в
+   `repos.json`, §9 т.1 остава отворена за ТОЗИ гейт конкретно).
+
 ## §7б. REVIEW КРИТЕРИИ (за finishing review stage — ревюърът оценява diff-а СПРЯМО ТЯХ)
 
 > Обвързващият текст живее в самото репо: `rules/architecture-rules.md` + `rules/i18n-rules.md`.
@@ -722,16 +848,20 @@ LFG филтри) без нови архитектурни решения изв
 - Всеки таск декларира `repo: "partyup"` (полето е задължително, дефолт НЯМА).
 - Verify е общ за монорепото (BE+FE) — счупен FE тест блокира merge на BE таск и обратно. Това е НАРОЧНО (контрактът е общ).
 
-## §9. Известни отворени точки след board 501–517 (кандидати за следваща фаза)
+## §9. Известни отворени точки след board 601–621 (кандидати за следваща фаза)
 
 Не са бъгове — съзнателно оставени. Всяка иска свой таск и решение на ЧОВЕКА. Списъкът е от board
 1–42 и остана непроменен през 101–308; board 401–431 ЗАТВОРИ т.4 (частично) и т.7 (частично) отдолу
 и добави три нови точки (9–11); board 501–517 ЗАТВОРИ т.4 ОСТАНАЛОТО (NotificationBell), но добави
-две нови точки (12–13):
+две нови точки (12–13); **board 601–621 ЗАТВОРИ т.5 (EF migrations) и т.11 (forwarded headers за
+rate limiter-а) ИЗЦЯЛО** и ЧАСТИЧНО облекчи т.1 (виж бележката там) — не добави нови точки.
 
-1. **Playwright не е в verify гейта.** Влизането му иска първо чистене на Metro замърсяването (§6):
-   `frontend/tsconfig.json` + root `nativewind-env.d.ts`. `repos.json` НЕ е пипан нито от board 1–42,
-   нито от следващите.
+1. **Playwright не е в `repos.json` verify гейта** (Ralph-овия merge гейт). Влизането му иска първо
+   чистене на Metro замърсяването (§6): `frontend/tsconfig.json` + root `nativewind-env.d.ts`.
+   `repos.json` НЕ е пипан нито от board 1–42, нито от следващите. **ЧАСТИЧНО облекчено от таск 621:**
+   отделен GitHub Actions гейт (`.github/workflows/ci.yml`) вече ЗАВЪРТА Playwright автоматично на
+   всеки push към `main` (release branch) — виж §6/§7а4.5. Точката остава отворена конкретно за
+   Ralph-овия `repos.json` merge гейт, който продължава да не включва e2e.
 2. **Full-stack e2e** (жив BE + Testcontainers compose) — сегашните 3 спека са неавтентикирани пътеки с един стъб.
 3. **Локализиран `src/app/+not-found.tsx`** — 404 сега е вграденият англоезичен екран на expo-router,
    извън root layout-а и без пазач. Спекът описва ТЕКУЩОТО, не желаното поведение.
@@ -741,7 +871,8 @@ LFG филтри) без нови архитектурни решения изв
    банер след смислено действие) СИ ОСТАВА незакачен. Обиколката (§1в, board 307–308) вече МОЖЕ да
    гради `bell` стъпката около реален изрез — все още не е обновена да го ползва (`tour-content.ts`
    пада на затъмнение без изрез за тази стъпка; закачването е еднодневен таск, чака решение).
-5. **EF migrations** (§3.5) — иска се преди първи прод deploy.
+5. **~~EF migrations (§3.5) — иска се преди първи прод deploy.~~ ЗАТВОРЕНО от таск 601** — виж §3.5
+   и §7а4.1.
 6. **`metro.config.js` tslib резолвърът** беше единствената промяна извън обхвата на таск 42. Ревертът му
    чупи `expo export --platform web` и с това целия e2e — ревюирайте съзнателно.
 7. **`dev-login` (таск 301) вече ИМА защита отвъд `IsDevelopment()` — ЧАСТИЧНО затворена.** Опционален
@@ -760,11 +891,10 @@ LFG филтри) без нови архитектурни решения изв
 10. **Витрината няма infinite scroll** (таск 411 покри само борда) — `tablesShowcase` е вече cursor
     connection (таск 401), но `showcase-screen.tsx` чете само първата страница/`nodes`. `pageInfo`
     съществува в отговора, чака wiring.
-11. **Rate limiter деплой допускането е недовършено.** Класификацията по IP (`RateLimitingSetup.Subject`)
-    разчита на честно `HttpContext.Connection.RemoteIpAddress` — зад reverse proxy това е адресът на
-    proxy-то, не на клиента, докато deploy таскът не включи
-    `ASPNETCORE_FORWARDEDHEADERS_ENABLED`/`UseForwardedHeaders(KnownProxies:...)`. Записано изрично
-    в кода (таск 421) като deploy грижа, не пропуск на този таск.
+11. **~~Rate limiter деплой допускането е недовършено.~~ ЗАТВОРЕНО от таск 602** — `HostingSetup`
+    включва `UseForwardedHeaders()` с изпразнени `KnownNetworks`/`KnownProxies` (безопасно зад
+    Render-овия прокси, виж „Hosting в детайли" §1а и §7а4.2); `RateLimitingSetup.Subject` вече
+    вижда честен клиентски IP.
 12. **Facebook логинът е спрян, не изтрит (таск 513).** За да се върне: добави `'facebook'` обратно
     в `AUTH_PROVIDERS` (`frontend/src/features/auth/oauth.ts`) И конфигурирай
     `Authentication:Facebook:ClientSecret` (backend user-secrets/env) — провайдърът се регистрира
