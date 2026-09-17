@@ -34,6 +34,96 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #611: feat(config): api base url from env with localhost fallback
+
+**Repo:** partyup (frontend)
+**Files:** `frontend/src/lib/config.ts`, `frontend/src/lib/config.test.ts`
+
+`API_BASE_URL` вече чете `EXPO_PUBLIC_API_URL` от env (build-time инжектиран от Expo/Cloudflare Pages), с fallback към `http://localhost:5000` и премахване на trailing slash. `GRAPHQL_HTTP_URL` и `GRAPHQL_WS_URL` се извеждат от нормализираната база (http→ws, https→wss).
+
+TDD: RED тестове с `jest.isolateModules` + env manipulation (6 случая: fallback, env без/със trailing slash, HTTP/WS извеждане), после минимална имплементация. Typecheck и целият unit suite (81 suites / 559 tests) зелени.
+
+Commit: `0d80181`.
+
+
+## Task 602 — feat(hosting): production-ready cookies, forwarded headers, cors from config and a health endpoint
+
+**Repo:** partyup (backend) · **Lane:** be-deploy · **Commit:** `c8b88bf` · **Tests:** 203 unit + 467 integration зелени (+16 нови)
+
+Прод топологията (party-up.pages.dev ↔ partyup.onrender.com) е CROSS-SITE — бисквитената сесия иска изрична конфигурация, без дев опитът да мръдне.
+
+**Какво е направено:**
+- `Common/Hosting/CookieSecurityOptions.cs` (ново): секция `Cookies`, ключ `CrossSite` (`bool?`). `null` = **средата решава** (Production → cross-site).
+- `Common/Hosting/HostingSetup.cs` (ново): `AddPartyUpHosting()` — (1) прилага политиката върху ВСИЧКИ Identity cookie схеми (`Application`/`External`/двете TwoFactor): cross-site → `SameSite=None` + `SecurePolicy=Always` + `HttpOnly`; иначе → изрично днешните `Lax` + `SameAsRequest`; (2) `ForwardedHeadersOptions` = `XForwardedFor | XForwardedProto` с изпразнени `KnownNetworks`/`KnownProxies`.
+- `Program.cs` (3 реда + коментари): `AddPartyUpHosting(builder.Configuration)` **след** `AddIdentityCookies()` (именуваните options конфигуратори важат по ред на регистрация) и `app.UseForwardedHeaders()` като ПЪРВИ middleware — преди CORS, cookie политиката и rate limiter-а по IP.
+- `Features/Health/HealthEndpoints.cs` (нов слайс): `GET /healthz` → `200 {"status":"ok"}` през `IEndpointModule`, **нула редове в Program.cs**. Пътят вече е `healthCheckPath` в `render.yaml` (таск 603).
+- `appsettings.json`: секция `Cookies` + коментари, че всеки ключ се презаписва от env var със `__` вместо `:` (`ConnectionStrings__PartyUp`, `Frontend__Origins__0`, `Authentication__Google__ClientSecret`). JSON конфиг провайдърът на .NET пропуска коментари — проверено с реален `schema export` прогон.
+
+**Обосновки (къде имаше избор):**
+- **Средата, а не „заявката е по HTTPS"** за cookie политиката: дев бекендът върви на `https://localhost:5001` (OAuth redirect-ите сочат там), тоест правило „по схема" щеше да превключи и ДЕВА на `SameSite=None`+`Secure` — а „дев опитът непроменен" е acceptance. Средата отговаря на истинския въпрос (къде живее фронтендът). Конфиг флагът остава за деплой, който не се казва „Production" (preview/Staging), без промяна в кода.
+- **`/healthz` е LIVENESS, БЕЗ db ping**: прод базата е Neon free tier — заспива и се събужда за секунди. Сонда, която чака базата, обявява живото приложение за мъртво точно по време на cold start, а Render реагира с рестарт/провален деплой: проверката би СЪЗДАЛА аварията, която уж наблюдава. Тест `Healthz_DoesNotDependOnTheDatabase` (хост към несъществуващ порт) заковава решението.
+- **`KnownProxies.Clear()`**: Render не обещава стабилен IP на прокси-то си; безопасно е ТОЧНО защото контейнерът е достъпен само през него. Записано в кода: тръгне ли това на VM с публичен порт (Oracle главата), задължително се връща изричен `KnownProxies`, иначе клиент може да излъже IP партицията на rate limiter-а.
+- **CORS/returnUrl не са пипани** — `Frontend:Origins` вече беше единственият източник и за двете. Вместо промяна: характеризационни тестове, които го доказват.
+
+**Тестове** (`Foundation/Hosting/`, 16 нови):
+- `CookiePolicyTests` (9): флаговете по среда през `IOptionsMonitor<CookieAuthenticationOptions>` (Production / Development / Testing / конфиг override и в двете посоки); наблюдаемият `Set-Cookie` в Production носи `samesite=none; secure; httponly`; **`X-Forwarded-Proto: https` → `Secure` бисквитка** в Testing (където политиката е `SameAsRequest`, тоест „Secure" се появява САМО ако forwarded headers-ът е зачетен ПРЕДИ auth-а — гейт за реда в пайплайна); `ForwardedHeaders` покрива и Proto, и For.
+- `HealthEndpointTests` (3): анонимен 200 + тяло; съществува и в Production; оцелява недостъпна база.
+- `FrontendOriginsTests` (4): през **истинска** environment variable `Frontend__Origins__1` (не `UseSetting` — „двойното подчертаване се мапва към двоеточие" е точно частта, която мълчаливо не работи при сгрешено име; вдига се и се връща около един хост): origin-ът влиза в `FrontendOptions`, CORS preflight-ът го пуска с `Allow-Credentials`, чужд origin получава нищо, и СЪЩАТА конфигурация отваря `returnUrl` whitelist-а (`/auth/login/google` → 503 PROVIDER_NOT_CONFIGURED вместо 400 UNSAFE_RETURN_URL).
+- `GraphQLWebSocketTests`: добавена е бележка за деплоя — зад Render прокси-то FE-то говори `wss://`, но прокси-то терминира TLS-а и към контейнера идва обикновен `ws://` upgrade, тоест `app.UseWebSockets()` е достатъчен; променя се само бисквитката, която пътува с handshake-а, и счупен `SameSite=None` вдига WS канала АНОНИМЕН вместо да гръмне.
+
+**Проверено:** `dotnet test backend/PartyUp.slnx` → 670 зелени, 0 червени; `schema export` минава и `contracts/schema.graphql` излиза байт-в-байт същият (health slice-ът е HTTP, не GraphQL).
+
+**Бележка за оператора:** на Render се подават `Frontend__Origins__0=https://party-up.pages.dev` и `ConnectionStrings__PartyUp`; `Cookies__CrossSite` НЕ е нужен, докато `ASPNETCORE_ENVIRONMENT=Production` (Dockerfile-ът го слага).
+
+
+## Task 601 — feat(db): ef migrations with an initial baseline and automatic migrate on production start
+
+**Repo:** partyup (backend) · **Lane:** be-deploy · **Commit:** `420ce3b` · **Tests:** 203 unit + 451 integration зелени
+
+Краят на «DROP SCHEMA» епохата — прод базата вече се вдига и надгражда само с EF migrations.
+
+**Какво е направено:**
+- `PartyUp.Api.csproj`: `Microsoft.EntityFrameworkCore.Design` 10.0.11 с `PrivateAssets="all"` (инструментариум, няма работа в published output-а).
+- `Migrations/PartyUpDbContextFactory.cs`: `IDesignTimeDbContextFactory` с ФИКТИВЕН низ (`Host=localhost;Database=partyup_design_time`, без креденшъли) — генераторът иска само диалекта, никога не се свързва; истинският connection string си остава секрет (§3.2).
+- `Migrations/20260917154047_InitialCreate*`: снимка на ЦЕЛИЯ днешен модел — 23 таблици (17 домейн + Identity), `text[]` колоните, уникалните индекси и съставният ключ на `NotificationPreference`.
+- `Migrations/DatabaseStartup.cs` (ново): `SchemaStartupAction` + `Decide`/`ApplyAsync`. Production → `MigrateAsync` (идемпотентно, рестартът минава без ефект); Development → `EnsureCreatedAsync` + settlements seed, **дословно както беше** (дев опитът непроменен е acceptance); Testing/Staging и всяка CLI команда (`schema export`, `settlements import`) → нищо. Изнесено от `Program.cs` по НЕОБХОДИМОСТ, не по вкус: `WebApplicationFactory` прекъсва Main-а на `builder.Build()`, значи кодът след него никога не върви в тест — прод пътят щеше да е непокрит.
+- `Program.cs`: dev блокът е заменен с един `await DatabaseStartup.ApplyAsync(...)` (същото поведение, същият ред в пайплайна).
+- `Migrations/README.md`: ⚠ правилото за бъдещето — **всеки таск, който пипа `Domain`/`OnModelCreating`, добавя миграция в СЪЩИЯ commit**; плюс таблица „коя среда какво прави" и защо дев/тест светът (без `__EFMigrationsHistory`) не се смесва с миграционния.
+
+**Тестове** (`Foundation/DatabaseMigrationTests.cs`, 13 случая): празна база + `Migrate` → цялата схема + записваема (`text[]` round-trip); втори `Migrate` = no-op; `HasPendingModelChanges` гейт срещу снимката (забравена миграция пада ТУК, не в прода); `ApplyAsync` в Production мигрира, в Development пази EnsureCreated пътя (без история на миграциите), с CLI args не пипа нищо. Всеки тест си вдига СОБСТВЕНА празна база на същия Testcontainers сървър и я дропва след себе си — споделената фикстура е вдигната с `EnsureCreated` и `Migrate` срещу нея би ударил вече съществуващи таблици. `tests/Support` не е пипан.
+
+**Проверено:** `dotnet test backend/PartyUp.slnx` → 654 зелени, 0 червени; `schema export` минава без база и `contracts/schema.graphql` излиза байт-в-байт същият.
+
+**Бележка за оператора:** `dotnet ef` е външен инструмент — `dotnet tool install --global dotnet-ef --version 10.0.11` (в тази итерация инсталиран в temp tool-path извън репото). Командата за следваща миграция е в `Migrations/README.md`.
+
+
+### Task 621: ci: unit suites on every push and e2e on the release branch
+
+- **Repo:** partyup (`D:\Downloads\monk\party-up`, worktree `partyup-task-621`)
+- **Files:** `.github/workflows/ci.yml` (new)
+- **What:** Implemented the 22.08 decision (party-up.md «v0.5 SCOPE» + «ДЕПЛОЙ РЕШЕНИЯ» 17.09): e2e moves out of the merge gate and runs on push instead, gated to the release branch (`main`, which Render/Cloudflare Pages deploy from).
+  - `push` to `develop`/`main` + `pull_request` to `main` → `frontend` job (`npm ci`, `npm run typecheck`, `npm test`) and `backend` job (`dotnet test backend/PartyUp.slnx`, SDK pinned via `actions/setup-dotnet` + `global.json`).
+  - `e2e` job runs only when `github.ref == refs/heads/main` on a `push` event: `npm run e2e:export` → `npx playwright install --with-deps chromium` → `npm run test:e2e` (reuses the existing `playwright.config.ts` / port 45280 static-export setup from task 42, unmodified).
+  - No deploy steps in CI — Render/Pages deploy themselves from `main` per `render.yaml`.
+  - `actions/setup-node` with `cache: npm` and `actions/setup-dotnet` with `global-json-file: global.json` for caching, per notes.
+- **Verify:** YAML parsed successfully via `js-yaml` installed in a scratch temp dir (`/tmp/yamlcheck`, outside the repo/worktree) since a live Actions run can't be exercised from a worktree. `git status --porcelain` confirmed only `.github/workflows/ci.yml` was added — no stray artifacts.
+- **Commit:** `8a13a66` — "ci: unit suites on every push and e2e on the release branch"
+
+
+### Task #603 — feat(deploy): backend dockerfile and render blueprint
+
+**Repo:** partyup (backend/Dockerfile, backend/.dockerignore, render.yaml)
+
+**What was done:**
+- `backend/Dockerfile`: multi-stage build — `mcr.microsoft.com/dotnet/sdk:10.0` restores/publishes only `src/PartyUp.Api` (tests never enter the build context), then `mcr.microsoft.com/dotnet/aspnet:10.0` runs the published output. `ASPNETCORE_ENVIRONMENT=Production` by default. Entry point reads Render's runtime-injected `$PORT` (shell form, `${PORT:-8080}` fallback for local `docker run`) into `ASPNETCORE_URLS` — commented inline explaining the Render Docker-service PORT convention.
+- `backend/.dockerignore`: excludes `bin/`, `obj/`, `tests/`, `.vs/`, `*.user`.
+- `render.yaml`: Blueprint for a `docker` web service, `dockerfilePath: backend/Dockerfile`, `dockerContext: backend`, `healthCheckPath: /healthz` (name only — task 602 owns the actual endpoint, not depended on for merge), `branch: main`. `envVars` list names only (`sync: false`, no values): `ConnectionStrings__PartyUp`, `Authentication__Google__ClientSecret`, `Authentication__Discord__ClientSecret`, `Push__VapidPublicKey`, `Push__VapidPrivateKey`, `Push__VapidSubject`, `Frontend__Origins__0`. `DevLogin` intentionally absent.
+
+**Verification:** `docker build -f backend/Dockerfile backend` succeeded locally (Docker Desktop was available in the worktree). Ran the built image with `-e PORT=8080`; logs confirm `Now listening on: http://[::]:8080` and `Hosting environment: Production`. `/healthz` returns 404 as expected (task 602 not merged yet — only the path name was needed per task notes); this is not a regression introduced by this task.
+
+**Commit:** `5bfb339` — "feat(deploy): backend dockerfile and render blueprint"
+
+
 ## Task #517 — fix(table-create): date and time pickers open on click anywhere in the field
 
 **Repo:** partyup · **Lane:** fe-flows
@@ -3580,6 +3670,11 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
 
 
 

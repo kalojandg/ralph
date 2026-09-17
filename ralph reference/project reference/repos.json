@@ -12,7 +12,7 @@
       "location": "D:\\Downloads\\monk\\party-up",
       "gitRoot": "D:\\Downloads\\monk\\party-up",
       "workSubdir": "",
-      "mainBranch": "main",
+      "mainBranch": "develop",
       "reference": "party-up-structure.md",
       "description": "TTRPG matchmaking (pull модел). МОНОРЕПО: backend/ (.NET 10 + Hot Chocolate GraphQL + EF/Npgsql, слънце PartyUp.slnx — .NET 10 slnx формат!), frontend/ (Expo SDK 57, TS + Expo Router + Apollo), contracts/ (schema.graphql — експорт от BE, FE само чете). Тестове: xUnit + Testcontainers (ИСКА работещ Docker Desktop!), jest-expo/RNTL. Зоните BE/FE/contracts се управляват от lanes, не от отделни repos записи.",
       "verify": [
