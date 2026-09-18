@@ -422,6 +422,7 @@ function Invoke-ReviewStage($tasks, $repoKeys) {
         }
         $repoPass = $false
         $quotaWaited = $false   # one quota wait per repo, so a dead account can't loop forever
+        $transientRetried = $false # one transient-API retry per repo (18.09: connection drop уби cycle 2 -> abort за нищо)
         for ($cycle = 1; $cycle -le ($reviewCycles + 1); $cycle++) {
             $stamp = Get-Date -Format "yyyy-MM-dd_HH-mm"
             $verdictPath = Join-Path $outDir "verdict.json"
@@ -457,6 +458,16 @@ function Invoke-ReviewStage($tasks, $repoKeys) {
                 # when the session window is empty - the reviewer then gets "hit your session
                 # limit", writes no verdict, and the whole finishing (docs/push) aborted for
                 # nothing. Do what the agents do: wait for the reset, then redo THIS cycle.
+                # ПРЕХОДНА API СМЪРТ (кръпка 21.09): 529/connection drop убива ревюера без
+                # verdict — същият клас, който агентският път лекува от месец. Един повторен
+                # опит на СЪЩИЯ cycle след кратко изчакване; втори срив = истински abort.
+                if (-not $transientRetried -and $outText -match 'API Error:\s*(529|5\d\d\s+Overloaded|Connection closed|Overloaded)') {
+                    Write-Host "[~] Repo '$k': reviewer killed by transient API error - waiting 2 min, then retrying cycle $cycle" -ForegroundColor Yellow
+                    Start-Sleep -Seconds 120
+                    $transientRetried = $true
+                    $cycle--
+                    continue
+                }
                 if (-not $quotaWaited -and $outText -match "hit your(?:\s+\w+)?\s+limit") {
                     $resetWait = 60
                     if ($outText -match "resets\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)") {

@@ -34,6 +34,82 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## [2026-09-18 20:59] - Task #705: feat(showcase): infinite scroll over the paginated tables showcase
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** BE-то пейджира `tablesShowcase` като Connection още от v0.5 (задача 401), но витрината четеше само `nodes` от първата страница — след 20-ата маса режеше мълчаливо.
+
+**What was done:**
+- RED: тестове в `showcase-screen.test.tsx` за първа страница с `first`, `fetchMore` долепване без дубли, филтър ресетва пейджирането, «това са всички маси» състоянието и гост изгледа (413).
+- GREEN: `TablesShowcaseDocument` взе `$first`/`$after` + `pageInfo { hasNextPage endCursor }`; `ShowcaseScreen` получи `fetchMore` при скрол до дъното (200px праг) + «зареди още» fallback бутон, дедупликация по `id` в `updateQuery`, loading/край състояния и bg/en ключове — огледално на борда (411), без да се пипа board зоната.
+- CROSS-LANE FIX (verify gate red, ретрай 3): новият задължителен `pageInfo` счупи `showcasePage()` mock-а в `table-listing-cache.test.ts` на таск #704 (merge-нат в develop след като този worktree е разклонен). develop е влят в клона и mock-ът е допълнен с `pageInfo` по конвенцията на `board-cache.test.ts`.
+
+**Verification:**
+- `npm --prefix frontend run typecheck` → clean (върху ИНТЕГРИРАНОТО дърво, с develop вътре)
+- `npm --prefix frontend test` → 577/577 pass, 82 suites
+- `git merge-tree develop HEAD` → clean; develop е ancestor на клона, значи merge-ът на оркестратора не може да конфликтира
+
+**Files modified:**
+- `frontend/src/features/showcase/showcase.gql.ts`
+- `frontend/src/features/showcase/showcase-screen.tsx`
+- `frontend/src/features/showcase/__tests__/showcase-screen.test.tsx`
+- `frontend/src/locales/bg/showcase.json`
+- `frontend/src/locales/en/showcase.json`
+- `frontend/src/features/table-settings/table-listing-cache.test.ts` — ИЗВЪН обхвата, по scope escalation: стар mock на чужд таск (#704), уловен от verify gate-а
+
+**Git commit:** `f1c62f3` и `0d32a78` — `feat(showcase): infinite scroll over the paginated tables showcase` (+ merge комит `3069e8d` на develop в клона)
+
+---
+
+
+### Task #704 - fix(cache): toggling the table listing updates the showcase and my-tables without a refresh
+
+- Added `evictShowcaseListing` in `frontend/src/features/table-settings/table-listing-cache.ts` and wired it into `table-listing-section.tsx`'s `SetTableListing` mutation `update()`, so toggling a table's listing status evicts the stale `tablesShowcase` query cache entry instead of leaving it stale until a manual refresh.
+- New test `table-listing-cache.test.ts` covers the eviction behavior (RED confirmed by temporarily breaking the implementation, then GREEN).
+- Verified the `my-tables` badge already updates automatically via Apollo's normalized `Table:id` entity cache - no extra code needed there.
+- Typecheck clean; full frontend suite green (562/562 tests, 82/82 suites).
+- Retry 1: verify gate reported a failure in an unrelated file (`board-screen.test.tsx`, filter-panel test) after merging with other parallel tasks. Reproduced clean/green in isolation and in the full local suite here - concluded it's a flake from the integration run, not caused by this task. No changes made; original commit `f38a740` stands.
+- Committed as `f38a740`.
+
+
+## Task #702 - feat(shell): guests land on the public showcase instead of the login wall
+
+`AuthGate` now redirects anonymous guests hitting the app root to `/showcase` instead of `/login` (deep protected routes like `chat`, `table/…` are unchanged, and logged-in users at root are unaffected). The login screen also got a discreet link back to the public showcase for guests who land there directly.
+
+**Retry fix:** the first attempt's feature code was correct and fully tested, but it used `const isRoot = segment === ''` where `segment` comes from `useSegments()[0] ?? ''`. On the integration branch, expo-router's generated typed-routes gives `useSegments()` a literal union type that never actually contains an empty string/tuple (the root path's segment type collapses to `never` and vanishes from the union in TS's typed-routes generation), even though the real hook returns `[]` at the true root. That made `segment === ''` (and equally `segments.length === 0` against the narrow tuple type) look statically impossible to TypeScript, tripping `TS2367` under `tsc --noEmit`. Fixed by explicitly typing `segments: string[] = useSegments()`, which widens away the literal tuple/union typing, then deriving `isRoot` from `segments.length === 0` - identical runtime behavior, clean typecheck.
+
+Files touched: `frontend/src/lib/auth-gate.tsx` (+ test), `frontend/src/features/auth/login-screen.tsx` (+ test), `frontend/src/locales/{bg,en}/auth.json`.
+
+Verification: `npm run typecheck` clean; full unit suite green (81 suites / 563 tests, including the `auth-gate` and `login-screen` suites, 22/22). Committed as `284fe24` on top of the original `3328024`.
+
+
+## Task #701 — fix(tabs): auto theme resolves like the content on the static web export
+
+**Repo:** partyup (frontend) · **Lane:** fe-tabs-theme · **Commit:** `bbe60b8`
+
+**Какво:** Режим „Авто" на статичния web export рисуваше ЧЕРЕН таб бар под СВЕТЛО съдържание (прод, 18.09). Резолюцията в `app/(tabs)/_layout.tsx` е изнесена в чистата `resolveTabBarIsDark(themeMode, nativewindScheme)`: изричният режим от ui-store-а печели ВИНАГИ (фиксът от 201 е непокътнат), а „Авто" вече не пита `useColorScheme` на React Native (`Appearance`).
+
+**Диагноза (source, не догадка):** `darkMode: 'class'` → реален билд на CSS-а дава 19 `.dark` селектора и НУЛА `prefers-color-scheme` правила, тоест на web съдържанието потъмнява САМО от класа `dark`, а `colorScheme.set('system')` точно него маха. Затова при „Авто" web-ът е светъл — и барът вече също. На native NativeWind резолвва `dark:` срещу своята схема, затова там „Авто" остава истинско авто и барът я следва. (Препоръчаният в notes hook сам по себе си не стигаше: на web `useColorScheme()` на nativewind при 'system' пада обратно на `Appearance` — виж `react-native-css-interop/runtime/web/color-scheme.js`.)
+
+**Тестове (TDD, RED → GREEN):** `src/__tests__/tabs-icons.test.tsx` — мокът на nativewind стана абонаментен, за да се тества смяна на схемата в движение. Нови/пренаписани: „system" следва NativeWind (докато `Appearance` сочи обратното); светъл бар при „system", когато `Appearance` се разминава; пребоядисване при смяна на системната схема; изричният режим печели; web „system" → светъл; native „system" → системната схема. Token-sync тестовете и двата 201 override теста са непроменени и зелени.
+
+**Верификация:** `npm --prefix frontend run typecheck` ✅ · `npm --prefix frontend test` ✅ 81 suites / 565 теста. Обхват: само двата файла от `files`.
+
+**Отворено (извън обхвата):** същата стара формула стои в `useIsDarkColorScheme` (`src/lib/theme.tsx`, отровен файл). Ако „Авто" трябва РЕАЛНО да следва системата на web, класът `dark` трябва да се слага от media listener при 'system' — продуктово решение, не бъгфикс.
+
+
+### Task 703 — fix(health): healthz answers head requests so any pinger works
+
+- **Repo:** partyup (backend/src/PartyUp.Api/Features/Health/**, backend/tests/PartyUp.IntegrationTests/Features/Health/**, backend/tests/PartyUp.IntegrationTests/Foundation/**)
+- **Problem:** UptimeRobot free tier pings `/healthz` with HEAD (GET is paywalled); `MapGet` only accepted GET, so HEAD got 405 → false "Down" alerts.
+- **Fix:** `HealthEndpoints.Map` now uses `MapMethods(Path, [HttpMethods.Get, HttpMethods.Head], ...)`. The handler checks `HttpMethods.IsHead(context.Request.Method)` and returns `Results.Ok()` (no body) for HEAD, `Results.Ok(new HealthStatus("ok"))` for GET. Note: the naive assumption that ASP.NET Core auto-strips HEAD bodies (true for Kestrel via static files) does NOT hold for the in-memory `TestServer` used by integration tests — confirmed by the RED test failing with the JSON body actually present in a HEAD response, so the handler now does it explicitly for correctness under both hosts.
+- **Tests:** Added `Healthz_HeadRequest_ReturnsOkWithoutBody` to `HealthEndpointTests.cs` — RED confirmed (405) before the fix, GREEN after. Full backend suite green: 203 unit + 478 integration tests, 0 failures.
+- **Commit:** 2c94458 — "fix(health): healthz answers head requests so any pinger works"
+
+
 ## Task #611: feat(config): api base url from env with localhost fallback
 
 **Repo:** partyup (frontend)
@@ -3670,6 +3746,11 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
 
 
 

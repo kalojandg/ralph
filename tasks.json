@@ -1,210 +1,210 @@
 ﻿[
     {
-        "id":  601,
-        "category":  "feature",
+        "id":  701,
+        "category":  "bugfix",
         "repo":  "partyup",
-        "lane":  "be-deploy",
+        "lane":  "fe-tabs-theme",
         "model":  "heavy",
         "dependsOn":  [
 
                       ],
         "files":  [
-                      "backend/src/PartyUp.Api/PartyUp.Api.csproj",
-                      "backend/src/PartyUp.Api/Migrations/**",
-                      "backend/src/PartyUp.Api/Program.cs",
-                      "backend/tests/PartyUp.IntegrationTests/Foundation/**"
+                      "frontend/src/app/(tabs)/_layout.tsx",
+                      "frontend/src/__tests__/tabs-icons.test.tsx"
                   ],
-        "description":  "feat(db): ef migrations with an initial baseline and automatic migrate on production start",
-        "specRef":  "party-up.md «ДЕПЛОЙ РЕШЕНИЯ» (17.09) + Паркинг т.15 + party-up-structure.md §3",
+        "description":  "fix(tabs): auto theme resolves like the content on the static web export",
+        "specRef":  "party-up.md «v0.7 бележки» т.1 + v0.6 таск 201 (предисторията)",
         "tddWorkflow":  true,
-        "notes":  "Краят на «DROP SCHEMA» епохата — прод база НИКОГА не се дропва. (1) Добави Microsoft.EntityFrameworkCore.Design в PartyUp.Api.csproj (версия като другите EF пакети; csproj е отровен файл — тази lane е единствената, която го пипа); (2) генерирай InitialCreate миграция (dotnet ef migrations add InitialCreate — снимка на ЦЕЛИЯ днешен модел; design-time factory ако DbContext-ът иска connection string — направи IDesignTimeDbContextFactory с dummy host, миграцията не се свързва); (3) Program.cs: в Production среда при старт await db.Database.MigrateAsync() (вместо dev EnsureCreated пътя); DEV ПЪТЯТ НЕ СЕ ПИПА — Development си остава EnsureCreated + seed, точно както е (дев опитът непроменен е acceptance!); тестовете (ApiFactory) си остават EnsureCreated — НЕ пипай tests/Support. (4) Тестове: integration — чиста база + MigrateAsync създава пълната схема и е идемпотентен (втори Migrate = no-op); миграционният snapshot съответства на модела (dotnet ef migrations has-pending-model-changes или сравнителен тест — ако командата е неудобна, тест през Migrate + EnsureCreated diff подход по твоя преценка, обоснови). ВАЖНО за бъдещето (запиши в migration папката README бележка): всеки следващ таск, който пипа Domain модела, ДОБАВЯ миграция в същия commit.",
+        "notes":  "БЪГ само на ПРОД (static export), само режим «Авто»: съдържанието е светло, а tab барът черен — изричните Светла/Тъмна работят (201 фиксът е жив). Причина: при themeMode===\u0027system\u0027 201 пита RN useColorScheme() (Appearance), а СЪДЪРЖАНИЕТО се боядисва от NativeWind class механиката — на статичния export + hydration двата детектора се разминават. Фикс: системната резолюция в tabs layout-а да ползва СЪЩИЯ източник като съдържанието — предпочетено: useColorScheme() от \u0027nativewind\u0027 САМО за system случая (тя следва class-а/media, който NativeWind реално прилага; override сценарият от 201 се пази: изричният themeMode от ui-store ПРОДЪЛЖАВА да печели — комбинацията е: explicit ? explicit : nativewindScheme). Алтернатива, ако nativewind hook-ът се окаже пак ненадежден на web: window.matchMedia(\u0027(prefers-color-scheme: dark)\u0027) + change listener, Platform-гардиран. ВНИМАНИЕ: точно този hook беше причината за оригиналния бъг (201) — разликата е, че СЕГА той се ползва САМО при system (когато colorScheme.set(\u0027system\u0027) е активен и NativeWind сам следва media query-то), не при explicit override. Token-sync тестът се пази. Тестове: explicit light/dark печелят независимо от системата; system следва nativewind стойността; смяна на системната схема (мокната) обновява бара. Локално dev НЕ възпроизвежда бъга — доказателството е прод; опиши в summary какво точно е проверено.",
         "steps":  [
                       {
-                          "id":  "601.1",
+                          "id":  "701.1",
                           "phase":  "RECON",
-                          "action":  "Прочети csproj, Program.cs dev пътя, PartyUpDbContext, ApiFactory (EnsureCreated остава там)."
+                          "action":  "Прочети (tabs)/_layout.tsx (201 кода), lib/theme.tsx (ThemeProvider/colorScheme.set), tabs-icons.test.tsx; как nativewind useColorScheme се държи при set(\u0027system\u0027)."
                       },
                       {
-                          "id":  "601.2",
+                          "id":  "701.2",
                           "phase":  "RED",
-                          "action":  "Integration: празна база + Migrate → пълна схема, идемпотентно; Production стартов път вика Migrate (тестова среда с env override). Червени."
+                          "action":  "Тестовете от notes (explicit печели; system следва nativewind схемата; реактивност при смяна). Червени."
                       },
                       {
-                          "id":  "601.3",
+                          "id":  "701.3",
                           "phase":  "GREEN",
-                          "action":  "Design пакет + InitialCreate + прод Migrate път + README бележката."
+                          "action":  "Комбинираната резолюция + запазен token тест."
                       },
                       {
-                          "id":  "601.4",
+                          "id":  "701.4",
                           "phase":  "DONE",
-                          "action":  "dotnet test backend/PartyUp.slnx зелен. Commit с description-а дословно."
+                          "action":  "npm --prefix frontend run typecheck \u0026\u0026 npm --prefix frontend test зелени. Commit с description-а дословно."
                       }
                   ],
         "passes":  true
     },
     {
-        "id":  602,
+        "id":  702,
         "category":  "feature",
         "repo":  "partyup",
-        "lane":  "be-deploy",
-        "model":  "heavy",
+        "lane":  "fe-guest-entry",
+        "model":  "easy",
         "dependsOn":  [
 
                       ],
         "files":  [
-                      "backend/src/PartyUp.Api/Program.cs",
-                      "backend/src/PartyUp.Api/Common/**",
-                      "backend/src/PartyUp.Api/appsettings.json",
+                      "frontend/src/lib/auth-gate.tsx",
+                      "frontend/src/lib/auth-gate.test.tsx",
+                      "frontend/src/app/index.tsx",
+                      "frontend/src/features/auth/**",
+                      "frontend/src/locales/bg/auth.json",
+                      "frontend/src/locales/en/auth.json"
+                  ],
+        "description":  "feat(shell): guests land on the public showcase instead of the login wall",
+        "specRef":  "party-up.md «v0.7 бележки» т.3 (РЕШЕНИЕ: вариант б + а) + v0.5 таск 413 (гост витрината)",
+        "tddWorkflow":  true,
+        "notes":  "Гост, отворил корена (линкът от CV/чат/QR), днес умира на /login без намек, че има публична витрина (/showcase от 413). РЕШЕНИЕТО (двете половини заедно): (а) АНОНИМЕН на корена → Redirect към /showcase вместо към /login — продуктът се показва, ПРЕДИ да иска нещо (acquisition инстинктът); логнатият на корена си отива на борда както днес (нищо не му се променя); дълбоките защитени route-ове (chat, table/… и т.н.) за гост продължават към /login както днес — САМО коренът сменя дестинацията си; (б) login екранът получава дискретен линк «Разгледай отворените маси без вход» → /showcase (за гостите, попаднали на login от защитен route). Имплементация: в AuthGate redirect клона — ако segments сочат корена/index → /showcase, иначе /login (или в app/index.tsx — избери по-чистото място и обоснови). Ключове bg+en в auth.json. Тестове: гост на корен → showcase; гост на /chat → login; логнат на корен → борда; линкът на login навигира.",
+        "steps":  [
+                      {
+                          "id":  "702.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети auth-gate.tsx + теста, app/index.tsx, login-screen.tsx, PUBLIC_SEGMENTS механиката от 413."
+                      },
+                      {
+                          "id":  "702.2",
+                          "phase":  "RED",
+                          "action":  "Четирите теста от notes. Червени."
+                      },
+                      {
+                          "id":  "702.3",
+                          "phase":  "GREEN",
+                          "action":  "Гост коренът + линкът + ключовете."
+                      },
+                      {
+                          "id":  "702.4",
+                          "phase":  "DONE",
+                          "action":  "typecheck + jest зелени. Commit."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  703,
+        "category":  "bugfix",
+        "repo":  "partyup",
+        "lane":  "be-health-head",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
                       "backend/src/PartyUp.Api/Features/Health/**",
+                      "backend/tests/PartyUp.IntegrationTests/Features/Health/**",
                       "backend/tests/PartyUp.IntegrationTests/Foundation/**"
                   ],
-        "description":  "feat(hosting): production-ready cookies, forwarded headers, cors from config and a health endpoint",
-        "specRef":  "party-up.md «ДЕПЛОЙ РЕШЕНИЯ» (17.09): Render + Pages = CROSS-SITE топология",
+        "description":  "fix(health): healthz answers head requests so any pinger works",
+        "specRef":  "party-up.md «v0.7 бележки» т.4 (UptimeRobot free праща HEAD → 405 → фалшив Down, 18.09)",
         "tddWorkflow":  true,
-        "notes":  "Прод топологията е cross-site (party-up.pages.dev ↔ partyup.onrender.com) — бисквитената сесия иска изрична конфигурация, БЕЗ да чупи dev: (1) Identity cookies: в Production (или по-добре: когато заявката е HTTPS/конфиг флаг — избери и обоснови) SameSite=None + SecurePolicy=Always + HttpOnly; в Development си остава днешното (Lax, SameAsRequest) — ДЕВ ОПИТЪТ НЕПРОМЕНЕН; (2) UseForwardedHeaders (XForwardedFor|XForwardedProto) ПРЕДИ auth-а — Render е зад прокси и без това Secure/redirect логиката вижда http; (3) CORS: origins вече се четат от Frontend:Origins конфига ✓ — увери се, че env var override работи (Frontend__Origins__0 стил) и документирай в appsettings коментар; същото за allowed returnUrl валидацията на AuthRedirect (тя ползва FrontendOptions ✓ — провери); (4) health endpoint GET /healthz (нов Features/Health slice с IEndpointModule — БЕЗ Program.cs ред) — 200 + по желание db ping (Render health check-ът ще го ползва); (5) ws bridge-ът: GRAPHQL през wss зад Render proxy работи върху същия UseWebSockets — нищо допълнително, но добави тест-бележка. Тестове: cookie флаговете по среда (WebApplicationFactory с Production env), healthz 200, forwarded proto → Secure cookie издаден. Ти си след 601 в lane-а (Program.cs е споделен между двата — затова една lane).",
+        "notes":  "Уловено на живо: UptimeRobot free мониторите пращат HEAD (GET им е зад paywall), а MapGet endpoint-ът отговаря 405 → фалшив «Down» + мейл паника. Фикс: Health endpoint-ът се map-ва за GET И HEAD (MapMethods(\"/healthz\", [\"GET\", \"HEAD\"], …) — HEAD връща същия статус без тяло, ASP.NET го прави сам при празен body pipeline; увери се, че каквото пише тялото при GET, не гърми при HEAD). Тестове: GET → 200 + {\"status\":\"ok\"}; HEAD → 200 без тяло. Едноредов по същество — не разширявай обхвата.",
         "steps":  [
                       {
-                          "id":  "602.1",
+                          "id":  "703.1",
                           "phase":  "RECON",
-                          "action":  "Прочети Program.cs след 601, FrontendOptions/AuthRedirect, Identity cookie defaults, IEndpointModule патърна."
+                          "action":  "Прочети Health slice-а (602) + къде живеят health тестовете му."
                       },
                       {
-                          "id":  "602.2",
+                          "id":  "703.2",
                           "phase":  "RED",
-                          "action":  "Тестовете от notes (cookie policy per среда; healthz; forwarded headers). Червени."
+                          "action":  "HEAD тестът — червен (405 днес)."
                       },
                       {
-                          "id":  "602.3",
+                          "id":  "703.3",
                           "phase":  "GREEN",
-                          "action":  "Конфигурацията + health slice-ът."
+                          "action":  "MapMethods GET+HEAD."
                       },
                       {
-                          "id":  "602.4",
+                          "id":  "703.4",
                           "phase":  "DONE",
-                          "action":  "dotnet test зелен. Commit."
+                          "action":  "dotnet test backend/PartyUp.slnx зелен. Commit."
                       }
                   ],
         "passes":  true
     },
     {
-        "id":  603,
-        "category":  "feature",
+        "id":  704,
+        "category":  "bugfix",
         "repo":  "partyup",
-        "lane":  "be-docker",
+        "lane":  "fe-listing-cache",
         "model":  "easy",
         "dependsOn":  [
 
                       ],
         "files":  [
-                      "backend/Dockerfile",
-                      "backend/.dockerignore",
-                      "render.yaml"
+                      "frontend/src/features/table-settings/**"
                   ],
-        "description":  "feat(deploy): backend dockerfile and render blueprint",
-        "specRef":  "party-up.md «ДЕПЛОЙ РЕШЕНИЯ» (17.09): Render free за бекенда",
-        "tddWorkflow":  false,
-        "notes":  "САМО НОВИ ФАЙЛОВЕ (безплатен паралелизъм): (1) backend/Dockerfile — multi-stage: sdk:10.0 build/publish на src/PartyUp.Api (Release, БЕЗ тестовете — те не влизат в образа) → aspnet:10.0 runtime; EXPOSE + ASPNETCORE_URLS=http://+:8080 (Render подава PORT env — чети го: ASPNETCORE_URLS от \\$PORT в entrypoint или URLS wildcard; провери Render конвенцията и я КОМЕНТИРАЙ в Dockerfile-а); ASPNETCORE_ENVIRONMENT=Production по подразбиране; (2) backend/.dockerignore: bin, obj, tests; (3) render.yaml blueprint (тип web, docker, dockerfilePath backend/Dockerfile, dockerContext backend, healthCheckPath /healthz, branch: main, envVars списък С ИМЕНА БЕЗ СТОЙНОСТИ — ConnectionStrings__PartyUp, Authentication__Google__ClientSecret, Authentication__Discord__ClientSecret, Push__VapidPublicKey, Push__VapidPrivateKey, Push__VapidSubject, Frontend__Origins__0, DevLogin отсъства нарочно). Секрети НИКЪДЕ във файловете — само имена. Верификация: docker build минава локално АКО docker е наличен (пробвай; ако средата няма docker — synta проверка + бележка в summary, гейтът пази останалото).",
-        "steps":  [
-                      {
-                          "id":  "603.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети csproj (TFM, AssemblyName), launchSettings (портове), healthz пътя от 602-та спека (не зависиш от merge-а ѝ — само името)."
-                      },
-                      {
-                          "id":  "603.2",
-                          "phase":  "RED",
-                          "action":  "Без TDD (инфра файлове) — «червеното» е docker build провалът."
-                      },
-                      {
-                          "id":  "603.3",
-                          "phase":  "GREEN",
-                          "action":  "Dockerfile + dockerignore + render.yaml; docker build локална проверка при възможност."
-                      },
-                      {
-                          "id":  "603.4",
-                          "phase":  "DONE",
-                          "action":  "Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  611,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "fe-env",
-        "model":  "easy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "frontend/src/lib/config.ts",
-                      "frontend/src/lib/config.test.ts"
-                  ],
-        "description":  "feat(config): api base url from env with localhost fallback",
-        "specRef":  "party-up.md «ДЕПЛОЙ РЕШЕНИЯ» (17.09) + сегашния config.ts коментар",
+        "description":  "fix(cache): toggling the table listing updates the showcase and my-tables without a refresh",
+        "specRef":  "party-up.md «v0.7 бележки» т.5 (кеш класът, случай №4 — на живо в прод, 18.09) + v0.6 таск 514 (конвенцията)",
         "tddWorkflow":  true,
-        "notes":  "config.ts е закован на http://localhost:5000. Фикс: API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || \u0027http://localhost:5000\u0027 (EXPO_PUBLIC_* се инжектират при build — точно каквото Cloudflare Pages build-ът ще подаде; БЕЗ trailing slash — нормализирай); GRAPHQL_WS_URL продължава да се извежда (https→wss автоматично през същия replace — провери, че http→ws И https→wss работят). ДЕВ ОПИТЪТ НЕПРОМЕНЕН: без env var всичко е като днес. Запази/обнови коментара на файла (той е добър). Тестове: fallback без env; env със/без trailing slash; wss извеждането от https. НЕ пипай apollo.ts (той чете от config ✓).",
+        "notes":  "Кеш класът, случай №4: обявяваш масата от table-settings («Търсим хора» тогъла / setTableListing) → «Виж масите» не я показва до F5. v0.6 одитът (514) не покри table-settings зоната. Фикс по СЪЩАТА конвенция: мутацията обновява кеша — (1) tablesShowcase Connection-а: добавяне/махане на масата при тогъл (пиши през relayStylePagination merge политиката като 514/411; ако хирургичният insert в Connection е непрактичен — cache.evict на полето + бележка защо, refetch-ът при следващо отваряне го запълва); (2) myTables кешираният запис на масата (listingActive полето — badge-ът от 515 да светва веднага). Мутационният payload вече връща масата с listingActive (515/512 га ползват) — пиши каквото връща. Тестове: тогъл ON → масата е в showcase кеша/евикнат; badge полето обновено; тогъл OFF → обратното; БЕЗ нов мрежов кръг (освен при избран evict — тогава тестът покрива evict-а). Showcase/my-tables фийчърите НЕ се пипат (чужди зони) — кеш кодът живее при мутацията в table-settings.",
         "steps":  [
                       {
-                          "id":  "611.1",
+                          "id":  "704.1",
                           "phase":  "RECON",
-                          "action":  "Прочети config.ts + кой го import-ва (oauth.ts, apollo.ts — само четене); как jest мокват process.env."
+                          "action":  "Прочети table-listing-section + мутацията ѝ, 514-те cache update образци, showcase заявката (само четене) и нейната кеш политика."
                       },
                       {
-                          "id":  "611.2",
+                          "id":  "704.2",
                           "phase":  "RED",
                           "action":  "Тестовете от notes. Червени."
                       },
                       {
-                          "id":  "611.3",
+                          "id":  "704.3",
                           "phase":  "GREEN",
-                          "action":  "Env четенето + нормализацията."
+                          "action":  "Cache update-ът по конвенцията."
                       },
                       {
-                          "id":  "611.4",
+                          "id":  "704.4",
                           "phase":  "DONE",
-                          "action":  "npm --prefix frontend run typecheck \u0026\u0026 npm --prefix frontend test зелени. Commit."
+                          "action":  "typecheck + jest зелени. Commit."
                       }
                   ],
         "passes":  true
     },
     {
-        "id":  621,
+        "id":  705,
         "category":  "feature",
         "repo":  "partyup",
-        "lane":  "ci",
+        "lane":  "fe-showcase-paging",
         "model":  "easy",
         "dependsOn":  [
 
                       ],
         "files":  [
-                      ".github/workflows/**"
+                      "frontend/src/features/showcase/**",
+                      "frontend/src/locales/bg/showcase.json",
+                      "frontend/src/locales/en/showcase.json"
                   ],
-        "description":  "ci: unit suites on every push and e2e on the release branch",
-        "specRef":  "party-up.md «v0.5 SCOPE» (e2e НА PUSH решението, 22.08) + «ДЕПЛОЙ РЕШЕНИЯ» (main = прод)",
-        "tddWorkflow":  false,
-        "notes":  "Решението от 22.08 влиза в сила: e2e НЕ е в merge гейта, а НА PUSH. САМО НОВИ ФАЙЛОВЕ: .github/workflows/ci.yml — (1) on push към develop и main + PR към main: FE (npm ci, typecheck, test) и BE (dotnet test — job-ът иска Postgres: GitHub runners имат Docker → Testcontainers работи out of the box, нищо специално); (2) САМО за main (release пътя): e2e job — npm run e2e:export + npx playwright install chromium + npm run test:e2e срещу статичния export (скриптовете e2e:serve/test:e2e СЪЩЕСТВУВАТ — прочети package.json и playwright.config за порт 45280/webServer уредбата, преизползвай, не преизмисляй). Кеширане: actions/setup-node с npm cache + actions/setup-dotnet (SDK версията от global.json — прочети го!). БЕЗ deploy стъпки в CI (Render/Pages деплойват сами от main — CI е само проверка). Никакви секрети (тестовете не искат). Верификация: YAML lint-ни файла (yq/node парс) — жив run няма как да провериш от worktree.",
+        "description":  "feat(showcase): infinite scroll over the paginated tables showcase",
+        "specRef":  "party-up.md «v0.7 бележки» т.6 + v0.5 таскове 401 (BE Connection) и 411 (образецът от борда)",
+        "tddWorkflow":  true,
+        "notes":  "BE-то пейджира tablesShowcase от v0.5 (Connection, ~20/страница), но витрината чете само първата страница — след 20-ата маса мълчаливо реже. Таск: копирай патърна на 411 (борда) едно към едно: fetchMore при дъно + «зареди още» fallback бутон, relayStylePagination кеш политиката (виж как 411 я реши — same подход, НЕ преизмисляй), филтрите ресетват пейджирането, loading/«това са всички маси» състояния (i18n bg+en). ВАЖНО: работи и за ГОСТ изгледа (413 — анонимен на /showcase пейджира също). board фичата НЕ се пипа (чужда зона) — само огледален код в showcase.",
         "steps":  [
                       {
-                          "id":  "621.1",
+                          "id":  "705.1",
                           "phase":  "RECON",
-                          "action":  "Прочети package.json скриптовете, playwright.config.ts, global.json, репо структурата за пътищата."
+                          "action":  "Прочети showcase-screen + gql документа, 411-та имплементация на борда (образецът), 413 гост пътя."
                       },
                       {
-                          "id":  "621.2",
+                          "id":  "705.2",
                           "phase":  "RED",
-                          "action":  "Без TDD (CI файл) — валидирай YAML синтаксиса машинно."
+                          "action":  "Тестове: първа страница; fetchMore долепя без дубли; филтър ресетва; «край» състоянието; гост изгледът пейджира. Червени."
                       },
                       {
-                          "id":  "621.3",
+                          "id":  "705.3",
                           "phase":  "GREEN",
-                          "action":  "ci.yml по спеката."
+                          "action":  "fetchMore + кеш политика + състояния + ключове."
                       },
                       {
-                          "id":  "621.4",
+                          "id":  "705.4",
                           "phase":  "DONE",
-                          "action":  "YAML валиден. Commit с description-а дословно."
+                          "action":  "typecheck + jest зелени. Commit."
                       }
                   ],
         "passes":  true
