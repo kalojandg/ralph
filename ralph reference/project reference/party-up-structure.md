@@ -5,16 +5,18 @@
 > МАСИТЕ дърпат кандидати). Монорепо, TDD от commit 1. Пълната продуктова
 > спека: `party-up.md` в D:\Downloads\monk\ (секции А–Е + Решения лога).
 > **Състояние: board 1–42 (v0.1), 101–108, 201–213, 301–308, 401–431 и 501–517 са ЗАТВОРЕНИ и
-> мерджнати в `main`; board 601–621 (деплой вълна) е ЗАТВОРЕН и мерджнат в `develop`, все още
-> НЕ е слят в `main`.** Всички таскове са зелени през гейта (fix-цикли по code review след всяко от
-> тези board-ове са си отделни комити, вече слети). Файлът описва РЕАЛНОСТТА след тях, не скелета.
-> **Board 601–621 (деплой вълна) добави:** EF migrations с начална baseline и автоматичен
-> `Database.MigrateAsync()` на `Production` старт (601), прод-готов hosting — cross-site бисквитки,
-> forwarded headers зад Render прокси-то и CORS от конфигурация, плюс `GET /healthz` (602),
-> `backend/Dockerfile` + `render.yaml` Render blueprint (603), FE `API_BASE_URL` от
-> `EXPO_PUBLIC_API_URL` с localhost fallback (611), и GitHub Actions CI — unit/typecheck на всеки
-> push/PR, Playwright e2e само на push към `main` (621). Затваря §9 т.5 (EF migrations) и т.11
-> (forwarded headers за rate limiter-а) изцяло — виж §7а4.
+> мерджнати в `main`; board 601–621 (деплой вълна) и 701–705 (fix/finishing вълна) са ЗАТВОРЕНИ и
+> мерджнати в `develop`, все още НЕ са слети в `main`.** Всички таскове са зелени през гейта
+> (fix-цикли по code review след всяко от тези board-ове са си отделни комити, вече слети). Файлът
+> описва РЕАЛНОСТТА след тях, не скелета.
+> **Board 701–705 добави:** „Авто" тема на таб бара/датапикъра следва NativeWind вместо
+> `Appearance`, за да съвпада с оцветеното от NativeWind съдържание на статичния web export (701);
+> коренният route пуска нерезолвнат гост към `/showcase`, не `/login` (702), с гост линк обратно от
+> `LoginScreen`; `GET/HEAD /healthz`, за да минат безплатните uptime pinger-и, които пращат HEAD
+> (703); евикция на кешираната `tablesShowcase` при `setTableListing`, за да види витрината/„Моите
+> маси" превключването без F5 (704); infinite scroll на витрината — `first`/`after`/`pageInfo` на
+> `TablesShowcaseDocument` + скрол-до-дъното с бутон „Зареди още" fallback (705, огледално на борда
+> от таск 411). Затваря §9 т.10 (витрината няма infinite scroll) изцяло — виж §7а5.
 > Board 101–108 добави desktop/responsive полиране на екраните; 201–213 добави in-app навигация,
 > logout, tab theming, LFG филтри и „Данни и поверителност" (deleteAccount, my-data export);
 > 301–308 добави dev-login за multi-account тестване, живо потвърждение на subscriptions-a,
@@ -61,7 +63,8 @@ party-up/
 │   │   ├── GraphQL/              ← Query.cs (root, само `hello`) + TypeModule.cs
 │   │   │                            ([assembly: Module("PartyUpTypes")] — котвата на генератора)
 │   │   ├── Features/             ← ВСИЧКАТА фича логика, vertical slices (виж §1а), вкл.
-│   │   │                            Health/HealthEndpoints.cs (таск 602 — `GET /healthz`, liveness)
+│   │   │                            Health/HealthEndpoints.cs (таск 602 — `GET /healthz`, liveness;
+│   │   │                            таск 703 добави `HEAD` на СЪЩИЯ path за безплатните uptime pinger-и)
 │   │   ├── Migrations/           ← EF migrations (таск 601): DatabaseStartup.cs (решение среда→
 │   │   │                            действие + изпълнение), PartyUpDbContextFactory.cs (design-time
 │   │   │                            factory за `dotnet ef`), `<timestamp>_InitialCreate.cs` +
@@ -139,7 +142,7 @@ party-up/
 | `MyTables` | (плосък) | `myTables` |
 | `Tables` | CreateTable, Settings, Listing | `createTable`, `updateTableSettings`, `setTableListing` — и двата мутатора носят `admissionKind`/`slotsFirm` от таск 402/412 (walk-in маси, мек лимит на местата — `SlotLimitRules.AllowsSlots`) |
 | `Geo` | Import, Search (таск 403/414) | `settlements(search)` — публичен typeahead reg. на населени места (БЕЗ `[Authorize]`, четe го и анонимната витрина); **няма mutation** — реестърът се пълни само през `settlements import` CLI команда, не през GraphQL |
-| `Lfg` | Board, Publish, Showcase | `lfgBoard(filter, first, after, last, before): LfgBoardConnection`, `tablesShowcase(filter, ...): TablesShowcaseConnection` — cursor connections от таск 401 (`[UsePaging]`, `LfgPagingDefaults`: `DefaultPageSize=20`, `MaxPageSize=50`); `myListing`, `publishMyListing`, `unpublishMyListing`, `table(id)`. **Таск 502:** `tablesShowcase` вече филтрира `AdmissionKind == Open OR ListingActive` (преди: само `Status != Disbanded`) — кандидатска маса без обява е скрита от витрината, отворената (walk-in) маса се вижда ВИНАГИ, независимо от `ListingActive` |
+| `Lfg` | Board, Publish, Showcase | `lfgBoard(filter, first, after, last, before): LfgBoardConnection`, `tablesShowcase(filter, first, after, last, before): TablesShowcaseConnection` — cursor connections от таск 401 (`[UsePaging]`, `LfgPagingDefaults`: `DefaultPageSize=20`, `MaxPageSize=50`); `myListing`, `publishMyListing`, `unpublishMyListing`, `table(id)`. **Таск 502:** `tablesShowcase` вече филтрира `AdmissionKind == Open OR ListingActive` (преди: само `Status != Disbanded`) — кандидатска маса без обява е скрита от витрината, отворената (walk-in) маса се вижда ВИНАГИ, независимо от `ListingActive`. **Таск 705 (FE):** `TablesShowcaseDocument` вече праща `first`/`after` и чете `pageInfo` — infinite scroll на витрината, огледално на борда |
 | `Decisions` | (плосък) | `groupDecision(id)`, `castVote` |
 | `DecisionAlerts` | (плосък) | `staleDecisions`, `snoozeDecision` |
 | `Candidacies` | Pull, Contact, Verdict | `candidacy(id)`, `myTableCandidacies(tableId)`, `myCandidacies` (таск 503 — гледната точка на КАНДИДАТА, филтър по `CandidateUserId` вместо `membership.UserId`; изисква сесия, хвърля GraphQL грешка на анонимен викащ вместо тих празен списък), `pullCandidate`, `openContactChat`, `submitVerdict` |
@@ -175,9 +178,12 @@ endpoint) — класификацията по път живее в `RateLimiti
 за VM с отворен порт). Затваря §9 т.11 (rate limiter-ът вече вижда честно клиентско IP). CORS
 origin-ите (`Frontend:Origins`) вече идват от конфигурация, не от твърд списък — СЪЩИЯТ списък е
 whitelist-ът на OAuth `returnUrl` (`FrontendOptions.IsAllowedReturnUrl`), един източник за две
-защити. `GET /healthz` (`Features/Health/HealthEndpoints.cs`) е СЪЗНАТЕЛНО liveness БЕЗ db ping —
+защити. `GET/HEAD /healthz` (`Features/Health/HealthEndpoints.cs`) е СЪЗНАТЕЛНО liveness БЕЗ db ping —
 Neon free tier заспива/буди се за секунди, сонда която чака базата би обявила живото приложение за
-мъртво точно при cold start.
+мъртво точно при cold start. **Таск 703** добави `HEAD` на СЪЩИЯ path (`MapMethods`, не `MapGet`):
+безплатните uptime мониторъри (UptimeRobot) пращат HEAD, а `MapGet` сам отговаря 405 на HEAD —
+изглежда като „Down", докато GET-ът си е жив. Тялото се пропуска изрично на HEAD (Kestrel го прави
+сам за статични файлове, но не за custom handler-и, а тестовият in-memory сървър изобщо не го прави).
 
 **EF migrations в детайли (таск 601, `Migrations/`):** пълната процедура и таблицата
 среда→действие живеят в `backend/src/PartyUp.Api/Migrations/README.md` — не се дублират тук.
@@ -277,7 +283,7 @@ DecisionStatus, ChatType (+ `AuthProvider` и `PushDelivery` в своите sli
 
 | Маршрут | Екран | Област (`src/features/`) |
 |---|---|---|
-| `/login` | LoginScreen (3 OAuth бутона) | `auth` |
+| `/login` | LoginScreen (3 OAuth бутона), **гост линк към `/showcase`** (таск 702 — `login.guestLink`, за госта, попаднал тук от защитен route, не иска вход) | `auth` |
 | `/settings` | линкнати профили, тема, „Пусни обиколката отново" (таск 308), **секция „Известия"** (таск 431 — статус на push абонамента + тогъли по категория), изход, Данни и поверителност (export/delete) | `auth-linking` (+ `RestartTourSection` от `tour`, `PushSettingsSection` от `push`) |
 | `/board` (таб) | LFG борд с филтри, player cards, publish CTA, **infinite scroll** (таск 411 — скрол до дъното дърпа следваща cursor страница, `pagination.loadMore` е fallback бутонът) | `board` |
 | `/tables` (таб) | моите маси + status badges + **бадж „обявена/необявена"** (таск 515, `TableListingBadge` — отделна заявка `MyTablesListingDocument`, виж §1г бележката в `queries.ts`) + create CTA | `my-tables` |
@@ -290,7 +296,7 @@ DecisionStatus, ChatType (+ `AuthProvider` и `PushDelivery` в своите sli
 | `/candidacy/[id]` | pull flow: решение чат, панел за гласуване, вердикт | `candidacy` |
 | `/candidacies` | «Моите кандидатури» (таск 516) — гледната точка на КАНДИДАТА: маса + статус на церемонията, ред → `/candidacy/[id]`; вход от самоблока на борда, „Кандидатурите ми (N)" (само ЖИВИ, `isOpenCandidacyStatus`) | `candidacy` |
 | `/chat`, `/chat/[chatId]` | списък чатове и нишка с realtime абонамент | `chat` |
-| `/showcase`, `/showcase/[id]` | readonly витрина + състав на партито, **cursor connection** (само първа страница, таск 401 — infinite scroll НЕ стигна до витрината, само до борда), open-табло бадж + `GuestCta` за анонимен посетител (таск 413) | `showcase` |
+| `/showcase`, `/showcase/[id]` | readonly витрина + състав на партито, **cursor connection с infinite scroll** (таск 401/705 — скрол до дъното дърпа следваща страница по `pageInfo.endCursor`, дедуп по `id`, `pagination.loadMore` fallback бутон, огледално на борда), open-табло бадж + `GuestCta` за анонимен посетител (таск 413) | `showcase` |
 | `/notifications` | нотификационен център (неутрални текстове към кандидата) | `contact` |
 | `/refound-invite` | приемане на покана след преосноваване | `lifecycle-actions` |
 
@@ -598,6 +604,21 @@ Party Up ползва: **5001/5000** (BE dev, OAuth redirect-ите сочат 5
   разликата между двата. Не сменя нито една бройка по-горе, само ги пуска автоматично на реалния
   `develop`/`main` push/PR поток.
 
+### §7 (продължение 4). Тестово състояние след board 701–705 (файлово преброено от диф-а — ЧИСТО
+ДОКУМЕНТАЦИОННА задача, без `dotnet test`/`npm test` прогон в тази сесия; следващият реален verify
+гейт да освежи точните бройки по-долу с фактически изпълнения, не само файлове)
+
+- **BE test suite файлове:** unit **непроменени, 26**; integration **непроменени, 57** — таск 703
+  разшири СЪЩЕСТВУВАЩИЯ `Foundation/Hosting/HealthEndpointTests.cs` (нов случай за HEAD), не добави
+  нов файл.
+- **FE test suite файлове:** `81 → 82` (+1 нов: `table-settings/table-listing-cache.test.ts`, таск
+  704). Значително разширени: `tabs-icons.test.tsx` (таск 701 — `resolveTabBarIsDark` unit случаи),
+  `table-form-fields.test.tsx` (таск 701 fix-цикъл — вторият консуматор на темата), `auth-gate.test.tsx`
+  (нов файл в предишно броене, тук разширен за `isRoot`/`segments.length`, таск 702),
+  `login-screen.test.tsx` (гост линк, таск 702), `showcase-screen.test.tsx` (infinite scroll, таск 705).
+- **Няма нови BE/FE тестови зони** (`Foundation/`, `test-utils/` и т.н.) — вълната пипа съществуващи
+  slice-ове/области, не добавя инфраструктура.
+
 ## §7а. Амендмънти за фаза v0.1 (board 1-42) — ИСТОРИЯ, всички ЗАТВОРЕНИ
 
 1. **§3.1 екзепция — ЗАТВОРЕНА.** Таск 2 ръчно написа целевата schema.graphql (contract-first, за да строи FE
@@ -780,6 +801,67 @@ LFG филтри) без нови архитектурни решения изв
    две минат — първото място, където Playwright реално се изпълнява автоматично (все още НЕ е в
    `repos.json`, §9 т.1 остава отворена за ТОЗИ гейт конкретно).
 
+## §7а5. Амендмънти за board 701–705 (fix/finishing вълна) — ИСТОРИЯ, всички ЗАТВОРЕНИ
+
+Мерджната в `develop`, все още НЕ в `main` — на тази вълна ѝ предхожда 601–621 (виж бележката в
+началото на файла). Фиксира два живи прод бъга от 18.09 (таб бар/пикър черен под светла тема на
+static export, гостите удрят login wall) и една инфраструктурна дупка (HEAD на `/healthz`), плюс
+две поведенчески подобрения (cache eviction, витрина infinite scroll).
+
+1. **„Авто" темата на таб бара/пикъра следваше грешния източник (таск 701).** И двата консуматора
+   (`app/(tabs)/_layout.tsx`, `lib/theme.tsx`) четяха `useColorScheme` от React Native
+   (`Appearance`) за режим `'system'`, а СЪДЪРЖАНИЕТО се боядисва от NativeWind. На **web** статичен
+   export това разминаване е фатално: `tailwind.config.js` е `darkMode:'class'`, което не емитва
+   `prefers-color-scheme` CSS правила изобщо — „Авто" съдържание там е ВИНАГИ светло (класът `dark`
+   идва само от изричен `colorScheme.set('dark')`), но `Appearance` продължава да пита ОС-та. На
+   тъмна машина резултатът е тъмен бар/пикър под светло съдържание — точно обратното на очакваното.
+   Поправката е нова чиста функция `resolveTabBarIsDark(themeMode, nativewindScheme)` (изнесена и
+   тествана отделно от компонента): изричен режим ('light'/'dark') печели винаги (таск 201-правилото
+   непокътнато); `'system'` на web връща твърдо `false` (NativeWind никога не носи `dark` клас там
+   без изричен избор); `'system'` на native пита `useColorScheme` от **nativewind**, не от
+   react-native. Огледалната поправка мина и в `useIsDarkColorScheme()` (`lib/theme.tsx`, вторият
+   консуматор — нативния web `<input>` picker). **Не сливай обратно двете правила в едно `||`
+   изречение** — коментарите на място обясняват защо са отделни клонове, не козметика.
+2. **Гостите удряха login wall на корена вместо витрината (таск 702).** `AuthGate` пренасочваше
+   ВСЕКИ нерезолвнат-без-сесия route (вкл. `/`) към `/login`; QR/чат/CV линк, сочещ към корена,
+   showcase acquisition каналът (413) никога не отваряше. Поправка: `isRoot` клон в `AuthGate` —
+   САМО коренът (`segments.length === 0`) пренасочва към `/showcase`, дълбоките защитени route-ове
+   (`chat`, `table/…`) продължават към `/login` непроменени. `LoginScreen` получи обратен гост линк
+   (`login.guestLink`) към `/showcase`, за госта, попаднал ТУК от дълбок защитен route. Код ревю
+   находка cycle 1: първата версия сравняваше `segments[0] === ''`, което е невярно за истински
+   празен масив (`useSegments()` на `/` връща `[]`, не `['']`) — сменено на `segments.length === 0`.
+3. **`/healthz` не отговаряше на HEAD (таск 703).** `MapGet` сам връща 405 на HEAD заявка;
+   безплатните uptime pinger-и (UptimeRobot) пращат HEAD, защото GET им е зад paywall — Render
+   инстанцията изглежда „Down", докато приложението си е живо. Поправка: `MapMethods(Path, [GET,
+   HEAD], ...)`, тялото се пропуска изрично на HEAD (Kestrel го прави сам за статични файлове, НЕ за
+   custom handler-и, а тестовият in-memory сървър изобщо не го прави).
+4. **Кеш класът, случай №4: `setTableListing` не пипаше витрината (таск 704).** Обявяваш/сваляш
+   обявата на маса → «Моите маси» се обновява веднага (badge-ът, таск 515, чете `listingActive` през
+   нормализирания `Table:id`, Apollo го пренаписва сам), но `/showcase` показва старото до F5 —
+   `tablesShowcase` е Connection (списък), не поле на един обект, значи хирургично вписване като
+   `board-cache` (§1г) би трябвало да знае дали новата стойност минава ТЕКУЩИЯ филтър на екрана, който
+   я гледа. Нов модул `features/table-settings/table-listing-cache.ts` (`evictShowcaseListing`) прави
+   вместо това пълна евикция на ВСИЧКИ кеширани `tablesShowcase` страници (`cache.evict` +
+   `cache.gc()`), закачена в `update()` на `SetTableListingDocument`; следващото отваряне на
+   `/showcase` я дърпа наново от сървъра, който преценява правилно. **Разширява §1г патерна:**
+   евикция е легитимна алтернатива на хирургично вписване точно когато видимостта на новия ред
+   зависи от произволна клиентска филтърна комбинация, която кеш кодът не би трябвало да преизчислява.
+5. **Витрината получи infinite scroll (таск 705), огледално на борда (411).** `TablesShowcaseDocument`
+   вече праща `first`/`after` и чете `pageInfo{hasNextPage, endCursor}`; скрол до дъното
+   (`onScroll`, праг 200px) или бутонът „Зареди още" (fallback за платформи/входове, при които
+   скролът не отработва чисто) дърпат следваща страница през `fetchMore` + `updateQuery`, дедуп по
+   `id`. За разлика от борда, витрината пипа `nodes` директно (не `edges`) — няма локален кеш запис,
+   за който `edge.cursor` да е нужен. Нови ключове: `showcase.pagination.{loadMore,loadingMore,end}`
+   (bg/en). **Кросов lane конфликт с 704** (двете лани се докоснаха до `tablesShowcase`-свързан код
+   успоредно): `pageInfo` става ЗАДЪЛЖИТЕЛНО поле на генерирания connection тип → `showcasePage()`
+   мокът в `table-listing-cache.test.ts` (704) остана без него след merge на `develop` — довършено
+   по образеца на `board-cache.test.ts`, отделен последващ комит (0d32a78).
+
+**Код ревю cycle 1 находка (fix-цикъл, отделен комит 4559c79):** `useIsDarkColorScheme` не
+покриваше втория консуматор на 701-формулата (native web `<input>` пикър, таск 517) — добавен
+регресионен тест (`table-form-fields.test.tsx`) + огледалната поправка в `lib/theme.tsx` (виж т.1
+по-горе). Единственият cycle за тази вълна — гейтът мина на първо ревю след него.
+
 ## §7б. REVIEW КРИТЕРИИ (за finishing review stage — ревюърът оценява diff-а СПРЯМО ТЯХ)
 
 > Обвързващият текст живее в самото репо: `rules/architecture-rules.md` + `rules/i18n-rules.md`.
@@ -848,13 +930,14 @@ LFG филтри) без нови архитектурни решения изв
 - Всеки таск декларира `repo: "partyup"` (полето е задължително, дефолт НЯМА).
 - Verify е общ за монорепото (BE+FE) — счупен FE тест блокира merge на BE таск и обратно. Това е НАРОЧНО (контрактът е общ).
 
-## §9. Известни отворени точки след board 601–621 (кандидати за следваща фаза)
+## §9. Известни отворени точки след board 701–705 (кандидати за следваща фаза)
 
 Не са бъгове — съзнателно оставени. Всяка иска свой таск и решение на ЧОВЕКА. Списъкът е от board
 1–42 и остана непроменен през 101–308; board 401–431 ЗАТВОРИ т.4 (частично) и т.7 (частично) отдолу
 и добави три нови точки (9–11); board 501–517 ЗАТВОРИ т.4 ОСТАНАЛОТО (NotificationBell), но добави
-две нови точки (12–13); **board 601–621 ЗАТВОРИ т.5 (EF migrations) и т.11 (forwarded headers за
-rate limiter-а) ИЗЦЯЛО** и ЧАСТИЧНО облекчи т.1 (виж бележката там) — не добави нови точки.
+две нови точки (12–13); board 601–621 ЗАТВОРИ т.5 (EF migrations) и т.11 (forwarded headers за
+rate limiter-а) ИЗЦЯЛО и ЧАСТИЧНО облекчи т.1 (виж бележката там) — не добави нови точки; **board
+701–705 ЗАТВОРИ т.10 (витрината без infinite scroll) ИЗЦЯЛО** — не добави нови точки.
 
 1. **Playwright не е в `repos.json` verify гейта** (Ralph-овия merge гейт). Влизането му иска първо
    чистене на Metro замърсяването (§6): `frontend/tsconfig.json` + root `nativewind-env.d.ts`.
@@ -888,9 +971,7 @@ rate limiter-а) ИЗЦЯЛО** и ЧАСТИЧНО облекчи т.1 (виж 
    старата push история (т.4 по-горе): `CreateTableInput`/`UpdateTableSettingsInput` още нямат
    `settlementId` в контракта, а видим контрол, чийто избор мълчаливо се губи, е UI, който лъже.
    Формите го монтират, когато BE таск добави полето и изборът реално пътува към сървъра.
-10. **Витрината няма infinite scroll** (таск 411 покри само борда) — `tablesShowcase` е вече cursor
-    connection (таск 401), но `showcase-screen.tsx` чете само първата страница/`nodes`. `pageInfo`
-    съществува в отговора, чака wiring.
+10. ~~**Витрината няма infinite scroll**~~ ЗАТВОРЕНО от таск 705 — виж §7а5.1.
 11. **~~Rate limiter деплой допускането е недовършено.~~ ЗАТВОРЕНО от таск 602** — `HostingSetup`
     включва `UseForwardedHeaders()` с изпразнени `KnownNetworks`/`KnownProxies` (безопасно зад
     Render-овия прокси, виж „Hosting в детайли" §1а и §7а4.2); `RateLimitingSetup.Subject` вече
