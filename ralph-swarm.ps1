@@ -156,7 +156,14 @@ if ($config -and $config.PSObject.Properties['models'] -and $config.models) {
     }
 }
 $reviewModel = $modelTiers['review']
+# Docs агентът има СВОЙ tier (config models.docs); липсва -> пада към easy, както беше
+# до 19.09. Изнесен от easy, защото референцията е знанието, с което тръгва всеки
+# следващ board — там качеството се изплаща, а обемът е един агент per репо.
 $docsModel   = $modelTiers['easy']
+if ($config -and $config.PSObject.Properties['models'] -and $config.models -and
+    $config.models.PSObject.Properties['docs'] -and $config.models.docs) {
+    $docsModel = $config.models.docs
+}
 
 function Resolve-TaskModel($task) {
     $m = ''

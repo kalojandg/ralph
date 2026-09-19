@@ -1,212 +1,30 @@
-﻿[
-    {
-        "id":  701,
-        "category":  "bugfix",
-        "repo":  "partyup",
-        "lane":  "fe-tabs-theme",
-        "model":  "heavy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "frontend/src/app/(tabs)/_layout.tsx",
-                      "frontend/src/__tests__/tabs-icons.test.tsx"
-                  ],
-        "description":  "fix(tabs): auto theme resolves like the content on the static web export",
-        "specRef":  "party-up.md «v0.7 бележки» т.1 + v0.6 таск 201 (предисторията)",
-        "tddWorkflow":  true,
-        "notes":  "БЪГ само на ПРОД (static export), само режим «Авто»: съдържанието е светло, а tab барът черен — изричните Светла/Тъмна работят (201 фиксът е жив). Причина: при themeMode===\u0027system\u0027 201 пита RN useColorScheme() (Appearance), а СЪДЪРЖАНИЕТО се боядисва от NativeWind class механиката — на статичния export + hydration двата детектора се разминават. Фикс: системната резолюция в tabs layout-а да ползва СЪЩИЯ източник като съдържанието — предпочетено: useColorScheme() от \u0027nativewind\u0027 САМО за system случая (тя следва class-а/media, който NativeWind реално прилага; override сценарият от 201 се пази: изричният themeMode от ui-store ПРОДЪЛЖАВА да печели — комбинацията е: explicit ? explicit : nativewindScheme). Алтернатива, ако nativewind hook-ът се окаже пак ненадежден на web: window.matchMedia(\u0027(prefers-color-scheme: dark)\u0027) + change listener, Platform-гардиран. ВНИМАНИЕ: точно този hook беше причината за оригиналния бъг (201) — разликата е, че СЕГА той се ползва САМО при system (когато colorScheme.set(\u0027system\u0027) е активен и NativeWind сам следва media query-то), не при explicit override. Token-sync тестът се пази. Тестове: explicit light/dark печелят независимо от системата; system следва nativewind стойността; смяна на системната схема (мокната) обновява бара. Локално dev НЕ възпроизвежда бъга — доказателството е прод; опиши в summary какво точно е проверено.",
-        "steps":  [
-                      {
-                          "id":  "701.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети (tabs)/_layout.tsx (201 кода), lib/theme.tsx (ThemeProvider/colorScheme.set), tabs-icons.test.tsx; как nativewind useColorScheme се държи при set(\u0027system\u0027)."
-                      },
-                      {
-                          "id":  "701.2",
-                          "phase":  "RED",
-                          "action":  "Тестовете от notes (explicit печели; system следва nativewind схемата; реактивност при смяна). Червени."
-                      },
-                      {
-                          "id":  "701.3",
-                          "phase":  "GREEN",
-                          "action":  "Комбинираната резолюция + запазен token тест."
-                      },
-                      {
-                          "id":  "701.4",
-                          "phase":  "DONE",
-                          "action":  "npm --prefix frontend run typecheck \u0026\u0026 npm --prefix frontend test зелени. Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  702,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "fe-guest-entry",
-        "model":  "easy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "frontend/src/lib/auth-gate.tsx",
-                      "frontend/src/lib/auth-gate.test.tsx",
-                      "frontend/src/app/index.tsx",
-                      "frontend/src/features/auth/**",
-                      "frontend/src/locales/bg/auth.json",
-                      "frontend/src/locales/en/auth.json"
-                  ],
-        "description":  "feat(shell): guests land on the public showcase instead of the login wall",
-        "specRef":  "party-up.md «v0.7 бележки» т.3 (РЕШЕНИЕ: вариант б + а) + v0.5 таск 413 (гост витрината)",
-        "tddWorkflow":  true,
-        "notes":  "Гост, отворил корена (линкът от CV/чат/QR), днес умира на /login без намек, че има публична витрина (/showcase от 413). РЕШЕНИЕТО (двете половини заедно): (а) АНОНИМЕН на корена → Redirect към /showcase вместо към /login — продуктът се показва, ПРЕДИ да иска нещо (acquisition инстинктът); логнатият на корена си отива на борда както днес (нищо не му се променя); дълбоките защитени route-ове (chat, table/… и т.н.) за гост продължават към /login както днес — САМО коренът сменя дестинацията си; (б) login екранът получава дискретен линк «Разгледай отворените маси без вход» → /showcase (за гостите, попаднали на login от защитен route). Имплементация: в AuthGate redirect клона — ако segments сочат корена/index → /showcase, иначе /login (или в app/index.tsx — избери по-чистото място и обоснови). Ключове bg+en в auth.json. Тестове: гост на корен → showcase; гост на /chat → login; логнат на корен → борда; линкът на login навигира.",
-        "steps":  [
-                      {
-                          "id":  "702.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети auth-gate.tsx + теста, app/index.tsx, login-screen.tsx, PUBLIC_SEGMENTS механиката от 413."
-                      },
-                      {
-                          "id":  "702.2",
-                          "phase":  "RED",
-                          "action":  "Четирите теста от notes. Червени."
-                      },
-                      {
-                          "id":  "702.3",
-                          "phase":  "GREEN",
-                          "action":  "Гост коренът + линкът + ключовете."
-                      },
-                      {
-                          "id":  "702.4",
-                          "phase":  "DONE",
-                          "action":  "typecheck + jest зелени. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  703,
-        "category":  "bugfix",
-        "repo":  "partyup",
-        "lane":  "be-health-head",
-        "model":  "easy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "backend/src/PartyUp.Api/Features/Health/**",
-                      "backend/tests/PartyUp.IntegrationTests/Features/Health/**",
-                      "backend/tests/PartyUp.IntegrationTests/Foundation/**"
-                  ],
-        "description":  "fix(health): healthz answers head requests so any pinger works",
-        "specRef":  "party-up.md «v0.7 бележки» т.4 (UptimeRobot free праща HEAD → 405 → фалшив Down, 18.09)",
-        "tddWorkflow":  true,
-        "notes":  "Уловено на живо: UptimeRobot free мониторите пращат HEAD (GET им е зад paywall), а MapGet endpoint-ът отговаря 405 → фалшив «Down» + мейл паника. Фикс: Health endpoint-ът се map-ва за GET И HEAD (MapMethods(\"/healthz\", [\"GET\", \"HEAD\"], …) — HEAD връща същия статус без тяло, ASP.NET го прави сам при празен body pipeline; увери се, че каквото пише тялото при GET, не гърми при HEAD). Тестове: GET → 200 + {\"status\":\"ok\"}; HEAD → 200 без тяло. Едноредов по същество — не разширявай обхвата.",
-        "steps":  [
-                      {
-                          "id":  "703.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети Health slice-а (602) + къде живеят health тестовете му."
-                      },
-                      {
-                          "id":  "703.2",
-                          "phase":  "RED",
-                          "action":  "HEAD тестът — червен (405 днес)."
-                      },
-                      {
-                          "id":  "703.3",
-                          "phase":  "GREEN",
-                          "action":  "MapMethods GET+HEAD."
-                      },
-                      {
-                          "id":  "703.4",
-                          "phase":  "DONE",
-                          "action":  "dotnet test backend/PartyUp.slnx зелен. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  704,
-        "category":  "bugfix",
-        "repo":  "partyup",
-        "lane":  "fe-listing-cache",
-        "model":  "easy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "frontend/src/features/table-settings/**"
-                  ],
-        "description":  "fix(cache): toggling the table listing updates the showcase and my-tables without a refresh",
-        "specRef":  "party-up.md «v0.7 бележки» т.5 (кеш класът, случай №4 — на живо в прод, 18.09) + v0.6 таск 514 (конвенцията)",
-        "tddWorkflow":  true,
-        "notes":  "Кеш класът, случай №4: обявяваш масата от table-settings («Търсим хора» тогъла / setTableListing) → «Виж масите» не я показва до F5. v0.6 одитът (514) не покри table-settings зоната. Фикс по СЪЩАТА конвенция: мутацията обновява кеша — (1) tablesShowcase Connection-а: добавяне/махане на масата при тогъл (пиши през relayStylePagination merge политиката като 514/411; ако хирургичният insert в Connection е непрактичен — cache.evict на полето + бележка защо, refetch-ът при следващо отваряне го запълва); (2) myTables кешираният запис на масата (listingActive полето — badge-ът от 515 да светва веднага). Мутационният payload вече връща масата с listingActive (515/512 га ползват) — пиши каквото връща. Тестове: тогъл ON → масата е в showcase кеша/евикнат; badge полето обновено; тогъл OFF → обратното; БЕЗ нов мрежов кръг (освен при избран evict — тогава тестът покрива evict-а). Showcase/my-tables фийчърите НЕ се пипат (чужди зони) — кеш кодът живее при мутацията в table-settings.",
-        "steps":  [
-                      {
-                          "id":  "704.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети table-listing-section + мутацията ѝ, 514-те cache update образци, showcase заявката (само четене) и нейната кеш политика."
-                      },
-                      {
-                          "id":  "704.2",
-                          "phase":  "RED",
-                          "action":  "Тестовете от notes. Червени."
-                      },
-                      {
-                          "id":  "704.3",
-                          "phase":  "GREEN",
-                          "action":  "Cache update-ът по конвенцията."
-                      },
-                      {
-                          "id":  "704.4",
-                          "phase":  "DONE",
-                          "action":  "typecheck + jest зелени. Commit."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  705,
-        "category":  "feature",
-        "repo":  "partyup",
-        "lane":  "fe-showcase-paging",
-        "model":  "easy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "frontend/src/features/showcase/**",
-                      "frontend/src/locales/bg/showcase.json",
-                      "frontend/src/locales/en/showcase.json"
-                  ],
-        "description":  "feat(showcase): infinite scroll over the paginated tables showcase",
-        "specRef":  "party-up.md «v0.7 бележки» т.6 + v0.5 таскове 401 (BE Connection) и 411 (образецът от борда)",
-        "tddWorkflow":  true,
-        "notes":  "BE-то пейджира tablesShowcase от v0.5 (Connection, ~20/страница), но витрината чете само първата страница — след 20-ата маса мълчаливо реже. Таск: копирай патърна на 411 (борда) едно към едно: fetchMore при дъно + «зареди още» fallback бутон, relayStylePagination кеш политиката (виж как 411 я реши — same подход, НЕ преизмисляй), филтрите ресетват пейджирането, loading/«това са всички маси» състояния (i18n bg+en). ВАЖНО: работи и за ГОСТ изгледа (413 — анонимен на /showcase пейджира също). board фичата НЕ се пипа (чужда зона) — само огледален код в showcase.",
-        "steps":  [
-                      {
-                          "id":  "705.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети showcase-screen + gql документа, 411-та имплементация на борда (образецът), 413 гост пътя."
-                      },
-                      {
-                          "id":  "705.2",
-                          "phase":  "RED",
-                          "action":  "Тестове: първа страница; fetchMore долепя без дубли; филтър ресетва; «край» състоянието; гост изгледът пейджира. Червени."
-                      },
-                      {
-                          "id":  "705.3",
-                          "phase":  "GREEN",
-                          "action":  "fetchMore + кеш политика + състояния + ключове."
-                      },
-                      {
-                          "id":  "705.4",
-                          "phase":  "DONE",
-                          "action":  "typecheck + jest зелени. Commit."
-                      }
-                  ],
-        "passes":  true
-    }
+[
+  {
+    "id": 801,
+    "category": "bugfix",
+    "repo": "partyup",
+    "lane": "fe-entry-hotfix",
+    "model": "heavy",
+    "dependsOn": [],
+    "files": [
+      "frontend/src/app/index.tsx",
+      "frontend/src/lib/auth-gate.tsx",
+      "frontend/src/lib/auth-gate.test.tsx",
+      "frontend/src/__tests__/navigation.test.tsx",
+      "frontend/e2e/**",
+      "frontend/src/locales/bg/auth.json",
+      "frontend/src/locales/en/auth.json"
+    ],
+    "description": "fix(shell): resolve the entry route deterministically instead of racing redirects",
+    "specRef": "party-up.md «v0.8 бележки» т.3 (ПРИОРИТЕТ, прод бъг) + v0.7 таск 702 (какво се счупи) + v0.5 таск 413 (гост витрината)",
+    "tddWorkflow": true,
+    "notes": "🔴 ПРОД БЪГ, наблюдаван от потребителя на живо (19.09) и възпроизведен с Playwright срещу party-up.kaloiand.workers.dev: гост отваря корена → БЯЛ ЕКРАН при Back + React #185 (Maximum update depth exceeded); на чист профил headless се мерят 5 НАВИГАЦИИ за едно зареждане (/ → /board → /showcase, всяка дублирана) + React #418 (hydration mismatch) на всяко зареждане. ДВЕ ПРИЧИНИ, които трябва да паднат ЗАЕДНО: (1) app/index.tsx праща БЕЗУСЛОВНО <Redirect href='/board' /> — включително докато сесията е НЕРЕЗОЛВНАТА, затова гостът първо влиза в защитен екран (оттам /board записът в историята, на който Back се връща и цикълът тръгва); (2) AuthGate решава «коренът ли е» по useSegments(), а при първия рендер сегментите са ПРАЗНИ (навигаторът се монтира) → isRoot е истина и за /board: проверено, гост на /board директно завършва на /showcase вместо на /login. ФИКСЪТ (детерминизъм вместо гонка): (а) index.tsx СТАВА решаващият — while (!resolved) не навигира НИКЪДЕ (връща null; покривалото на AuthGate така или иначе е отгоре), после: user → <Redirect href='/board' />, гост → <Redirect href='/showcase' />; (б) AuthGate ПРЕСТАВА да гадае корена: root route-ът е passthrough (index решава), а пазачът пази САМО «защитен route + resolved + без сесия → /login»; PUBLIC_SEGMENTS/SESSION_FREE_SEGMENTS логиката остава. useSession НЕ се пипа (resolved = !loading && !error — мрежова грешка нарочно не е «анонимен»). ПОВЕДЕНЧЕСКА ПРОМЯНА = СПЕКОВЕТЕ В СЪЩИЯ COMMIT (правило 6), и те са ТРИ вида: (i) jest: auth-gate.test + navigation.test — гост на корен → витрина, потребител на корен → борд, гост на защитен route → login, нерезолвната сесия → НУЛА навигации; (ii) e2e/smoke.spec.ts — ФОСИЛЕН СЛЕД v0.6/v0.7 (пада на main, виж «v0.8 бележки» т.1): тест 1 твърди «коренът праща на /login с ТРИТЕ провайдъра» → става «гостът от корена стига до витрината» + отделен тест «/login показва ДВАТА провайдъра» (чети локала, не хардкоднати имена); тест 2 («без грешки в конзолата») минава по новия вход; тест 3 (404) НЕ се пипа; ДОБАВИ тест за Back след гост вход (goBack → нула pageerror, непразен екран) — точно счупеното да има страж; (iii) e2e/support.ts — stubAnonymousSession отговаря на ВСЯКА **/graphql заявка с {data:{me:null}}, а витрината пита tablesShowcase → чужда форма → конзолни грешки: стъбът да разпознава операцията по тялото на заявката (me → null; tablesShowcase → валидна празна Connection: edges:[], pageInfo:{hasNextPage:false,endCursor:null}). ПЛЮС: 513 махна Facebook от AUTH_PROVIDERS, но остави ключа login.providers.facebook в bg/auth.json И en/auth.json — сирашкият ключ ХРАНИ фосила (спекът обхожда локала), чисти се тук. HYDRATION #418: провери дали изчезва след фикса (вероятно е следствие от пре-рендера на редиректващия корен); ако ОСТАНЕ — НЕ разширявай обхвата, опиши в summary като отделна находка. E2E ИЗПЪЛНЕНИЕ: гейтът не пуска e2e — опитай `npm --prefix frontend run test:e2e` (скриптовете e2e:export/e2e:serve съществуват); ако Playwright браузърите липсват в worktree-то, НЕ ги инсталирай (тежко теглене) — отбележи в summary, че e2e е писан, но непуснат, и остави jest доказателството.",
+    "steps": [
+      { "id": "801.1", "phase": "RECON", "action": "Прочети app/index.tsx, lib/auth-gate.tsx (+ теста), features/auth/use-session.ts, e2e/smoke.spec.ts, e2e/support.ts, src/__tests__/navigation.test.tsx, двата auth локала; изясни какво връща useSegments() при първи рендер." },
+      { "id": "801.2", "phase": "RED", "action": "Jest: гост на корен → витрина; потребител на корен → борд; гост на защитен route → login; нерезолвната сесия → нула навигации (мок на Redirect/router). E2E: новите/пренаписаните смоук твърдения + Back тестът. Червени." },
+      { "id": "801.3", "phase": "GREEN", "action": "index.tsx решава, AuthGate спира да гадае корена; стъбът по операция; сирашкият facebook ключ вън." },
+      { "id": "801.4", "phase": "DONE", "action": "npm --prefix frontend run typecheck && npm --prefix frontend test зелени (e2e по възможност). Commit с description-а дословно." }
+    ],
+    "passes": false
+  }
 ]

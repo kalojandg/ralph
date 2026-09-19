@@ -39,7 +39,7 @@ architecture-rules.md + i18n-rules.md; за малък ап — стига кр�
 3. `.gitignore` покрива runtime артефактите (node_modules, playwright-report, test-results, coverage) — verify команди, оставящи untracked файлове, правят следващите merges "dirty-skipped". За артефакти на ЛИЧНИ инструменти в чуждо/екипно репо (gitnexus индекси и подобни): **`.git/info/exclude`** (per-clone, не се комитва, невидим за колегите) или `core.excludesFile` глобално — иначе untracked боклукът им спира merge-овете на ралф.
 4. Env файлове: untracked `.env*` се копират в worktrees от оркестратора — провери, че са в location root-а.
 5. Среда: `claude --version` (моделите в config-а се поддържат?), git версия (worktree-ите искат ≥2.5; `--show-current` иска ≥2.22 — оркестраторът ползва rev-parse), диск за worktrees (~размер на репото × агенти).
-6. `ralph-config.json`: модел (`use_api_key:false` = абонамент), `swarm` бюджети (retries 4/4, escalate_after 2), `verify_timeout_min` спрямо baseline мярката.
+6. `ralph-config.json`: модел (`use_api_key:false` = абонамент), `swarm` бюджети (retries 4/4, escalate_after 2), `verify_timeout_min` спрямо baseline мярката. **Пълният справочник на настройките (всяко поле, дефолт, рецепти за квотна криза/демо/бавна машина): скилът `/ralph-config`** — там се и ДОКУМЕНТИРА всяка нова настройка, в същата промяна.
 
 ## 4. Пренос на нова машина
 1. Клонирай ralph репото (скиловете и референциите пътуват с него — `.claude/skills/` важат автоматично при работа В репото);

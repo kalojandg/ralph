@@ -1,4 +1,5 @@
 {
+  "_config_skill": "Пълният справочник на настройките (какво прави всяка, дефолти, рецепти) е скилът /ralph-config в .claude/skills/ralph-config. ПРАВИЛО: нова/преименувана/изтрита настройка се документира ТАМ в същата промяна — иначе на нова машина тя не съществува.",
   "prompt_file": "PROMPT.md",
   "use_api_key": false,
   "_use_api_key_comment": "false (default) = агентите МАХАТ ANTHROPIC_API_KEY от env-а си и вървят на абонамента (OAuth login). true = ползват API ключа (кредити). Сет-нат ANTHROPIC_API_KEY иначе тихо отвлича билинга към кредити и игнорира Max плана.",
@@ -10,9 +11,10 @@
   "models": {
     "easy": "claude-sonnet-5",
     "heavy": "claude-opus-5",
-    "review": "claude-fable-5"
+    "review": "claude-opus-5",
+    "docs": "claude-sonnet-5"
   },
-  "_models_comment": "MODEL TIERS (19.08): таскът в tasks.json носи \"model\": \"easy\" | \"heavy\" (или конкретен claude-* id); липсва -> heavy. easy = механични/добре сдъвкани таскове (полиш, локали, wiring, готова рецепта в notes); heavy = фичи/диагностика/schema промени; review = finishing review+fix агентите (качествената летва; Fable гори ОТДЕЛНИЯ Fable седмичен джоб на Max плана, не общия). Docs агентът върви на easy. При квотна криза се сменят СТОЙНОСТИТЕ тук (напр. heavy -> claude-sonnet-5, review -> claude-opus-5), board-ът НЕ се пипа. claude_args --model остава за соло режима и като fallback при липсващ models блок.",
+  "_models_comment": "MODEL TIERS (19.08): таскът в tasks.json носи \"model\": \"easy\" | \"heavy\" (или конкретен claude-* id); липсва -> heavy. easy = механични/добре сдъвкани таскове (полиш, локали, wiring, готова рецепта в notes); heavy = фичи/диагностика/schema промени; review = finishing review+fix агентите (качествената летва); docs = finishing docs агентът (липсва -> пада към easy). ⚠ 19.09: review и docs бяха на claude-fable-5 (той гори ОТДЕЛНИЯ Fable седмичен джоб на Max), но джобът свърши -> и двата са на opus. При квотна криза се сменят СТОЙНОСТИТЕ тук (напр. heavy -> claude-sonnet-5, review -> claude-opus-5), board-ът НЕ се пипа. claude_args --model остава за соло режима и като fallback при липсващ models блок.",
   "prerequisite_steps": {
     "enabled": true,
     "steps_file": "prerequisite-steps.md"
