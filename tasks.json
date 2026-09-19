@@ -1,30 +1,46 @@
-[
-  {
-    "id": 801,
-    "category": "bugfix",
-    "repo": "partyup",
-    "lane": "fe-entry-hotfix",
-    "model": "heavy",
-    "dependsOn": [],
-    "files": [
-      "frontend/src/app/index.tsx",
-      "frontend/src/lib/auth-gate.tsx",
-      "frontend/src/lib/auth-gate.test.tsx",
-      "frontend/src/__tests__/navigation.test.tsx",
-      "frontend/e2e/**",
-      "frontend/src/locales/bg/auth.json",
-      "frontend/src/locales/en/auth.json"
-    ],
-    "description": "fix(shell): resolve the entry route deterministically instead of racing redirects",
-    "specRef": "party-up.md «v0.8 бележки» т.3 (ПРИОРИТЕТ, прод бъг) + v0.7 таск 702 (какво се счупи) + v0.5 таск 413 (гост витрината)",
-    "tddWorkflow": true,
-    "notes": "🔴 ПРОД БЪГ, наблюдаван от потребителя на живо (19.09) и възпроизведен с Playwright срещу party-up.kaloiand.workers.dev: гост отваря корена → БЯЛ ЕКРАН при Back + React #185 (Maximum update depth exceeded); на чист профил headless се мерят 5 НАВИГАЦИИ за едно зареждане (/ → /board → /showcase, всяка дублирана) + React #418 (hydration mismatch) на всяко зареждане. ДВЕ ПРИЧИНИ, които трябва да паднат ЗАЕДНО: (1) app/index.tsx праща БЕЗУСЛОВНО <Redirect href='/board' /> — включително докато сесията е НЕРЕЗОЛВНАТА, затова гостът първо влиза в защитен екран (оттам /board записът в историята, на който Back се връща и цикълът тръгва); (2) AuthGate решава «коренът ли е» по useSegments(), а при първия рендер сегментите са ПРАЗНИ (навигаторът се монтира) → isRoot е истина и за /board: проверено, гост на /board директно завършва на /showcase вместо на /login. ФИКСЪТ (детерминизъм вместо гонка): (а) index.tsx СТАВА решаващият — while (!resolved) не навигира НИКЪДЕ (връща null; покривалото на AuthGate така или иначе е отгоре), после: user → <Redirect href='/board' />, гост → <Redirect href='/showcase' />; (б) AuthGate ПРЕСТАВА да гадае корена: root route-ът е passthrough (index решава), а пазачът пази САМО «защитен route + resolved + без сесия → /login»; PUBLIC_SEGMENTS/SESSION_FREE_SEGMENTS логиката остава. useSession НЕ се пипа (resolved = !loading && !error — мрежова грешка нарочно не е «анонимен»). ПОВЕДЕНЧЕСКА ПРОМЯНА = СПЕКОВЕТЕ В СЪЩИЯ COMMIT (правило 6), и те са ТРИ вида: (i) jest: auth-gate.test + navigation.test — гост на корен → витрина, потребител на корен → борд, гост на защитен route → login, нерезолвната сесия → НУЛА навигации; (ii) e2e/smoke.spec.ts — ФОСИЛЕН СЛЕД v0.6/v0.7 (пада на main, виж «v0.8 бележки» т.1): тест 1 твърди «коренът праща на /login с ТРИТЕ провайдъра» → става «гостът от корена стига до витрината» + отделен тест «/login показва ДВАТА провайдъра» (чети локала, не хардкоднати имена); тест 2 («без грешки в конзолата») минава по новия вход; тест 3 (404) НЕ се пипа; ДОБАВИ тест за Back след гост вход (goBack → нула pageerror, непразен екран) — точно счупеното да има страж; (iii) e2e/support.ts — stubAnonymousSession отговаря на ВСЯКА **/graphql заявка с {data:{me:null}}, а витрината пита tablesShowcase → чужда форма → конзолни грешки: стъбът да разпознава операцията по тялото на заявката (me → null; tablesShowcase → валидна празна Connection: edges:[], pageInfo:{hasNextPage:false,endCursor:null}). ПЛЮС: 513 махна Facebook от AUTH_PROVIDERS, но остави ключа login.providers.facebook в bg/auth.json И en/auth.json — сирашкият ключ ХРАНИ фосила (спекът обхожда локала), чисти се тук. HYDRATION #418: провери дали изчезва след фикса (вероятно е следствие от пре-рендера на редиректващия корен); ако ОСТАНЕ — НЕ разширявай обхвата, опиши в summary като отделна находка. E2E ИЗПЪЛНЕНИЕ: гейтът не пуска e2e — опитай `npm --prefix frontend run test:e2e` (скриптовете e2e:export/e2e:serve съществуват); ако Playwright браузърите липсват в worktree-то, НЕ ги инсталирай (тежко теглене) — отбележи в summary, че e2e е писан, но непуснат, и остави jest доказателството.",
-    "steps": [
-      { "id": "801.1", "phase": "RECON", "action": "Прочети app/index.tsx, lib/auth-gate.tsx (+ теста), features/auth/use-session.ts, e2e/smoke.spec.ts, e2e/support.ts, src/__tests__/navigation.test.tsx, двата auth локала; изясни какво връща useSegments() при първи рендер." },
-      { "id": "801.2", "phase": "RED", "action": "Jest: гост на корен → витрина; потребител на корен → борд; гост на защитен route → login; нерезолвната сесия → нула навигации (мок на Redirect/router). E2E: новите/пренаписаните смоук твърдения + Back тестът. Червени." },
-      { "id": "801.3", "phase": "GREEN", "action": "index.tsx решава, AuthGate спира да гадае корена; стъбът по операция; сирашкият facebook ключ вън." },
-      { "id": "801.4", "phase": "DONE", "action": "npm --prefix frontend run typecheck && npm --prefix frontend test зелени (e2e по възможност). Commit с description-а дословно." }
-    ],
-    "passes": false
-  }
-]
+﻿{
+    "id":  801,
+    "category":  "bugfix",
+    "repo":  "partyup",
+    "lane":  "fe-entry-hotfix",
+    "model":  "heavy",
+    "dependsOn":  [
+
+                  ],
+    "files":  [
+                  "frontend/src/app/index.tsx",
+                  "frontend/src/lib/auth-gate.tsx",
+                  "frontend/src/lib/auth-gate.test.tsx",
+                  "frontend/src/__tests__/navigation.test.tsx",
+                  "frontend/e2e/**",
+                  "frontend/src/locales/bg/auth.json",
+                  "frontend/src/locales/en/auth.json"
+              ],
+    "description":  "fix(shell): resolve the entry route deterministically instead of racing redirects",
+    "specRef":  "party-up.md «v0.8 бележки» т.3 (ПРИОРИТЕТ, прод бъг) + v0.7 таск 702 (какво се счупи) + v0.5 таск 413 (гост витрината)",
+    "tddWorkflow":  true,
+    "notes":  "🔴 ПРОД БЪГ, наблюдаван от потребителя на живо (19.09) и възпроизведен с Playwright срещу party-up.kaloiand.workers.dev: гост отваря корена → БЯЛ ЕКРАН при Back + React #185 (Maximum update depth exceeded); на чист профил headless се мерят 5 НАВИГАЦИИ за едно зареждане (/ → /board → /showcase, всяка дублирана) + React #418 (hydration mismatch) на всяко зареждане. ДВЕ ПРИЧИНИ, които трябва да паднат ЗАЕДНО: (1) app/index.tsx праща БЕЗУСЛОВНО \u003cRedirect href=\u0027/board\u0027 /\u003e — включително докато сесията е НЕРЕЗОЛВНАТА, затова гостът първо влиза в защитен екран (оттам /board записът в историята, на който Back се връща и цикълът тръгва); (2) AuthGate решава «коренът ли е» по useSegments(), а при първия рендер сегментите са ПРАЗНИ (навигаторът се монтира) → isRoot е истина и за /board: проверено, гост на /board директно завършва на /showcase вместо на /login. ФИКСЪТ (детерминизъм вместо гонка): (а) index.tsx СТАВА решаващият — while (!resolved) не навигира НИКЪДЕ (връща null; покривалото на AuthGate така или иначе е отгоре), после: user → \u003cRedirect href=\u0027/board\u0027 /\u003e, гост → \u003cRedirect href=\u0027/showcase\u0027 /\u003e; (б) AuthGate ПРЕСТАВА да гадае корена: root route-ът е passthrough (index решава), а пазачът пази САМО «защитен route + resolved + без сесия → /login»; PUBLIC_SEGMENTS/SESSION_FREE_SEGMENTS логиката остава. useSession НЕ се пипа (resolved = !loading \u0026\u0026 !error — мрежова грешка нарочно не е «анонимен»). ПОВЕДЕНЧЕСКА ПРОМЯНА = СПЕКОВЕТЕ В СЪЩИЯ COMMIT (правило 6), и те са ТРИ вида: (i) jest: auth-gate.test + navigation.test — гост на корен → витрина, потребител на корен → борд, гост на защитен route → login, нерезолвната сесия → НУЛА навигации; (ii) e2e/smoke.spec.ts — ФОСИЛЕН СЛЕД v0.6/v0.7 (пада на main, виж «v0.8 бележки» т.1): тест 1 твърди «коренът праща на /login с ТРИТЕ провайдъра» → става «гостът от корена стига до витрината» + отделен тест «/login показва ДВАТА провайдъра» (чети локала, не хардкоднати имена); тест 2 («без грешки в конзолата») минава по новия вход; тест 3 (404) НЕ се пипа; ДОБАВИ тест за Back след гост вход (goBack → нула pageerror, непразен екран) — точно счупеното да има страж; (iii) e2e/support.ts — stubAnonymousSession отговаря на ВСЯКА **/graphql заявка с {data:{me:null}}, а витрината пита tablesShowcase → чужда форма → конзолни грешки: стъбът да разпознава операцията по тялото на заявката (me → null; tablesShowcase → валидна празна Connection: edges:[], pageInfo:{hasNextPage:false,endCursor:null}). ПЛЮС: 513 махна Facebook от AUTH_PROVIDERS, но остави ключа login.providers.facebook в bg/auth.json И en/auth.json — сирашкият ключ ХРАНИ фосила (спекът обхожда локала), чисти се тук. HYDRATION #418: провери дали изчезва след фикса (вероятно е следствие от пре-рендера на редиректващия корен); ако ОСТАНЕ — НЕ разширявай обхвата, опиши в summary като отделна находка. E2E ИЗПЪЛНЕНИЕ: гейтът не пуска e2e — опитай `npm --prefix frontend run test:e2e` (скриптовете e2e:export/e2e:serve съществуват); ако Playwright браузърите липсват в worktree-то, НЕ ги инсталирай (тежко теглене) — отбележи в summary, че e2e е писан, но непуснат, и остави jest доказателството.",
+    "steps":  [
+                  {
+                      "id":  "801.1",
+                      "phase":  "RECON",
+                      "action":  "Прочети app/index.tsx, lib/auth-gate.tsx (+ теста), features/auth/use-session.ts, e2e/smoke.spec.ts, e2e/support.ts, src/__tests__/navigation.test.tsx, двата auth локала; изясни какво връща useSegments() при първи рендер."
+                  },
+                  {
+                      "id":  "801.2",
+                      "phase":  "RED",
+                      "action":  "Jest: гост на корен → витрина; потребител на корен → борд; гост на защитен route → login; нерезолвната сесия → нула навигации (мок на Redirect/router). E2E: новите/пренаписаните смоук твърдения + Back тестът. Червени."
+                  },
+                  {
+                      "id":  "801.3",
+                      "phase":  "GREEN",
+                      "action":  "index.tsx решава, AuthGate спира да гадае корена; стъбът по операция; сирашкият facebook ключ вън."
+                  },
+                  {
+                      "id":  "801.4",
+                      "phase":  "DONE",
+                      "action":  "npm --prefix frontend run typecheck \u0026\u0026 npm --prefix frontend test зелени (e2e по възможност). Commit с description-а дословно."
+                  }
+              ],
+    "passes":  true
+}

@@ -34,6 +34,42 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## [2026-09-19 10:35] - Task #801: fix(shell): resolve the entry route deterministically instead of racing redirects
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** Жив прод бъг (19.09): гост отваря корена → БЯЛ ЕКРАН при Back + React #185, а на чисто зареждане се броят 5 навигации. Две причини наведнъж: (1) `app/index.tsx` праща БЕЗУСЛОВНО `<Redirect href="/board" />` — включително докато сесията е нерезолвната, тоест гостът минава през защитен екран и оставя `/board` в историята; (2) `AuthGate` решаваше «коренът ли е» по `useSegments()`, а при първия рендер сегментите са ПРАЗНИ и за всеки друг route — затова гост на `/board` завършваше на `/showcase` вместо на `/login`.
+
+**What was done:**
+- RECON: `app/index.tsx`, `lib/auth-gate.tsx` (+ спек), `use-session.ts`, `e2e/smoke.spec.ts`, `e2e/support.ts`, `navigation.test.tsx`, двата auth локала; потвърдено емпирично, че `useSegments()` връща `[]` при монтиране на навигатора.
+- RED: `navigation.test.tsx` — три нови твърдения срещу РЕАЛНИЯ рутер (гост от корена → `/showcase`, потребител → `/board`, нерезолвната сесия → нула навигации); `auth-gate.test.tsx` — празни сегменти не пренасочват, а щом сегментите дойдат, гостът на защитен route отива към `/login`. Проверено, че двете ключови падат срещу непроменения `index.tsx` (получено `/board` вместо `/showcase` и `/`).
+- GREEN: `index.tsx` става решаващият — `!resolved` → `null` (покривалото на пазача е отгоре), потребител → `/board`, гост → `/showcase`. `AuthGate` престана да гадае корена: пази САМО «защитен route + resolved + без сесия → `/login`», а празни сегменти пропуска. `PUBLIC_SEGMENTS`/`SESSION_FREE_SEGMENTS` и `useSession` са непипнати.
+- E2E: `e2e/support.ts` — стъбът вече отговаря ПО ОПЕРАЦИЯ (`Me` → null, `TablesShowcase` → валидна празна Connection с `__typename`, `UnreadNotifications` → празен списък, защото камбанката виси в хедъра докато `me` пътува); неочаквана операция получава честна GraphQL грешка вместо чужда форма. `smoke.spec.ts` — фосилният тест 1 разделен на «гостът от корена стига до витрината» + «входът показва активните провайдъри» (чете локала), нов тест за Back след гост вход (нула pageerror + жив екран), тест 3 (404) непипнат.
+- Сирашкият ключ `login.providers.facebook` (останал от таск 513) махнат от bg/auth.json И en/auth.json — той хранеше фосила, защото спекът обхожда локала.
+
+**Verification:**
+- `npm --prefix frontend test` → 82 suites / 582 тест pass
+- `npm --prefix frontend run typecheck` → clean
+- `npm --prefix frontend run test:e2e` → 5/5 pass срещу реалния статичен export (Playwright браузърите бяха налични)
+- HYDRATION #418: изчезва след фикса — смоук тестът «зареждането минава без грешки в конзолата» е зелен по новия вход (нула console.error и нула pageerror).
+
+**Files modified:**
+- frontend/src/app/index.tsx
+- frontend/src/lib/auth-gate.tsx
+- frontend/src/lib/auth-gate.test.tsx
+- frontend/src/__tests__/navigation.test.tsx
+- frontend/e2e/smoke.spec.ts
+- frontend/e2e/support.ts
+- frontend/src/locales/bg/auth.json
+- frontend/src/locales/en/auth.json
+
+**Git commit:** `3342682` — `fix(shell): resolve the entry route deterministically instead of racing redirects`
+
+---
+
+
 ## [2026-09-18 20:59] - Task #705: feat(showcase): infinite scroll over the paginated tables showcase
 
 **Status:** ✅ Complete
@@ -3746,6 +3782,7 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
 
 
 
