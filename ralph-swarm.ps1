@@ -188,6 +188,28 @@ if (-not (Test-Path $tasksFile)) { Write-Host "[X] tasks.json not found" -Foregr
 if (-not (Test-Path $reposFile)) { Write-Host "[X] repos.json not found ($reposFile)" -ForegroundColor Red; exit 1 }
 $reposMap = Get-Content $reposFile -Raw -Encoding UTF8 | ConvertFrom-Json
 
+# PER-MACHINE OVERRIDE (19.09): repos.json носи АБСОЛЮТНИ пътища и пътува през git —
+# на всяка нова машина location/gitRoot се разминават и трябваше ръчно пренаписване
+# (познатият рецидив при всеки пренос). `repos.local.json` до него е GITIGNORE-нат и
+# застъпва само подадените полета, per репо. Липсва -> нищо не се променя.
+$reposLocalFile = Join-Path (Split-Path $reposFile -Parent) "repos.local.json"
+if (Test-Path $reposLocalFile) {
+    $localMap = Get-Content $reposLocalFile -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($localMap -and $localMap.PSObject.Properties['repos']) {
+        foreach ($repoProp in $localMap.repos.PSObject.Properties) {
+            $key = $repoProp.Name
+            if (-not $reposMap.repos.PSObject.Properties[$key]) {
+                Write-Host "[!] repos.local.json: '$key' няма запис в repos.json - пропуснат" -ForegroundColor Yellow
+                continue
+            }
+            foreach ($field in $repoProp.Value.PSObject.Properties) {
+                $reposMap.repos.$key | Add-Member -NotePropertyName $field.Name -NotePropertyValue $field.Value -Force
+            }
+            Write-Host "[i] repos.local.json: '$key' застъпен ($(($repoProp.Value.PSObject.Properties | ForEach-Object { $_.Name }) -join ', '))" -ForegroundColor Cyan
+        }
+    }
+}
+
 foreach ($d in @($claimsDir, $resultsDir, $worktreeRoot, $retryDir)) {
     if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d | Out-Null }
 }

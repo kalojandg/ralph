@@ -6,3 +6,7 @@ logs/
 claims/
 results/
 retry/
+
+# Per-machine override на repos.json (абсолютни пътища) — НЕ влиза в репото:
+# всяка машина има свой. Виж скила /ralph-config.
+ralph reference/project reference/repos.local.json
