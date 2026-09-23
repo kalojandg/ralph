@@ -34,6 +34,74 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #1030 - feat(skills): render the Quick Reference rules as a grouped accordion
+
+**Repo:** combat (monk_combat_app) | **Branch:** ralph/task-1030 | **Commits:** c5eccff, 94116e6
+
+### What was done
+- **RED/GREEN (c5eccff, earlier attempt - kept as is):** `test/e2e/quick-reference.spec.js` with assertions (a)-(d) and `modules/quick-reference.js` filled in: module-level cache over `fetch('quick-reference.json', { cache: 'no-store' })`, a `.section-title mt-14` per section and a `<details class="feat">` per entry with `desc`/`bullets`/`table`/`notes`, `<` escaped exactly like `_buildFeatureHTML`. No latch when `#quickRefRoot` is missing, no state, no new CSS, no listeners beyond native `<details>`.
+- **Gate de-flake (94116e6, this attempt):** the two specs that failed the full gate pass in isolation, so they were load-induced timeouts rather than regressions - neither touches Quick Reference. Under the retry scope escalation:
+  - `test/e2e/critical-path.spec.js` - explicit `{ timeout: 10000 }` on the HP-clamp assertions, matching the convention the file's own `beforeEach` already uses.
+  - `test/e2e/tabs-navigation.spec.js` - the `Stats Tab - Second Level Navigation` `beforeEach` now waits for `#subtab-basicinfo #xpDisplay` to be attached instead of a fixed `waitForTimeout(300)`. `showTab()` calls `showSubTab()` without `await` and the partial is fetched, so under load the fetch could outlive the default 5s budget of the assertions that follow.
+
+### Verification
+- `npx playwright test quick-reference critical-path tabs-navigation skills-features` -> **60 passed, 0 failed (1.1m)**.
+- No dev server left running (nothing LISTENING on 45278 afterwards).
+- Red lines respected: `app.js`, `index.html`, the partials and `quick-reference.json` untouched; `skills-features.spec.js` unchanged and green.
+
+### Notes
+- Out-of-scope files touched (allowed by the retry scope escalation, listed for review): `test/e2e/critical-path.spec.js`, `test/e2e/tabs-navigation.spec.js` - test-only timing changes, no assertion semantics altered.
+- The two previous retries failed only because they blocked on the ~17-minute full gate and never wrote this result file; the full gate is the orchestrator's step.
+
+
+## Task 1010 — refactor(tabs): scope sub-tab navigation per tab and split Skills into Personal and Quick Reference
+
+**Repo:** combat (monk_combat_app) · **Lane:** skills-subtabs · **Commit:** `1411590`
+
+### Какво е направено
+
+**app.js (само в IIFE `tabsInit`):**
+- Нов регистър `SUB_TABS = { stats: {default:'basicinfo'}, skills: {default:'personal'} }`.
+- `subTabHtmlMap` += `personal` → `tabs/skills-personal.html`, `quickref` → `tabs/skills-quickref.html`.
+- `showSubTab(key)` е СКОУПНАТА: взима `panel = #subtab-<key>.closest('.tab')` и скрива/активира само `panel.querySelectorAll('.sub-tab-content' / '.sub-tab-btn')`. Ранно извикване при липсващ елемент → тих `return`, без латч.
+- В `showTab` stats-специфичният блок е заменен с генеричен `SUB_TABS[tabKey]` хук; **else-клонът `hideAllSubTabs()` е махнат** (скриването на самия `.tab` панел е достатъчно) — точно той изпразваше Skills.
+- Per-show рендери в `showSubTab`: `personal` → `renderFeaturesAccordion` + `attachCollapseBtn` (при ВСЯКО показване, не само при първото зареждане); `quickref` → `window.renderQuickReference?.()`. Старият `if (tabKey === 'skills') renderFeaturesAccordion(...)` в `showTab` отпадна.
+- `initStatsSubTabs` → `initSubTabs`: само закача listener-и, не форсира default (това го прави `showTab`). Запазен е alias `window.initStatsSubTabs`; boot-ът вика `initSubTabs`.
+- `hideAllSubTabs(scope)` остава като помощна (приема панел), но вече не се вика при смяна на таб.
+
+**Партиали / модули:**
+- `tabs/skills.html` → само навигация + контейнери (1:1 с `tabs/stats.html`): `Personal` / `Quick Reference`.
+- `tabs/skills-personal.html` — дословно старото съдържание (section-title + `#collapseAllBtn` + `#featuresAccordion`).
+- `tabs/skills-quickref.html` — `Quick Reference` section-title + `#quickRefRoot.acc-root`.
+- `modules/quick-reference.js` — IIFE скелет с `window.renderQuickReference()`; при липсващ root връща без да вдига флаг (урокът от `attachCampaignNpcs`/`attachInventory`). Пълни се от таск 1030.
+- `index.html` — `<script src="modules/quick-reference.js">` при другите модули, преди `app.js`.
+
+**Тестове (TDD, в същия commit):** нов describe `Skills Tab - Second Level Navigation` в `test/e2e/tabs-navigation.spec.js` с петте случая (а)–(д). Пуснати първо ЧЕРВЕНИ (sub-табовете не съществуваха), после зелени.
+
+### Верификация
+- `npx playwright test tabs-navigation skills-features tabs-accordion-regression critical-path` → **61 passed**, като `skills-features.spec.js` НЕ е пипан (основният регресионен сигнал).
+- Допълнителен sweep на всички останали спекове, които докосват sub-табове/Skills (attack-bonuses, cunning-intuition-tooltip, data-loading, derived-values, import-export, levelup-modal, multiclass-levelup, proficiency-toggles, rest-mechanics, short-rest, styles, text-fields, xp-add) → **218 passed**.
+
+### Бележки / научено
+- `#quickRefRoot` е празен `<div>` до таск 1030 → има нулев bounding box, така че `toBeVisible()` върху него е червено по конструкция. Тестът асертва `#subtab-quickref` видим + `#quickRefRoot` attached.
+- Повторното влизане в таб ГО ВРЪЩА на default sub-таба — заварено поведение: `showTab` чисти `active` от всеки `.tab-nav .tab-btn`, а sub-tab пиловете също са `.tab-btn` вътре в `.tab-nav`. Тестът за Stats го документира както е (характеризационно), не го променя.
+
+
+## Task #1020 — feat(data): add quick-reference.json with jumping, conditions, combat actions and cover rules
+
+**Repo:** combat (monk_combat_app) · **Lane:** quickref-data · **Branch:** ralph/task-1020 · **Commit:** 2deeb08
+
+### Какво е направено
+- **RECON:** прочетен изцяло `D:\Downloads\monk\additional.txt` (187 реда) — преброени 2 jumping / 15 conditions / 11 actions / 3 cover записа, съвпада с notes. Прочетен `test/e2e/data-loading.spec.js` като еталон за стил на data спек (fetch през page.evaluate, без UI кликове за чисто data теста).
+- **RED:** нов `test/e2e/quick-reference-data.spec.js` — 6 теста: (a) валиден JSON, 4 секции в правилния ред с точните id/title; (b) брой entries по секция 2/15/11/3; (c) всеки entry има непразен `name` и поне едно от desc/bullets/table; (d) никой desc/bullets елемент не е празен стринг; (e) Exhaustion таблица 6 реда с headers ['Level','Effect']; (f) дословни фрази — Blinded/'automatically fails any ability check that requires sight', Half Cover/'+2 bonus to AC', Three-Quarters Cover/'+5 bonus to AC'. Пуснат самостоятелно → 6 червени (JSON файлът липсва — правилната причина).
+- **GREEN:** създаден `quick-reference.json` точно по контракта от notes: `sections[].{id,title,entries[]}`, всеки entry `{name, desc?, bullets?, table?, notes?}` — опционалните ключове пропуснати където няма съдържание (без празни масиви). Jumping-ите и action абзаците са `desc`; condition-ите (без Exhaustion) са `bullets` (индентираните точки в източника); Exhaustion е изключението — уводен абзац + 4 обяснителни абзаца в `desc` (избран вариант измежду desc/notes от notes-а), таблица 6x2 в `table`; Cover-ите са `desc` с нормализирани имена ('Half Cover'/'Three-Quarters Cover'/'Total Cover'), текстът остана дословен от 'Half cover'/'Three quarters cover'/'Total' в източника.
+- **DONE:** `npx playwright test quick-reference-data data-loading` → **36 passed** (6 нови + 30 регресионни data-loading). Нищо друго в repo-то не е пипано — само двата файла от `files` списъка на таска. Без runtime боклук в commit-а.
+
+### Бележки
+- Таскът е чисто data — app.js/модулите/партиалите не са пипани; рендерирането на quick-reference.json е за таск 1030.
+- Изворният `additional.txt` е ИЗВЪН репото (по абсолютен път), не е копиран/комитнат никъде.
+
+
 ## [2026-09-19 10:35] - Task #801: fix(shell): resolve the entry route deterministically instead of racing redirects
 
 **Status:** ✅ Complete
@@ -3782,6 +3850,9 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
 
 
 
