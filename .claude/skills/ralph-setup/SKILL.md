@@ -1,11 +1,42 @@
 ---
 name: ralph-setup
-description: Bootstrap на нов проект/репо за Ralph swarm — repos.json запис, structure reference, отровен списък, verify команди и предстартовия чеклист (зелен baseline!). Ползвай при закачане на ralph към ново репо или нова машина.
+description: Bootstrap на нов проект/репо за Ralph swarm — GitNexus индекс (разкачен, пуска се пръв), repos.json запис, per-machine repos.local.json, structure reference, отровен списък, verify команди и предстартовия чеклист (зелен baseline!). Ползвай при закачане на ralph към ново репо или нова машина.
 ---
 
 # Ralph Setup — закачане на нов проект
 
 RALPH_ROOT = директорията на ralph репото (тук: `D:\Downloads\monk\ralph`; иначе — намери `ralph-swarm.ps1`). Шаблоните за подражание: съществуващите записи в `project reference/repos.json` и `*-structure.md` файловете там.
+
+## 0. GitNexus индекс — ПУСНИ ГО ПЪРВО, разкачен (върви, докато правиш останалото)
+`analyze` може да отнеме **30+ минути** на голямо репо, а нищо в стъпки 1–3 не го чака. Затова
+е стъпка нула и е РАЗКАЧЕН процес — същият патърн като `finish_index` в оркестратора
+(`ralph-swarm.ps1`, „ONCE, at the very end, FIRE-AND-FORGET"): пускаш го, връщаш се на setup-а,
+готов е някъде докато пишеш structure reference-а.
+
+Редът има значение — **първо изключването, после анализът**, иначе `.gitnexus/` излиза untracked
+и прави следващите merge-ове „dirty-skipped":
+
+```powershell
+# 0.1 веднъж на МАШИНА (не на репо): закача MCP-то към Claude Code
+npx gitnexus setup
+
+# 0.2 ПРЕДИ анализа: артефактът вън от погледа на git
+#     свое репо -> .gitignore;  чуждо/екипно -> .git/info/exclude (per-clone, невидим за колегите)
+Add-Content "<gitRoot>\.git\info\exclude" ".gitnexus/"
+
+# 0.3 разкачено, минимизирано, с лог — и продължаваш напред веднага
+$log = "RALPH_ROOT\logs\gitnexus-setup-<key>-$(Get-Date -Format yyyyMMdd-HHmmss).txt"
+Start-Process powershell.exe -ArgumentList "-NoProfile","-Command", `
+  "`$host.UI.RawUI.WindowTitle = 'GitNexus analyze: <key>'; Set-Location '<location>'; npx gitnexus analyze *> '$log'" `
+  -WindowStyle Minimized
+```
+
+Прозорецът в лентата = още върви; изчезнал = готово (както при finish_index). Проверка: `gitnexus status`.
+Резултат: `.gitnexus/` + `AGENTS.md`/`CLAUDE.md` в корена — **тях ги комитваш** (ралф ги
+преподновява сам след всеки run).
+⚠ Без тази стъпка `finish_index` на ПЪРВИЯ run пада тихо в лога: оркестраторът вика
+`npx --no-install gitnexus analyze` нарочно, за да не инсталира нищо зад гърба ти — но на
+неиндексирано репо това значи „нищо не се случи", без вик.
 
 ## 1. repos.json запис
 Във `RALPH_ROOT/ralph reference/project reference/repos.json` → `repos.<key>`:
@@ -23,6 +54,20 @@ Finishing review stage-ът търси `<repo>/rules/` папка: ако същ
 просто сложи правилата на екипа в `rules/` и ревюто ги прилага out-of-the-box, без ralph
 конфигурация. За нов проект: попитай потребителя дали иска rules/ (за Party Up-мащаб — да:
 architecture-rules.md + i18n-rules.md; за малък ап — стига кратък code-rules.md или нищо).
+
+## 1б. `repos.local.json` — per-machine застъпване (лекът за преноса)
+`repos.json` носи **абсолютни** пътища и пътува през git, затова на всяка нова машина
+`location`/`gitRoot` се разминават — и рецидивът беше ръчно пренаписване при всеки пренос
+(а после конфликт при следващия pull). Затова до него живее **`repos.local.json`**,
+**gitignore-нат**, който застъпва само подадените полета:
+
+```json
+{ "repos": { "partyup": { "location": "C:\\work\\party-up", "gitRoot": "C:\\work\\party-up" } } }
+```
+
+Правила: чете се от `ralph-swarm.ps1` веднага след `repos.json`; **merge е per поле** (каквото не си подал, остава от `repos.json`); липсващият файл значи „нищо не се променя"; ключ, който няма запис в `repos.json`, се ПРОПУСКА с жълто `[!]`, а всяко застъпване се обявява с циан `[i]` при старта — тоест виждаш в конзолата какво е било застъпено, без да гадаеш. Обхватът е ЦЕЛИЯТ запис на репото, не само пътищата: `mainBranch`, `verify`, `commands` също се застъпват, ако машината го иска.
+⚠ Ключът трябва да е ТОЧНО като в `repos.json` (там е `partyup`, не `party-up`) — печатка не гърми, а се пропуска с жълто предупреждение.
+⚠ Соло `ralph.ps1` НЕ чете застъпването — само swarm оркестраторът.
 
 ## 2. Structure reference (`<key>-structure.md`)
 Задължителни секции (виж shared-inventory-structure.md като образец):
@@ -44,8 +89,9 @@ architecture-rules.md + i18n-rules.md; за малък ап — стига кр�
 ## 4. Пренос на нова машина
 1. Клонирай ralph репото (скиловете и референциите пътуват с него — `.claude/skills/` важат автоматично при работа В репото);
 2. За извикване отвсякъде: копирай скиловете на потребителско ниво: `cp -r <RALPH_ROOT>/.claude/skills/* ~/.claude/skills/`;
-3. Пренапиши `repos.json` пътищата за новата машина (location/gitRoot са абсолютни!);
-4. Мини чеклиста от т.3 (нова машина = нова среда = нови изненади: CLI версия, git версия, портове).
+3. **НЕ пипай `repos.json`** — направи `repos.local.json` до него с новите `location`/`gitRoot` (т.1б). Файлът е gitignore-нат, тоест машините не си стъпват по пътищата и следващият pull минава без конфликт;
+4. **GitNexus е per-clone, не пътува** — `.gitnexus/` е изключен от git, значи на новата машина репото е НЕиндексирано, колкото и да е индексирано на старата. Мини т.0 за всяко репо (пусни ги разкачени едно след друго, вървят си паралелно, докато ти правиш т.2/т.3);
+5. Мини чеклиста от т.3 (нова машина = нова среда = нови изненади: CLI версия, git версия, портове).
 
 ## 5. Финал
 Board-ът се пише с `/ralph-plan`. Диагностиката след run — `/ralph-diagnose`.
