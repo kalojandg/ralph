@@ -121,7 +121,7 @@
                           "action":  "npm test — всичко зелено. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  40,
@@ -238,6 +238,6 @@
                           "action":  "npm test — целият пакет зелен. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     }
 ]
