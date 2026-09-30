@@ -110,8 +110,40 @@ escalate прага (escalate_after изгорени fail retry-та — същ�
 
 ### 4. Механика на board-а
 - `tasks.json` = чист JSON масив, редът в масива = ред на изпълнение в lane.
+- **ЗАДЪЛЖИТЕЛНИ ПОЛЕТА на всеки таск** (пълният набор — липсва ли едно, board-ът е тих боклук):
+  `id`, `category`, `repo`, `lane`, `model`, `dependsOn`, `files`, `description`, `specRef`,
+  `tddWorkflow`, `notes`, `steps`, `passes`. Опционално: `verify` (§3), `migrationRef`.
+  - ⚠ **`"passes": false`** — БЕЗ него таскът е НЕВИДИМ: оркестраторът брои `passes -eq $false`
+    (ralph-swarm.ps1), така че board само от нови таскове без полето дава `pendingCount = 0`
+    → „ALL TASKS COMPLETE" / „няма таскове" на празно. Най-тихият възможен провал.
+  - ⚠ **`steps`** — масив `{id: "<taskId>.<n>", phase, action}`, фази `RECON → RED → GREEN → DONE`.
+    PROMPT.md изрично казва на агента да прочете „ВСИЧКИ негови steps"; липсват ли, агентът
+    остава само с notes и импровизира TDD цикъла.
 - ⚠ PowerShell капан при програмно append: пиши с `ConvertTo-Json -InputObject $array -Depth 16` (pipeline-ът `$arr | ConvertTo-Json` увива в `{value, Count}` и чупи board-а).
 - Валидация преди пускане: уникални id-та; всички dependsOn таргети съществуват; всеки таск има repo; files на различни lanes не се пресичат; описанията са commit-готови.
+- **СВЕРИ НАБОРА ПОЛЕТА С ЖИВ ЕТАЛОН, не по памет**: прочети ЦЯЛ съществуващ таск
+  (`tasks.json` или `results/tasks-archive-*.json`) и diff-ни ключовете му срещу своите.
+  ⛔ Не режи изхода с `head -c` / `.slice()` — `steps` и `passes` са ПОСЛЕДНИТЕ полета и
+  падат точно извън отреза (така се роди този параграф).
+- **ДИМЕН ТЕСТ ПРЕДИ СТАРТ** — симулирай прочита на оркестратора в СКРИПТОВ контекст:
+  `powershell.exe -ExecutionPolicy Bypass -NoProfile -File <probe.ps1>`.
+  ⚠⚠ **Пробата ЗАДЪЛЖИТЕЛНО минава през ФУНКЦИЯ с `return`** — точно както го прави
+  оркестраторът (`ralph-swarm.ps1` ред 242). Причината: `ConvertFrom-Json` подава масива
+  като ЕДИН обект по пайплайна, затова `@(... | ConvertFrom-Json)` НА ГОЛО дава `Count = 1`
+  дори при напълно здрав board; `return` от функция обаче РАЗГЪВА масива и викащият
+  получава истинските N. Пробата без функция ражда фалшива диагноза „бордът е счупен"
+  (30.09: изгоря точно така — 6 таска се четяха като 1).
+
+  ```powershell
+  function Get-Tasks { return @(Get-Content 'D:\...\tasks.json' -Raw -Encoding UTF8 | ConvertFrom-Json) }
+  $t = Get-Tasks
+  Write-Host ("taskove: " + $t.Count)
+  Write-Host ("pending: " + @($t | Where-Object { $_.passes -eq $false }).Count)
+  ```
+
+  Очакване: и двете = броя таскове. Ако искаш проверка БЕЗ функция, раздели на два реда
+  (`$parsed = Get-Content ... | ConvertFrom-Json` и после `@($parsed).Count`) — присвояването
+  също разгъва. Пробата пак е през `-File`, не `-Command`.
 
 ### 5. ПОТВЪРЖДЕНИЕ НА ИНТЕГРАЦИОННИЯ КЛОН (задължително, ПРЕДИ старт)
 Оркестраторът merge-ва в `repos.json → mainBranch` на всяко репо — БЕЗ да пита. Затова
