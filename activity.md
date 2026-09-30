@@ -34,6 +34,99 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #50 — docs: say what this repo is and why it exists apart from the app
+
+**Repo:** partyup-landing
+**Files:** README.md (new)
+
+Wrote README.md covering the three required points: what the page is (Party Up's landing
+page on GitHub Pages, linking to the private app), why it's a separate public repo (Pages
+from a private repo needs a paid plan, plus LinkedIn's crawler doesn't reach
+`*.workers.dev` — verified via Post Inspector with a healthy server), and how to work with
+it (`npm test`, `npm run serve` on port 45277, auto-deploy via `.github/workflows/pages.yml`
+on push to main). No file-structure section added, so no risk of drifting from
+partyup-landing-structure.md.
+
+`npm test` — 13/13 passing. Commit `e5453ec`.
+
+
+## [2026-09-30 00:00] - Task #40: style(page): typographic landing layout that holds up on a phone
+
+**Repo:** partyup-landing | **Branch:** ralph/task-40 | **Commit:** b234308
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → GREEN → DONE   (no TDD — visual task, gate is the existing suite staying green)
+
+**What was done:**
+- RECON: read src/styles.css's existing palette skeleton and the selector contract fixed in the task notes (header [data-testid="lang-toggle"]; main.page; section.hero img.logo/h1/p; section.pitch p/p.punchline/p; section.spread h2/p; a.cta; footer).
+- GREEN: rebuilt src/styles.css around that contract — kept and extended the light/dark :root variables (prefers-color-scheme), added a clamp()-based spacing scale, a centered 40rem-max readable column, fluid clamp() type sizes for h1/h2/punchline, a p.punchline accent (bigger + bold, not shouting), a 44x44px minimum lang-toggle target with its own focus-visible ring, a clear a.cta focus-visible outline, env(safe-area-inset-*) padding on header/body/footer, zero horizontal overflow at phone widths, and a prefers-reduced-motion: no-preference guard around the only transition (cta hover). System font stack only, no CDN fonts/framework/background images.
+
+**Verification:**
+- npm ci (node_modules was missing in the fresh worktree) then npm test → 7/7 pass (5 content tests + 2 skeleton tests), confirming nothing outside CSS was touched.
+
+**Files modified:**
+- src/styles.css
+
+**Git commit:** `b234308` — `style(page): typographic landing layout that holds up on a phone`
+
+---
+
+
+## [2026-09-30 19:55] - Task #10: feat(page): full landing markup with share metadata and i18n hooks
+
+**Repo:** partyup-landing | **Branch:** ralph/task-10 | **Commit:** 6915fb0
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** index.html беше walking skeleton — лого, заглавие, едно изречение и бутон. Липсваха мета таговете, които са ПРИЧИНАТА страницата да съществува (краулерът на LinkedIn не стига до `*.workers.dev`), както и i18n куките, върху които тасковете за превода и за смяната на език стъпват. Това е единственият таск, който пипа отровния файл, затова структурата и ключовете се пинват ВЕДНЪЖ.
+
+**What was done:**
+- RECON: прочетох index.html, tests/dom.js (`loadPage`/`readFile`), tests/skeleton.test.js, src/styles.css и `partyup-landing-structure.md` (Файлова карта, жив контракт, ЧЕРВЕНИ ЛИНИИ, отровен списък).
+- RED: добавих `tests/markup.test.js` с шестте твърдения през `loadPage()` — (а) всеки от 11-те ключа на договора присъства като `data-i18n`/`data-i18n-aria`; (б) `og:url`/`og:image` са абсолютни и сочат party-up-landing; (в) `og:image:width=1200` и `height=630`; (г) `twitter:card=summary_large_image`; (д) връзката е `https://party-up.kaloiand.workers.dev/` с `data-testid="app-link"`; (е) логото има alt + width/height. Пуснах npm test → 4 ЧЕРВЕНИ (i18n ключове, og:url/og:image, размери, twitter:card), 2 зелени регресионни (връзка, лого) + skeleton.test.js зелен.
+- GREEN: разширих index.html — глава с description, пълен og набор (type/site_name/title/description/url/image/image:width/image:height/image:alt) с АБСОЛЮТНИ URL-и, twitter картичката, favicon, stylesheet и `<script type="module" src="src/i18n.js">`; тяло с `header` + `button[data-testid="lang-toggle"][data-i18n-aria="lang.toggle"]` със `span[data-i18n="lang.short"]`, `main.page` със секциите hero / pitch / spread, CTA-то и `footer`. Българският текст е в разметката (език по подразбиране → страницата е четима и без скрипта); `pitch.punchline` остава на английски нарочно.
+
+**Verification:**
+- `npm test` (node --test + jsdom) → 8/8 pass (markup.test.js 6/6, skeleton.test.js 2/2 — непипнат)
+- Червени линии: нула build стъпка, нула фреймуърк, нула външни скриптове/шрифтове; `assets/og.png` непипнат; адресът на приложението непроменен; `package.json` и `.github/workflows/pages.yml` непипнати.
+
+**Files modified:**
+- index.html
+- tests/markup.test.js (нов)
+
+**Git commit:** `6915fb0` — `feat(page): full landing markup with share metadata and i18n hooks`
+
+---
+
+
+## [2026-09-30 00:00] - Task #20: feat(content): the two language files behind the landing copy
+
+**Repo:** partyup-landing | **Branch:** ralph/task-20 | **Commit:** b55e121
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+- RECON: read the i18n key contract in the task notes, tests/dom.js (readFile helper), and index.html for tone.
+- RED: wrote tests/content.test.js with 5 assertions — matching key sets across bg/en, no empty values, all contract keys present, pitch.punchline identical, hero.title === "Party Up". Ran npm test — all 5 new tests failed (ENOENT, files didn't exist yet); tests/skeleton.test.js stayed green.
+- GREEN: wrote src/content.bg.json and src/content.en.json — flat dot-key JSON, all 11 contract keys (hero.title, hero.tagline, pitch.question, pitch.punchline, pitch.body, spread.title, spread.body, cta.open, lang.toggle, lang.short, footer.madeWith), restrained tone per the brief, pitch.punchline kept in English in both files, lang.short is "EN" in bg and "БГ" in en.
+
+**Verification:**
+- npm test → 7/7 pass (5 new content tests + 2 existing skeleton tests)
+
+**Files modified:**
+- src/content.bg.json
+- src/content.en.json
+- tests/content.test.js
+
+**Git commit:** `b55e121` — `feat(content): the two language files behind the landing copy`
+
+---
+
+
 ## Task #1030 - feat(skills): render the Quick Reference rules as a grouped accordion
 
 **Repo:** combat (monk_combat_app) | **Branch:** ralph/task-1030 | **Commits:** c5eccff, 94116e6
@@ -3850,6 +3943,10 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
 
 
 

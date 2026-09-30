@@ -7,7 +7,7 @@ REM   maxTasks - stop after N tasks (default 0 = run until done/blocked)
 setlocal
 set AGENTS=%1
 set MAXTASKS=%2
-if "%AGENTS%"=="" set AGENTS=3
+if "%AGENTS%"=="" set AGENTS=0
 if "%MAXTASKS%"=="" set MAXTASKS=0
 
 echo.

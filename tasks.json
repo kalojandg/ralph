@@ -1,233 +1,243 @@
 ﻿[
-  {
-    "id": 10,
-    "category": "feature",
-    "repo": "partyup-landing",
-    "lane": "markup",
-    "model": "heavy",
-    "dependsOn": [],
-    "files": [
-      "index.html",
-      "tests/markup.test.js"
-    ],
-    "description": "feat(page): full landing markup with share metadata and i18n hooks",
-    "specRef": "partyup-landing-structure.md «Файлова карта» + «Как работи (жив контракт)» + «ЧЕРВЕНИ ЛИНИИ»",
-    "tddWorkflow": true,
-    "notes": "СКЕЛЕТЕН ТАСК — той е ЕДИНСТВЕНИЯТ, който пипа index.html (отровният файл: цялата\nразметка е в него). Пинва структурата и мета таговете ВЕДНЪЖ, за да могат стиловете,\nпреводите и i18n логиката да вървят паралелно след това, без да се бият по файл.\n\nЗАЩО СЪЩЕСТВУВА СТРАНИЦАТА (контекст, който агентът няма как да знае): краулерът на\nLinkedIn не стига до `*.workers.dev` — проверено два пъти през Post Inspector при напълно\nздрав сървър (200 на всичко, включително с LinkedInBot User-Agent). Тази страница е\nдостижимият адрес, който носи og таговете и праща човека към приложението. Тоест мета\nтаговете НЕ са украса, а причината за съществуване.\n\nСЕГАШНО СЪСТОЯНИЕ: index.html е walking skeleton — лого, заглавие, едно изречение, бутон\nс data-testid=\"app-link\". Разширяваш го, не го пренаписваш от нула.\n\nСТРУКТУРА, която трябва да се получи (семантичен HTML, без div супа):\n  <head>: charset, viewport (с viewport-fit=cover), title, description,\n          og:type/site_name/title/description/url/image/image:width/image:height/image:alt,\n          twitter:card=summary_large_image + twitter:title/description/image,\n          link rel=icon, link rel=stylesheet href=\"src/styles.css\",\n          script type=\"module\" src=\"src/i18n.js\" (defer по подразбиране при module)\n  <body>:\n    header с бутона за език: <button data-testid=\"lang-toggle\" data-i18n-aria=\"lang.toggle\">\n                             със <span data-i18n=\"lang.short\">\n    main.page:\n      section.hero    — img логото (assets/logo.png, alt, width/height за да не скача),\n                        h1 data-i18n=\"hero.title\", p data-i18n=\"hero.tagline\"\n      section.pitch   — p data-i18n=\"pitch.question\",\n                        p.punchline data-i18n=\"pitch.punchline\",\n                        p data-i18n=\"pitch.body\"\n      section.spread  — h2 data-i18n=\"spread.title\", p data-i18n=\"spread.body\"\n      a.cta           — data-testid=\"app-link\", href=\"https://party-up.kaloiand.workers.dev/\",\n                        вътре <span data-i18n=\"cta.open\">\n    footer            — p data-i18n=\"footer.madeWith\"\n\nАБСОЛЮТНИ URL-и в мета таговете (относителните са безполезни за чужд бот):\n  og:url   = https://kalojandg.github.io/party-up-landing/\n  og:image = https://kalojandg.github.io/party-up-landing/assets/og.png\n  og:image:width 1200, og:image:height 630\n\nКОНВЕНЦИЯТА: всеки текстов възел, който се превежда, носи data-i18n=\"<ключ>\"; атрибут,\nкойто се превежда, носи data-i18n-aria=\"<ключ>\". Текстът в HTML-а е БЪЛГАРСКИЯТ (той е\nезикът по подразбиране) — така страницата е четима и ако скриптът не се зареди.\n\nДОГОВОР ЗА i18n КЛЮЧОВЕТЕ (дословно същият в таскове 10, 20 и 30 — това е,\nкоето им позволява да вървят паралелно; НЕ измисляй свои ключове и НЕ преименувай):\n\n  hero.title          \"Party Up\" — НЕ се превежда, едно и също в двата езика\n  hero.tagline        едно изречение какво прави приложението\n  pitch.question      въпросът-кука: десетки сайтове за запознанства, защо няма за TTRPG\n  pitch.punchline     \"Find your soulmate? Why not find your tabletop mates?\" — ОСТАВА\n                      на английски И в българската версия (шегата умира в превод)\n  pitch.body          2-3 изречения: какво е приложението и за кого\n  spread.title        заглавие на призива\n  spread.body         призивът: такива мрежи работят с хора — говорете, споделяйте\n  cta.open            етикетът на бутона към приложението\n  lang.toggle         достъпното име на превключвателя (aria-label)\n  lang.short          къс код за бутона: \"EN\" в bg файла, \"БГ\" в en файла — бутонът\n                      показва КЪМ КОЙ език водиш, не текущия\n  footer.madeWith     ред под всичко: какво е това и връзка към приложението\n\nФормата на двата файла е ЕДНА И СЪЩА, плоски ключове с точки, без влагане:\n  { \"hero.title\": \"Party Up\", \"hero.tagline\": \"…\", … }\n\nЧЕРВЕНИ ЛИНИИ (виж partyup-landing-structure.md): нула build стъпка, нула\nфреймуърк, нула външни скриптове и шрифтове; `assets/og.png` НЕ се пипа (1200×630 е\nизискване на споделящите платформи); адресът на приложението\nhttps://party-up.kaloiand.workers.dev/ не се променя.\n\nТЕСТОВЕ (tests/markup.test.js, в СЪЩИЯ commit): (а) всеки ключ от договора се среща\nпоне веднъж като data-i18n или data-i18n-aria; (б) og:image и og:url са АБСОЛЮТНИ и\nсочат party-up-landing; (в) og:image:width=1200 и height=630; (г) twitter:card е\nsummary_large_image; (д) връзката към приложението сочи https://party-up.kaloiand.workers.dev/\nи има data-testid=\"app-link\"; (е) логото има alt и подадени width/height.\n⚠ tests/skeleton.test.js НЕ се пипа и трябва да остане зелен.",
-    "steps": [
-      {
-        "id": "10.1",
-        "phase": "RECON",
-        "action": "Прочети index.html (walking skeleton), tests/dom.js (помощникът loadPage/readFile), tests/skeleton.test.js и src/styles.css, за да знаеш кои класове вече съществуват. Прочети partyup-landing-structure.md — особено „Червени линии\" и „Отровен списък\"."
-      },
-      {
-        "id": "10.2",
-        "phase": "RED",
-        "action": "Напиши tests/markup.test.js с шестте твърдения (а)-(е) от notes, през loadPage() от tests/dom.js. Пусни npm test — новите трябва да са ЧЕРВЕНИ, а skeleton.test.js ЗЕЛЕН."
-      },
-      {
-        "id": "10.3",
-        "phase": "GREEN",
-        "action": "Разшири index.html до структурата от notes: главата с пълния набор мета тагове (абсолютни URL-и), после header с бутона за език, hero/pitch/spread секциите, CTA-то и footer-а — всеки преводим възел с data-i18n ключ от договора, българският текст вътре."
-      },
-      {
-        "id": "10.4",
-        "phase": "DONE",
-        "action": "npm test — всичко зелено. Commit с description-а дословно."
-      }
-    ],
-    "passes": false
-  },
-  {
-    "id": 20,
-    "category": "feature",
-    "repo": "partyup-landing",
-    "lane": "content",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "src/content.bg.json",
-      "src/content.en.json",
-      "tests/content.test.js"
-    ],
-    "description": "feat(content): the two language files behind the landing copy",
-    "specRef": "partyup-landing-structure.md «Как работи» (текстът е ДАННИ, не разметка) + «Отровен списък»",
-    "tddWorkflow": true,
-    "notes": "Пише САМО двата JSON файла и техния спек — нула HTML, нула CSS, нула JS. Затова\nвърви паралелно с всичко останало: файловете са НОВИ и никой друг таск не ги пипа.\n\nДВАТА ЕЗИКА СА ЕДИН КОНТРАКТ — еднакви ключове, затова са в ЕДИН таск. Разделянето им по\nагенти произвежда разминати ключове, което е тихият провал на всяка i18n.\n\nДОГОВОР ЗА i18n КЛЮЧОВЕТЕ (дословно същият в таскове 10, 20 и 30 — това е,\nкоето им позволява да вървят паралелно; НЕ измисляй свои ключове и НЕ преименувай):\n\n  hero.title          \"Party Up\" — НЕ се превежда, едно и също в двата езика\n  hero.tagline        едно изречение какво прави приложението\n  pitch.question      въпросът-кука: десетки сайтове за запознанства, защо няма за TTRPG\n  pitch.punchline     \"Find your soulmate? Why not find your tabletop mates?\" — ОСТАВА\n                      на английски И в българската версия (шегата умира в превод)\n  pitch.body          2-3 изречения: какво е приложението и за кого\n  spread.title        заглавие на призива\n  spread.body         призивът: такива мрежи работят с хора — говорете, споделяйте\n  cta.open            етикетът на бутона към приложението\n  lang.toggle         достъпното име на превключвателя (aria-label)\n  lang.short          къс код за бутона: \"EN\" в bg файла, \"БГ\" в en файла — бутонът\n                      показва КЪМ КОЙ език водиш, не текущия\n  footer.madeWith     ред под всичко: какво е това и връзка към приложението\n\nФормата на двата файла е ЕДНА И СЪЩА, плоски ключове с точки, без влагане:\n  { \"hero.title\": \"Party Up\", \"hero.tagline\": \"…\", … }\n\nСУРОВИНАТА ОТ ПОТРЕБИТЕЛЯ (негови думи, 30.09 — шлифовай ги, не ги преписвай дословно;\nтова е брийф, не готов текст):\n  • „Има десетки или стотици сайтове за запознанства. Защо няма за TTRPG?\n     Find your soulmate? Why not find your tabletop mates?\"\n  • „Ефективността на такъв тип сайтове идва от броя потребители. Разпространявайте,\n     говорете, споделяйте и нека този сайт да процъфти.\"\n\nТОН: сдържан и човешки, без маркетингов патос и без удивителни. Това е визитка на проект,\nкоято ще бъде четена и от работодатели — суперлативите я правят по-малко сериозна, не\nповече. Пиши късо: цялата страница трябва да се чете за под минута.\n\nЗА pitch.punchline: „Find your soulmate? Why not find your tabletop mates?\" остава на\nАНГЛИЙСКИ и в двата файла — римата е в английското, а преводът я убива.\n\nЗА hero.tagline (bg): приложението се описва така — „масите дърпат играчите, не обратното\"\n(това е pull моделът, сърцето на продукта: масата избира, не играчът кандидатства напосоки).\n\nЗА spread.body: смисълът е, че мрежа за срещи работи само с достатъчно хора — затова\nмолбата за споделяне е честна, не рекламна. Без „сподели сега!\".\n\nЧЕРВЕНИ ЛИНИИ (виж partyup-landing-structure.md): нула build стъпка, нула\nфреймуърк, нула външни скриптове и шрифтове; `assets/og.png` НЕ се пипа (1200×630 е\nизискване на споделящите платформи); адресът на приложението\nhttps://party-up.kaloiand.workers.dev/ не се променя.\n\nТЕСТОВЕ (tests/content.test.js, в СЪЩИЯ commit): (а) двата файла имат ТОЧНО едни и същи\nключове (сравнение на сортирани списъци — разминаването е основният риск); (б) нито една\nстойност не е празна; (в) всички ключове от договора присъстват; (г) pitch.punchline е\nидентичен в двата файла; (д) hero.title е \"Party Up\" в двата.",
-    "steps": [
-      {
-        "id": "20.1",
-        "phase": "RECON",
-        "action": "Прочети договора за ключовете в notes и tests/dom.js (помощникът readFile). Виж index.html за тона на съществуващия текст — не за да го копираш, а за да не си противоречите."
-      },
-      {
-        "id": "20.2",
-        "phase": "RED",
-        "action": "Напиши tests/content.test.js с петте твърдения (а)-(д). Пусни npm test — червени са, защото файловете още ги няма."
-      },
-      {
-        "id": "20.3",
-        "phase": "GREEN",
-        "action": "Напиши src/content.bg.json и src/content.en.json — плоски ключове с точки, всички от договора, текстът шлифован по брийфа и тона от notes."
-      },
-      {
-        "id": "20.4",
-        "phase": "DONE",
-        "action": "npm test — всичко зелено. Commit с description-а дословно."
-      }
-    ],
-    "passes": false
-  },
-  {
-    "id": 30,
-    "category": "feature",
-    "repo": "partyup-landing",
-    "lane": "i18n",
-    "model": "heavy",
-    "dependsOn": [],
-    "files": [
-      "src/i18n.js",
-      "tests/i18n.test.js"
-    ],
-    "description": "feat(i18n): runtime language switch that remembers the choice",
-    "specRef": "partyup-landing-structure.md «Как работи» (езикът по подразбиране е bg) + «ЧЕРВЕНИ ЛИНИИ» т.1",
-    "tddWorkflow": true,
-    "notes": "Пише САМО src/i18n.js и своя спек. Върви паралелно с разметката и преводите, защото\nработи по ДОГОВОРА (долу), не по merged код: тестовете му строят собствен минимален DOM\nфрагмент, вместо да зареждат index.html. Това е нарочно — юнит тест на поведение не бива\nда пада, защото някой е преместил секция.\n\nКАКВО ПРАВИ (ES модул, без зависимости, зареден с <script type=\"module\">):\n 1. Определя началния език: запомненият избор от localStorage (ключ \"partyup.lang\") →\n    ако няма, езикът на браузъра (`navigator.language` започва ли с \"bg\") → иначе \"bg\".\n 2. Зарежда съответния `src/content.<lang>.json` с fetch и прилага текстовете:\n    всеки `[data-i18n]` получава textContent, всеки `[data-i18n-aria]` получава\n    aria-label от същия речник.\n 3. Обновява `document.documentElement.lang` — иначе екранните четци и търсачките четат\n    грешен език, а това е половината смисъл на упражнението.\n 4. Бутонът `[data-testid=\"lang-toggle\"]` сменя езика, прилага наново и ЗАПОМНЯ избора.\n 5. Липсващ ключ НЕ изтрива текста — оставя каквото е в HTML-а (той е българският) и\n    предупреждава веднъж в конзолата. Тихото изпразване на страница заради една липсваща\n    дума е по-лошо от разминат превод.\n\nДОГОВОР ЗА i18n КЛЮЧОВЕТЕ (дословно същият в таскове 10, 20 и 30 — това е,\nкоето им позволява да вървят паралелно; НЕ измисляй свои ключове и НЕ преименувай):\n\n  hero.title          \"Party Up\" — НЕ се превежда, едно и също в двата езика\n  hero.tagline        едно изречение какво прави приложението\n  pitch.question      въпросът-кука: десетки сайтове за запознанства, защо няма за TTRPG\n  pitch.punchline     \"Find your soulmate? Why not find your tabletop mates?\" — ОСТАВА\n                      на английски И в българската версия (шегата умира в превод)\n  pitch.body          2-3 изречения: какво е приложението и за кого\n  spread.title        заглавие на призива\n  spread.body         призивът: такива мрежи работят с хора — говорете, споделяйте\n  cta.open            етикетът на бутона към приложението\n  lang.toggle         достъпното име на превключвателя (aria-label)\n  lang.short          къс код за бутона: \"EN\" в bg файла, \"БГ\" в en файла — бутонът\n                      показва КЪМ КОЙ език водиш, не текущия\n  footer.madeWith     ред под всичко: какво е това и връзка към приложението\n\nФормата на двата файла е ЕДНА И СЪЩА, плоски ключове с точки, без влагане:\n  { \"hero.title\": \"Party Up\", \"hero.tagline\": \"…\", … }\n\nТЕХНИЧЕСКИ ЧЕРВЕНИ ЛИНИИ:\n • ВСЕКИ достъп до localStorage в try/catch — частен прозорец ХВЪРЛЯ при самото четене,\n   а страницата трябва да работи и там.\n • Нула зависимости (jsdom е само за тестовете, не за страницата).\n • Без `innerHTML` — само `textContent`. Текстът идва от JSON файл, но навикът е\n   по-важен от конкретния случай.\n • Модулът трябва да е ТЕСТВАЕМ: изнеси чистата функция (речник + корен → приложени\n   текстове) и я изнасяй с export, а само закачането за document да е страничният ефект.\n\nЧЕРВЕНИ ЛИНИИ (виж partyup-landing-structure.md): нула build стъпка, нула\nфреймуърк, нула външни скриптове и шрифтове; `assets/og.png` НЕ се пипа (1200×630 е\nизискване на споделящите платформи); адресът на приложението\nhttps://party-up.kaloiand.workers.dev/ не се променя.\n\nТЕСТОВЕ (tests/i18n.test.js, в СЪЩИЯ commit) — върху СОБСТВЕН DOM фрагмент, не върху\nindex.html: (а) прилага текстовете по data-i18n; (б) прилага aria-label по data-i18n-aria;\n(в) липсващ ключ оставя оригиналния текст непокътнат; (г) смяната на езика обновява\ndocument.documentElement.lang; (д) изборът се запомня и се чете при следващо зареждане;\n(е) localStorage, който хвърля, НЕ чупи прилагането на текстовете.",
-    "steps": [
-      {
-        "id": "30.1",
-        "phase": "RECON",
-        "action": "Прочети договора за ключовете и конвенцията data-i18n/data-i18n-aria в notes, plus tests/dom.js (там е JSDOM помощникът и вариантът с runScripts). Реши как да изнесеш чистата функция, за да е тествана без fetch."
-      },
-      {
-        "id": "30.2",
-        "phase": "RED",
-        "action": "Напиши tests/i18n.test.js с шестте твърдения (а)-(е), върху собствен DOM фрагмент и с подправен localStorage (включително вариант, който хвърля). Пусни npm test — червени."
-      },
-      {
-        "id": "30.3",
-        "phase": "GREEN",
-        "action": "Напиши src/i18n.js: чиста функция за прилагане (експортирана) + закачането за document, избор на език, fetch на речника, бутон, localStorage в try/catch, обновяване на documentElement.lang, предупреждение при липсващ ключ."
-      },
-      {
-        "id": "30.4",
-        "phase": "DONE",
-        "action": "npm test — всичко зелено. Commit с description-а дословно."
-      }
-    ],
-    "passes": false
-  },
-  {
-    "id": 40,
-    "category": "feature",
-    "repo": "partyup-landing",
-    "lane": "styles",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "src/styles.css"
-    ],
-    "description": "style(page): typographic landing layout that holds up on a phone",
-    "specRef": "partyup-landing-structure.md «Файлова карта» + «ЧЕРВЕНИ ЛИНИИ» т.1 и т.4",
-    "tddWorkflow": false,
-    "notes": "Пипа САМО src/styles.css. Върви паралелно с всичко: класовете и структурата са\nфиксирани в договора долу, не се четат от merged HTML.\n\nСЕЛЕКТОРИТЕ, по които пишеш (таск 10 ги гарантира): header с бутон\n`[data-testid=\"lang-toggle\"]`; `main.page`; `section.hero` (img.logo, h1, p);\n`section.pitch` (p, p.punchline, p); `section.spread` (h2, p); `a.cta`; `footer`.\n\nЗАДАЧАТА Е ТИПОГРАФИЯ, не украса. Страницата има един екран текст и един бутон — ако\nизглежда добре, ще е заради ритъма на буквите и празното място, не заради ефекти.\n\n • Светла и тъмна тема през `prefers-color-scheme`, с CSS променливи на :root.\n   Текущият файл вече има скелета на палитрата — доразвий го, не го изхвърляй.\n • Едноколонен четим блок: max-width около 40rem, центриран, щедро празно място.\n • `p.punchline` е акцентът на страницата — по-едра, различима, но БЕЗ да крещи.\n • Fluid типография с clamp(), за да не се чупи между телефон и голям екран.\n • Бутонът за език: малка мишена горе вдясно, минимум 44×44 CSS пиксела — под това не\n   се улучва с пръст.\n • `a.cta` е главното действие: очевидно, с ясен `:focus-visible` контур.\n • Телефон (около 400px ширина): нула хоризонтално скролване, странично поле поне 16px,\n   и `env(safe-area-inset-*)` за телефоните с изрезка.\n • `prefers-reduced-motion`: ако изобщо добавиш преход, изключи го там.\n\nЧЕРВЕНИ ЛИНИИ (виж partyup-landing-structure.md): нула build стъпка, нула\nфреймуърк, нула външни скриптове и шрифтове; `assets/og.png` НЕ се пипа (1200×630 е\nизискване на споделящите платформи); адресът на приложението\nhttps://party-up.kaloiand.workers.dev/ не се променя.\nДОПЪЛНИТЕЛНО ЗА ТОЗИ ТАСК: нула шрифтове от CDN (системен стек), нула CSS фреймуърк,\nнула картинки-фонове — файлът трябва да остане четим за човек.\n\nБЕЗ TDD: това е визуална задача и няма спек, който да я хване честно. Гейтът е, че\nсъществуващите тестове остават зелени (`npm test`) — ако си пипнал нещо извън CSS-а,\nте ще го кажат.",
-    "steps": [
-      {
-        "id": "40.1",
-        "phase": "RECON",
-        "action": "Прочети src/styles.css (има палитра и минимално оформление) и списъка селектори в notes. Не чакай index.html да е готов — договорът в notes е достатъчен."
-      },
-      {
-        "id": "40.2",
-        "phase": "GREEN",
-        "action": "Разпиши оформлението: променливи за двете теми, вертикален ритъм, fluid типография с clamp(), акцент на punchline, бутон за език с мишена ≥44px, CTA с focus-visible, отзивчивост до 400px със safe-area отстъпи."
-      },
-      {
-        "id": "40.3",
-        "phase": "DONE",
-        "action": "npm test — зелено (нищо извън CSS не е пипнато). Commit с description-а дословно."
-      }
-    ],
-    "passes": false
-  },
-  {
-    "id": 50,
-    "category": "docs",
-    "repo": "partyup-landing",
-    "lane": "docs",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "README.md"
-    ],
-    "description": "docs: say what this repo is and why it exists apart from the app",
-    "specRef": "partyup-landing-structure.md (целият — README-то е човешкият му вход)",
-    "tddWorkflow": false,
-    "notes": "Нов файл, никой друг таск не го пипа — затова е собствена lane без зависимости.\n\nРепото е ПУБЛИЧНО и ще бъде четено от работодатели, не само от потребителя. README-то\nтрябва да отговори на три въпроса за под минута:\n\n 1. КАКВО е това: визитката на Party Up — една статична страница на GitHub Pages\n    (https://kalojandg.github.io/party-up-landing/), която води към приложението\n    (https://party-up.kaloiand.workers.dev/).\n 2. ЗАЩО е отделно репо: приложението е ЧАСТНО, а GitHub Pages от частно репо иска\n    платен план. Плюс истинската причина страницата да съществува: краулерът на LinkedIn\n    не стига до `*.workers.dev` (проверено два пъти през Post Inspector при напълно здрав\n    сървър — 200 на всичко, включително с LinkedInBot User-Agent), затова линкът, който\n    се споделя, трябва да живее на достижим адрес.\n 3. КАК се пипа: `npm test` (node --test + jsdom), `npm run serve` за локален преглед на\n    порт 45277, деплой автоматично при push към main през .github/workflows/pages.yml.\n    Нула build стъпка, нула фреймуърк — и това е нарочно.\n\nТОН: сдържан и точен. Без емоджи-водопад, без „awesome\". Кратките, честни README-та\nказват повече за автора от дългите.\n\nАко добавиш секция за структурата на файловете, тя трябва да СЪВПАДА с\npartyup-landing-structure.md — разминаването между двата документа е по-лошо от липсващ\nраздел.",
-    "steps": [
-      {
-        "id": "50.1",
-        "phase": "RECON",
-        "action": "Прочети partyup-landing-structure.md и package.json (скриптовете), за да не измисляш команди. Виж .github/workflows/pages.yml за това как точно тече деплоят."
-      },
-      {
-        "id": "50.2",
-        "phase": "GREEN",
-        "action": "Напиши README.md с трите отговора от notes, кратко и без украса."
-      },
-      {
-        "id": "50.3",
-        "phase": "DONE",
-        "action": "npm test — зелено. Commit с description-а дословно."
-      }
-    ],
-    "passes": false
-  },
-  {
-    "id": 60,
-    "category": "feature",
-    "repo": "partyup-landing",
-    "lane": "integration",
-    "model": "heavy",
-    "dependsOn": [
-      10,
-      20,
-      30,
-      40
-    ],
-    "files": [
-      "tests/page.test.js",
-      "index.html",
-      "src/i18n.js",
-      "src/content.bg.json",
-      "src/content.en.json"
-    ],
-    "description": "test(page): prove the whole page works in both languages, end to end",
-    "specRef": "partyup-landing-structure.md «Как работи (жив контракт)» + «Тестово състояние»",
-    "tddWorkflow": true,
-    "notes": "ФИНАЛНИЯТ ТАСК — единственият, който вижда четирите парчета заедно. Дотук всеки\nтаск доказваше СВОЯТА част срещу договора; тук се доказва, че договорът е бил спазен и\nот четиримата. Точно тази проверка липсва при паралелна работа и точно тя хваща\nразминатия ключ.\n\nЗатова има право да пипа чуждите файлове: ако намери разминаване, го ПОПРАВЯ на място,\nа не отваря нов таск. Поправката е малка по конструкция — ако се окаже голяма, значи\nдоговорът е бил сгрешен и това трябва да се каже изрично в commit-а.\n\nТЕСТОВЕ (tests/page.test.js): зареди index.html в jsdom с ИЗПЪЛНЕНИ скриптове\n(loadPage({ scripts: true }) от tests/dom.js) и докажи:\n (а) всеки data-i18n ключ в index.html СЪЩЕСТВУВА в двата речника — това е проверката,\n     която не може да се направи от нито един от предните таскове;\n (б) обратното: всеки ключ от речниците се ползва поне веднъж в разметката (сирашки\n     ключ = храна за фосил, точно както в приложението);\n (в) при език bg страницата показва българските текстове, а documentElement.lang е \"bg\";\n (г) натискането на [data-testid=\"lang-toggle\"] сменя на английски: и текстовете, и\n     lang атрибутът;\n (д) og:image и og:url са абсолютни и сочат party-up-landing;\n (е) връзката към приложението е жива и сочи https://party-up.kaloiand.workers.dev/.\n\n⚠ fetch в jsdom: ако зареждането на речника през fetch е нестабилно в тестова среда,\nподмени го (stub) вместо да променяш src/i18n.js заради теста. Тестът се нагажда към\nкода, не обратното — освен ако кодът е сгрешил.\n\nБЕЗ verify override — тук минава ПЪЛНИЯТ гейт на репото, защото това е последното нещо\nпреди деплоя.\n\nЧЕРВЕНИ ЛИНИИ (виж partyup-landing-structure.md): нула build стъпка, нула\nфреймуърк, нула външни скриптове и шрифтове; `assets/og.png` НЕ се пипа (1200×630 е\nизискване на споделящите платформи); адресът на приложението\nhttps://party-up.kaloiand.workers.dev/ не се променя.",
-    "steps": [
-      {
-        "id": "60.1",
-        "phase": "RECON",
-        "action": "Прочети merged index.html, src/i18n.js, двата content файла и tests/dom.js. Направи списък на data-i18n ключовете в разметката и на ключовете в двата речника и ги сравни РЪЧНО, преди да пишеш тест — така ще знаеш предварително какво ще падне."
-      },
-      {
-        "id": "60.2",
-        "phase": "RED",
-        "action": "Напиши tests/page.test.js с шестте твърдения (а)-(е) върху заредена с изпълнени скриптове страница. Пусни npm test и виж кои падат."
-      },
-      {
-        "id": "60.3",
-        "phase": "GREEN",
-        "action": "Поправи разминаванията на място — липсващ ключ в речник, сирашки ключ, сгрешен абсолютен URL. Промените трябва да са малки; ако не са, кажи го в commit съобщението."
-      },
-      {
-        "id": "60.4",
-        "phase": "DONE",
-        "action": "npm test — целият пакет зелен. Commit с description-а дословно."
-      }
-    ],
-    "passes": false
-  }
+    {
+        "id":  10,
+        "category":  "feature",
+        "repo":  "partyup-landing",
+        "lane":  "markup",
+        "model":  "heavy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "index.html",
+                      "tests/markup.test.js"
+                  ],
+        "description":  "feat(page): full landing markup with share metadata and i18n hooks",
+        "specRef":  "partyup-landing-structure.md «Файлова карта» + «Как работи (жив контракт)» + «ЧЕРВЕНИ ЛИНИИ»",
+        "tddWorkflow":  true,
+        "notes":  "СКЕЛЕТЕН ТАСК — той е ЕДИНСТВЕНИЯТ, който пипа index.html (отровният файл: цялата\nразметка е в него). Пинва структурата и мета таговете ВЕДНЪЖ, за да могат стиловете,\nпреводите и i18n логиката да вървят паралелно след това, без да се бият по файл.\n\nЗАЩО СЪЩЕСТВУВА СТРАНИЦАТА (контекст, който агентът няма как да знае): краулерът на\nLinkedIn не стига до `*.workers.dev` — проверено два пъти през Post Inspector при напълно\nздрав сървър (200 на всичко, включително с LinkedInBot User-Agent). Тази страница е\nдостижимият адрес, който носи og таговете и праща човека към приложението. Тоест мета\nтаговете НЕ са украса, а причината за съществуване.\n\nСЕГАШНО СЪСТОЯНИЕ: index.html е walking skeleton — лого, заглавие, едно изречение, бутон\nс data-testid=\"app-link\". Разширяваш го, не го пренаписваш от нула.\n\nСТРУКТУРА, която трябва да се получи (семантичен HTML, без div супа):\n  \u003chead\u003e: charset, viewport (с viewport-fit=cover), title, description,\n          og:type/site_name/title/description/url/image/image:width/image:height/image:alt,\n          twitter:card=summary_large_image + twitter:title/description/image,\n          link rel=icon, link rel=stylesheet href=\"src/styles.css\",\n          script type=\"module\" src=\"src/i18n.js\" (defer по подразбиране при module)\n  \u003cbody\u003e:\n    header с бутона за език: \u003cbutton data-testid=\"lang-toggle\" data-i18n-aria=\"lang.toggle\"\u003e\n                             със \u003cspan data-i18n=\"lang.short\"\u003e\n    main.page:\n      section.hero    — img логото (assets/logo.png, alt, width/height за да не скача),\n                        h1 data-i18n=\"hero.title\", p data-i18n=\"hero.tagline\"\n      section.pitch   — p data-i18n=\"pitch.question\",\n                        p.punchline data-i18n=\"pitch.punchline\",\n                        p data-i18n=\"pitch.body\"\n      section.spread  — h2 data-i18n=\"spread.title\", p data-i18n=\"spread.body\"\n      a.cta           — data-testid=\"app-link\", href=\"https://party-up.kaloiand.workers.dev/\",\n                        вътре \u003cspan data-i18n=\"cta.open\"\u003e\n    footer            — p data-i18n=\"footer.madeWith\"\n\nАБСОЛЮТНИ URL-и в мета таговете (относителните са безполезни за чужд бот):\n  og:url   = https://kalojandg.github.io/party-up-landing/\n  og:image = https://kalojandg.github.io/party-up-landing/assets/og.png\n  og:image:width 1200, og:image:height 630\n\nКОНВЕНЦИЯТА: всеки текстов възел, който се превежда, носи data-i18n=\"\u003cключ\u003e\"; атрибут,\nкойто се превежда, носи data-i18n-aria=\"\u003cключ\u003e\". Текстът в HTML-а е БЪЛГАРСКИЯТ (той е\nезикът по подразбиране) — така страницата е четима и ако скриптът не се зареди.\n\nДОГОВОР ЗА i18n КЛЮЧОВЕТЕ (дословно същият в таскове 10, 20 и 30 — това е,\nкоето им позволява да вървят паралелно; НЕ измисляй свои ключове и НЕ преименувай):\n\n  hero.title          \"Party Up\" — НЕ се превежда, едно и също в двата езика\n  hero.tagline        едно изречение какво прави приложението\n  pitch.question      въпросът-кука: десетки сайтове за запознанства, защо няма за TTRPG\n  pitch.punchline     \"Find your soulmate? Why not find your tabletop mates?\" — ОСТАВА\n                      на английски И в българската версия (шегата умира в превод)\n  pitch.body          2-3 изречения: какво е приложението и за кого\n  spread.title        заглавие на призива\n  spread.body         призивът: такива мрежи работят с хора — говорете, споделяйте\n  cta.open            етикетът на бутона към приложението\n  lang.toggle         достъпното име на превключвателя (aria-label)\n  lang.short          къс код за бутона: \"EN\" в bg файла, \"БГ\" в en файла — бутонът\n                      показва КЪМ КОЙ език водиш, не текущия\n  footer.madeWith     ред под всичко: какво е това и връзка към приложението\n\nФормата на двата файла е ЕДНА И СЪЩА, плоски ключове с точки, без влагане:\n  { \"hero.title\": \"Party Up\", \"hero.tagline\": \"…\", … }\n\nЧЕРВЕНИ ЛИНИИ (виж partyup-landing-structure.md): нула build стъпка, нула\nфреймуърк, нула външни скриптове и шрифтове; `assets/og.png` НЕ се пипа (1200×630 е\nизискване на споделящите платформи); адресът на приложението\nhttps://party-up.kaloiand.workers.dev/ не се променя.\n\nТЕСТОВЕ (tests/markup.test.js, в СЪЩИЯ commit): (а) всеки ключ от договора се среща\nпоне веднъж като data-i18n или data-i18n-aria; (б) og:image и og:url са АБСОЛЮТНИ и\nсочат party-up-landing; (в) og:image:width=1200 и height=630; (г) twitter:card е\nsummary_large_image; (д) връзката към приложението сочи https://party-up.kaloiand.workers.dev/\nи има data-testid=\"app-link\"; (е) логото има alt и подадени width/height.\n⚠ tests/skeleton.test.js НЕ се пипа и трябва да остане зелен.",
+        "steps":  [
+                      {
+                          "id":  "10.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети index.html (walking skeleton), tests/dom.js (помощникът loadPage/readFile), tests/skeleton.test.js и src/styles.css, за да знаеш кои класове вече съществуват. Прочети partyup-landing-structure.md — особено „Червени линии\" и „Отровен списък\"."
+                      },
+                      {
+                          "id":  "10.2",
+                          "phase":  "RED",
+                          "action":  "Напиши tests/markup.test.js с шестте твърдения (а)-(е) от notes, през loadPage() от tests/dom.js. Пусни npm test — новите трябва да са ЧЕРВЕНИ, а skeleton.test.js ЗЕЛЕН."
+                      },
+                      {
+                          "id":  "10.3",
+                          "phase":  "GREEN",
+                          "action":  "Разшири index.html до структурата от notes: главата с пълния набор мета тагове (абсолютни URL-и), после header с бутона за език, hero/pitch/spread секциите, CTA-то и footer-а — всеки преводим възел с data-i18n ключ от договора, българският текст вътре."
+                      },
+                      {
+                          "id":  "10.4",
+                          "phase":  "DONE",
+                          "action":  "npm test — всичко зелено. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  20,
+        "category":  "feature",
+        "repo":  "partyup-landing",
+        "lane":  "content",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "src/content.bg.json",
+                      "src/content.en.json",
+                      "tests/content.test.js"
+                  ],
+        "description":  "feat(content): the two language files behind the landing copy",
+        "specRef":  "partyup-landing-structure.md «Как работи» (текстът е ДАННИ, не разметка) + «Отровен списък»",
+        "tddWorkflow":  true,
+        "notes":  "Пише САМО двата JSON файла и техния спек — нула HTML, нула CSS, нула JS. Затова\nвърви паралелно с всичко останало: файловете са НОВИ и никой друг таск не ги пипа.\n\nДВАТА ЕЗИКА СА ЕДИН КОНТРАКТ — еднакви ключове, затова са в ЕДИН таск. Разделянето им по\nагенти произвежда разминати ключове, което е тихият провал на всяка i18n.\n\nДОГОВОР ЗА i18n КЛЮЧОВЕТЕ (дословно същият в таскове 10, 20 и 30 — това е,\nкоето им позволява да вървят паралелно; НЕ измисляй свои ключове и НЕ преименувай):\n\n  hero.title          \"Party Up\" — НЕ се превежда, едно и също в двата езика\n  hero.tagline        едно изречение какво прави приложението\n  pitch.question      въпросът-кука: десетки сайтове за запознанства, защо няма за TTRPG\n  pitch.punchline     \"Find your soulmate? Why not find your tabletop mates?\" — ОСТАВА\n                      на английски И в българската версия (шегата умира в превод)\n  pitch.body          2-3 изречения: какво е приложението и за кого\n  spread.title        заглавие на призива\n  spread.body         призивът: такива мрежи работят с хора — говорете, споделяйте\n  cta.open            етикетът на бутона към приложението\n  lang.toggle         достъпното име на превключвателя (aria-label)\n  lang.short          къс код за бутона: \"EN\" в bg файла, \"БГ\" в en файла — бутонът\n                      показва КЪМ КОЙ език водиш, не текущия\n  footer.madeWith     ред под всичко: какво е това и връзка към приложението\n\nФормата на двата файла е ЕДНА И СЪЩА, плоски ключове с точки, без влагане:\n  { \"hero.title\": \"Party Up\", \"hero.tagline\": \"…\", … }\n\nСУРОВИНАТА ОТ ПОТРЕБИТЕЛЯ (негови думи, 30.09 — шлифовай ги, не ги преписвай дословно;\nтова е брийф, не готов текст):\n  • „Има десетки или стотици сайтове за запознанства. Защо няма за TTRPG?\n     Find your soulmate? Why not find your tabletop mates?\"\n  • „Ефективността на такъв тип сайтове идва от броя потребители. Разпространявайте,\n     говорете, споделяйте и нека този сайт да процъфти.\"\n\nТОН: сдържан и човешки, без маркетингов патос и без удивителни. Това е визитка на проект,\nкоято ще бъде четена и от работодатели — суперлативите я правят по-малко сериозна, не\nповече. Пиши късо: цялата страница трябва да се чете за под минута.\n\nЗА pitch.punchline: „Find your soulmate? Why not find your tabletop mates?\" остава на\nАНГЛИЙСКИ и в двата файла — римата е в английското, а преводът я убива.\n\nЗА hero.tagline (bg): приложението се описва така — „масите дърпат играчите, не обратното\"\n(това е pull моделът, сърцето на продукта: масата избира, не играчът кандидатства напосоки).\n\nЗА spread.body: смисълът е, че мрежа за срещи работи само с достатъчно хора — затова\nмолбата за споделяне е честна, не рекламна. Без „сподели сега!\".\n\nЧЕРВЕНИ ЛИНИИ (виж partyup-landing-structure.md): нула build стъпка, нула\nфреймуърк, нула външни скриптове и шрифтове; `assets/og.png` НЕ се пипа (1200×630 е\nизискване на споделящите платформи); адресът на приложението\nhttps://party-up.kaloiand.workers.dev/ не се променя.\n\nТЕСТОВЕ (tests/content.test.js, в СЪЩИЯ commit): (а) двата файла имат ТОЧНО едни и същи\nключове (сравнение на сортирани списъци — разминаването е основният риск); (б) нито една\nстойност не е празна; (в) всички ключове от договора присъстват; (г) pitch.punchline е\nидентичен в двата файла; (д) hero.title е \"Party Up\" в двата.",
+        "steps":  [
+                      {
+                          "id":  "20.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети договора за ключовете в notes и tests/dom.js (помощникът readFile). Виж index.html за тона на съществуващия текст — не за да го копираш, а за да не си противоречите."
+                      },
+                      {
+                          "id":  "20.2",
+                          "phase":  "RED",
+                          "action":  "Напиши tests/content.test.js с петте твърдения (а)-(д). Пусни npm test — червени са, защото файловете още ги няма."
+                      },
+                      {
+                          "id":  "20.3",
+                          "phase":  "GREEN",
+                          "action":  "Напиши src/content.bg.json и src/content.en.json — плоски ключове с точки, всички от договора, текстът шлифован по брийфа и тона от notes."
+                      },
+                      {
+                          "id":  "20.4",
+                          "phase":  "DONE",
+                          "action":  "npm test — всичко зелено. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  30,
+        "category":  "feature",
+        "repo":  "partyup-landing",
+        "lane":  "i18n",
+        "model":  "heavy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "src/i18n.js",
+                      "tests/i18n.test.js"
+                  ],
+        "description":  "feat(i18n): runtime language switch that remembers the choice",
+        "specRef":  "partyup-landing-structure.md «Как работи» (езикът по подразбиране е bg) + «ЧЕРВЕНИ ЛИНИИ» т.1",
+        "tddWorkflow":  true,
+        "notes":  "Пише САМО src/i18n.js и своя спек. Върви паралелно с разметката и преводите, защото\nработи по ДОГОВОРА (долу), не по merged код: тестовете му строят собствен минимален DOM\nфрагмент, вместо да зареждат index.html. Това е нарочно — юнит тест на поведение не бива\nда пада, защото някой е преместил секция.\n\nКАКВО ПРАВИ (ES модул, без зависимости, зареден с \u003cscript type=\"module\"\u003e):\n 1. Определя началния език: запомненият избор от localStorage (ключ \"partyup.lang\") →\n    ако няма, езикът на браузъра (`navigator.language` започва ли с \"bg\") → иначе \"bg\".\n 2. Зарежда съответния `src/content.\u003clang\u003e.json` с fetch и прилага текстовете:\n    всеки `[data-i18n]` получава textContent, всеки `[data-i18n-aria]` получава\n    aria-label от същия речник.\n 3. Обновява `document.documentElement.lang` — иначе екранните четци и търсачките четат\n    грешен език, а това е половината смисъл на упражнението.\n 4. Бутонът `[data-testid=\"lang-toggle\"]` сменя езика, прилага наново и ЗАПОМНЯ избора.\n 5. Липсващ ключ НЕ изтрива текста — оставя каквото е в HTML-а (той е българският) и\n    предупреждава веднъж в конзолата. Тихото изпразване на страница заради една липсваща\n    дума е по-лошо от разминат превод.\n\nДОГОВОР ЗА i18n КЛЮЧОВЕТЕ (дословно същият в таскове 10, 20 и 30 — това е,\nкоето им позволява да вървят паралелно; НЕ измисляй свои ключове и НЕ преименувай):\n\n  hero.title          \"Party Up\" — НЕ се превежда, едно и също в двата езика\n  hero.tagline        едно изречение какво прави приложението\n  pitch.question      въпросът-кука: десетки сайтове за запознанства, защо няма за TTRPG\n  pitch.punchline     \"Find your soulmate? Why not find your tabletop mates?\" — ОСТАВА\n                      на английски И в българската версия (шегата умира в превод)\n  pitch.body          2-3 изречения: какво е приложението и за кого\n  spread.title        заглавие на призива\n  spread.body         призивът: такива мрежи работят с хора — говорете, споделяйте\n  cta.open            етикетът на бутона към приложението\n  lang.toggle         достъпното име на превключвателя (aria-label)\n  lang.short          къс код за бутона: \"EN\" в bg файла, \"БГ\" в en файла — бутонът\n                      показва КЪМ КОЙ език водиш, не текущия\n  footer.madeWith     ред под всичко: какво е това и връзка към приложението\n\nФормата на двата файла е ЕДНА И СЪЩА, плоски ключове с точки, без влагане:\n  { \"hero.title\": \"Party Up\", \"hero.tagline\": \"…\", … }\n\nТЕХНИЧЕСКИ ЧЕРВЕНИ ЛИНИИ:\n • ВСЕКИ достъп до localStorage в try/catch — частен прозорец ХВЪРЛЯ при самото четене,\n   а страницата трябва да работи и там.\n • Нула зависимости (jsdom е само за тестовете, не за страницата).\n • Без `innerHTML` — само `textContent`. Текстът идва от JSON файл, но навикът е\n   по-важен от конкретния случай.\n • Модулът трябва да е ТЕСТВАЕМ: изнеси чистата функция (речник + корен → приложени\n   текстове) и я изнасяй с export, а само закачането за document да е страничният ефект.\n\nЧЕРВЕНИ ЛИНИИ (виж partyup-landing-structure.md): нула build стъпка, нула\nфреймуърк, нула външни скриптове и шрифтове; `assets/og.png` НЕ се пипа (1200×630 е\nизискване на споделящите платформи); адресът на приложението\nhttps://party-up.kaloiand.workers.dev/ не се променя.\n\nТЕСТОВЕ (tests/i18n.test.js, в СЪЩИЯ commit) — върху СОБСТВЕН DOM фрагмент, не върху\nindex.html: (а) прилага текстовете по data-i18n; (б) прилага aria-label по data-i18n-aria;\n(в) липсващ ключ оставя оригиналния текст непокътнат; (г) смяната на езика обновява\ndocument.documentElement.lang; (д) изборът се запомня и се чете при следващо зареждане;\n(е) localStorage, който хвърля, НЕ чупи прилагането на текстовете.",
+        "steps":  [
+                      {
+                          "id":  "30.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети договора за ключовете и конвенцията data-i18n/data-i18n-aria в notes, plus tests/dom.js (там е JSDOM помощникът и вариантът с runScripts). Реши как да изнесеш чистата функция, за да е тествана без fetch."
+                      },
+                      {
+                          "id":  "30.2",
+                          "phase":  "RED",
+                          "action":  "Напиши tests/i18n.test.js с шестте твърдения (а)-(е), върху собствен DOM фрагмент и с подправен localStorage (включително вариант, който хвърля). Пусни npm test — червени."
+                      },
+                      {
+                          "id":  "30.3",
+                          "phase":  "GREEN",
+                          "action":  "Напиши src/i18n.js: чиста функция за прилагане (експортирана) + закачането за document, избор на език, fetch на речника, бутон, localStorage в try/catch, обновяване на documentElement.lang, предупреждение при липсващ ключ."
+                      },
+                      {
+                          "id":  "30.4",
+                          "phase":  "DONE",
+                          "action":  "npm test — всичко зелено. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  false
+    },
+    {
+        "id":  40,
+        "category":  "feature",
+        "repo":  "partyup-landing",
+        "lane":  "styles",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "src/styles.css"
+                  ],
+        "description":  "style(page): typographic landing layout that holds up on a phone",
+        "specRef":  "partyup-landing-structure.md «Файлова карта» + «ЧЕРВЕНИ ЛИНИИ» т.1 и т.4",
+        "tddWorkflow":  false,
+        "notes":  "Пипа САМО src/styles.css. Върви паралелно с всичко: класовете и структурата са\nфиксирани в договора долу, не се четат от merged HTML.\n\nСЕЛЕКТОРИТЕ, по които пишеш (таск 10 ги гарантира): header с бутон\n`[data-testid=\"lang-toggle\"]`; `main.page`; `section.hero` (img.logo, h1, p);\n`section.pitch` (p, p.punchline, p); `section.spread` (h2, p); `a.cta`; `footer`.\n\nЗАДАЧАТА Е ТИПОГРАФИЯ, не украса. Страницата има един екран текст и един бутон — ако\nизглежда добре, ще е заради ритъма на буквите и празното място, не заради ефекти.\n\n • Светла и тъмна тема през `prefers-color-scheme`, с CSS променливи на :root.\n   Текущият файл вече има скелета на палитрата — доразвий го, не го изхвърляй.\n • Едноколонен четим блок: max-width около 40rem, центриран, щедро празно място.\n • `p.punchline` е акцентът на страницата — по-едра, различима, но БЕЗ да крещи.\n • Fluid типография с clamp(), за да не се чупи между телефон и голям екран.\n • Бутонът за език: малка мишена горе вдясно, минимум 44×44 CSS пиксела — под това не\n   се улучва с пръст.\n • `a.cta` е главното действие: очевидно, с ясен `:focus-visible` контур.\n • Телефон (около 400px ширина): нула хоризонтално скролване, странично поле поне 16px,\n   и `env(safe-area-inset-*)` за телефоните с изрезка.\n • `prefers-reduced-motion`: ако изобщо добавиш преход, изключи го там.\n\nЧЕРВЕНИ ЛИНИИ (виж partyup-landing-structure.md): нула build стъпка, нула\nфреймуърк, нула външни скриптове и шрифтове; `assets/og.png` НЕ се пипа (1200×630 е\nизискване на споделящите платформи); адресът на приложението\nhttps://party-up.kaloiand.workers.dev/ не се променя.\nДОПЪЛНИТЕЛНО ЗА ТОЗИ ТАСК: нула шрифтове от CDN (системен стек), нула CSS фреймуърк,\nнула картинки-фонове — файлът трябва да остане четим за човек.\n\nБЕЗ TDD: това е визуална задача и няма спек, който да я хване честно. Гейтът е, че\nсъществуващите тестове остават зелени (`npm test`) — ако си пипнал нещо извън CSS-а,\nте ще го кажат.",
+        "steps":  [
+                      {
+                          "id":  "40.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети src/styles.css (има палитра и минимално оформление) и списъка селектори в notes. Не чакай index.html да е готов — договорът в notes е достатъчен."
+                      },
+                      {
+                          "id":  "40.2",
+                          "phase":  "GREEN",
+                          "action":  "Разпиши оформлението: променливи за двете теми, вертикален ритъм, fluid типография с clamp(), акцент на punchline, бутон за език с мишена ≥44px, CTA с focus-visible, отзивчивост до 400px със safe-area отстъпи."
+                      },
+                      {
+                          "id":  "40.3",
+                          "phase":  "DONE",
+                          "action":  "npm test — зелено (нищо извън CSS не е пипнато). Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  50,
+        "category":  "docs",
+        "repo":  "partyup-landing",
+        "lane":  "docs",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "README.md"
+                  ],
+        "description":  "docs: say what this repo is and why it exists apart from the app",
+        "specRef":  "partyup-landing-structure.md (целият — README-то е човешкият му вход)",
+        "tddWorkflow":  false,
+        "notes":  "Нов файл, никой друг таск не го пипа — затова е собствена lane без зависимости.\n\nРепото е ПУБЛИЧНО и ще бъде четено от работодатели, не само от потребителя. README-то\nтрябва да отговори на три въпроса за под минута:\n\n 1. КАКВО е това: визитката на Party Up — една статична страница на GitHub Pages\n    (https://kalojandg.github.io/party-up-landing/), която води към приложението\n    (https://party-up.kaloiand.workers.dev/).\n 2. ЗАЩО е отделно репо: приложението е ЧАСТНО, а GitHub Pages от частно репо иска\n    платен план. Плюс истинската причина страницата да съществува: краулерът на LinkedIn\n    не стига до `*.workers.dev` (проверено два пъти през Post Inspector при напълно здрав\n    сървър — 200 на всичко, включително с LinkedInBot User-Agent), затова линкът, който\n    се споделя, трябва да живее на достижим адрес.\n 3. КАК се пипа: `npm test` (node --test + jsdom), `npm run serve` за локален преглед на\n    порт 45277, деплой автоматично при push към main през .github/workflows/pages.yml.\n    Нула build стъпка, нула фреймуърк — и това е нарочно.\n\nТОН: сдържан и точен. Без емоджи-водопад, без „awesome\". Кратките, честни README-та\nказват повече за автора от дългите.\n\nАко добавиш секция за структурата на файловете, тя трябва да СЪВПАДА с\npartyup-landing-structure.md — разминаването между двата документа е по-лошо от липсващ\nраздел.",
+        "steps":  [
+                      {
+                          "id":  "50.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети partyup-landing-structure.md и package.json (скриптовете), за да не измисляш команди. Виж .github/workflows/pages.yml за това как точно тече деплоят."
+                      },
+                      {
+                          "id":  "50.2",
+                          "phase":  "GREEN",
+                          "action":  "Напиши README.md с трите отговора от notes, кратко и без украса."
+                      },
+                      {
+                          "id":  "50.3",
+                          "phase":  "DONE",
+                          "action":  "npm test — зелено. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  60,
+        "category":  "feature",
+        "repo":  "partyup-landing",
+        "lane":  "integration",
+        "model":  "heavy",
+        "dependsOn":  [
+                          10,
+                          20,
+                          30,
+                          40
+                      ],
+        "files":  [
+                      "tests/page.test.js",
+                      "index.html",
+                      "src/i18n.js",
+                      "src/content.bg.json",
+                      "src/content.en.json"
+                  ],
+        "description":  "test(page): prove the whole page works in both languages, end to end",
+        "specRef":  "partyup-landing-structure.md «Как работи (жив контракт)» + «Тестово състояние»",
+        "tddWorkflow":  true,
+        "notes":  "ФИНАЛНИЯТ ТАСК — единственият, който вижда четирите парчета заедно. Дотук всеки\nтаск доказваше СВОЯТА част срещу договора; тук се доказва, че договорът е бил спазен и\nот четиримата. Точно тази проверка липсва при паралелна работа и точно тя хваща\nразминатия ключ.\n\nЗатова има право да пипа чуждите файлове: ако намери разминаване, го ПОПРАВЯ на място,\nа не отваря нов таск. Поправката е малка по конструкция — ако се окаже голяма, значи\nдоговорът е бил сгрешен и това трябва да се каже изрично в commit-а.\n\nТЕСТОВЕ (tests/page.test.js): зареди index.html в jsdom с ИЗПЪЛНЕНИ скриптове\n(loadPage({ scripts: true }) от tests/dom.js) и докажи:\n (а) всеки data-i18n ключ в index.html СЪЩЕСТВУВА в двата речника — това е проверката,\n     която не може да се направи от нито един от предните таскове;\n (б) обратното: всеки ключ от речниците се ползва поне веднъж в разметката (сирашки\n     ключ = храна за фосил, точно както в приложението);\n (в) при език bg страницата показва българските текстове, а documentElement.lang е \"bg\";\n (г) натискането на [data-testid=\"lang-toggle\"] сменя на английски: и текстовете, и\n     lang атрибутът;\n (д) og:image и og:url са абсолютни и сочат party-up-landing;\n (е) връзката към приложението е жива и сочи https://party-up.kaloiand.workers.dev/.\n\n⚠ fetch в jsdom: ако зареждането на речника през fetch е нестабилно в тестова среда,\nподмени го (stub) вместо да променяш src/i18n.js заради теста. Тестът се нагажда към\nкода, не обратното — освен ако кодът е сгрешил.\n\nБЕЗ verify override — тук минава ПЪЛНИЯТ гейт на репото, защото това е последното нещо\nпреди деплоя.\n\nЧЕРВЕНИ ЛИНИИ (виж partyup-landing-structure.md): нула build стъпка, нула\nфреймуърк, нула външни скриптове и шрифтове; `assets/og.png` НЕ се пипа (1200×630 е\nизискване на споделящите платформи); адресът на приложението\nhttps://party-up.kaloiand.workers.dev/ не се променя.",
+        "steps":  [
+                      {
+                          "id":  "60.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети merged index.html, src/i18n.js, двата content файла и tests/dom.js. Направи списък на data-i18n ключовете в разметката и на ключовете в двата речника и ги сравни РЪЧНО, преди да пишеш тест — така ще знаеш предварително какво ще падне."
+                      },
+                      {
+                          "id":  "60.2",
+                          "phase":  "RED",
+                          "action":  "Напиши tests/page.test.js с шестте твърдения (а)-(е) върху заредена с изпълнени скриптове страница. Пусни npm test и виж кои падат."
+                      },
+                      {
+                          "id":  "60.3",
+                          "phase":  "GREEN",
+                          "action":  "Поправи разминаванията на място — липсващ ключ в речник, сирашки ключ, сгрешен абсолютен URL. Промените трябва да са малки; ако не са, кажи го в commit съобщението."
+                      },
+                      {
+                          "id":  "60.4",
+                          "phase":  "DONE",
+                          "action":  "npm test — целият пакет зелен. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  false
+    }
 ]
