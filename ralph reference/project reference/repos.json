@@ -106,7 +106,7 @@
       "workSubdir": "",
       "mainBranch": "main",
       "reference": "partyup-landing-structure.md",
-      "description": "Визитката на Party Up — ЕДНА статична страница на GitHub Pages (kalojandg.github.io/party-up-landing/), отделно ПУБЛИЧНО репо, защото приложението е частно. Нула build стъпка, нула фреймуърк: index.html + src/*.css|js + assets/. Тестове: node --test + jsdom (без браузър). Деплой: .github/workflows/pages.yml при push към main.",
+      "description": "Визитката на Party Up — ЕДНА статична страница на GitHub Pages (party-up-1534.github.io/), отделен ПУБЛИЧЕН акаунт (party-up-1534), защото на основния има публични репота с ключове, защото приложението е частно. Нула build стъпка, нула фреймуърк: index.html + src/*.css|js + assets/. Тестове: node --test + jsdom (без браузър). Деплой: .github/workflows/pages.yml при push към main.",
       "verify": [
         "npm ci --no-audit --no-fund",
         "npm test"
