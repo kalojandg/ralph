@@ -428,8 +428,19 @@ if (Test-Path $outputFile) {
     # Message wording DRIFTS across claude CLI versions - match loosely:
     #   old  (<= 2.1.47):  "You've hit your limit · resets 7pm (Europe/Sofia)"
     #   new  (>= 2.1.210): "You've hit your session limit · resets 8:30pm (Europe/Kiev)"
-    # so: "hit your" + optional qualifier word(s) + "limit", and reset time with optional :MM.
-    if ($result -match "hit your(?:\s+\w+)?\s+limit") {
+    #
+    # 03.10.2026 (CLI 2.1.288) - името на лимита се сглобява от таблица В БИНАРА:
+    #   five_hour -> "session limit"        seven_day       -> "weekly limit"
+    #   seven_day_opus -> "Opus limit"      seven_day_sonnet -> "Sonnet limit"
+    #   seven_day_overage_included -> "Fable limit"
+    #   overage -> "usage credit limit"     (+ билинг: "channel's monthly spend limit")
+    # Старият шаблон позволяваше най-много ЕДНА дума пред "limit" -> двусловните
+    # ("usage credit") и трисловните изобщо не се разпознаваха като квота: итерацията
+    # минаваше за обикновен провал и гореше fail бюджет вместо да ИЗЧАКА reset-а.
+    # Затова: до 4 думи, с апостроф и тире (за "channel's" и подобни).
+    # ⚠ Таблицата е в CLI-я, не в API-то - при всяко обновяване на claude се проверява
+    # наново (виж /ralph-config, секцията за моделите).
+    if ($result -match "hit your(?:\s+[\w'-]+){0,4}\s+limit") {
         $waitMinutes = 60  # default fallback: wait 1 hour
 
         $resetHour = $null

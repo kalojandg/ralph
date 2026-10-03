@@ -46,7 +46,7 @@ RALPH_ROOT = директорията с `ralph-swarm.ps1` (на тази маш
 |---|---|---|
 | `prompt_file` | `PROMPT.md` | Базовият prompt, с който тръгва всеки агент. |
 | `use_api_key` | `false` | `false` = агентът МАХА `ANTHROPIC_API_KEY` от env-а си → CLI пада на абонамента (OAuth). `true` = API кредити. Сет-нат глобален ключ иначе тихо отвлича билинга и игнорира Max плана. |
-| `claude_args` | `--output-format text --model claude-opus-5 --dangerously-skip-permissions` | Аргументите на CLI. Моделът тук важи за соло режима и е fallback за swarm. |
+| `claude_args` | `--output-format text --model claude-opus-5-5 --dangerously-skip-permissions` | Аргументите на CLI. Моделът тук важи за соло режима и е fallback за swarm. |
 | `models` | виж долу | Tier → модел мапинг (swarm). |
 | `prerequisite_steps` | `{enabled:true, steps_file:"prerequisite-steps.md"}` | Стъпки, добавяни след PROMPT.md. `enabled` се уважава. |
 | `user_defined_steps` | `{steps_file:"user-steps.md"}` | Червените линии на проекта. ⚠ `enabled` НЕ се чете. |
@@ -58,10 +58,25 @@ RALPH_ROOT = директорията с `ralph-swarm.ps1` (на тази маш
 
 | Tier | Кой го ползва | Текуща стойност |
 |---|---|---|
-| `easy` | таскове с `"model": "easy"` | `claude-sonnet-5` |
-| `heavy` | таскове с `"model": "heavy"` и таскове БЕЗ `model` поле | `claude-opus-5` |
-| `review` | finishing review + fix агентите | `claude-opus-5` |
-| `docs` | finishing docs агентът (липсва → пада към `easy`) | `claude-sonnet-5` |
+| `easy` | таскове с `"model": "easy"` | `claude-sonnet-5-5` |
+| `heavy` | таскове с `"model": "heavy"` и таскове БЕЗ `model` поле | `claude-opus-5-5` |
+| `review` | finishing review + fix агентите | `claude-opus-5-5` |
+| `docs` | finishing docs агентът (липсва → пада към `easy`) | `claude-sonnet-5-5` |
+
+⚠ **НОВ МОДЕЛ ИСКА И НОВ CLI.** Моделите се валидират от Claude Code, не само от сървъра:
+стар CLI + нов модел = `API Error: 400 Claude Code <версия> does not support this model;
+version X or newer is required` на ВСЯКА итерация, тоест целият board пада наведнъж.
+(03.10.2026: Opus 5.5 поиска 2.1.280+, а на машината стоеше 2.1.210 — Sonnet 5.5 минаваше,
+Opus 5.5 не.) Затова редът при обновяване е: **(1)** `npm install -g
+@anthropic-ai/claude-code@latest` (`claude update` може да се спъне — тогава директно npm),
+**(2)** провери с `claude -p "say OK" --model <id>` за ВСЕКИ tier, **(3)** чак тогава пиши
+стойностите тук и в конфига. Една миниатюрна заявка на модел струва нищо и спасява нощен run.
+
+**Псевдоними вместо точни имена:** CLI-ят приема и `opus`/`sonnet`/`fable` — те значат „най-
+новото, което този CLI поддържа", тоест конфигът никога не остарява. Цената е
+недетерминираност: моделът може да се смени под теб между два run-а, а точно
+възпроизвеждане на стар run става невъзможно. Затова tier-овете СЪЗНАТЕЛНО държат пълни
+имена — обновяването е ръчно, но знаеш какво е работило.
 
 Таскът в `tasks.json` сочи **tier име**, не модел — затова при квотна криза се сменят
 стойностите тук, а board-ът не се пипа. Кой таск какъв tier получава: `/ralph-plan` §2в.
@@ -108,7 +123,7 @@ opus/sonnet. При нулиране на джоба връщането е см�
 
 ## Готови рецепти
 
-- **Квотна криза (изгаря твърде бързо):** `models.heavy` → `claude-sonnet-5` и/или `agents` → 2-3;
+- **Квотна криза (изгаря твърде бързо):** `models.heavy` → `claude-sonnet-5-5` и/или `agents` → 2-3;
   board-ът не се пипа. Ескалацията пак ще вдигне закъсалите таскове.
 - **Демо пред публика:** `agents` 5-7 + `window_positions: "auto"` + `keep_windows: true`
   (конзолите остават за разглеждане). Стартирай на свеж 5-часов quota прозорец — 5 Opus

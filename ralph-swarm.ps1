@@ -497,7 +497,7 @@ function Invoke-ReviewStage($tasks, $repoKeys) {
                     $cycle--
                     continue
                 }
-                if (-not $quotaWaited -and $outText -match "hit your(?:\s+\w+)?\s+limit") {
+                if (-not $quotaWaited -and $outText -match "hit your(?:\s+[\w'-]+){0,4}\s+limit") {
                     $resetWait = 60
                     if ($outText -match "resets\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)") {
                         $h = [int]$Matches[1]; $mn = if ($Matches[2]) { [int]$Matches[2] } else { 0 }
@@ -1040,6 +1040,25 @@ function Complete-Agent($info) {
         # path (an agent that wrote a result survived its API hiccups).
         if (-not $result) {
             $apiTail = Get-AgentLogTail $t.id 6
+
+            # CLI ТВЪРДЕ СТАР ЗА МОДЕЛА (03.10.2026): моделите се валидират от Claude Code,
+            # не само от сървъра — "API Error: 400 Claude Code 2.1.210 does not support this
+            # model; version 2.1.280 or newer is required". Това НЕ е преходно и НЕ е вина на
+            # агента: всеки таск ще умре мигновено по същата причина. Защитата с 3-те бързи
+            # провала долу го хваща, но чак след три изгорени таска и с общо съобщение —
+            # затова тук се казва точната причина и точният лек веднага.
+            if ($apiTail -match 'Claude Code \S+ does not support this model') {
+                $script:fastFails = 99   # спира run-а на следващата проверка в главния цикъл
+                Write-Host ""
+                Write-Host "[X] FATAL: claude CLI is too old for a model in ralph-config.json." -ForegroundColor Red
+                Write-Host "    $($apiTail -split "`n" | Where-Object { $_ -match 'does not support this model' } | Select-Object -First 1)" -ForegroundColor Red
+                Write-Host "    Fix: npm install -g @anthropic-ai/claude-code@latest" -ForegroundColor Red
+                Write-Host "    Then verify EVERY tier: claude -p 'say OK' --model <id>   (see /ralph-config)" -ForegroundColor Red
+                Write-Host ""
+                Release-Claim $t.id
+                return "failed"
+            }
+
             if ($apiTail -match 'API Error:\s*(529|5\d\d\s+Overloaded|Connection closed|Overloaded)') {
                 $n = $script:timeoutCounts[$t.id]; if (-not $n) { $n = 0 }
                 if ($n -lt $maxTimeoutRequeues) {
