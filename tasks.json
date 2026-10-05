@@ -1,298 +1,306 @@
-[
-  {
-    "id": 1100,
-    "category": "refactor",
-    "repo": "combat",
-    "lane": "core-seams",
-    "model": "heavy",
-    "dependsOn": [],
-    "files": [
-      "app.js",
-      "index.html",
-      "modules/classes/monk.js",
-      "modules/campaign-npc.js",
-      "test/e2e/class-profile.spec.js"
-    ],
-    "description": "refactor(core): introduce class profiles, per-character storage and campaign accessors without changing behavior",
-    "specRef": "monk-combat-structure.md «Модел» (localStorage/st, bundle v2) + «Червени линии» т.1 (app.js = малък обхват) и т.3 (localStorage схемата е жив контракт)",
-    "tddWorkflow": true,
-    "verify": [
-      "npx playwright test class-profile derived-values critical-path rest-mechanics short-rest multiclass-levelup levelup-modal"
-    ],
-    "notes": "🔑 СКЕЛЕТЕН ТАСК. Пипа отровните файлове (app.js, index.html) ВЕДНЪЖ и отваря местата, които останалите таскове пълнят. ⛔ ЗАБРАНЕНО Е ДА ПРОМЕНИШ ПОВЕДЕНИЕТО НА МОНКА — нито едно число, нито един видим елемент. Доказателството: derived-values (53 теста), critical-path (25), rest-mechanics (6), short-rest (6), multiclass-levelup (20), levelup-modal (14) трябва да минат БЕЗ ДА ГИ ПИПАШ. Поискаш ли да промениш такъв тест — рефакторът ти е сгрешен, спри и преосмисли.\n\nЗАЩО: апът ще поддържа ВТОРИ герой (чист Grave Cleric) с други формули. Механизмът е класови профили + отделен запис на герой, НЕ feature flag-ове.\n\n=== 1) КЛАСОВ ПРОФИЛ ===\nНов файл `modules/classes/monk.js` (IIFE, 'use strict'), който ИЗНАСЯ монашеската математика от app.js. Договорът (таск 1200 ще напише cleric.js по НЕГО — спази го дословно):\n```\nwindow.CLASS_PROFILES = window.CLASS_PROFILES || {};\nwindow.CLASS_PROFILES.monk = {\n  id: 'monk',\n  label: 'Monk',\n  storageKey: 'monkSheet_v3',   // ⚠ НЕ СЕ ПРОМЕНЯ\n  defaults: {},                  // допълнителни полета към defaultState (монкът няма нови)\n  derive(st, base) { /* връща САМО класовите стойности */ },\n  hiddenFieldIds: [],            // id-та, чийто .field контейнер се скрива (монкът не крие нищо)\n  hasClassBadges: true,          // баджовете горе вляво\n  hasLevelUpModal: true,         // избор на клас при level-up\n  restoresKi: true               // почивките пълнят ки\n};\n```\n`derive(st, base)` получава вече сметнатите НЕУТРАЛНИ стойности (`base.level`, `base.mods`, `base.prof`, `base.hdMax`, `base.maxHP`, `base.savesBase`, `base.savesTotal`, `base.rangedAtk`) и връща класовите: `ma`, `kiMax`, `ac`, `um`, `totalSpeed`, `meleeAtk`, `meleeWeaponAtk`, `kiSaveDC`, `spellSaveDC_WIS`, `spellAtk_WIS`, `spellSaveDC_CHA`, `spellAtk_CHA`. Премести и помощните `maDie` (app.js:67-72) и `umBonus` (app.js:82-89) в monk.js — те са 100% монашески. `profBonus` и `baseHP` ОСТАВАТ в app.js (неутрални са).\n\nВ app.js `derived()` (215-268) става ДИСПЕЧЕР: смята неутралната част, после слива `activeProfile().derive(st, base)`. Добави `function activeProfile()` → `window.CLASS_PROFILES[st.class || 'monk']`. ⚠ Формулите се ПРЕМЕСТВАТ дословно, без «подобрения» — същите закръгления, същият ред на събиране.\n\n=== 2) ЗАПИС ПО ГЕРОЙ ===\nКлючът `monkSheet_v3` е зашит на 3 места: app.js:153 (четене), app.js:198 (запис), modules/newchar.js:5. Направи го ИНДИРЕКТЕН: `function activeStorageKey()` чете мъничък указател `localStorage['activeCharacter']` (стойност = id на профил, ДЕФОЛТ `'monk'`) и връща `CLASS_PROFILES[id].storageKey`. При липсващ указател → монк → `monkSheet_v3`. ⚠ Монкът ТРЯБВА да продължи да чете и пише ТОЧНО `monkSheet_v3` — около 51 теста сеят този ключ директно и трябва да останат зелени. modules/newchar.js НЕ го пипай в този таск (той е извън files; остава както е и продължава да работи, защото ключът му съвпада с монашеския).\n\n=== 3) ВИДИМОСТ НА ПОЛЕТА ===\n`hiddenFieldIds` се прилага в renderAll: за всяко id вземи елемента и скрий НАЙ-БЛИЗКИЯ му `.field` контейнер (`el.closest('.field')`) — в tabs/stats-basicinfo.html всяко поле е точно такъв `div.field`. Ако всички `.field` в един ред са скрити, скрий и реда. ⚠ НЕ пипай самия tabs/stats-basicinfo.html — той е собственост на друг таск. Монкът има празен списък, значи визуално нищо не се променя.\n\n=== 4) КАМПАНИЕН ДОСТЪП (само фасада) ===\nДобави `window.Campaign` с четири метода: `getNpcs()`, `setNpcs(arr)`, `getNotes()`, `setNotes(str)`. В ТОЗИ таск те четат/пишат право в `st.campaignNpcs` и `st.sessionNotes` — тоест поведение НУЛА промяна. Насочи към тях: modules/campaign-npc.js (замени прякото `window.st.campaignNpcs`) и кода за session notes в app.js. Таск 1310 после ще подмени само реализацията отдолу.\n\n=== 5) МЕСТА ЗА ЗАКАЧАНЕ (index.html) ===\nДобави script таговете за ВСИЧКИ нови модули ПРЕДИ app.js (за да не се пипа index.html пак): `modules/classes/monk.js`, `modules/classes/cleric.js`, `modules/characters.js`, `modules/campaign.js`. ⚠ Трите още не съществуват — това е НОРМАЛНО, браузърът логва 404 и продължава; таскове 1200/1300/1310 ги създават. Добави и празна точка за монтиране на превключвателя в header-а: `<div id=\"charSwitcher\"></div>` (таск 1300 я пълни).\n\nЧЕРВЕНИ ЛИНИИ: не пипай localStorage данните (нищо не се мигрира, нищо не се трие); не пипай spells-mark.js; не въвеждай нови зависимости; новият код е в modules/, app.js само изтънява.\n\nТЕСТ (в същия commit, нов test/e2e/class-profile.spec.js): (а) `window.CLASS_PROFILES.monk` съществува с всички полета от договора; (б) `activeProfile().id === 'monk'` по подразбиране и при липсващ указател; (в) `derived()` връща същите стойности като профила за ki/ma/ac/um/totalSpeed/meleeAtk/kiSaveDC при няколко нива (1, 5, 11); (г) при `hiddenFieldIds: ['maDieSpan']` (временно подаден в теста) `.field` контейнерът се скрива, а при празен списък е видим; (д) `window.Campaign.getNpcs()` връща същото като `st.campaignNpcs`.",
-    "steps": [
-      {
-        "id": "1100.1",
-        "phase": "RECON",
-        "action": "Прочети app.js: derived() 215-268, помощните maDie 67-72 / umBonus 82-89 / profBonus 74-80 / baseHP 91-96, defaultState 99-144, renderAll 376-499, load/save 147-202, кода за session notes (~921-1013). Прочети modules/campaign-npc.js и tabs/stats-basicinfo.html (НЕ го променяй — само виж, че всяко поле е div.field с id). Прочети test/e2e/derived-values.spec.js, за да знаеш какво точно е заковано."
-      },
-      {
-        "id": "1100.2",
-        "phase": "RED",
-        "action": "Напиши test/e2e/class-profile.spec.js с асерциите (а)-(д) от notes. Червен — CLASS_PROFILES още не съществува."
-      },
-      {
-        "id": "1100.3",
-        "phase": "GREEN",
-        "action": "Създай modules/classes/monk.js по договора и премести в него монашеските формули ДОСЛОВНО. Преработи derived() в диспечер, добави activeProfile() и activeStorageKey(), приложи hiddenFieldIds в renderAll, добави window.Campaign фасадата и я закачи в campaign-npc.js и session notes кода, добави script таговете и #charSwitcher в index.html."
-      },
-      {
-        "id": "1100.4",
-        "phase": "DONE",
-        "action": "npx playwright test class-profile derived-values critical-path rest-mechanics short-rest multiclass-levelup levelup-modal — ВСИЧКО зелено и БЕЗ нито една промяна по монашеските спекове. Commit с description-а дословно."
-      }
-    ],
-    "passes": true
-  },
-  {
-    "id": 1110,
-    "category": "feature",
-    "repo": "combat",
-    "lane": "core-seams",
-    "model": "heavy",
-    "dependsOn": [],
-    "files": [
-      "app.js",
-      "test/e2e/character-io.spec.js"
-    ],
-    "description": "feat(io): make export and import character-aware with a campaign snapshot that only moves forward",
-    "specRef": "monk-combat-structure.md «Модел» (Bundle v2 = export/import контрактът)",
-    "tddWorkflow": true,
-    "verify": [
-      "npx playwright test character-io import-export critical-path"
-    ],
-    "notes": "Стъпва на скелета от 1100 (същата lane, вече merge-нат): `activeProfile()`, `activeStorageKey()`, `window.Campaign`.\n\nДНЕШНО СЪСТОЯНИЕ: `getBundle()` app.js:729-735 → `{schema:'monkSheetBundle/v1', state, aliases}`; `buildBundle()` app.js:1102-1124 → `{version:2, state, sessionNotes}` (sessionNotes ВЕЧЕ е отделно поле ИЗВЪН state — това е прецедентът, който разширяваш); `readBundleOrState()` 737-751 разпознава v2 и суров legacy state; `applyBundle()` прави `st = {...defaultState, ...incoming}` + save() + renderAll() + пререндер на модулите. Експортът (826-840) слага дата САМО в ИМЕТО на файла — вътре няма никакво времево поле.\n\nЩО СЕ ИСКА (решения на потребителя, не ги предоговаряй):\n1. **Всеки файл е самодостатъчен**: експортът изнася АКТИВНИЯ герой + ПЪЛНО копие на кампанията. Нова форма: `{ version: 3, character: '<profile id>', state, campaign: { npcs, sessionNotes, savedAt } }`, където `savedAt` е ISO дата в САМИТЕ ДАННИ (имената на файлове се преименуват, данните не лъжат).\n2. **Маркер за герой**: при импорт, ако `character` не съвпада с активния герой → съобщение от рода «Този файл е на <X>, а активният герой е <Y>» и импортът НЕ се прилага. Файл БЕЗ поле `character` = монк (всичко съществуващо днес е монк).\n3. **Кампанията върви само нагоре**: кампанийната част се прилага САМО ако `campaign.savedAt` е ПО-НОВА от текущата. По-стара или липсваща → игнорира се тихо, героят пак се зарежда нормално. Така нито един архивен файл не може да изяде по-нови NPC-та и записки.\n4. **Назад-съвместимост**: v2 и legacy файловете трябва да продължат да се зареждат (те нямат campaign — само state).\n\nИМПЛЕМЕНТАЦИЯ: разшири getBundle/buildBundle да четат кампанията през `window.Campaign` и да слагат `character: activeProfile().id` + `savedAt: new Date().toISOString()`. В applyBundle раздели на две стъпки: първо проверка на маркера (несъвпадение → съобщение + изход), после героят, после кампанията по правилото за датата. Текущата кампанийна дата се пази до самата кампания (`Campaign` фасадата да я излага като `getSavedAt()`/`setSavedAt()`).\n\nЧЕРВЕНИ ЛИНИИ: import-export.spec.js е жив контракт — ако някой негов тест падне, значи си счупил назад-съвместимостта, поправи КОДА си, не теста. Не пипай localStorage данните. Не променяй имената на експортните файлове.\n\nТЕСТ (нов test/e2e/character-io.spec.js): (а) експортът произвежда version 3 с `character`, `state` и `campaign.savedAt`; (б) импорт на v2 файл (без campaign) зарежда героя и НЕ пипа кампанията; (в) импорт на файл с ПО-СТАРА `savedAt` оставя сегашните NPC-та и записки непроменени; (г) импорт с ПО-НОВА `savedAt` ги подменя; (д) импорт на файл с `character: 'cleric'` при активен монк показва съобщение и НЕ променя нищо; (е) файл без `character` се приема като монк.",
-    "steps": [
-      {
-        "id": "1110.1",
-        "phase": "RECON",
-        "action": "Прочети app.js: getBundle 729-735, readBundleOrState 737-751, applyBundle, експорт хендлъра 826-845, buildBundle 1102-1124, плюс window.Campaign фасадата от таск 1100. Прочети test/e2e/import-export.spec.js — той е договорът за назад-съвместимост."
-      },
-      {
-        "id": "1110.2",
-        "phase": "RED",
-        "action": "Напиши test/e2e/character-io.spec.js с асерциите (а)-(е) от notes. Червен."
-      },
-      {
-        "id": "1110.3",
-        "phase": "GREEN",
-        "action": "Въведи bundle v3 (character + campaign + savedAt), проверката на маркера при импорт и правилото «кампанията се подменя само ако файлът е по-нов». Запази пътищата за v2 и legacy."
-      },
-      {
-        "id": "1110.4",
-        "phase": "DONE",
-        "action": "npx playwright test character-io import-export critical-path — зелено, при това БЕЗ промени по import-export.spec.js. Commit с description-а дословно."
-      }
-    ],
-    "passes": true
-  },
-  {
-    "id": 1200,
-    "category": "feature",
-    "repo": "combat",
-    "lane": "cleric-profile",
-    "model": "heavy",
-    "dependsOn": [
-      1100
-    ],
-    "files": [
-      "modules/classes/cleric.js",
-      "test/e2e/cleric-profile.spec.js"
-    ],
-    "description": "feat(cleric): add the Grave Cleric class profile with its own derived formulas",
-    "specRef": "monk-combat-structure.md «Файлове» (modules/ IIFE конвенция)",
-    "tddWorkflow": true,
-    "verify": [
-      "npx playwright test cleric-profile class-profile"
-    ],
-    "notes": "ЧИСТО НОВ ФАЙЛ — не пипа app.js, не пипа монка, не пипа нито един съществуващ тест. Пише се по договора, който таск 1100 вече е merge-нал в `modules/classes/monk.js`; прочети го и го следвай ДОСЛОВНО (същите имена на полета и същата сигнатура `derive(st, base)`).\n\nГЕРОЯТ: чист Grave Cleric, БЕЗ мултиклас. Правилата са окончателни (от списъка на потребителя):\n- **Няма ki** — нито `kiMax`, нито `kiSaveDC`, нито ки магически бонус.\n- **Няма martial arts die** — няма `ma`.\n- **AC = 10 + DEX, капнат от бронята.** Формулата: `ac = armorAc + min(mods.dex, armorMaxDex) + acMagic`, където при липсваща броня (`armorAc` 0/празно) се пада на `10 + mods.dex + acMagic`, а `armorMaxDex` null/празно значи БЕЗ таван. Пример от потребителя: half plate = armorAc 15, armorMaxDex 2.\n- **Скоростта е една стойност** — `totalSpeed = st.baseSpeed`, идва от расата, НЯМА Unarmored Movement и НЯМА `um`.\n- **Unarmed = 1 + STR**, мени се само от айтъми: `meleeAtk = 1 + mods.str + (st.unarmedMagic || 0)`.\n- **Само WIS spell DC**: `spellSaveDC_WIS` и `spellAtk_WIS` както при монка; `spellSaveDC_CHA`/`spellAtk_CHA` НЕ се връщат изобщо.\n- **Линейна прогресия**: `hasClassBadges: false`, `hasLevelUpModal: false` (без избор на клас при вдигане на ниво).\n- `restoresKi: false`.\n- Неутралните стойности (`level`, `mods`, `prof`, `hdMax`, `maxHP`, `savesBase`, `savesTotal`, `rangedAtk`) ИДВАТ наготово в `base` — не ги смятай наново.\n\nСОБСТВЕН ЗАПИС И ПОЛЕТА: `storageKey: 'cleric_v1'` (⛔ НИКОГА `monkSheet_v3` — той е на живия монк). `defaults: { armorAc: 0, armorMaxDex: null }` — тези полета се сливат към defaultState за клерика.\n`hiddenFieldIds` (скриват монашеските редове в tabs/stats-basicinfo.html): `['monkLevelSpan','maDieSpan','kiMaxSpan','kiSaveDcSpan2','kiSaveDcMagicInput','umBonusSpan']`.\n\n⚠ UI-ят за бронята (полетата armor AC и max dex) е на таск 1210 — ТУК само формулата и полетата по подразбиране.\n\nЧЕРВЕНИ ЛИНИИ: не пипай monk.js, app.js, index.html и нито един съществуващ спек. Клерикът е Grave Domain (не Death — Death е на монка), но уменията му са за ДРУГ board, тук няма skills съдържание.\n\nТЕСТ (нов test/e2e/cleric-profile.spec.js, чисто формулен — вика профила директно през page.evaluate, БЕЗ да сменя активен герой): (а) профилът съществува с всички полета от договора и `storageKey === 'cleric_v1'`; (б) без броня AC = 10 + DEX + acMagic; (в) half plate (15, max 2) при DEX +4 дава AC 17, а при DEX +1 дава 16; (г) `armorMaxDex: null` не слага таван; (д) няма `ma`, `kiMax`, `kiSaveDC`, `um`, `spellSaveDC_CHA` в резултата; (е) `totalSpeed === st.baseSpeed` независимо от нивото; (ж) `meleeAtk === 1 + STR mod + unarmedMagic`; (з) `spellSaveDC_WIS === 8 + prof + WIS mod`.",
-    "steps": [
-      {
-        "id": "1200.1",
-        "phase": "RECON",
-        "action": "Прочети merge-натия modules/classes/monk.js — той е еталонът за формата на профила и за сигнатурата derive(st, base). Прочети и диспечера derived() в app.js, за да знаеш какво точно идва в `base`."
-      },
-      {
-        "id": "1200.2",
-        "phase": "RED",
-        "action": "Напиши test/e2e/cleric-profile.spec.js с асерциите (а)-(з) от notes, викайки window.CLASS_PROFILES.cleric.derive(...) директно. Червен."
-      },
-      {
-        "id": "1200.3",
-        "phase": "GREEN",
-        "action": "Създай modules/classes/cleric.js по договора с всички правила от notes (без ki/ma/um, AC от броня с dex таван, фиксирана скорост, 1+STR unarmed, само WIS DC, линейна прогресия, собствен storageKey и defaults)."
-      },
-      {
-        "id": "1200.4",
-        "phase": "DONE",
-        "action": "npx playwright test cleric-profile class-profile — зелено. Commit с description-а дословно."
-      }
-    ],
-    "passes": true
-  },
-  {
-    "id": 1210,
-    "category": "feature",
-    "repo": "combat",
-    "lane": "cleric-profile",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "tabs/stats-basicinfo.html",
-      "modules/classes/cleric.js",
-      "test/e2e/armor-ac.spec.js"
-    ],
-    "description": "feat(cleric): add armor AC and max dex inputs that feed the cleric AC formula",
-    "specRef": "monk-combat-structure.md «Файлове» (tabs/ партиали)",
-    "tddWorkflow": true,
-    "notes": "Стъпва на таск 1200 (същата lane, вече merge-нат) — формулата за AC вече съществува в клерик профила, тук ѝ се дава UI.\n\nДОБАВИ в tabs/stats-basicinfo.html нов ред с два `div.field` по образеца на съседните (виж реда с «AC (Unarmored)» и «Magic Item Bonus (AC)»):\n- `<input id=\"armorAcInput\" type=\"number\" step=\"1\">` с етикет «Armor AC»\n- `<input id=\"armorMaxDexInput\" type=\"number\" step=\"1\">` с етикет «Armor Max DEX» (празно = без таван)\nПлюс поле за показване на резултата, ако е нужно за симетрия с «AC (Unarmored)».\n\nЗАКАЧИ ГИ като другите входове в партиала: `input` слушател → пише в `st.armorAc` / `st.armorMaxDex` → `save()`. ⚠ Партиалът се зарежда ЛЕНИВО (sub-tab 'basicinfo'), затова слушателите се закачат в `attachSubTabEventListeners('basicinfo')` в app.js… НО app.js е собственост на друга lane. Затова: закачи ги от клерик профила (`modules/classes/cleric.js`) през делегиран слушател на документа (`document.addEventListener('input', e => { if (e.target.id === 'armorAcInput') … })`) — така не пипаш app.js изобщо. Празно поле за max dex → `null` (без таван), не 0.\n\nВИДИМОСТ: двете полета са само за клерика. Добави id-тата им в… НЕ в `hiddenFieldIds` на клерика (той ги ПОКАЗВА), а ги скрий за МОНКА. Понеже monk.js е на друга lane, направи го от клерик профила обратно: при `activeProfile().id !== 'cleric'` скрий `.field` контейнерите им при рендер. Най-простото: клерик профилът излага `shownFieldIds: ['armorAcInput','armorMaxDexInput']`, а механизмът от 1100 скрива всичко от `shownFieldIds` на ДРУГИ профили — ако такъв механизъм няма, скрий ги чрез делегиран рендер хук в cleric.js и ОПИШИ го в коментар.\n\nЧЕРВЕНИ ЛИНИИ: ⛔ НЕ пипай app.js, index.html, monk.js. Не местѝ и не преименувай съществуващи полета в партиала — само добавяш. Монашеският изглед на Basic Info трябва да остане ВИЗУАЛНО непроменен (двете нови полета са скрити за монк).\n\nТЕСТ (нов test/e2e/armor-ac.spec.js): (а) при активен монк двата входа НЕ са видими и Basic Info изглежда както преди; (б) стойностите се пазят в st.armorAc / st.armorMaxDex и преживяват reload; (в) празно max dex поле дава null, не 0; (г) въведени 15 и 2 при DEX +4 дават AC 17 през клерик формулата.",
-    "steps": [
-      {
-        "id": "1210.1",
-        "phase": "RECON",
-        "action": "Прочети tabs/stats-basicinfo.html (76 реда, всяко поле е div.field с id) и merge-натия modules/classes/cleric.js. Виж как съседните входове (acMagicInput, kiSaveDcMagicInput) са оформени, за да ги повториш 1:1."
-      },
-      {
-        "id": "1210.2",
-        "phase": "RED",
-        "action": "Напиши test/e2e/armor-ac.spec.js с асерциите (а)-(г) от notes. Червен."
-      },
-      {
-        "id": "1210.3",
-        "phase": "GREEN",
-        "action": "Добави двата входа в партиала и ги закачи с делегиран слушател от cleric.js (БЕЗ да пипаш app.js). Скрий ги за всички профили освен клерика."
-      },
-      {
-        "id": "1210.4",
-        "phase": "DONE",
-        "action": "Пълният гейт (npm test) зелен — това е последният таск на lane-а и няма verify override. Commit с description-а дословно."
-      }
-    ],
-    "passes": true
-  },
-  {
-    "id": 1300,
-    "category": "feature",
-    "repo": "combat",
-    "lane": "characters",
-    "model": "heavy",
-    "dependsOn": [
-      1100
-    ],
-    "files": [
-      "modules/characters.js",
-      "test/e2e/character-switch.spec.js"
-    ],
-    "description": "feat(characters): add the character container with switching between separate saves",
-    "specRef": "monk-combat-structure.md «Модел» (localStorage/st) + «Червени линии» т.3",
-    "tddWorkflow": true,
-    "verify": [
-      "npx playwright test character-switch class-profile critical-path"
-    ],
-    "notes": "ЧИСТО НОВ ФАЙЛ `modules/characters.js` (IIFE). Стъпва на скелета от 1100: `activeProfile()`, `activeStorageKey()`, указателят `localStorage['activeCharacter']`, и точката за монтиране `#charSwitcher` в header-а на index.html (вече съществува, празна е).\n\nМОДЕЛЪТ (решение на потребителя, не го предоговаряй): всеки герой има СОБСТВЕН `st` в СОБСТВЕН localStorage ключ, взет от профила му. Монкът остава в `monkSheet_v3` НЕПРОМЕНЕН — нулева миграция на живи данни. Няма вложен обект с всички герои; има само мъничък указател кой е активен.\n\nКАКВО ПРАВИ МОДУЛЪТ:\n1. `window.Characters.list()` → наличните профили от `window.CLASS_PROFILES` + дали имат запис в localStorage.\n2. `window.Characters.active()` → id на активния (дефолт 'monk').\n3. `window.Characters.switchTo(id)` → записва текущия герой, сменя указателя, зарежда записа на новия (или го създава от defaultState + `profile.defaults`), после пререндерира ВСИЧКО по пътя, който апът вече ползва при импорт: `window.st = st; renderAll();` плюс модулните пререндери (renderLangTable, renderToolTable, renderInventoryTable, renderDomainSpells, initMarkSpells, renderClericPrepSpells, renderClericCantrips, renderChaSpells, renderCube) — прочети как `applyBundle` го прави и ползвай СЪЩИЯ ред; ако той вече е изнесен във функция, викай нея, не дублирай списъка.\n4. Рендерира превключвателя в `#charSwitcher`: по едно копче/избор на герой, активният е отбелязан. Минимален, но четим на таблет (едро за пръст).\n\nВАЖНО ЗА БЕЗОПАСНОСТ: превключването ЗАПИСВА текущия герой ПРЕДИ да смени указателя — иначе губиш последните промени. И НИКОГА не пише в чуждия ключ.\n\nЧЕРВЕНИ ЛИНИИ: ⛔ не пипай app.js, index.html, monk.js, cleric.js (всички са на други lanes). Не мигрирай и не трий localStorage данни. По подразбиране, при празен указател, апът е МОНК и се държи точно както днес — около 51 теста сеят `monkSheet_v3` и трябва да останат зелени.\n\nТЕСТ (нов test/e2e/character-switch.spec.js): (а) по подразбиране активният е монк и `monkSheet_v3` се чете както преди; (б) превключване към втори герой създава НОВ ключ и НЕ пипа `monkSheet_v3` (сверѝ съдържанието му преди и след); (в) промяна по втория герой (напр. HP) не се вижда при монка и обратно; (г) превключване напред-назад пази стойностите и на двамата; (д) превключването пререндерира екрана (комбат пиловете показват стойностите на новия герой); (е) активният герой преживява reload.",
-    "steps": [
-      {
-        "id": "1300.1",
-        "phase": "RECON",
-        "action": "Прочети merge-натия скелет: activeProfile/activeStorageKey/указателя в app.js, modules/classes/monk.js, и как applyBundle пререндерира целия UI след подмяна на state (точният ред на модулните извиквания). Виж #charSwitcher в index.html."
-      },
-      {
-        "id": "1300.2",
-        "phase": "RED",
-        "action": "Напиши test/e2e/character-switch.spec.js с асерциите (а)-(е) от notes, особено (б) — че monkSheet_v3 остава байт за байт същият. Червен."
-      },
-      {
-        "id": "1300.3",
-        "phase": "GREEN",
-        "action": "Създай modules/characters.js с list/active/switchTo + рендер на превключвателя в #charSwitcher. Запис на текущия ПРЕДИ смяна на указателя; пререндер по пътя на applyBundle."
-      },
-      {
-        "id": "1300.4",
-        "phase": "DONE",
-        "action": "npx playwright test character-switch class-profile critical-path — зелено. Commit с description-а дословно."
-      }
-    ],
-    "passes": true
-  },
-  {
-    "id": 1310,
-    "category": "feature",
-    "repo": "combat",
-    "lane": "characters",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "modules/campaign.js",
-      "test/e2e/campaign-container.spec.js"
-    ],
-    "description": "feat(campaign): move NPCs and session notes into a shared container seeded from the monk save",
-    "specRef": "monk-combat-structure.md «Campaign NPCs таб» + «Червени линии» т.3",
-    "tddWorkflow": true,
-    "notes": "Стъпва на таск 1100 (фасадата `window.Campaign` вече съществува и чете/пише в `st`) и на 1300 (същата lane, вече merge-нат). ТУК се подменя САМО реализацията отдолу — нито един викащ не се пипа.\n\nЗАЩО: Campaign NPCs и session notes са на КАМПАНИЯТА, не на героя — двамата герои са в една и съща кампания и журналът трябва да е един, независимо с кого играеш. Всичко останало (включително инвентар, злато и изтеглените имена) си остава на героя.\n\nКАКВО ПРАВИ: нов `modules/campaign.js` (IIFE) със собствен localStorage ключ `campaign_v1`, съдържащ `{ npcs: [], sessionNotes: '', savedAt: '<ISO>' }`. Преопределя реализацията зад `window.Campaign` (getNpcs/setNpcs/getNotes/setNotes плюс getSavedAt/setSavedAt, които таск 1110 ползва за правилото «кампанията върви само нагоре»). Всеки запис обновява `savedAt`.\n\n⚠⚠ ЗАСЯВАНЕ ЧРЕЗ КОПИРАНЕ, НЕ МЕСТЕНЕ: при първо пускане, ако `campaign_v1` липсва, той се СЪЗДАВА от сегашните `st.campaignNpcs` и `st.sessionNotes` на МОНАШЕСКИЯ запис. ⛔ Старите полета в `monkSheet_v3` НЕ СЕ ТРИЯТ и НЕ СЕ ПРАЗНЯТ — просто спират да се ползват. Нищо живо не се разрушава; ако нещо се обърка, данните още са на старото място.\n\nЧЕРВЕНИ ЛИНИИ: ⛔ не пипай app.js, campaign-npc.js, characters.js (чужди зони — те вече викат фасадата). Не мигрирай и не трий нищо. campaign-npc.spec.js и session-notes.spec.js са живи договори и трябва да минат БЕЗ промени.\n\nТЕСТ (нов test/e2e/campaign-container.spec.js): (а) при липсващ `campaign_v1` той се създава от монашеските данни и `monkSheet_v3` ОСТАВА с непокътнати `campaignNpcs`/`sessionNotes`; (б) добавен NPC отива в `campaign_v1`, не в героя; (в) NPC-тата и записките са ЕДНИ И СЪЩИ при двамата герои (добавяш при монка, виждаш при другия); (г) всеки запис обновява `savedAt`; (д) campaign-npc и session notes спековете продължават да минат непроменени.",
-    "steps": [
-      {
-        "id": "1310.1",
-        "phase": "RECON",
-        "action": "Прочети фасадата window.Campaign (app.js, от таск 1100), modules/campaign-npc.js и кода за session notes — виж какво точно викат. Прочети test/e2e/campaign-npc.spec.js и session-notes.spec.js: те са договорът, който не бива да мръдне."
-      },
-      {
-        "id": "1310.2",
-        "phase": "RED",
-        "action": "Напиши test/e2e/campaign-container.spec.js с асерциите (а)-(д) от notes, особено (а) — че монашеският запис остава непокътнат след засяването. Червен."
-      },
-      {
-        "id": "1310.3",
-        "phase": "GREEN",
-        "action": "Създай modules/campaign.js със собствен ключ campaign_v1, засяване чрез КОПИРАНЕ от монашеския запис и подмяна на реализацията зад window.Campaign, с обновяване на savedAt при всеки запис."
-      },
-      {
-        "id": "1310.4",
-        "phase": "DONE",
-        "action": "Пълният гейт (npm test) зелен — последен таск на lane-а, без verify override. Commit с description-а дословно."
-      }
-    ],
-    "passes": true
-  },
-  {
-    "id": 1400,
-    "category": "feature",
-    "repo": "combat",
-    "lane": "core-seams",
-    "model": "heavy",
-    "dependsOn": [
-      1210,
-      1310
-    ],
-    "files": [
-      "app.js",
-      "test/e2e/cleric-end-to-end.spec.js"
-    ],
-    "description": "feat(cleric): wire the cleric as a playable second character end to end",
-    "specRef": "monk-combat-structure.md «Модел» + «Червени линии» т.1-3",
-    "tddWorkflow": true,
-    "notes": "ФИНАЛНИЯТ таск на board-а — БЕЗ verify override НАРОЧНО: пълният гейт е задната мрежа за цялата интеграция.\n\nВХОД (всичко вече merge-нато): скелетът с профилите и индиректния ключ (1100), bundle v3 с маркер и кампанийна дата (1110), клерик профилът с формулите (1200), полетата за броня (1210), контейнерът за герои с превключвател (1300), кампанийният контейнер (1310).\n\nЗАДАЧАТА: да се ИГРАЕ с клерика от начало до край и да се запуши всичко, което още куца при реална смяна на герой. Конкретно:\n1. Създаване на клерик през превключвателя: нов запис със своя ключ, `st.class = 'cleric'`, полета по подразбиране от профила (armorAc, armorMaxDex).\n2. При активен клерик монашеските полета ги НЯМА на екрана (ki, martial arts die, Monk Level, Unarmored Movement, ки магически бонус), а класовите баджове горе вляво и модалът за избор на клас при level-up НЕ се появяват (`hasClassBadges:false`, `hasLevelUpModal:false`) — вдигането на ниво е линейно.\n3. Почивките при клерика НЕ пълнят ки (няма такова), но правят всичко останало (HP, hit dice, death saves, spell slots както досега).\n4. Превключване монк ⇄ клерик по време на работа не смесва данни и пререндерира правилно.\n5. Експорт на клерика и импорт обратно работят с маркера от 1110.\n\n⚠ Ако нещо изисква промяна в app.js — това е таскът, в който е позволено (app.js е на тази lane). Пипай ХИРУРГИЧНО, по един регион.\n\nЧЕРВЕНИ ЛИНИИ: монашеското поведение остава непроменено — derived-values, critical-path, rest-mechanics, short-rest, multiclass-levelup, levelup-modal минават БЕЗ промени. `monkSheet_v3` остава непокътнат. Не включвай в този таск: spellcasting таба, flavor по герой, TTS глас по герой, Grave Cleric уменията, слотове за нива 11-20 — те са за СЛЕДВАЩ board.\n\nТЕСТ (нов test/e2e/cleric-end-to-end.spec.js): (а) създаване на клерик и попълване на статове/броня дава правилни AC, скорост, unarmed атака и WIS DC; (б) монашеските полета не се виждат при клерик, но се виждат пак след превключване към монк; (в) няма класови баджове и няма level-up модал при клерика, а нивото расте линейно; (г) кратка и дълга почивка при клерика минават без грешки и не търсят ки; (д) превключване монк→клерик→монк пази данните и на двамата; (е) експорт на клерика и импорт обратно възстановява същите стойности.",
-    "steps": [
-      {
-        "id": "1400.1",
-        "phase": "RECON",
-        "action": "Прочети всичко merge-нато от board-а: диспечера derived() и индиректния ключ в app.js, monk.js, cleric.js, characters.js, campaign.js, bundle v3 кода. Пусни апа наум през сценария «създай клерик и играй» и запиши къде още се допуска монашеско допускане (почивки, баджове, level-up, видимост)."
-      },
-      {
-        "id": "1400.2",
-        "phase": "RED",
-        "action": "Напиши test/e2e/cleric-end-to-end.spec.js с асерциите (а)-(е) от notes. Червен на местата, където интеграцията още куца."
-      },
-      {
-        "id": "1400.3",
-        "phase": "GREEN",
-        "action": "Запуши дупките — хирургично в app.js (почивки без ки, баджове и level-up модал според профила, видимост при смяна на герой). Нищо от следващия board (spellcasting, flavor, TTS, Grave умения)."
-      },
-      {
-        "id": "1400.4",
-        "phase": "DONE",
-        "action": "Пълният гейт (npm test) зелен, включително всички монашески спекове БЕЗ нито една промяна по тях. Commit с description-а дословно."
-      }
-    ],
-    "passes": false
-  }
+﻿[
+    {
+        "id":  1100,
+        "category":  "refactor",
+        "repo":  "combat",
+        "lane":  "core-seams",
+        "model":  "heavy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "app.js",
+                      "index.html",
+                      "modules/classes/monk.js",
+                      "modules/campaign-npc.js",
+                      "test/e2e/class-profile.spec.js"
+                  ],
+        "description":  "refactor(core): introduce class profiles, per-character storage and campaign accessors without changing behavior",
+        "specRef":  "monk-combat-structure.md «Модел» (localStorage/st, bundle v2) + «Червени линии» т.1 (app.js = малък обхват) и т.3 (localStorage схемата е жив контракт)",
+        "tddWorkflow":  true,
+        "verify":  [
+                       "npx playwright test class-profile derived-values critical-path rest-mechanics short-rest multiclass-levelup levelup-modal"
+                   ],
+        "notes":  "🔑 СКЕЛЕТЕН ТАСК. Пипа отровните файлове (app.js, index.html) ВЕДНЪЖ и отваря местата, които останалите таскове пълнят. ⛔ ЗАБРАНЕНО Е ДА ПРОМЕНИШ ПОВЕДЕНИЕТО НА МОНКА — нито едно число, нито един видим елемент. Доказателството: derived-values (53 теста), critical-path (25), rest-mechanics (6), short-rest (6), multiclass-levelup (20), levelup-modal (14) трябва да минат БЕЗ ДА ГИ ПИПАШ. Поискаш ли да промениш такъв тест — рефакторът ти е сгрешен, спри и преосмисли.\n\nЗАЩО: апът ще поддържа ВТОРИ герой (чист Grave Cleric) с други формули. Механизмът е класови профили + отделен запис на герой, НЕ feature flag-ове.\n\n=== 1) КЛАСОВ ПРОФИЛ ===\nНов файл `modules/classes/monk.js` (IIFE, \u0027use strict\u0027), който ИЗНАСЯ монашеската математика от app.js. Договорът (таск 1200 ще напише cleric.js по НЕГО — спази го дословно):\n```\nwindow.CLASS_PROFILES = window.CLASS_PROFILES || {};\nwindow.CLASS_PROFILES.monk = {\n  id: \u0027monk\u0027,\n  label: \u0027Monk\u0027,\n  storageKey: \u0027monkSheet_v3\u0027,   // ⚠ НЕ СЕ ПРОМЕНЯ\n  defaults: {},                  // допълнителни полета към defaultState (монкът няма нови)\n  derive(st, base) { /* връща САМО класовите стойности */ },\n  hiddenFieldIds: [],            // id-та, чийто .field контейнер се скрива (монкът не крие нищо)\n  hasClassBadges: true,          // баджовете горе вляво\n  hasLevelUpModal: true,         // избор на клас при level-up\n  restoresKi: true               // почивките пълнят ки\n};\n```\n`derive(st, base)` получава вече сметнатите НЕУТРАЛНИ стойности (`base.level`, `base.mods`, `base.prof`, `base.hdMax`, `base.maxHP`, `base.savesBase`, `base.savesTotal`, `base.rangedAtk`) и връща класовите: `ma`, `kiMax`, `ac`, `um`, `totalSpeed`, `meleeAtk`, `meleeWeaponAtk`, `kiSaveDC`, `spellSaveDC_WIS`, `spellAtk_WIS`, `spellSaveDC_CHA`, `spellAtk_CHA`. Премести и помощните `maDie` (app.js:67-72) и `umBonus` (app.js:82-89) в monk.js — те са 100% монашески. `profBonus` и `baseHP` ОСТАВАТ в app.js (неутрални са).\n\nВ app.js `derived()` (215-268) става ДИСПЕЧЕР: смята неутралната част, после слива `activeProfile().derive(st, base)`. Добави `function activeProfile()` → `window.CLASS_PROFILES[st.class || \u0027monk\u0027]`. ⚠ Формулите се ПРЕМЕСТВАТ дословно, без «подобрения» — същите закръгления, същият ред на събиране.\n\n=== 2) ЗАПИС ПО ГЕРОЙ ===\nКлючът `monkSheet_v3` е зашит на 3 места: app.js:153 (четене), app.js:198 (запис), modules/newchar.js:5. Направи го ИНДИРЕКТЕН: `function activeStorageKey()` чете мъничък указател `localStorage[\u0027activeCharacter\u0027]` (стойност = id на профил, ДЕФОЛТ `\u0027monk\u0027`) и връща `CLASS_PROFILES[id].storageKey`. При липсващ указател → монк → `monkSheet_v3`. ⚠ Монкът ТРЯБВА да продължи да чете и пише ТОЧНО `monkSheet_v3` — около 51 теста сеят този ключ директно и трябва да останат зелени. modules/newchar.js НЕ го пипай в този таск (той е извън files; остава както е и продължава да работи, защото ключът му съвпада с монашеския).\n\n=== 3) ВИДИМОСТ НА ПОЛЕТА ===\n`hiddenFieldIds` се прилага в renderAll: за всяко id вземи елемента и скрий НАЙ-БЛИЗКИЯ му `.field` контейнер (`el.closest(\u0027.field\u0027)`) — в tabs/stats-basicinfo.html всяко поле е точно такъв `div.field`. Ако всички `.field` в един ред са скрити, скрий и реда. ⚠ НЕ пипай самия tabs/stats-basicinfo.html — той е собственост на друг таск. Монкът има празен списък, значи визуално нищо не се променя.\n\n=== 4) КАМПАНИЕН ДОСТЪП (само фасада) ===\nДобави `window.Campaign` с четири метода: `getNpcs()`, `setNpcs(arr)`, `getNotes()`, `setNotes(str)`. В ТОЗИ таск те четат/пишат право в `st.campaignNpcs` и `st.sessionNotes` — тоест поведение НУЛА промяна. Насочи към тях: modules/campaign-npc.js (замени прякото `window.st.campaignNpcs`) и кода за session notes в app.js. Таск 1310 после ще подмени само реализацията отдолу.\n\n=== 5) МЕСТА ЗА ЗАКАЧАНЕ (index.html) ===\nДобави script таговете за ВСИЧКИ нови модули ПРЕДИ app.js (за да не се пипа index.html пак): `modules/classes/monk.js`, `modules/classes/cleric.js`, `modules/characters.js`, `modules/campaign.js`. ⚠ Трите още не съществуват — това е НОРМАЛНО, браузърът логва 404 и продължава; таскове 1200/1300/1310 ги създават. Добави и празна точка за монтиране на превключвателя в header-а: `\u003cdiv id=\"charSwitcher\"\u003e\u003c/div\u003e` (таск 1300 я пълни).\n\nЧЕРВЕНИ ЛИНИИ: не пипай localStorage данните (нищо не се мигрира, нищо не се трие); не пипай spells-mark.js; не въвеждай нови зависимости; новият код е в modules/, app.js само изтънява.\n\nТЕСТ (в същия commit, нов test/e2e/class-profile.spec.js): (а) `window.CLASS_PROFILES.monk` съществува с всички полета от договора; (б) `activeProfile().id === \u0027monk\u0027` по подразбиране и при липсващ указател; (в) `derived()` връща същите стойности като профила за ki/ma/ac/um/totalSpeed/meleeAtk/kiSaveDC при няколко нива (1, 5, 11); (г) при `hiddenFieldIds: [\u0027maDieSpan\u0027]` (временно подаден в теста) `.field` контейнерът се скрива, а при празен списък е видим; (д) `window.Campaign.getNpcs()` връща същото като `st.campaignNpcs`.",
+        "steps":  [
+                      {
+                          "id":  "1100.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети app.js: derived() 215-268, помощните maDie 67-72 / umBonus 82-89 / profBonus 74-80 / baseHP 91-96, defaultState 99-144, renderAll 376-499, load/save 147-202, кода за session notes (~921-1013). Прочети modules/campaign-npc.js и tabs/stats-basicinfo.html (НЕ го променяй — само виж, че всяко поле е div.field с id). Прочети test/e2e/derived-values.spec.js, за да знаеш какво точно е заковано."
+                      },
+                      {
+                          "id":  "1100.2",
+                          "phase":  "RED",
+                          "action":  "Напиши test/e2e/class-profile.spec.js с асерциите (а)-(д) от notes. Червен — CLASS_PROFILES още не съществува."
+                      },
+                      {
+                          "id":  "1100.3",
+                          "phase":  "GREEN",
+                          "action":  "Създай modules/classes/monk.js по договора и премести в него монашеските формули ДОСЛОВНО. Преработи derived() в диспечер, добави activeProfile() и activeStorageKey(), приложи hiddenFieldIds в renderAll, добави window.Campaign фасадата и я закачи в campaign-npc.js и session notes кода, добави script таговете и #charSwitcher в index.html."
+                      },
+                      {
+                          "id":  "1100.4",
+                          "phase":  "DONE",
+                          "action":  "npx playwright test class-profile derived-values critical-path rest-mechanics short-rest multiclass-levelup levelup-modal — ВСИЧКО зелено и БЕЗ нито една промяна по монашеските спекове. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  1110,
+        "category":  "feature",
+        "repo":  "combat",
+        "lane":  "core-seams",
+        "model":  "heavy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "app.js",
+                      "test/e2e/character-io.spec.js"
+                  ],
+        "description":  "feat(io): make export and import character-aware with a campaign snapshot that only moves forward",
+        "specRef":  "monk-combat-structure.md «Модел» (Bundle v2 = export/import контрактът)",
+        "tddWorkflow":  true,
+        "verify":  [
+                       "npx playwright test character-io import-export critical-path"
+                   ],
+        "notes":  "Стъпва на скелета от 1100 (същата lane, вече merge-нат): `activeProfile()`, `activeStorageKey()`, `window.Campaign`.\n\nДНЕШНО СЪСТОЯНИЕ: `getBundle()` app.js:729-735 → `{schema:\u0027monkSheetBundle/v1\u0027, state, aliases}`; `buildBundle()` app.js:1102-1124 → `{version:2, state, sessionNotes}` (sessionNotes ВЕЧЕ е отделно поле ИЗВЪН state — това е прецедентът, който разширяваш); `readBundleOrState()` 737-751 разпознава v2 и суров legacy state; `applyBundle()` прави `st = {...defaultState, ...incoming}` + save() + renderAll() + пререндер на модулите. Експортът (826-840) слага дата САМО в ИМЕТО на файла — вътре няма никакво времево поле.\n\nЩО СЕ ИСКА (решения на потребителя, не ги предоговаряй):\n1. **Всеки файл е самодостатъчен**: експортът изнася АКТИВНИЯ герой + ПЪЛНО копие на кампанията. Нова форма: `{ version: 3, character: \u0027\u003cprofile id\u003e\u0027, state, campaign: { npcs, sessionNotes, savedAt } }`, където `savedAt` е ISO дата в САМИТЕ ДАННИ (имената на файлове се преименуват, данните не лъжат).\n2. **Маркер за герой**: при импорт, ако `character` не съвпада с активния герой → съобщение от рода «Този файл е на \u003cX\u003e, а активният герой е \u003cY\u003e» и импортът НЕ се прилага. Файл БЕЗ поле `character` = монк (всичко съществуващо днес е монк).\n3. **Кампанията върви само нагоре**: кампанийната част се прилага САМО ако `campaign.savedAt` е ПО-НОВА от текущата. По-стара или липсваща → игнорира се тихо, героят пак се зарежда нормално. Така нито един архивен файл не може да изяде по-нови NPC-та и записки.\n4. **Назад-съвместимост**: v2 и legacy файловете трябва да продължат да се зареждат (те нямат campaign — само state).\n\nИМПЛЕМЕНТАЦИЯ: разшири getBundle/buildBundle да четат кампанията през `window.Campaign` и да слагат `character: activeProfile().id` + `savedAt: new Date().toISOString()`. В applyBundle раздели на две стъпки: първо проверка на маркера (несъвпадение → съобщение + изход), после героят, после кампанията по правилото за датата. Текущата кампанийна дата се пази до самата кампания (`Campaign` фасадата да я излага като `getSavedAt()`/`setSavedAt()`).\n\nЧЕРВЕНИ ЛИНИИ: import-export.spec.js е жив контракт — ако някой негов тест падне, значи си счупил назад-съвместимостта, поправи КОДА си, не теста. Не пипай localStorage данните. Не променяй имената на експортните файлове.\n\nТЕСТ (нов test/e2e/character-io.spec.js): (а) експортът произвежда version 3 с `character`, `state` и `campaign.savedAt`; (б) импорт на v2 файл (без campaign) зарежда героя и НЕ пипа кампанията; (в) импорт на файл с ПО-СТАРА `savedAt` оставя сегашните NPC-та и записки непроменени; (г) импорт с ПО-НОВА `savedAt` ги подменя; (д) импорт на файл с `character: \u0027cleric\u0027` при активен монк показва съобщение и НЕ променя нищо; (е) файл без `character` се приема като монк.",
+        "steps":  [
+                      {
+                          "id":  "1110.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети app.js: getBundle 729-735, readBundleOrState 737-751, applyBundle, експорт хендлъра 826-845, buildBundle 1102-1124, плюс window.Campaign фасадата от таск 1100. Прочети test/e2e/import-export.spec.js — той е договорът за назад-съвместимост."
+                      },
+                      {
+                          "id":  "1110.2",
+                          "phase":  "RED",
+                          "action":  "Напиши test/e2e/character-io.spec.js с асерциите (а)-(е) от notes. Червен."
+                      },
+                      {
+                          "id":  "1110.3",
+                          "phase":  "GREEN",
+                          "action":  "Въведи bundle v3 (character + campaign + savedAt), проверката на маркера при импорт и правилото «кампанията се подменя само ако файлът е по-нов». Запази пътищата за v2 и legacy."
+                      },
+                      {
+                          "id":  "1110.4",
+                          "phase":  "DONE",
+                          "action":  "npx playwright test character-io import-export critical-path — зелено, при това БЕЗ промени по import-export.spec.js. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  1200,
+        "category":  "feature",
+        "repo":  "combat",
+        "lane":  "cleric-profile",
+        "model":  "heavy",
+        "dependsOn":  [
+                          1100
+                      ],
+        "files":  [
+                      "modules/classes/cleric.js",
+                      "test/e2e/cleric-profile.spec.js"
+                  ],
+        "description":  "feat(cleric): add the Grave Cleric class profile with its own derived formulas",
+        "specRef":  "monk-combat-structure.md «Файлове» (modules/ IIFE конвенция)",
+        "tddWorkflow":  true,
+        "verify":  [
+                       "npx playwright test cleric-profile class-profile"
+                   ],
+        "notes":  "ЧИСТО НОВ ФАЙЛ — не пипа app.js, не пипа монка, не пипа нито един съществуващ тест. Пише се по договора, който таск 1100 вече е merge-нал в `modules/classes/monk.js`; прочети го и го следвай ДОСЛОВНО (същите имена на полета и същата сигнатура `derive(st, base)`).\n\nГЕРОЯТ: чист Grave Cleric, БЕЗ мултиклас. Правилата са окончателни (от списъка на потребителя):\n- **Няма ki** — нито `kiMax`, нито `kiSaveDC`, нито ки магически бонус.\n- **Няма martial arts die** — няма `ma`.\n- **AC = 10 + DEX, капнат от бронята.** Формулата: `ac = armorAc + min(mods.dex, armorMaxDex) + acMagic`, където при липсваща броня (`armorAc` 0/празно) се пада на `10 + mods.dex + acMagic`, а `armorMaxDex` null/празно значи БЕЗ таван. Пример от потребителя: half plate = armorAc 15, armorMaxDex 2.\n- **Скоростта е една стойност** — `totalSpeed = st.baseSpeed`, идва от расата, НЯМА Unarmored Movement и НЯМА `um`.\n- **Unarmed = 1 + STR**, мени се само от айтъми: `meleeAtk = 1 + mods.str + (st.unarmedMagic || 0)`.\n- **Само WIS spell DC**: `spellSaveDC_WIS` и `spellAtk_WIS` както при монка; `spellSaveDC_CHA`/`spellAtk_CHA` НЕ се връщат изобщо.\n- **Линейна прогресия**: `hasClassBadges: false`, `hasLevelUpModal: false` (без избор на клас при вдигане на ниво).\n- `restoresKi: false`.\n- Неутралните стойности (`level`, `mods`, `prof`, `hdMax`, `maxHP`, `savesBase`, `savesTotal`, `rangedAtk`) ИДВАТ наготово в `base` — не ги смятай наново.\n\nСОБСТВЕН ЗАПИС И ПОЛЕТА: `storageKey: \u0027cleric_v1\u0027` (⛔ НИКОГА `monkSheet_v3` — той е на живия монк). `defaults: { armorAc: 0, armorMaxDex: null }` — тези полета се сливат към defaultState за клерика.\n`hiddenFieldIds` (скриват монашеските редове в tabs/stats-basicinfo.html): `[\u0027monkLevelSpan\u0027,\u0027maDieSpan\u0027,\u0027kiMaxSpan\u0027,\u0027kiSaveDcSpan2\u0027,\u0027kiSaveDcMagicInput\u0027,\u0027umBonusSpan\u0027]`.\n\n⚠ UI-ят за бронята (полетата armor AC и max dex) е на таск 1210 — ТУК само формулата и полетата по подразбиране.\n\nЧЕРВЕНИ ЛИНИИ: не пипай monk.js, app.js, index.html и нито един съществуващ спек. Клерикът е Grave Domain (не Death — Death е на монка), но уменията му са за ДРУГ board, тук няма skills съдържание.\n\nТЕСТ (нов test/e2e/cleric-profile.spec.js, чисто формулен — вика профила директно през page.evaluate, БЕЗ да сменя активен герой): (а) профилът съществува с всички полета от договора и `storageKey === \u0027cleric_v1\u0027`; (б) без броня AC = 10 + DEX + acMagic; (в) half plate (15, max 2) при DEX +4 дава AC 17, а при DEX +1 дава 16; (г) `armorMaxDex: null` не слага таван; (д) няма `ma`, `kiMax`, `kiSaveDC`, `um`, `spellSaveDC_CHA` в резултата; (е) `totalSpeed === st.baseSpeed` независимо от нивото; (ж) `meleeAtk === 1 + STR mod + unarmedMagic`; (з) `spellSaveDC_WIS === 8 + prof + WIS mod`.",
+        "steps":  [
+                      {
+                          "id":  "1200.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети merge-натия modules/classes/monk.js — той е еталонът за формата на профила и за сигнатурата derive(st, base). Прочети и диспечера derived() в app.js, за да знаеш какво точно идва в `base`."
+                      },
+                      {
+                          "id":  "1200.2",
+                          "phase":  "RED",
+                          "action":  "Напиши test/e2e/cleric-profile.spec.js с асерциите (а)-(з) от notes, викайки window.CLASS_PROFILES.cleric.derive(...) директно. Червен."
+                      },
+                      {
+                          "id":  "1200.3",
+                          "phase":  "GREEN",
+                          "action":  "Създай modules/classes/cleric.js по договора с всички правила от notes (без ki/ma/um, AC от броня с dex таван, фиксирана скорост, 1+STR unarmed, само WIS DC, линейна прогресия, собствен storageKey и defaults)."
+                      },
+                      {
+                          "id":  "1200.4",
+                          "phase":  "DONE",
+                          "action":  "npx playwright test cleric-profile class-profile — зелено. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  1210,
+        "category":  "feature",
+        "repo":  "combat",
+        "lane":  "cleric-profile",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "tabs/stats-basicinfo.html",
+                      "modules/classes/cleric.js",
+                      "test/e2e/armor-ac.spec.js"
+                  ],
+        "description":  "feat(cleric): add armor AC and max dex inputs that feed the cleric AC formula",
+        "specRef":  "monk-combat-structure.md «Файлове» (tabs/ партиали)",
+        "tddWorkflow":  true,
+        "notes":  "Стъпва на таск 1200 (същата lane, вече merge-нат) — формулата за AC вече съществува в клерик профила, тук ѝ се дава UI.\n\nДОБАВИ в tabs/stats-basicinfo.html нов ред с два `div.field` по образеца на съседните (виж реда с «AC (Unarmored)» и «Magic Item Bonus (AC)»):\n- `\u003cinput id=\"armorAcInput\" type=\"number\" step=\"1\"\u003e` с етикет «Armor AC»\n- `\u003cinput id=\"armorMaxDexInput\" type=\"number\" step=\"1\"\u003e` с етикет «Armor Max DEX» (празно = без таван)\nПлюс поле за показване на резултата, ако е нужно за симетрия с «AC (Unarmored)».\n\nЗАКАЧИ ГИ като другите входове в партиала: `input` слушател → пише в `st.armorAc` / `st.armorMaxDex` → `save()`. ⚠ Партиалът се зарежда ЛЕНИВО (sub-tab \u0027basicinfo\u0027), затова слушателите се закачат в `attachSubTabEventListeners(\u0027basicinfo\u0027)` в app.js… НО app.js е собственост на друга lane. Затова: закачи ги от клерик профила (`modules/classes/cleric.js`) през делегиран слушател на документа (`document.addEventListener(\u0027input\u0027, e =\u003e { if (e.target.id === \u0027armorAcInput\u0027) … })`) — така не пипаш app.js изобщо. Празно поле за max dex → `null` (без таван), не 0.\n\nВИДИМОСТ: двете полета са само за клерика. Добави id-тата им в… НЕ в `hiddenFieldIds` на клерика (той ги ПОКАЗВА), а ги скрий за МОНКА. Понеже monk.js е на друга lane, направи го от клерик профила обратно: при `activeProfile().id !== \u0027cleric\u0027` скрий `.field` контейнерите им при рендер. Най-простото: клерик профилът излага `shownFieldIds: [\u0027armorAcInput\u0027,\u0027armorMaxDexInput\u0027]`, а механизмът от 1100 скрива всичко от `shownFieldIds` на ДРУГИ профили — ако такъв механизъм няма, скрий ги чрез делегиран рендер хук в cleric.js и ОПИШИ го в коментар.\n\nЧЕРВЕНИ ЛИНИИ: ⛔ НЕ пипай app.js, index.html, monk.js. Не местѝ и не преименувай съществуващи полета в партиала — само добавяш. Монашеският изглед на Basic Info трябва да остане ВИЗУАЛНО непроменен (двете нови полета са скрити за монк).\n\nТЕСТ (нов test/e2e/armor-ac.spec.js): (а) при активен монк двата входа НЕ са видими и Basic Info изглежда както преди; (б) стойностите се пазят в st.armorAc / st.armorMaxDex и преживяват reload; (в) празно max dex поле дава null, не 0; (г) въведени 15 и 2 при DEX +4 дават AC 17 през клерик формулата.",
+        "steps":  [
+                      {
+                          "id":  "1210.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети tabs/stats-basicinfo.html (76 реда, всяко поле е div.field с id) и merge-натия modules/classes/cleric.js. Виж как съседните входове (acMagicInput, kiSaveDcMagicInput) са оформени, за да ги повториш 1:1."
+                      },
+                      {
+                          "id":  "1210.2",
+                          "phase":  "RED",
+                          "action":  "Напиши test/e2e/armor-ac.spec.js с асерциите (а)-(г) от notes. Червен."
+                      },
+                      {
+                          "id":  "1210.3",
+                          "phase":  "GREEN",
+                          "action":  "Добави двата входа в партиала и ги закачи с делегиран слушател от cleric.js (БЕЗ да пипаш app.js). Скрий ги за всички профили освен клерика."
+                      },
+                      {
+                          "id":  "1210.4",
+                          "phase":  "DONE",
+                          "action":  "Пълният гейт (npm test) зелен — това е последният таск на lane-а и няма verify override. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  1300,
+        "category":  "feature",
+        "repo":  "combat",
+        "lane":  "characters",
+        "model":  "heavy",
+        "dependsOn":  [
+                          1100
+                      ],
+        "files":  [
+                      "modules/characters.js",
+                      "test/e2e/character-switch.spec.js"
+                  ],
+        "description":  "feat(characters): add the character container with switching between separate saves",
+        "specRef":  "monk-combat-structure.md «Модел» (localStorage/st) + «Червени линии» т.3",
+        "tddWorkflow":  true,
+        "verify":  [
+                       "npx playwright test character-switch class-profile critical-path"
+                   ],
+        "notes":  "ЧИСТО НОВ ФАЙЛ `modules/characters.js` (IIFE). Стъпва на скелета от 1100: `activeProfile()`, `activeStorageKey()`, указателят `localStorage[\u0027activeCharacter\u0027]`, и точката за монтиране `#charSwitcher` в header-а на index.html (вече съществува, празна е).\n\nМОДЕЛЪТ (решение на потребителя, не го предоговаряй): всеки герой има СОБСТВЕН `st` в СОБСТВЕН localStorage ключ, взет от профила му. Монкът остава в `monkSheet_v3` НЕПРОМЕНЕН — нулева миграция на живи данни. Няма вложен обект с всички герои; има само мъничък указател кой е активен.\n\nКАКВО ПРАВИ МОДУЛЪТ:\n1. `window.Characters.list()` → наличните профили от `window.CLASS_PROFILES` + дали имат запис в localStorage.\n2. `window.Characters.active()` → id на активния (дефолт \u0027monk\u0027).\n3. `window.Characters.switchTo(id)` → записва текущия герой, сменя указателя, зарежда записа на новия (или го създава от defaultState + `profile.defaults`), после пререндерира ВСИЧКО по пътя, който апът вече ползва при импорт: `window.st = st; renderAll();` плюс модулните пререндери (renderLangTable, renderToolTable, renderInventoryTable, renderDomainSpells, initMarkSpells, renderClericPrepSpells, renderClericCantrips, renderChaSpells, renderCube) — прочети как `applyBundle` го прави и ползвай СЪЩИЯ ред; ако той вече е изнесен във функция, викай нея, не дублирай списъка.\n4. Рендерира превключвателя в `#charSwitcher`: по едно копче/избор на герой, активният е отбелязан. Минимален, но четим на таблет (едро за пръст).\n\nВАЖНО ЗА БЕЗОПАСНОСТ: превключването ЗАПИСВА текущия герой ПРЕДИ да смени указателя — иначе губиш последните промени. И НИКОГА не пише в чуждия ключ.\n\nЧЕРВЕНИ ЛИНИИ: ⛔ не пипай app.js, index.html, monk.js, cleric.js (всички са на други lanes). Не мигрирай и не трий localStorage данни. По подразбиране, при празен указател, апът е МОНК и се държи точно както днес — около 51 теста сеят `monkSheet_v3` и трябва да останат зелени.\n\nТЕСТ (нов test/e2e/character-switch.spec.js): (а) по подразбиране активният е монк и `monkSheet_v3` се чете както преди; (б) превключване към втори герой създава НОВ ключ и НЕ пипа `monkSheet_v3` (сверѝ съдържанието му преди и след); (в) промяна по втория герой (напр. HP) не се вижда при монка и обратно; (г) превключване напред-назад пази стойностите и на двамата; (д) превключването пререндерира екрана (комбат пиловете показват стойностите на новия герой); (е) активният герой преживява reload.",
+        "steps":  [
+                      {
+                          "id":  "1300.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети merge-натия скелет: activeProfile/activeStorageKey/указателя в app.js, modules/classes/monk.js, и как applyBundle пререндерира целия UI след подмяна на state (точният ред на модулните извиквания). Виж #charSwitcher в index.html."
+                      },
+                      {
+                          "id":  "1300.2",
+                          "phase":  "RED",
+                          "action":  "Напиши test/e2e/character-switch.spec.js с асерциите (а)-(е) от notes, особено (б) — че monkSheet_v3 остава байт за байт същият. Червен."
+                      },
+                      {
+                          "id":  "1300.3",
+                          "phase":  "GREEN",
+                          "action":  "Създай modules/characters.js с list/active/switchTo + рендер на превключвателя в #charSwitcher. Запис на текущия ПРЕДИ смяна на указателя; пререндер по пътя на applyBundle."
+                      },
+                      {
+                          "id":  "1300.4",
+                          "phase":  "DONE",
+                          "action":  "npx playwright test character-switch class-profile critical-path — зелено. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  1310,
+        "category":  "feature",
+        "repo":  "combat",
+        "lane":  "characters",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "modules/campaign.js",
+                      "test/e2e/campaign-container.spec.js"
+                  ],
+        "description":  "feat(campaign): move NPCs and session notes into a shared container seeded from the monk save",
+        "specRef":  "monk-combat-structure.md «Campaign NPCs таб» + «Червени линии» т.3",
+        "tddWorkflow":  true,
+        "notes":  "Стъпва на таск 1100 (фасадата `window.Campaign` вече съществува и чете/пише в `st`) и на 1300 (същата lane, вече merge-нат). ТУК се подменя САМО реализацията отдолу — нито един викащ не се пипа.\n\nЗАЩО: Campaign NPCs и session notes са на КАМПАНИЯТА, не на героя — двамата герои са в една и съща кампания и журналът трябва да е един, независимо с кого играеш. Всичко останало (включително инвентар, злато и изтеглените имена) си остава на героя.\n\nКАКВО ПРАВИ: нов `modules/campaign.js` (IIFE) със собствен localStorage ключ `campaign_v1`, съдържащ `{ npcs: [], sessionNotes: \u0027\u0027, savedAt: \u0027\u003cISO\u003e\u0027 }`. Преопределя реализацията зад `window.Campaign` (getNpcs/setNpcs/getNotes/setNotes плюс getSavedAt/setSavedAt, които таск 1110 ползва за правилото «кампанията върви само нагоре»). Всеки запис обновява `savedAt`.\n\n⚠⚠ ЗАСЯВАНЕ ЧРЕЗ КОПИРАНЕ, НЕ МЕСТЕНЕ: при първо пускане, ако `campaign_v1` липсва, той се СЪЗДАВА от сегашните `st.campaignNpcs` и `st.sessionNotes` на МОНАШЕСКИЯ запис. ⛔ Старите полета в `monkSheet_v3` НЕ СЕ ТРИЯТ и НЕ СЕ ПРАЗНЯТ — просто спират да се ползват. Нищо живо не се разрушава; ако нещо се обърка, данните още са на старото място.\n\nЧЕРВЕНИ ЛИНИИ: ⛔ не пипай app.js, campaign-npc.js, characters.js (чужди зони — те вече викат фасадата). Не мигрирай и не трий нищо. campaign-npc.spec.js и session-notes.spec.js са живи договори и трябва да минат БЕЗ промени.\n\nТЕСТ (нов test/e2e/campaign-container.spec.js): (а) при липсващ `campaign_v1` той се създава от монашеските данни и `monkSheet_v3` ОСТАВА с непокътнати `campaignNpcs`/`sessionNotes`; (б) добавен NPC отива в `campaign_v1`, не в героя; (в) NPC-тата и записките са ЕДНИ И СЪЩИ при двамата герои (добавяш при монка, виждаш при другия); (г) всеки запис обновява `savedAt`; (д) campaign-npc и session notes спековете продължават да минат непроменени.",
+        "steps":  [
+                      {
+                          "id":  "1310.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети фасадата window.Campaign (app.js, от таск 1100), modules/campaign-npc.js и кода за session notes — виж какво точно викат. Прочети test/e2e/campaign-npc.spec.js и session-notes.spec.js: те са договорът, който не бива да мръдне."
+                      },
+                      {
+                          "id":  "1310.2",
+                          "phase":  "RED",
+                          "action":  "Напиши test/e2e/campaign-container.spec.js с асерциите (а)-(д) от notes, особено (а) — че монашеският запис остава непокътнат след засяването. Червен."
+                      },
+                      {
+                          "id":  "1310.3",
+                          "phase":  "GREEN",
+                          "action":  "Създай modules/campaign.js със собствен ключ campaign_v1, засяване чрез КОПИРАНЕ от монашеския запис и подмяна на реализацията зад window.Campaign, с обновяване на savedAt при всеки запис."
+                      },
+                      {
+                          "id":  "1310.4",
+                          "phase":  "DONE",
+                          "action":  "Пълният гейт (npm test) зелен — последен таск на lane-а, без verify override. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  1400,
+        "category":  "feature",
+        "repo":  "combat",
+        "lane":  "core-seams",
+        "model":  "heavy",
+        "dependsOn":  [
+                          1210,
+                          1310
+                      ],
+        "files":  [
+                      "app.js",
+                      "test/e2e/cleric-end-to-end.spec.js"
+                  ],
+        "description":  "feat(cleric): wire the cleric as a playable second character end to end",
+        "specRef":  "monk-combat-structure.md «Модел» + «Червени линии» т.1-3",
+        "tddWorkflow":  true,
+        "notes":  "ФИНАЛНИЯТ таск на board-а — БЕЗ verify override НАРОЧНО: пълният гейт е задната мрежа за цялата интеграция.\n\nВХОД (всичко вече merge-нато): скелетът с профилите и индиректния ключ (1100), bundle v3 с маркер и кампанийна дата (1110), клерик профилът с формулите (1200), полетата за броня (1210), контейнерът за герои с превключвател (1300), кампанийният контейнер (1310).\n\nЗАДАЧАТА: да се ИГРАЕ с клерика от начало до край и да се запуши всичко, което още куца при реална смяна на герой. Конкретно:\n1. Създаване на клерик през превключвателя: нов запис със своя ключ, `st.class = \u0027cleric\u0027`, полета по подразбиране от профила (armorAc, armorMaxDex).\n2. При активен клерик монашеските полета ги НЯМА на екрана (ki, martial arts die, Monk Level, Unarmored Movement, ки магически бонус), а класовите баджове горе вляво и модалът за избор на клас при level-up НЕ се появяват (`hasClassBadges:false`, `hasLevelUpModal:false`) — вдигането на ниво е линейно.\n3. Почивките при клерика НЕ пълнят ки (няма такова), но правят всичко останало (HP, hit dice, death saves, spell slots както досега).\n4. Превключване монк ⇄ клерик по време на работа не смесва данни и пререндерира правилно.\n5. Експорт на клерика и импорт обратно работят с маркера от 1110.\n\n⚠ Ако нещо изисква промяна в app.js — това е таскът, в който е позволено (app.js е на тази lane). Пипай ХИРУРГИЧНО, по един регион.\n\nЧЕРВЕНИ ЛИНИИ: монашеското поведение остава непроменено — derived-values, critical-path, rest-mechanics, short-rest, multiclass-levelup, levelup-modal минават БЕЗ промени. `monkSheet_v3` остава непокътнат. Не включвай в този таск: spellcasting таба, flavor по герой, TTS глас по герой, Grave Cleric уменията, слотове за нива 11-20 — те са за СЛЕДВАЩ board.\n\nТЕСТ (нов test/e2e/cleric-end-to-end.spec.js): (а) създаване на клерик и попълване на статове/броня дава правилни AC, скорост, unarmed атака и WIS DC; (б) монашеските полета не се виждат при клерик, но се виждат пак след превключване към монк; (в) няма класови баджове и няма level-up модал при клерика, а нивото расте линейно; (г) кратка и дълга почивка при клерика минават без грешки и не търсят ки; (д) превключване монк→клерик→монк пази данните и на двамата; (е) експорт на клерика и импорт обратно възстановява същите стойности.",
+        "steps":  [
+                      {
+                          "id":  "1400.1",
+                          "phase":  "RECON",
+                          "action":  "Прочети всичко merge-нато от board-а: диспечера derived() и индиректния ключ в app.js, monk.js, cleric.js, characters.js, campaign.js, bundle v3 кода. Пусни апа наум през сценария «създай клерик и играй» и запиши къде още се допуска монашеско допускане (почивки, баджове, level-up, видимост)."
+                      },
+                      {
+                          "id":  "1400.2",
+                          "phase":  "RED",
+                          "action":  "Напиши test/e2e/cleric-end-to-end.spec.js с асерциите (а)-(е) от notes. Червен на местата, където интеграцията още куца."
+                      },
+                      {
+                          "id":  "1400.3",
+                          "phase":  "GREEN",
+                          "action":  "Запуши дупките — хирургично в app.js (почивки без ки, баджове и level-up модал според профила, видимост при смяна на герой). Нищо от следващия board (spellcasting, flavor, TTS, Grave умения)."
+                      },
+                      {
+                          "id":  "1400.4",
+                          "phase":  "DONE",
+                          "action":  "Пълният гейт (npm test) зелен, включително всички монашески спекове БЕЗ нито една промяна по тях. Commit с description-а дословно."
+                      }
+                  ],
+        "passes":  true
+    }
 ]

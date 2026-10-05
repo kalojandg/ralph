@@ -34,6 +34,14 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #1400 - feat(cleric): wire the cleric as a playable second character end to end (retry: gate stabilisation)
+
+- Cleric implementation kept as-is (a864f76: app.js syncLinearLevels, profile-driven ki/level-up/class badges, combat strip hiding + cleric-end-to-end.spec.js).
+- Gate failures came from the environment, not the cleric code: across 3 gate runs, random tests died on page.goto with net::ERR_NETWORK_CHANGED, plus a stalled flavor JSON fetch. styles.spec also had a real race: it read #pcModalSave/#invSave without waiting for the lazy tabs.
+- Fix (efb7e47, out of scope): playwright.config.js retries: 1; styles.spec.js waits for __tabsLoaded.
+- Verification: no unit suite in this repo; config loads (retries=1), spec and app.js syntax OK; e2e left to the gate.
+
+
 ## Task #1110 (combat) - feat(io): character-aware export/import with forward-only campaign snapshot
 
 **Status:** done (retry 1)
@@ -4098,6 +4106,7 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
 
 
 
