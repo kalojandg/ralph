@@ -1,243 +1,298 @@
-﻿[
-    {
-        "id":  10,
-        "category":  "feature",
-        "repo":  "partyup-landing",
-        "lane":  "markup",
-        "model":  "heavy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "index.html",
-                      "tests/markup.test.js"
-                  ],
-        "description":  "feat(page): full landing markup with share metadata and i18n hooks",
-        "specRef":  "partyup-landing-structure.md «Файлова карта» + «Как работи (жив контракт)» + «ЧЕРВЕНИ ЛИНИИ»",
-        "tddWorkflow":  true,
-        "notes":  "СКЕЛЕТЕН ТАСК — той е ЕДИНСТВЕНИЯТ, който пипа index.html (отровният файл: цялата\nразметка е в него). Пинва структурата и мета таговете ВЕДНЪЖ, за да могат стиловете,\nпреводите и i18n логиката да вървят паралелно след това, без да се бият по файл.\n\nЗАЩО СЪЩЕСТВУВА СТРАНИЦАТА (контекст, който агентът няма как да знае): краулерът на\nLinkedIn не стига до `*.workers.dev` — проверено два пъти през Post Inspector при напълно\nздрав сървър (200 на всичко, включително с LinkedInBot User-Agent). Тази страница е\nдостижимият адрес, който носи og таговете и праща човека към приложението. Тоест мета\nтаговете НЕ са украса, а причината за съществуване.\n\nСЕГАШНО СЪСТОЯНИЕ: index.html е walking skeleton — лого, заглавие, едно изречение, бутон\nс data-testid=\"app-link\". Разширяваш го, не го пренаписваш от нула.\n\nСТРУКТУРА, която трябва да се получи (семантичен HTML, без div супа):\n  \u003chead\u003e: charset, viewport (с viewport-fit=cover), title, description,\n          og:type/site_name/title/description/url/image/image:width/image:height/image:alt,\n          twitter:card=summary_large_image + twitter:title/description/image,\n          link rel=icon, link rel=stylesheet href=\"src/styles.css\",\n          script type=\"module\" src=\"src/i18n.js\" (defer по подразбиране при module)\n  \u003cbody\u003e:\n    header с бутона за език: \u003cbutton data-testid=\"lang-toggle\" data-i18n-aria=\"lang.toggle\"\u003e\n                             със \u003cspan data-i18n=\"lang.short\"\u003e\n    main.page:\n      section.hero    — img логото (assets/logo.png, alt, width/height за да не скача),\n                        h1 data-i18n=\"hero.title\", p data-i18n=\"hero.tagline\"\n      section.pitch   — p data-i18n=\"pitch.question\",\n                        p.punchline data-i18n=\"pitch.punchline\",\n                        p data-i18n=\"pitch.body\"\n      section.spread  — h2 data-i18n=\"spread.title\", p data-i18n=\"spread.body\"\n      a.cta           — data-testid=\"app-link\", href=\"https://party-up.kaloiand.workers.dev/\",\n                        вътре \u003cspan data-i18n=\"cta.open\"\u003e\n    footer            — p data-i18n=\"footer.madeWith\"\n\nАБСОЛЮТНИ URL-и в мета таговете (относителните са безполезни за чужд бот):\n  og:url   = https://kalojandg.github.io/party-up-landing/\n  og:image = https://kalojandg.github.io/party-up-landing/assets/og.png\n  og:image:width 1200, og:image:height 630\n\nКОНВЕНЦИЯТА: всеки текстов възел, който се превежда, носи data-i18n=\"\u003cключ\u003e\"; атрибут,\nкойто се превежда, носи data-i18n-aria=\"\u003cключ\u003e\". Текстът в HTML-а е БЪЛГАРСКИЯТ (той е\nезикът по подразбиране) — така страницата е четима и ако скриптът не се зареди.\n\nДОГОВОР ЗА i18n КЛЮЧОВЕТЕ (дословно същият в таскове 10, 20 и 30 — това е,\nкоето им позволява да вървят паралелно; НЕ измисляй свои ключове и НЕ преименувай):\n\n  hero.title          \"Party Up\" — НЕ се превежда, едно и също в двата езика\n  hero.tagline        едно изречение какво прави приложението\n  pitch.question      въпросът-кука: десетки сайтове за запознанства, защо няма за TTRPG\n  pitch.punchline     \"Find your soulmate? Why not find your tabletop mates?\" — ОСТАВА\n                      на английски И в българската версия (шегата умира в превод)\n  pitch.body          2-3 изречения: какво е приложението и за кого\n  spread.title        заглавие на призива\n  spread.body         призивът: такива мрежи работят с хора — говорете, споделяйте\n  cta.open            етикетът на бутона към приложението\n  lang.toggle         достъпното име на превключвателя (aria-label)\n  lang.short          къс код за бутона: \"EN\" в bg файла, \"БГ\" в en файла — бутонът\n                      показва КЪМ КОЙ език водиш, не текущия\n  footer.madeWith     ред под всичко: какво е това и връзка към приложението\n\nФормата на двата файла е ЕДНА И СЪЩА, плоски ключове с точки, без влагане:\n  { \"hero.title\": \"Party Up\", \"hero.tagline\": \"…\", … }\n\nЧЕРВЕНИ ЛИНИИ (виж partyup-landing-structure.md): нула build стъпка, нула\nфреймуърк, нула външни скриптове и шрифтове; `assets/og.png` НЕ се пипа (1200×630 е\nизискване на споделящите платформи); адресът на приложението\nhttps://party-up.kaloiand.workers.dev/ не се променя.\n\nТЕСТОВЕ (tests/markup.test.js, в СЪЩИЯ commit): (а) всеки ключ от договора се среща\nпоне веднъж като data-i18n или data-i18n-aria; (б) og:image и og:url са АБСОЛЮТНИ и\nсочат party-up-landing; (в) og:image:width=1200 и height=630; (г) twitter:card е\nsummary_large_image; (д) връзката към приложението сочи https://party-up.kaloiand.workers.dev/\nи има data-testid=\"app-link\"; (е) логото има alt и подадени width/height.\n⚠ tests/skeleton.test.js НЕ се пипа и трябва да остане зелен.",
-        "steps":  [
-                      {
-                          "id":  "10.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети index.html (walking skeleton), tests/dom.js (помощникът loadPage/readFile), tests/skeleton.test.js и src/styles.css, за да знаеш кои класове вече съществуват. Прочети partyup-landing-structure.md — особено „Червени линии\" и „Отровен списък\"."
-                      },
-                      {
-                          "id":  "10.2",
-                          "phase":  "RED",
-                          "action":  "Напиши tests/markup.test.js с шестте твърдения (а)-(е) от notes, през loadPage() от tests/dom.js. Пусни npm test — новите трябва да са ЧЕРВЕНИ, а skeleton.test.js ЗЕЛЕН."
-                      },
-                      {
-                          "id":  "10.3",
-                          "phase":  "GREEN",
-                          "action":  "Разшири index.html до структурата от notes: главата с пълния набор мета тагове (абсолютни URL-и), после header с бутона за език, hero/pitch/spread секциите, CTA-то и footer-а — всеки преводим възел с data-i18n ключ от договора, българският текст вътре."
-                      },
-                      {
-                          "id":  "10.4",
-                          "phase":  "DONE",
-                          "action":  "npm test — всичко зелено. Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  20,
-        "category":  "feature",
-        "repo":  "partyup-landing",
-        "lane":  "content",
-        "model":  "easy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "src/content.bg.json",
-                      "src/content.en.json",
-                      "tests/content.test.js"
-                  ],
-        "description":  "feat(content): the two language files behind the landing copy",
-        "specRef":  "partyup-landing-structure.md «Как работи» (текстът е ДАННИ, не разметка) + «Отровен списък»",
-        "tddWorkflow":  true,
-        "notes":  "Пише САМО двата JSON файла и техния спек — нула HTML, нула CSS, нула JS. Затова\nвърви паралелно с всичко останало: файловете са НОВИ и никой друг таск не ги пипа.\n\nДВАТА ЕЗИКА СА ЕДИН КОНТРАКТ — еднакви ключове, затова са в ЕДИН таск. Разделянето им по\nагенти произвежда разминати ключове, което е тихият провал на всяка i18n.\n\nДОГОВОР ЗА i18n КЛЮЧОВЕТЕ (дословно същият в таскове 10, 20 и 30 — това е,\nкоето им позволява да вървят паралелно; НЕ измисляй свои ключове и НЕ преименувай):\n\n  hero.title          \"Party Up\" — НЕ се превежда, едно и също в двата езика\n  hero.tagline        едно изречение какво прави приложението\n  pitch.question      въпросът-кука: десетки сайтове за запознанства, защо няма за TTRPG\n  pitch.punchline     \"Find your soulmate? Why not find your tabletop mates?\" — ОСТАВА\n                      на английски И в българската версия (шегата умира в превод)\n  pitch.body          2-3 изречения: какво е приложението и за кого\n  spread.title        заглавие на призива\n  spread.body         призивът: такива мрежи работят с хора — говорете, споделяйте\n  cta.open            етикетът на бутона към приложението\n  lang.toggle         достъпното име на превключвателя (aria-label)\n  lang.short          къс код за бутона: \"EN\" в bg файла, \"БГ\" в en файла — бутонът\n                      показва КЪМ КОЙ език водиш, не текущия\n  footer.madeWith     ред под всичко: какво е това и връзка към приложението\n\nФормата на двата файла е ЕДНА И СЪЩА, плоски ключове с точки, без влагане:\n  { \"hero.title\": \"Party Up\", \"hero.tagline\": \"…\", … }\n\nСУРОВИНАТА ОТ ПОТРЕБИТЕЛЯ (негови думи, 30.09 — шлифовай ги, не ги преписвай дословно;\nтова е брийф, не готов текст):\n  • „Има десетки или стотици сайтове за запознанства. Защо няма за TTRPG?\n     Find your soulmate? Why not find your tabletop mates?\"\n  • „Ефективността на такъв тип сайтове идва от броя потребители. Разпространявайте,\n     говорете, споделяйте и нека този сайт да процъфти.\"\n\nТОН: сдържан и човешки, без маркетингов патос и без удивителни. Това е визитка на проект,\nкоято ще бъде четена и от работодатели — суперлативите я правят по-малко сериозна, не\nповече. Пиши късо: цялата страница трябва да се чете за под минута.\n\nЗА pitch.punchline: „Find your soulmate? Why not find your tabletop mates?\" остава на\nАНГЛИЙСКИ и в двата файла — римата е в английското, а преводът я убива.\n\nЗА hero.tagline (bg): приложението се описва така — „масите дърпат играчите, не обратното\"\n(това е pull моделът, сърцето на продукта: масата избира, не играчът кандидатства напосоки).\n\nЗА spread.body: смисълът е, че мрежа за срещи работи само с достатъчно хора — затова\nмолбата за споделяне е честна, не рекламна. Без „сподели сега!\".\n\nЧЕРВЕНИ ЛИНИИ (виж partyup-landing-structure.md): нула build стъпка, нула\nфреймуърк, нула външни скриптове и шрифтове; `assets/og.png` НЕ се пипа (1200×630 е\nизискване на споделящите платформи); адресът на приложението\nhttps://party-up.kaloiand.workers.dev/ не се променя.\n\nТЕСТОВЕ (tests/content.test.js, в СЪЩИЯ commit): (а) двата файла имат ТОЧНО едни и същи\nключове (сравнение на сортирани списъци — разминаването е основният риск); (б) нито една\nстойност не е празна; (в) всички ключове от договора присъстват; (г) pitch.punchline е\nидентичен в двата файла; (д) hero.title е \"Party Up\" в двата.",
-        "steps":  [
-                      {
-                          "id":  "20.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети договора за ключовете в notes и tests/dom.js (помощникът readFile). Виж index.html за тона на съществуващия текст — не за да го копираш, а за да не си противоречите."
-                      },
-                      {
-                          "id":  "20.2",
-                          "phase":  "RED",
-                          "action":  "Напиши tests/content.test.js с петте твърдения (а)-(д). Пусни npm test — червени са, защото файловете още ги няма."
-                      },
-                      {
-                          "id":  "20.3",
-                          "phase":  "GREEN",
-                          "action":  "Напиши src/content.bg.json и src/content.en.json — плоски ключове с точки, всички от договора, текстът шлифован по брийфа и тона от notes."
-                      },
-                      {
-                          "id":  "20.4",
-                          "phase":  "DONE",
-                          "action":  "npm test — всичко зелено. Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  30,
-        "category":  "feature",
-        "repo":  "partyup-landing",
-        "lane":  "i18n",
-        "model":  "heavy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "src/i18n.js",
-                      "tests/i18n.test.js"
-                  ],
-        "description":  "feat(i18n): runtime language switch that remembers the choice",
-        "specRef":  "partyup-landing-structure.md «Как работи» (езикът по подразбиране е bg) + «ЧЕРВЕНИ ЛИНИИ» т.1",
-        "tddWorkflow":  true,
-        "notes":  "Пише САМО src/i18n.js и своя спек. Върви паралелно с разметката и преводите, защото\nработи по ДОГОВОРА (долу), не по merged код: тестовете му строят собствен минимален DOM\nфрагмент, вместо да зареждат index.html. Това е нарочно — юнит тест на поведение не бива\nда пада, защото някой е преместил секция.\n\nКАКВО ПРАВИ (ES модул, без зависимости, зареден с \u003cscript type=\"module\"\u003e):\n 1. Определя началния език: запомненият избор от localStorage (ключ \"partyup.lang\") →\n    ако няма, езикът на браузъра (`navigator.language` започва ли с \"bg\") → иначе \"bg\".\n 2. Зарежда съответния `src/content.\u003clang\u003e.json` с fetch и прилага текстовете:\n    всеки `[data-i18n]` получава textContent, всеки `[data-i18n-aria]` получава\n    aria-label от същия речник.\n 3. Обновява `document.documentElement.lang` — иначе екранните четци и търсачките четат\n    грешен език, а това е половината смисъл на упражнението.\n 4. Бутонът `[data-testid=\"lang-toggle\"]` сменя езика, прилага наново и ЗАПОМНЯ избора.\n 5. Липсващ ключ НЕ изтрива текста — оставя каквото е в HTML-а (той е българският) и\n    предупреждава веднъж в конзолата. Тихото изпразване на страница заради една липсваща\n    дума е по-лошо от разминат превод.\n\nДОГОВОР ЗА i18n КЛЮЧОВЕТЕ (дословно същият в таскове 10, 20 и 30 — това е,\nкоето им позволява да вървят паралелно; НЕ измисляй свои ключове и НЕ преименувай):\n\n  hero.title          \"Party Up\" — НЕ се превежда, едно и също в двата езика\n  hero.tagline        едно изречение какво прави приложението\n  pitch.question      въпросът-кука: десетки сайтове за запознанства, защо няма за TTRPG\n  pitch.punchline     \"Find your soulmate? Why not find your tabletop mates?\" — ОСТАВА\n                      на английски И в българската версия (шегата умира в превод)\n  pitch.body          2-3 изречения: какво е приложението и за кого\n  spread.title        заглавие на призива\n  spread.body         призивът: такива мрежи работят с хора — говорете, споделяйте\n  cta.open            етикетът на бутона към приложението\n  lang.toggle         достъпното име на превключвателя (aria-label)\n  lang.short          къс код за бутона: \"EN\" в bg файла, \"БГ\" в en файла — бутонът\n                      показва КЪМ КОЙ език водиш, не текущия\n  footer.madeWith     ред под всичко: какво е това и връзка към приложението\n\nФормата на двата файла е ЕДНА И СЪЩА, плоски ключове с точки, без влагане:\n  { \"hero.title\": \"Party Up\", \"hero.tagline\": \"…\", … }\n\nТЕХНИЧЕСКИ ЧЕРВЕНИ ЛИНИИ:\n • ВСЕКИ достъп до localStorage в try/catch — частен прозорец ХВЪРЛЯ при самото четене,\n   а страницата трябва да работи и там.\n • Нула зависимости (jsdom е само за тестовете, не за страницата).\n • Без `innerHTML` — само `textContent`. Текстът идва от JSON файл, но навикът е\n   по-важен от конкретния случай.\n • Модулът трябва да е ТЕСТВАЕМ: изнеси чистата функция (речник + корен → приложени\n   текстове) и я изнасяй с export, а само закачането за document да е страничният ефект.\n\nЧЕРВЕНИ ЛИНИИ (виж partyup-landing-structure.md): нула build стъпка, нула\nфреймуърк, нула външни скриптове и шрифтове; `assets/og.png` НЕ се пипа (1200×630 е\nизискване на споделящите платформи); адресът на приложението\nhttps://party-up.kaloiand.workers.dev/ не се променя.\n\nТЕСТОВЕ (tests/i18n.test.js, в СЪЩИЯ commit) — върху СОБСТВЕН DOM фрагмент, не върху\nindex.html: (а) прилага текстовете по data-i18n; (б) прилага aria-label по data-i18n-aria;\n(в) липсващ ключ оставя оригиналния текст непокътнат; (г) смяната на езика обновява\ndocument.documentElement.lang; (д) изборът се запомня и се чете при следващо зареждане;\n(е) localStorage, който хвърля, НЕ чупи прилагането на текстовете.",
-        "steps":  [
-                      {
-                          "id":  "30.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети договора за ключовете и конвенцията data-i18n/data-i18n-aria в notes, plus tests/dom.js (там е JSDOM помощникът и вариантът с runScripts). Реши как да изнесеш чистата функция, за да е тествана без fetch."
-                      },
-                      {
-                          "id":  "30.2",
-                          "phase":  "RED",
-                          "action":  "Напиши tests/i18n.test.js с шестте твърдения (а)-(е), върху собствен DOM фрагмент и с подправен localStorage (включително вариант, който хвърля). Пусни npm test — червени."
-                      },
-                      {
-                          "id":  "30.3",
-                          "phase":  "GREEN",
-                          "action":  "Напиши src/i18n.js: чиста функция за прилагане (експортирана) + закачането за document, избор на език, fetch на речника, бутон, localStorage в try/catch, обновяване на documentElement.lang, предупреждение при липсващ ключ."
-                      },
-                      {
-                          "id":  "30.4",
-                          "phase":  "DONE",
-                          "action":  "npm test — всичко зелено. Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  40,
-        "category":  "feature",
-        "repo":  "partyup-landing",
-        "lane":  "styles",
-        "model":  "easy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "src/styles.css"
-                  ],
-        "description":  "style(page): typographic landing layout that holds up on a phone",
-        "specRef":  "partyup-landing-structure.md «Файлова карта» + «ЧЕРВЕНИ ЛИНИИ» т.1 и т.4",
-        "tddWorkflow":  false,
-        "notes":  "Пипа САМО src/styles.css. Върви паралелно с всичко: класовете и структурата са\nфиксирани в договора долу, не се четат от merged HTML.\n\nСЕЛЕКТОРИТЕ, по които пишеш (таск 10 ги гарантира): header с бутон\n`[data-testid=\"lang-toggle\"]`; `main.page`; `section.hero` (img.logo, h1, p);\n`section.pitch` (p, p.punchline, p); `section.spread` (h2, p); `a.cta`; `footer`.\n\nЗАДАЧАТА Е ТИПОГРАФИЯ, не украса. Страницата има един екран текст и един бутон — ако\nизглежда добре, ще е заради ритъма на буквите и празното място, не заради ефекти.\n\n • Светла и тъмна тема през `prefers-color-scheme`, с CSS променливи на :root.\n   Текущият файл вече има скелета на палитрата — доразвий го, не го изхвърляй.\n • Едноколонен четим блок: max-width около 40rem, центриран, щедро празно място.\n • `p.punchline` е акцентът на страницата — по-едра, различима, но БЕЗ да крещи.\n • Fluid типография с clamp(), за да не се чупи между телефон и голям екран.\n • Бутонът за език: малка мишена горе вдясно, минимум 44×44 CSS пиксела — под това не\n   се улучва с пръст.\n • `a.cta` е главното действие: очевидно, с ясен `:focus-visible` контур.\n • Телефон (около 400px ширина): нула хоризонтално скролване, странично поле поне 16px,\n   и `env(safe-area-inset-*)` за телефоните с изрезка.\n • `prefers-reduced-motion`: ако изобщо добавиш преход, изключи го там.\n\nЧЕРВЕНИ ЛИНИИ (виж partyup-landing-structure.md): нула build стъпка, нула\nфреймуърк, нула външни скриптове и шрифтове; `assets/og.png` НЕ се пипа (1200×630 е\nизискване на споделящите платформи); адресът на приложението\nhttps://party-up.kaloiand.workers.dev/ не се променя.\nДОПЪЛНИТЕЛНО ЗА ТОЗИ ТАСК: нула шрифтове от CDN (системен стек), нула CSS фреймуърк,\nнула картинки-фонове — файлът трябва да остане четим за човек.\n\nБЕЗ TDD: това е визуална задача и няма спек, който да я хване честно. Гейтът е, че\nсъществуващите тестове остават зелени (`npm test`) — ако си пипнал нещо извън CSS-а,\nте ще го кажат.",
-        "steps":  [
-                      {
-                          "id":  "40.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети src/styles.css (има палитра и минимално оформление) и списъка селектори в notes. Не чакай index.html да е готов — договорът в notes е достатъчен."
-                      },
-                      {
-                          "id":  "40.2",
-                          "phase":  "GREEN",
-                          "action":  "Разпиши оформлението: променливи за двете теми, вертикален ритъм, fluid типография с clamp(), акцент на punchline, бутон за език с мишена ≥44px, CTA с focus-visible, отзивчивост до 400px със safe-area отстъпи."
-                      },
-                      {
-                          "id":  "40.3",
-                          "phase":  "DONE",
-                          "action":  "npm test — зелено (нищо извън CSS не е пипнато). Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  50,
-        "category":  "docs",
-        "repo":  "partyup-landing",
-        "lane":  "docs",
-        "model":  "easy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "README.md"
-                  ],
-        "description":  "docs: say what this repo is and why it exists apart from the app",
-        "specRef":  "partyup-landing-structure.md (целият — README-то е човешкият му вход)",
-        "tddWorkflow":  false,
-        "notes":  "Нов файл, никой друг таск не го пипа — затова е собствена lane без зависимости.\n\nРепото е ПУБЛИЧНО и ще бъде четено от работодатели, не само от потребителя. README-то\nтрябва да отговори на три въпроса за под минута:\n\n 1. КАКВО е това: визитката на Party Up — една статична страница на GitHub Pages\n    (https://kalojandg.github.io/party-up-landing/), която води към приложението\n    (https://party-up.kaloiand.workers.dev/).\n 2. ЗАЩО е отделно репо: приложението е ЧАСТНО, а GitHub Pages от частно репо иска\n    платен план. Плюс истинската причина страницата да съществува: краулерът на LinkedIn\n    не стига до `*.workers.dev` (проверено два пъти през Post Inspector при напълно здрав\n    сървър — 200 на всичко, включително с LinkedInBot User-Agent), затова линкът, който\n    се споделя, трябва да живее на достижим адрес.\n 3. КАК се пипа: `npm test` (node --test + jsdom), `npm run serve` за локален преглед на\n    порт 45277, деплой автоматично при push към main през .github/workflows/pages.yml.\n    Нула build стъпка, нула фреймуърк — и това е нарочно.\n\nТОН: сдържан и точен. Без емоджи-водопад, без „awesome\". Кратките, честни README-та\nказват повече за автора от дългите.\n\nАко добавиш секция за структурата на файловете, тя трябва да СЪВПАДА с\npartyup-landing-structure.md — разминаването между двата документа е по-лошо от липсващ\nраздел.",
-        "steps":  [
-                      {
-                          "id":  "50.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети partyup-landing-structure.md и package.json (скриптовете), за да не измисляш команди. Виж .github/workflows/pages.yml за това как точно тече деплоят."
-                      },
-                      {
-                          "id":  "50.2",
-                          "phase":  "GREEN",
-                          "action":  "Напиши README.md с трите отговора от notes, кратко и без украса."
-                      },
-                      {
-                          "id":  "50.3",
-                          "phase":  "DONE",
-                          "action":  "npm test — зелено. Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  60,
-        "category":  "feature",
-        "repo":  "partyup-landing",
-        "lane":  "integration",
-        "model":  "heavy",
-        "dependsOn":  [
-                          10,
-                          20,
-                          30,
-                          40
-                      ],
-        "files":  [
-                      "tests/page.test.js",
-                      "index.html",
-                      "src/i18n.js",
-                      "src/content.bg.json",
-                      "src/content.en.json"
-                  ],
-        "description":  "test(page): prove the whole page works in both languages, end to end",
-        "specRef":  "partyup-landing-structure.md «Как работи (жив контракт)» + «Тестово състояние»",
-        "tddWorkflow":  true,
-        "notes":  "ФИНАЛНИЯТ ТАСК — единственият, който вижда четирите парчета заедно. Дотук всеки\nтаск доказваше СВОЯТА част срещу договора; тук се доказва, че договорът е бил спазен и\nот четиримата. Точно тази проверка липсва при паралелна работа и точно тя хваща\nразминатия ключ.\n\nЗатова има право да пипа чуждите файлове: ако намери разминаване, го ПОПРАВЯ на място,\nа не отваря нов таск. Поправката е малка по конструкция — ако се окаже голяма, значи\nдоговорът е бил сгрешен и това трябва да се каже изрично в commit-а.\n\nТЕСТОВЕ (tests/page.test.js): зареди index.html в jsdom с ИЗПЪЛНЕНИ скриптове\n(loadPage({ scripts: true }) от tests/dom.js) и докажи:\n (а) всеки data-i18n ключ в index.html СЪЩЕСТВУВА в двата речника — това е проверката,\n     която не може да се направи от нито един от предните таскове;\n (б) обратното: всеки ключ от речниците се ползва поне веднъж в разметката (сирашки\n     ключ = храна за фосил, точно както в приложението);\n (в) при език bg страницата показва българските текстове, а documentElement.lang е \"bg\";\n (г) натискането на [data-testid=\"lang-toggle\"] сменя на английски: и текстовете, и\n     lang атрибутът;\n (д) og:image и og:url са абсолютни и сочат party-up-landing;\n (е) връзката към приложението е жива и сочи https://party-up.kaloiand.workers.dev/.\n\n⚠ fetch в jsdom: ако зареждането на речника през fetch е нестабилно в тестова среда,\nподмени го (stub) вместо да променяш src/i18n.js заради теста. Тестът се нагажда към\nкода, не обратното — освен ако кодът е сгрешил.\n\nБЕЗ verify override — тук минава ПЪЛНИЯТ гейт на репото, защото това е последното нещо\nпреди деплоя.\n\nЧЕРВЕНИ ЛИНИИ (виж partyup-landing-structure.md): нула build стъпка, нула\nфреймуърк, нула външни скриптове и шрифтове; `assets/og.png` НЕ се пипа (1200×630 е\nизискване на споделящите платформи); адресът на приложението\nhttps://party-up.kaloiand.workers.dev/ не се променя.",
-        "steps":  [
-                      {
-                          "id":  "60.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети merged index.html, src/i18n.js, двата content файла и tests/dom.js. Направи списък на data-i18n ключовете в разметката и на ключовете в двата речника и ги сравни РЪЧНО, преди да пишеш тест — така ще знаеш предварително какво ще падне."
-                      },
-                      {
-                          "id":  "60.2",
-                          "phase":  "RED",
-                          "action":  "Напиши tests/page.test.js с шестте твърдения (а)-(е) върху заредена с изпълнени скриптове страница. Пусни npm test и виж кои падат."
-                      },
-                      {
-                          "id":  "60.3",
-                          "phase":  "GREEN",
-                          "action":  "Поправи разминаванията на място — липсващ ключ в речник, сирашки ключ, сгрешен абсолютен URL. Промените трябва да са малки; ако не са, кажи го в commit съобщението."
-                      },
-                      {
-                          "id":  "60.4",
-                          "phase":  "DONE",
-                          "action":  "npm test — целият пакет зелен. Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    }
+[
+  {
+    "id": 1100,
+    "category": "refactor",
+    "repo": "combat",
+    "lane": "core-seams",
+    "model": "heavy",
+    "dependsOn": [],
+    "files": [
+      "app.js",
+      "index.html",
+      "modules/classes/monk.js",
+      "modules/campaign-npc.js",
+      "test/e2e/class-profile.spec.js"
+    ],
+    "description": "refactor(core): introduce class profiles, per-character storage and campaign accessors without changing behavior",
+    "specRef": "monk-combat-structure.md «Модел» (localStorage/st, bundle v2) + «Червени линии» т.1 (app.js = малък обхват) и т.3 (localStorage схемата е жив контракт)",
+    "tddWorkflow": true,
+    "verify": [
+      "npx playwright test class-profile derived-values critical-path rest-mechanics short-rest multiclass-levelup levelup-modal"
+    ],
+    "notes": "🔑 СКЕЛЕТЕН ТАСК. Пипа отровните файлове (app.js, index.html) ВЕДНЪЖ и отваря местата, които останалите таскове пълнят. ⛔ ЗАБРАНЕНО Е ДА ПРОМЕНИШ ПОВЕДЕНИЕТО НА МОНКА — нито едно число, нито един видим елемент. Доказателството: derived-values (53 теста), critical-path (25), rest-mechanics (6), short-rest (6), multiclass-levelup (20), levelup-modal (14) трябва да минат БЕЗ ДА ГИ ПИПАШ. Поискаш ли да промениш такъв тест — рефакторът ти е сгрешен, спри и преосмисли.\n\nЗАЩО: апът ще поддържа ВТОРИ герой (чист Grave Cleric) с други формули. Механизмът е класови профили + отделен запис на герой, НЕ feature flag-ове.\n\n=== 1) КЛАСОВ ПРОФИЛ ===\nНов файл `modules/classes/monk.js` (IIFE, 'use strict'), който ИЗНАСЯ монашеската математика от app.js. Договорът (таск 1200 ще напише cleric.js по НЕГО — спази го дословно):\n```\nwindow.CLASS_PROFILES = window.CLASS_PROFILES || {};\nwindow.CLASS_PROFILES.monk = {\n  id: 'monk',\n  label: 'Monk',\n  storageKey: 'monkSheet_v3',   // ⚠ НЕ СЕ ПРОМЕНЯ\n  defaults: {},                  // допълнителни полета към defaultState (монкът няма нови)\n  derive(st, base) { /* връща САМО класовите стойности */ },\n  hiddenFieldIds: [],            // id-та, чийто .field контейнер се скрива (монкът не крие нищо)\n  hasClassBadges: true,          // баджовете горе вляво\n  hasLevelUpModal: true,         // избор на клас при level-up\n  restoresKi: true               // почивките пълнят ки\n};\n```\n`derive(st, base)` получава вече сметнатите НЕУТРАЛНИ стойности (`base.level`, `base.mods`, `base.prof`, `base.hdMax`, `base.maxHP`, `base.savesBase`, `base.savesTotal`, `base.rangedAtk`) и връща класовите: `ma`, `kiMax`, `ac`, `um`, `totalSpeed`, `meleeAtk`, `meleeWeaponAtk`, `kiSaveDC`, `spellSaveDC_WIS`, `spellAtk_WIS`, `spellSaveDC_CHA`, `spellAtk_CHA`. Премести и помощните `maDie` (app.js:67-72) и `umBonus` (app.js:82-89) в monk.js — те са 100% монашески. `profBonus` и `baseHP` ОСТАВАТ в app.js (неутрални са).\n\nВ app.js `derived()` (215-268) става ДИСПЕЧЕР: смята неутралната част, после слива `activeProfile().derive(st, base)`. Добави `function activeProfile()` → `window.CLASS_PROFILES[st.class || 'monk']`. ⚠ Формулите се ПРЕМЕСТВАТ дословно, без «подобрения» — същите закръгления, същият ред на събиране.\n\n=== 2) ЗАПИС ПО ГЕРОЙ ===\nКлючът `monkSheet_v3` е зашит на 3 места: app.js:153 (четене), app.js:198 (запис), modules/newchar.js:5. Направи го ИНДИРЕКТЕН: `function activeStorageKey()` чете мъничък указател `localStorage['activeCharacter']` (стойност = id на профил, ДЕФОЛТ `'monk'`) и връща `CLASS_PROFILES[id].storageKey`. При липсващ указател → монк → `monkSheet_v3`. ⚠ Монкът ТРЯБВА да продължи да чете и пише ТОЧНО `monkSheet_v3` — около 51 теста сеят този ключ директно и трябва да останат зелени. modules/newchar.js НЕ го пипай в този таск (той е извън files; остава както е и продължава да работи, защото ключът му съвпада с монашеския).\n\n=== 3) ВИДИМОСТ НА ПОЛЕТА ===\n`hiddenFieldIds` се прилага в renderAll: за всяко id вземи елемента и скрий НАЙ-БЛИЗКИЯ му `.field` контейнер (`el.closest('.field')`) — в tabs/stats-basicinfo.html всяко поле е точно такъв `div.field`. Ако всички `.field` в един ред са скрити, скрий и реда. ⚠ НЕ пипай самия tabs/stats-basicinfo.html — той е собственост на друг таск. Монкът има празен списък, значи визуално нищо не се променя.\n\n=== 4) КАМПАНИЕН ДОСТЪП (само фасада) ===\nДобави `window.Campaign` с четири метода: `getNpcs()`, `setNpcs(arr)`, `getNotes()`, `setNotes(str)`. В ТОЗИ таск те четат/пишат право в `st.campaignNpcs` и `st.sessionNotes` — тоест поведение НУЛА промяна. Насочи към тях: modules/campaign-npc.js (замени прякото `window.st.campaignNpcs`) и кода за session notes в app.js. Таск 1310 после ще подмени само реализацията отдолу.\n\n=== 5) МЕСТА ЗА ЗАКАЧАНЕ (index.html) ===\nДобави script таговете за ВСИЧКИ нови модули ПРЕДИ app.js (за да не се пипа index.html пак): `modules/classes/monk.js`, `modules/classes/cleric.js`, `modules/characters.js`, `modules/campaign.js`. ⚠ Трите още не съществуват — това е НОРМАЛНО, браузърът логва 404 и продължава; таскове 1200/1300/1310 ги създават. Добави и празна точка за монтиране на превключвателя в header-а: `<div id=\"charSwitcher\"></div>` (таск 1300 я пълни).\n\nЧЕРВЕНИ ЛИНИИ: не пипай localStorage данните (нищо не се мигрира, нищо не се трие); не пипай spells-mark.js; не въвеждай нови зависимости; новият код е в modules/, app.js само изтънява.\n\nТЕСТ (в същия commit, нов test/e2e/class-profile.spec.js): (а) `window.CLASS_PROFILES.monk` съществува с всички полета от договора; (б) `activeProfile().id === 'monk'` по подразбиране и при липсващ указател; (в) `derived()` връща същите стойности като профила за ki/ma/ac/um/totalSpeed/meleeAtk/kiSaveDC при няколко нива (1, 5, 11); (г) при `hiddenFieldIds: ['maDieSpan']` (временно подаден в теста) `.field` контейнерът се скрива, а при празен списък е видим; (д) `window.Campaign.getNpcs()` връща същото като `st.campaignNpcs`.",
+    "steps": [
+      {
+        "id": "1100.1",
+        "phase": "RECON",
+        "action": "Прочети app.js: derived() 215-268, помощните maDie 67-72 / umBonus 82-89 / profBonus 74-80 / baseHP 91-96, defaultState 99-144, renderAll 376-499, load/save 147-202, кода за session notes (~921-1013). Прочети modules/campaign-npc.js и tabs/stats-basicinfo.html (НЕ го променяй — само виж, че всяко поле е div.field с id). Прочети test/e2e/derived-values.spec.js, за да знаеш какво точно е заковано."
+      },
+      {
+        "id": "1100.2",
+        "phase": "RED",
+        "action": "Напиши test/e2e/class-profile.spec.js с асерциите (а)-(д) от notes. Червен — CLASS_PROFILES още не съществува."
+      },
+      {
+        "id": "1100.3",
+        "phase": "GREEN",
+        "action": "Създай modules/classes/monk.js по договора и премести в него монашеските формули ДОСЛОВНО. Преработи derived() в диспечер, добави activeProfile() и activeStorageKey(), приложи hiddenFieldIds в renderAll, добави window.Campaign фасадата и я закачи в campaign-npc.js и session notes кода, добави script таговете и #charSwitcher в index.html."
+      },
+      {
+        "id": "1100.4",
+        "phase": "DONE",
+        "action": "npx playwright test class-profile derived-values critical-path rest-mechanics short-rest multiclass-levelup levelup-modal — ВСИЧКО зелено и БЕЗ нито една промяна по монашеските спекове. Commit с description-а дословно."
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 1110,
+    "category": "feature",
+    "repo": "combat",
+    "lane": "core-seams",
+    "model": "heavy",
+    "dependsOn": [],
+    "files": [
+      "app.js",
+      "test/e2e/character-io.spec.js"
+    ],
+    "description": "feat(io): make export and import character-aware with a campaign snapshot that only moves forward",
+    "specRef": "monk-combat-structure.md «Модел» (Bundle v2 = export/import контрактът)",
+    "tddWorkflow": true,
+    "verify": [
+      "npx playwright test character-io import-export critical-path"
+    ],
+    "notes": "Стъпва на скелета от 1100 (същата lane, вече merge-нат): `activeProfile()`, `activeStorageKey()`, `window.Campaign`.\n\nДНЕШНО СЪСТОЯНИЕ: `getBundle()` app.js:729-735 → `{schema:'monkSheetBundle/v1', state, aliases}`; `buildBundle()` app.js:1102-1124 → `{version:2, state, sessionNotes}` (sessionNotes ВЕЧЕ е отделно поле ИЗВЪН state — това е прецедентът, който разширяваш); `readBundleOrState()` 737-751 разпознава v2 и суров legacy state; `applyBundle()` прави `st = {...defaultState, ...incoming}` + save() + renderAll() + пререндер на модулите. Експортът (826-840) слага дата САМО в ИМЕТО на файла — вътре няма никакво времево поле.\n\nЩО СЕ ИСКА (решения на потребителя, не ги предоговаряй):\n1. **Всеки файл е самодостатъчен**: експортът изнася АКТИВНИЯ герой + ПЪЛНО копие на кампанията. Нова форма: `{ version: 3, character: '<profile id>', state, campaign: { npcs, sessionNotes, savedAt } }`, където `savedAt` е ISO дата в САМИТЕ ДАННИ (имената на файлове се преименуват, данните не лъжат).\n2. **Маркер за герой**: при импорт, ако `character` не съвпада с активния герой → съобщение от рода «Този файл е на <X>, а активният герой е <Y>» и импортът НЕ се прилага. Файл БЕЗ поле `character` = монк (всичко съществуващо днес е монк).\n3. **Кампанията върви само нагоре**: кампанийната част се прилага САМО ако `campaign.savedAt` е ПО-НОВА от текущата. По-стара или липсваща → игнорира се тихо, героят пак се зарежда нормално. Така нито един архивен файл не може да изяде по-нови NPC-та и записки.\n4. **Назад-съвместимост**: v2 и legacy файловете трябва да продължат да се зареждат (те нямат campaign — само state).\n\nИМПЛЕМЕНТАЦИЯ: разшири getBundle/buildBundle да четат кампанията през `window.Campaign` и да слагат `character: activeProfile().id` + `savedAt: new Date().toISOString()`. В applyBundle раздели на две стъпки: първо проверка на маркера (несъвпадение → съобщение + изход), после героят, после кампанията по правилото за датата. Текущата кампанийна дата се пази до самата кампания (`Campaign` фасадата да я излага като `getSavedAt()`/`setSavedAt()`).\n\nЧЕРВЕНИ ЛИНИИ: import-export.spec.js е жив контракт — ако някой негов тест падне, значи си счупил назад-съвместимостта, поправи КОДА си, не теста. Не пипай localStorage данните. Не променяй имената на експортните файлове.\n\nТЕСТ (нов test/e2e/character-io.spec.js): (а) експортът произвежда version 3 с `character`, `state` и `campaign.savedAt`; (б) импорт на v2 файл (без campaign) зарежда героя и НЕ пипа кампанията; (в) импорт на файл с ПО-СТАРА `savedAt` оставя сегашните NPC-та и записки непроменени; (г) импорт с ПО-НОВА `savedAt` ги подменя; (д) импорт на файл с `character: 'cleric'` при активен монк показва съобщение и НЕ променя нищо; (е) файл без `character` се приема като монк.",
+    "steps": [
+      {
+        "id": "1110.1",
+        "phase": "RECON",
+        "action": "Прочети app.js: getBundle 729-735, readBundleOrState 737-751, applyBundle, експорт хендлъра 826-845, buildBundle 1102-1124, плюс window.Campaign фасадата от таск 1100. Прочети test/e2e/import-export.spec.js — той е договорът за назад-съвместимост."
+      },
+      {
+        "id": "1110.2",
+        "phase": "RED",
+        "action": "Напиши test/e2e/character-io.spec.js с асерциите (а)-(е) от notes. Червен."
+      },
+      {
+        "id": "1110.3",
+        "phase": "GREEN",
+        "action": "Въведи bundle v3 (character + campaign + savedAt), проверката на маркера при импорт и правилото «кампанията се подменя само ако файлът е по-нов». Запази пътищата за v2 и legacy."
+      },
+      {
+        "id": "1110.4",
+        "phase": "DONE",
+        "action": "npx playwright test character-io import-export critical-path — зелено, при това БЕЗ промени по import-export.spec.js. Commit с description-а дословно."
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 1200,
+    "category": "feature",
+    "repo": "combat",
+    "lane": "cleric-profile",
+    "model": "heavy",
+    "dependsOn": [
+      1100
+    ],
+    "files": [
+      "modules/classes/cleric.js",
+      "test/e2e/cleric-profile.spec.js"
+    ],
+    "description": "feat(cleric): add the Grave Cleric class profile with its own derived formulas",
+    "specRef": "monk-combat-structure.md «Файлове» (modules/ IIFE конвенция)",
+    "tddWorkflow": true,
+    "verify": [
+      "npx playwright test cleric-profile class-profile"
+    ],
+    "notes": "ЧИСТО НОВ ФАЙЛ — не пипа app.js, не пипа монка, не пипа нито един съществуващ тест. Пише се по договора, който таск 1100 вече е merge-нал в `modules/classes/monk.js`; прочети го и го следвай ДОСЛОВНО (същите имена на полета и същата сигнатура `derive(st, base)`).\n\nГЕРОЯТ: чист Grave Cleric, БЕЗ мултиклас. Правилата са окончателни (от списъка на потребителя):\n- **Няма ki** — нито `kiMax`, нито `kiSaveDC`, нито ки магически бонус.\n- **Няма martial arts die** — няма `ma`.\n- **AC = 10 + DEX, капнат от бронята.** Формулата: `ac = armorAc + min(mods.dex, armorMaxDex) + acMagic`, където при липсваща броня (`armorAc` 0/празно) се пада на `10 + mods.dex + acMagic`, а `armorMaxDex` null/празно значи БЕЗ таван. Пример от потребителя: half plate = armorAc 15, armorMaxDex 2.\n- **Скоростта е една стойност** — `totalSpeed = st.baseSpeed`, идва от расата, НЯМА Unarmored Movement и НЯМА `um`.\n- **Unarmed = 1 + STR**, мени се само от айтъми: `meleeAtk = 1 + mods.str + (st.unarmedMagic || 0)`.\n- **Само WIS spell DC**: `spellSaveDC_WIS` и `spellAtk_WIS` както при монка; `spellSaveDC_CHA`/`spellAtk_CHA` НЕ се връщат изобщо.\n- **Линейна прогресия**: `hasClassBadges: false`, `hasLevelUpModal: false` (без избор на клас при вдигане на ниво).\n- `restoresKi: false`.\n- Неутралните стойности (`level`, `mods`, `prof`, `hdMax`, `maxHP`, `savesBase`, `savesTotal`, `rangedAtk`) ИДВАТ наготово в `base` — не ги смятай наново.\n\nСОБСТВЕН ЗАПИС И ПОЛЕТА: `storageKey: 'cleric_v1'` (⛔ НИКОГА `monkSheet_v3` — той е на живия монк). `defaults: { armorAc: 0, armorMaxDex: null }` — тези полета се сливат към defaultState за клерика.\n`hiddenFieldIds` (скриват монашеските редове в tabs/stats-basicinfo.html): `['monkLevelSpan','maDieSpan','kiMaxSpan','kiSaveDcSpan2','kiSaveDcMagicInput','umBonusSpan']`.\n\n⚠ UI-ят за бронята (полетата armor AC и max dex) е на таск 1210 — ТУК само формулата и полетата по подразбиране.\n\nЧЕРВЕНИ ЛИНИИ: не пипай monk.js, app.js, index.html и нито един съществуващ спек. Клерикът е Grave Domain (не Death — Death е на монка), но уменията му са за ДРУГ board, тук няма skills съдържание.\n\nТЕСТ (нов test/e2e/cleric-profile.spec.js, чисто формулен — вика профила директно през page.evaluate, БЕЗ да сменя активен герой): (а) профилът съществува с всички полета от договора и `storageKey === 'cleric_v1'`; (б) без броня AC = 10 + DEX + acMagic; (в) half plate (15, max 2) при DEX +4 дава AC 17, а при DEX +1 дава 16; (г) `armorMaxDex: null` не слага таван; (д) няма `ma`, `kiMax`, `kiSaveDC`, `um`, `spellSaveDC_CHA` в резултата; (е) `totalSpeed === st.baseSpeed` независимо от нивото; (ж) `meleeAtk === 1 + STR mod + unarmedMagic`; (з) `spellSaveDC_WIS === 8 + prof + WIS mod`.",
+    "steps": [
+      {
+        "id": "1200.1",
+        "phase": "RECON",
+        "action": "Прочети merge-натия modules/classes/monk.js — той е еталонът за формата на профила и за сигнатурата derive(st, base). Прочети и диспечера derived() в app.js, за да знаеш какво точно идва в `base`."
+      },
+      {
+        "id": "1200.2",
+        "phase": "RED",
+        "action": "Напиши test/e2e/cleric-profile.spec.js с асерциите (а)-(з) от notes, викайки window.CLASS_PROFILES.cleric.derive(...) директно. Червен."
+      },
+      {
+        "id": "1200.3",
+        "phase": "GREEN",
+        "action": "Създай modules/classes/cleric.js по договора с всички правила от notes (без ki/ma/um, AC от броня с dex таван, фиксирана скорост, 1+STR unarmed, само WIS DC, линейна прогресия, собствен storageKey и defaults)."
+      },
+      {
+        "id": "1200.4",
+        "phase": "DONE",
+        "action": "npx playwright test cleric-profile class-profile — зелено. Commit с description-а дословно."
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 1210,
+    "category": "feature",
+    "repo": "combat",
+    "lane": "cleric-profile",
+    "model": "easy",
+    "dependsOn": [],
+    "files": [
+      "tabs/stats-basicinfo.html",
+      "modules/classes/cleric.js",
+      "test/e2e/armor-ac.spec.js"
+    ],
+    "description": "feat(cleric): add armor AC and max dex inputs that feed the cleric AC formula",
+    "specRef": "monk-combat-structure.md «Файлове» (tabs/ партиали)",
+    "tddWorkflow": true,
+    "notes": "Стъпва на таск 1200 (същата lane, вече merge-нат) — формулата за AC вече съществува в клерик профила, тук ѝ се дава UI.\n\nДОБАВИ в tabs/stats-basicinfo.html нов ред с два `div.field` по образеца на съседните (виж реда с «AC (Unarmored)» и «Magic Item Bonus (AC)»):\n- `<input id=\"armorAcInput\" type=\"number\" step=\"1\">` с етикет «Armor AC»\n- `<input id=\"armorMaxDexInput\" type=\"number\" step=\"1\">` с етикет «Armor Max DEX» (празно = без таван)\nПлюс поле за показване на резултата, ако е нужно за симетрия с «AC (Unarmored)».\n\nЗАКАЧИ ГИ като другите входове в партиала: `input` слушател → пише в `st.armorAc` / `st.armorMaxDex` → `save()`. ⚠ Партиалът се зарежда ЛЕНИВО (sub-tab 'basicinfo'), затова слушателите се закачат в `attachSubTabEventListeners('basicinfo')` в app.js… НО app.js е собственост на друга lane. Затова: закачи ги от клерик профила (`modules/classes/cleric.js`) през делегиран слушател на документа (`document.addEventListener('input', e => { if (e.target.id === 'armorAcInput') … })`) — така не пипаш app.js изобщо. Празно поле за max dex → `null` (без таван), не 0.\n\nВИДИМОСТ: двете полета са само за клерика. Добави id-тата им в… НЕ в `hiddenFieldIds` на клерика (той ги ПОКАЗВА), а ги скрий за МОНКА. Понеже monk.js е на друга lane, направи го от клерик профила обратно: при `activeProfile().id !== 'cleric'` скрий `.field` контейнерите им при рендер. Най-простото: клерик профилът излага `shownFieldIds: ['armorAcInput','armorMaxDexInput']`, а механизмът от 1100 скрива всичко от `shownFieldIds` на ДРУГИ профили — ако такъв механизъм няма, скрий ги чрез делегиран рендер хук в cleric.js и ОПИШИ го в коментар.\n\nЧЕРВЕНИ ЛИНИИ: ⛔ НЕ пипай app.js, index.html, monk.js. Не местѝ и не преименувай съществуващи полета в партиала — само добавяш. Монашеският изглед на Basic Info трябва да остане ВИЗУАЛНО непроменен (двете нови полета са скрити за монк).\n\nТЕСТ (нов test/e2e/armor-ac.spec.js): (а) при активен монк двата входа НЕ са видими и Basic Info изглежда както преди; (б) стойностите се пазят в st.armorAc / st.armorMaxDex и преживяват reload; (в) празно max dex поле дава null, не 0; (г) въведени 15 и 2 при DEX +4 дават AC 17 през клерик формулата.",
+    "steps": [
+      {
+        "id": "1210.1",
+        "phase": "RECON",
+        "action": "Прочети tabs/stats-basicinfo.html (76 реда, всяко поле е div.field с id) и merge-натия modules/classes/cleric.js. Виж как съседните входове (acMagicInput, kiSaveDcMagicInput) са оформени, за да ги повториш 1:1."
+      },
+      {
+        "id": "1210.2",
+        "phase": "RED",
+        "action": "Напиши test/e2e/armor-ac.spec.js с асерциите (а)-(г) от notes. Червен."
+      },
+      {
+        "id": "1210.3",
+        "phase": "GREEN",
+        "action": "Добави двата входа в партиала и ги закачи с делегиран слушател от cleric.js (БЕЗ да пипаш app.js). Скрий ги за всички профили освен клерика."
+      },
+      {
+        "id": "1210.4",
+        "phase": "DONE",
+        "action": "Пълният гейт (npm test) зелен — това е последният таск на lane-а и няма verify override. Commit с description-а дословно."
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 1300,
+    "category": "feature",
+    "repo": "combat",
+    "lane": "characters",
+    "model": "heavy",
+    "dependsOn": [
+      1100
+    ],
+    "files": [
+      "modules/characters.js",
+      "test/e2e/character-switch.spec.js"
+    ],
+    "description": "feat(characters): add the character container with switching between separate saves",
+    "specRef": "monk-combat-structure.md «Модел» (localStorage/st) + «Червени линии» т.3",
+    "tddWorkflow": true,
+    "verify": [
+      "npx playwright test character-switch class-profile critical-path"
+    ],
+    "notes": "ЧИСТО НОВ ФАЙЛ `modules/characters.js` (IIFE). Стъпва на скелета от 1100: `activeProfile()`, `activeStorageKey()`, указателят `localStorage['activeCharacter']`, и точката за монтиране `#charSwitcher` в header-а на index.html (вече съществува, празна е).\n\nМОДЕЛЪТ (решение на потребителя, не го предоговаряй): всеки герой има СОБСТВЕН `st` в СОБСТВЕН localStorage ключ, взет от профила му. Монкът остава в `monkSheet_v3` НЕПРОМЕНЕН — нулева миграция на живи данни. Няма вложен обект с всички герои; има само мъничък указател кой е активен.\n\nКАКВО ПРАВИ МОДУЛЪТ:\n1. `window.Characters.list()` → наличните профили от `window.CLASS_PROFILES` + дали имат запис в localStorage.\n2. `window.Characters.active()` → id на активния (дефолт 'monk').\n3. `window.Characters.switchTo(id)` → записва текущия герой, сменя указателя, зарежда записа на новия (или го създава от defaultState + `profile.defaults`), после пререндерира ВСИЧКО по пътя, който апът вече ползва при импорт: `window.st = st; renderAll();` плюс модулните пререндери (renderLangTable, renderToolTable, renderInventoryTable, renderDomainSpells, initMarkSpells, renderClericPrepSpells, renderClericCantrips, renderChaSpells, renderCube) — прочети как `applyBundle` го прави и ползвай СЪЩИЯ ред; ако той вече е изнесен във функция, викай нея, не дублирай списъка.\n4. Рендерира превключвателя в `#charSwitcher`: по едно копче/избор на герой, активният е отбелязан. Минимален, но четим на таблет (едро за пръст).\n\nВАЖНО ЗА БЕЗОПАСНОСТ: превключването ЗАПИСВА текущия герой ПРЕДИ да смени указателя — иначе губиш последните промени. И НИКОГА не пише в чуждия ключ.\n\nЧЕРВЕНИ ЛИНИИ: ⛔ не пипай app.js, index.html, monk.js, cleric.js (всички са на други lanes). Не мигрирай и не трий localStorage данни. По подразбиране, при празен указател, апът е МОНК и се държи точно както днес — около 51 теста сеят `monkSheet_v3` и трябва да останат зелени.\n\nТЕСТ (нов test/e2e/character-switch.spec.js): (а) по подразбиране активният е монк и `monkSheet_v3` се чете както преди; (б) превключване към втори герой създава НОВ ключ и НЕ пипа `monkSheet_v3` (сверѝ съдържанието му преди и след); (в) промяна по втория герой (напр. HP) не се вижда при монка и обратно; (г) превключване напред-назад пази стойностите и на двамата; (д) превключването пререндерира екрана (комбат пиловете показват стойностите на новия герой); (е) активният герой преживява reload.",
+    "steps": [
+      {
+        "id": "1300.1",
+        "phase": "RECON",
+        "action": "Прочети merge-натия скелет: activeProfile/activeStorageKey/указателя в app.js, modules/classes/monk.js, и как applyBundle пререндерира целия UI след подмяна на state (точният ред на модулните извиквания). Виж #charSwitcher в index.html."
+      },
+      {
+        "id": "1300.2",
+        "phase": "RED",
+        "action": "Напиши test/e2e/character-switch.spec.js с асерциите (а)-(е) от notes, особено (б) — че monkSheet_v3 остава байт за байт същият. Червен."
+      },
+      {
+        "id": "1300.3",
+        "phase": "GREEN",
+        "action": "Създай modules/characters.js с list/active/switchTo + рендер на превключвателя в #charSwitcher. Запис на текущия ПРЕДИ смяна на указателя; пререндер по пътя на applyBundle."
+      },
+      {
+        "id": "1300.4",
+        "phase": "DONE",
+        "action": "npx playwright test character-switch class-profile critical-path — зелено. Commit с description-а дословно."
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 1310,
+    "category": "feature",
+    "repo": "combat",
+    "lane": "characters",
+    "model": "easy",
+    "dependsOn": [],
+    "files": [
+      "modules/campaign.js",
+      "test/e2e/campaign-container.spec.js"
+    ],
+    "description": "feat(campaign): move NPCs and session notes into a shared container seeded from the monk save",
+    "specRef": "monk-combat-structure.md «Campaign NPCs таб» + «Червени линии» т.3",
+    "tddWorkflow": true,
+    "notes": "Стъпва на таск 1100 (фасадата `window.Campaign` вече съществува и чете/пише в `st`) и на 1300 (същата lane, вече merge-нат). ТУК се подменя САМО реализацията отдолу — нито един викащ не се пипа.\n\nЗАЩО: Campaign NPCs и session notes са на КАМПАНИЯТА, не на героя — двамата герои са в една и съща кампания и журналът трябва да е един, независимо с кого играеш. Всичко останало (включително инвентар, злато и изтеглените имена) си остава на героя.\n\nКАКВО ПРАВИ: нов `modules/campaign.js` (IIFE) със собствен localStorage ключ `campaign_v1`, съдържащ `{ npcs: [], sessionNotes: '', savedAt: '<ISO>' }`. Преопределя реализацията зад `window.Campaign` (getNpcs/setNpcs/getNotes/setNotes плюс getSavedAt/setSavedAt, които таск 1110 ползва за правилото «кампанията върви само нагоре»). Всеки запис обновява `savedAt`.\n\n⚠⚠ ЗАСЯВАНЕ ЧРЕЗ КОПИРАНЕ, НЕ МЕСТЕНЕ: при първо пускане, ако `campaign_v1` липсва, той се СЪЗДАВА от сегашните `st.campaignNpcs` и `st.sessionNotes` на МОНАШЕСКИЯ запис. ⛔ Старите полета в `monkSheet_v3` НЕ СЕ ТРИЯТ и НЕ СЕ ПРАЗНЯТ — просто спират да се ползват. Нищо живо не се разрушава; ако нещо се обърка, данните още са на старото място.\n\nЧЕРВЕНИ ЛИНИИ: ⛔ не пипай app.js, campaign-npc.js, characters.js (чужди зони — те вече викат фасадата). Не мигрирай и не трий нищо. campaign-npc.spec.js и session-notes.spec.js са живи договори и трябва да минат БЕЗ промени.\n\nТЕСТ (нов test/e2e/campaign-container.spec.js): (а) при липсващ `campaign_v1` той се създава от монашеските данни и `monkSheet_v3` ОСТАВА с непокътнати `campaignNpcs`/`sessionNotes`; (б) добавен NPC отива в `campaign_v1`, не в героя; (в) NPC-тата и записките са ЕДНИ И СЪЩИ при двамата герои (добавяш при монка, виждаш при другия); (г) всеки запис обновява `savedAt`; (д) campaign-npc и session notes спековете продължават да минат непроменени.",
+    "steps": [
+      {
+        "id": "1310.1",
+        "phase": "RECON",
+        "action": "Прочети фасадата window.Campaign (app.js, от таск 1100), modules/campaign-npc.js и кода за session notes — виж какво точно викат. Прочети test/e2e/campaign-npc.spec.js и session-notes.spec.js: те са договорът, който не бива да мръдне."
+      },
+      {
+        "id": "1310.2",
+        "phase": "RED",
+        "action": "Напиши test/e2e/campaign-container.spec.js с асерциите (а)-(д) от notes, особено (а) — че монашеският запис остава непокътнат след засяването. Червен."
+      },
+      {
+        "id": "1310.3",
+        "phase": "GREEN",
+        "action": "Създай modules/campaign.js със собствен ключ campaign_v1, засяване чрез КОПИРАНЕ от монашеския запис и подмяна на реализацията зад window.Campaign, с обновяване на savedAt при всеки запис."
+      },
+      {
+        "id": "1310.4",
+        "phase": "DONE",
+        "action": "Пълният гейт (npm test) зелен — последен таск на lane-а, без verify override. Commit с description-а дословно."
+      }
+    ],
+    "passes": true
+  },
+  {
+    "id": 1400,
+    "category": "feature",
+    "repo": "combat",
+    "lane": "core-seams",
+    "model": "heavy",
+    "dependsOn": [
+      1210,
+      1310
+    ],
+    "files": [
+      "app.js",
+      "test/e2e/cleric-end-to-end.spec.js"
+    ],
+    "description": "feat(cleric): wire the cleric as a playable second character end to end",
+    "specRef": "monk-combat-structure.md «Модел» + «Червени линии» т.1-3",
+    "tddWorkflow": true,
+    "notes": "ФИНАЛНИЯТ таск на board-а — БЕЗ verify override НАРОЧНО: пълният гейт е задната мрежа за цялата интеграция.\n\nВХОД (всичко вече merge-нато): скелетът с профилите и индиректния ключ (1100), bundle v3 с маркер и кампанийна дата (1110), клерик профилът с формулите (1200), полетата за броня (1210), контейнерът за герои с превключвател (1300), кампанийният контейнер (1310).\n\nЗАДАЧАТА: да се ИГРАЕ с клерика от начало до край и да се запуши всичко, което още куца при реална смяна на герой. Конкретно:\n1. Създаване на клерик през превключвателя: нов запис със своя ключ, `st.class = 'cleric'`, полета по подразбиране от профила (armorAc, armorMaxDex).\n2. При активен клерик монашеските полета ги НЯМА на екрана (ki, martial arts die, Monk Level, Unarmored Movement, ки магически бонус), а класовите баджове горе вляво и модалът за избор на клас при level-up НЕ се появяват (`hasClassBadges:false`, `hasLevelUpModal:false`) — вдигането на ниво е линейно.\n3. Почивките при клерика НЕ пълнят ки (няма такова), но правят всичко останало (HP, hit dice, death saves, spell slots както досега).\n4. Превключване монк ⇄ клерик по време на работа не смесва данни и пререндерира правилно.\n5. Експорт на клерика и импорт обратно работят с маркера от 1110.\n\n⚠ Ако нещо изисква промяна в app.js — това е таскът, в който е позволено (app.js е на тази lane). Пипай ХИРУРГИЧНО, по един регион.\n\nЧЕРВЕНИ ЛИНИИ: монашеското поведение остава непроменено — derived-values, critical-path, rest-mechanics, short-rest, multiclass-levelup, levelup-modal минават БЕЗ промени. `monkSheet_v3` остава непокътнат. Не включвай в този таск: spellcasting таба, flavor по герой, TTS глас по герой, Grave Cleric уменията, слотове за нива 11-20 — те са за СЛЕДВАЩ board.\n\nТЕСТ (нов test/e2e/cleric-end-to-end.spec.js): (а) създаване на клерик и попълване на статове/броня дава правилни AC, скорост, unarmed атака и WIS DC; (б) монашеските полета не се виждат при клерик, но се виждат пак след превключване към монк; (в) няма класови баджове и няма level-up модал при клерика, а нивото расте линейно; (г) кратка и дълга почивка при клерика минават без грешки и не търсят ки; (д) превключване монк→клерик→монк пази данните и на двамата; (е) експорт на клерика и импорт обратно възстановява същите стойности.",
+    "steps": [
+      {
+        "id": "1400.1",
+        "phase": "RECON",
+        "action": "Прочети всичко merge-нато от board-а: диспечера derived() и индиректния ключ в app.js, monk.js, cleric.js, characters.js, campaign.js, bundle v3 кода. Пусни апа наум през сценария «създай клерик и играй» и запиши къде още се допуска монашеско допускане (почивки, баджове, level-up, видимост)."
+      },
+      {
+        "id": "1400.2",
+        "phase": "RED",
+        "action": "Напиши test/e2e/cleric-end-to-end.spec.js с асерциите (а)-(е) от notes. Червен на местата, където интеграцията още куца."
+      },
+      {
+        "id": "1400.3",
+        "phase": "GREEN",
+        "action": "Запуши дупките — хирургично в app.js (почивки без ки, баджове и level-up модал според профила, видимост при смяна на герой). Нищо от следващия board (spellcasting, flavor, TTS, Grave умения)."
+      },
+      {
+        "id": "1400.4",
+        "phase": "DONE",
+        "action": "Пълният гейт (npm test) зелен, включително всички монашески спекове БЕЗ нито една промяна по тях. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  }
 ]

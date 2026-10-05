@@ -34,6 +34,104 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #1110 (combat) - feat(io): character-aware export/import with forward-only campaign snapshot
+
+**Status:** done (retry 1)
+
+**What was done:**
+- `app.js` (from the first attempt, 233d813): the Export button writes a v3 bundle `{ version: 3, character, state, campaign: { npcs, sessionNotes, savedAt } }`. `buildBundle()` stays at v2 for compatibility. `applyBundle()` rejects a file for a different character with an alert and changes nothing; a file without `character` counts as monk. The hero always loads; the campaign (NPCs and notes) is replaced only when the file's `campaign.savedAt` is newer than the local date. New field `st.campaignSavedAt`, plus `Campaign.getSavedAt()` and `Campaign.setSavedAt()`.
+- Retry fix (9763637): `test/e2e/character-io.spec.js` test (e) checked `toContain('cleric')`. After the merge with the cleric profile (task 1200), the alert shows the profile label 'Cleric', so the check now uses `/cleric/i`.
+
+**Verification:**
+- Worktree: character-io passed 8/8.
+- Tree merged with main (via `git merge-tree`, no conflicts): character-io, import-export, critical-path, character-switch and cleric-profile passed 51/51; session-notes and tabs-accordion-regression passed 14/14. All runs used isolated port 45293.
+
+**Notes:**
+- v2 and legacy files still overwrite the campaign while it has never been dated. Two existing specs (session-notes, tabs-accordion-regression) depend on that behavior.
+- These untracked leftovers couldn't be deleted (EPERM) and are not committed: `.tmp-merged/`, `pw-local.config.js`, `.cache/npm/`.
+
+
+### Task #1210 - feat(cleric): add armor AC and max dex inputs that feed the cleric AC formula
+- Added row #armorRow (armorAcInput, armorMaxDexInput) to tabs/stats-basicinfo.html, display:none by default.
+- modules/classes/cleric.js: delegated input listener writes st.armorAc / st.armorMaxDex (empty max dex = null) and calls save(); visibility is synced via MutationObserver and a renderAll wrapper so only an active cleric sees the row. app.js, index.html and monk.js untouched.
+- test/e2e/armor-ac.spec.js: monk hides inputs, persistence across reload, empty max dex is null, armor 15 / max dex 2 at DEX +4 gives AC 17.
+- Verified: armor-ac, cleric-profile, class-profile, derived-values, critical-path = 94 passed. Commit 2648ca0.
+
+
+## Task #1300 — feat(characters): add the character container with switching between separate saves
+
+**Repo:** combat · **Lane:** characters · **Commit:** 615e85a
+
+### What changed
+- **NEW `modules/characters.js`** (IIFE, already loaded by index.html before app.js):
+  - `Characters.list()` returns `{id, label, storageKey, hasSave, active}` for each entry in `window.CLASS_PROFILES`.
+  - `Characters.active()` returns the pointer `localStorage['activeCharacter']`. It falls back to `'monk'` when the pointer is empty or names an unknown profile.
+  - `Characters.switchTo(id)` does these steps in order:
+    1. Saves the current hero before changing the pointer. It skips the write if the current state matches what is stored, so an unchanged live record is never rewritten or normalized.
+    2. Sets the pointer.
+    3. Loads the new hero from its own `profile.storageKey`, or creates it from a deep copy of `defaultState`, plus `profile.defaults`, plus `class: id`.
+    4. Sets `window.st` and calls `window.save()`. This syncs app.js's `st` and writes ONLY to the new key.
+    5. Calls the same module re-renders as `applyBundle`: lang/tool/inventory tables, domain/mark/prep/cantrip/CHA spells, cube.
+  - The switcher in `#charSwitcher` has one button per hero (`data-char`, `aria-pressed`, `.primary` on the active one) and 44px finger targets. It renders NOTHING while only one profile exists, so the monk-only header is unchanged.
+- **NEW `test/e2e/character-switch.spec.js`** covers (a) through (f) from the notes. The second hero is a stub `testhero` profile registered with `addInitScript`, so the spec does not depend on cleric.js landing.
+
+### Notes
+- applyBundle's re-render list is not extracted into its own function in app.js, which is off-limits for this task. The list is copied once into `rerenderModules()` in the same order. If a later task extracts it, switch over to that function.
+- app.js, index.html and monk.js were not touched. No localStorage data is migrated or deleted.
+
+### Verify
+- RED: all 6 tests failed because `Characters` was undefined.
+- GREEN: `npx playwright test character-switch class-profile critical-path` passed 39/39. These ran on a private port 3004 through a temporary config, which has been deleted.
+- Regression: new-character, import-export, styles and tabs-navigation passed 51/51.
+
+
+## Task #1200 — feat(cleric): add the Grave Cleric class profile with its own derived formulas
+
+**Repo:** combat · **Lane:** cleric-profile · **Commit:** 15bc6b5
+
+**What changed**
+- NEW `modules/classes/cleric.js`: `window.CLASS_PROFILES.cleric` follows the monk.js contract exactly (`id`, `label`, `storageKey: 'cleric_v1'`, `defaults: { armorAc: 0, armorMaxDex: null }`, `derive(st, base)`, `hiddenFieldIds` for the 6 monk rows, `hasClassBadges/hasLevelUpModal/restoresKi: false`).
+- `derive` returns only `ac`, `totalSpeed`, `meleeAtk`, `meleeWeaponAtk`, `spellSaveDC_WIS`, `spellAtk_WIS`. AC = armorAc + min(DEX, armorMaxDex) + acMagic, or 10 + DEX + acMagic with no armor. null/empty max dex = no cap. Speed = st.baseSpeed. Unarmed = 1 + STR + unarmedMagic. No ki/ma/um/CHA DC.
+- NEW `test/e2e/cleric-profile.spec.js`: formula-only assertions (a)-(h), calling the profile directly via page.evaluate without switching the active character.
+
+**Verification**
+- RED: 8/8 cleric tests failed with `CLASS_PROFILES.cleric` undefined.
+- GREEN: `npx playwright test cleric-profile class-profile` gave 16 passed. It ran on isolated port 3003 via a temp config outside the repo, not shared 45278.
+
+**Notes**
+- `meleeWeaponAtk` (STR + prof + meleeWeaponMagic) is also returned, because app.js renders `#meleeWeaponMagicAtkSpan` unconditionally. It is not in the task notes, so revisit if the user wants a different rule.
+- app.js, monk.js, index.html (it already loaded cleric.js) and the existing specs are untouched.
+
+
+## Task #1100 — refactor(core): introduce class profiles, per-character storage and campaign accessors without changing behavior
+
+**Repo:** combat · **Lane:** core-seams · **Commit:** 90047e0
+
+### What changed
+- **modules/classes/monk.js** (new, IIFE): `window.CLASS_PROFILES.monk` follows the contract word for word (`id, label, storageKey:'monkSheet_v3', defaults:{}, derive, hiddenFieldIds:[], hasClassBadges, hasLevelUpModal, restoresKi`). `maDie` and `umBonus` moved here unchanged. `derive(st, base)` returns ma, kiMax, ac, um, totalSpeed, meleeAtk, meleeWeaponAtk, kiSaveDC, spellSaveDC_WIS/CHA and spellAtk_WIS/CHA, with formulas copied verbatim.
+- **app.js**:
+  - `derived()` is now a dispatcher: it works out the class-neutral values (level, mods, prof, hdMax, maxHP, savesBase, savesTotal, rangedAtk) and returns `{...base, ...activeProfile().derive(st, base)}`. `profBonus` and `baseHP` stay in app.js.
+  - `activeProfile()` / `activeStorageKey()` are exported on window. The `localStorage['activeCharacter']` pointer defaults to monk, so the key is still `monkSheet_v3`. load() and save() use the indirect key.
+  - `applyHiddenFields()` runs in renderAll. It hides the closest `.field` (inline display:none + a `data-profile-hidden` marker, reset on every render) and hides a `.row-grid` once all of its fields are hidden.
+  - `window.Campaign` facade (`getNpcs/setNpcs/getNotes/setNotes`) reads and writes `window.st` directly, so behavior is unchanged. The session-notes code (renderAll sync, notesWriteNow, onNotesTabShown, notesRestoreDir, wireNotesUI) now goes through it. buildBundle/applyBundle were not touched.
+- **modules/campaign-npc.js**: every direct `window.st.campaignNpcs` access now goes through `window.Campaign` (npcList → getNpcs, reorder → setNpcs).
+- **index.html**: script tags added before app.js for monk.js, cleric.js, characters.js and campaign.js (the last three 404 until tasks 1200/1300/1310 create them). Added `<div id="charSwitcher" style="display:contents">` in header-left; display:contents means the empty div adds no extra flex gap.
+- **test/e2e/class-profile.spec.js** (new, 8 tests): (a) the profile contract; (b) activeProfile/activeStorageKey default to monk and save still writes monkSheet_v3; (c) derived() matches the profile and fixed expected values at levels 1/5/11; (d) hiddenFieldIds hides and shows the field, and a row with all fields hidden is hidden too; (e) the Campaign facade.
+
+### Verification
+- RED first: 8/8 failed because CLASS_PROFILES/Campaign did not exist yet. GREEN after the change.
+- `class-profile derived-values critical-path rest-mechanics short-rest multiclass-levelup levelup-modal`: **151/151 passed** on the second run. No monk spec was edited.
+  - The first run had 1 failure, `Ki Save DC magic item bonus adds to formula`. It passed when re-run alone, then 106/106 with `derived-values --repeat-each=2`, so it looks like flakiness from fixed timeouts.
+- Extra regression run over the areas touched: campaign-npc, session-notes, tabs-navigation, new-character, import-export, attack-bonuses, styles, cube-widget, data-loading: **151/151 passed**.
+- All runs used a temporary config on port 45291 (own http-server, reuseExistingServer:false), not shared port 45278.
+
+### Notes
+- modules/newchar.js was not touched (out of scope). Its hard-coded `monkSheet_v3` still matches the monk key.
+- No localStorage migration and no data deleted.
+- GitNexus MCP tools were not available in this session, so impact analysis and detect_changes were not run. Blast radius was checked by grep instead: derived() is used across app.js render and rest code, and its return shape is unchanged.
+- Untracked leftovers in the worktree (deleting them was denied): `pw-local.config.js` (temporary test config) and `.cache/npm/`. Neither is committed.
+
+
 ## Task #60 — test(page): prove the whole page works in both languages, end to end
 
 **Status:** ✅ Complete
@@ -4000,6 +4098,11 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
 
 
 

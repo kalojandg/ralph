@@ -86,9 +86,16 @@ $windowPositions = @()
 # the whole session. Failed retries are INFORMED - see Save-RetryContext below.
 $maxTimeoutRequeues = 2
 $maxFailRetries = 2
+# Merge conflicts get their OWN budget: a conflict is not the agent's failure, it is the
+# cost of parallel lanes touching a shared file, and resolving it is a different job.
+# Sharing the fail budget meant a task that burned its retries on unrelated causes (a bad
+# spec, a watchdog timeout) arrived at the merge with nothing left, so the in-worktree
+# conflict resolution the harness already supports never got to run (05.10: task #1310).
+$maxConflictRequeues = 2
 if ($config -and $config.swarm) {
     if ($config.swarm.PSObject.Properties['max_timeout_requeues']) { $maxTimeoutRequeues = [int]$config.swarm.max_timeout_requeues }
     if ($config.swarm.PSObject.Properties['max_fail_retries'])     { $maxFailRetries     = [int]$config.swarm.max_fail_retries }
+    if ($config.swarm.PSObject.Properties['max_conflict_requeues']) { $maxConflictRequeues = [int]$config.swarm.max_conflict_requeues }
 }
 
 # Post-merge verification gate: after every successful merge, run the repo's `verify`
@@ -919,15 +926,17 @@ function Complete-Agent($info) {
             if ($LASTEXITCODE -ne 0) {
                 # Capture the conflicting files BEFORE aborting, then send the task back for
                 # IN-WORKTREE resolution: the agent is permitted (exception) to merge the
-                # integration branch into its own branch and resolve, budgeted like a fail.
+                # integration branch into its own branch and resolve. Budgeted SEPARATELY
+                # from failures - a conflict is not the agent's fault, and a task that spent
+                # its fail retries elsewhere must still get its chance to resolve the merge.
                 $confFiles = ((& git -C $info.gitRoot diff --name-only --diff-filter=U 2>$null) -join "`n")
                 & git -C $info.gitRoot merge --abort 2>$null | Out-Null
-                $n = $script:failCounts[$t.id]; if (-not $n) { $n = 0 }
-                if ($n -lt $maxFailRetries) {
-                    $script:failCounts[$t.id] = $n + 1
+                $n = $script:conflictCounts[$t.id]; if (-not $n) { $n = 0 }
+                if ($n -lt $maxConflictRequeues) {
+                    $script:conflictCounts[$t.id] = $n + 1
                     $script:conflictPending[$t.id] = $true
                     Save-RetryContext $t.id ($n + 1) ("MERGE CONFLICT: your branch conflicts with the integration branch '$($info.baseBranch)'. Conflicting files:`n$confFiles`n`nResolve IN YOUR WORKTREE: you are PERMITTED (exception to the git rules) to run 'git merge $($info.baseBranch)' on your current branch, resolve the conflicts preserving BOTH sides' intent, commit the merge, re-run the repo's unit tests, then write the result file.")
-                    Write-Host "[~] Task #$($t.id): MERGE CONFLICT - RE-QUEUED for in-worktree resolution ($($n + 1)/$maxFailRetries)" -ForegroundColor Yellow
+                    Write-Host "[~] Task #$($t.id): MERGE CONFLICT - RE-QUEUED for in-worktree resolution ($($n + 1)/$maxConflictRequeues)" -ForegroundColor Yellow
                     Release-Claim $t.id
                     return "conflict_requeue"
                 }
@@ -1097,6 +1106,7 @@ $script:failCounts    = @{}   # taskId -> informed retries used this session
 $script:fastFails     = 0     # consecutive instant (<60s) agent deaths -> environment problem guard
 $script:fatalEnv      = $false # exit 4 seen (credits/auth) -> abort the whole run immediately
 $script:conflictPending = @{} # taskId -> next spawn is a conflict-resolution retry (merge main in-worktree)
+$script:conflictCounts  = @{} # taskId -> conflict re-queues used this session (own budget, not failCounts)
 # Snapshot each touched repo's HEAD at run start - the finishing review stage reviews
 # exactly what THIS run changed (startSha..HEAD).
 $script:startShas = @{}
