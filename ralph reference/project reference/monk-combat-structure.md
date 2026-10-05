@@ -1,14 +1,15 @@
 # Monk Combat App — Architecture Reference
 
 > Прочети ПРЕДИ код по repo `combat`. D&D Monk/Cleric character sheet (v3) с автоматизирани тестове. Vanilla JS, без bundler.
-> НАЙ-ГОЛЯМОТО и най-старото приложение — очаквай наслоена история. Актуализиран: 2026-10-05 (след борда 1100-1400: class profiles, character container, campaign container, v3 export, играем Cleric — виж „Герои, класове и кампания“ по-долу).
+> НАЙ-ГОЛЯМОТО и най-старото приложение — очаквай наслоена история. Актуализиран: 2026-10-05 (след борда 1100-1400: class profiles, character container, campaign container, v3 export, играем Cleric; и борда 1500-1700: profile-driven табове/feature файлове/flavor/глас, Spellcasting таб със spell library — виж „Герои, класове и кампания“ по-долу).
 
 ## Файлове
 
 ```
 monk_combat_app/
-├── index.html          ← скелет + tab-nav (9 таба: Stats, PC Characteristics, Resurrection, Inventory,
-│                          Flavor, Skills, Session Notes, Names, Campaign NPCs); табовете се зареждат
+├── index.html          ← скелет + tab-nav (10 бутона: Stats, PC Characteristics, Resurrection, Spellcasting,
+│                          Inventory, Flavor, Skills, Session Notes, Names, Campaign NPCs; видимостта и редът
+│                          им идват от `activeProfile().tabs`, Spellcasting е скрит за монка); табовете се зареждат
 │                          динамично (loadTabs -> fetch tabs/*.html)
 ├── app.js              ← ЯДРОТО ~2400+ реда: state (st.*), derived values, tab loading, bundle
 │                          (buildBundle/applyBundle), оркестрация. Пипай хирургично, малки таскове.
@@ -25,25 +26,31 @@ monk_combat_app/
 │                          characters.js — контейнер на героите + switcher #charSwitcher (window.Characters)
 │                          campaign.js — кампанийният контейнер campaign_v1 (window.Campaign)
 │                          quick-reference.js — Skills › Quick Reference accordion от quick-reference.json
+│                          spell-library.js — Spellcasting таб на клерика: слотове + приготвени + търсима
+│                                        библиотека (виж „Герои, класове и кампания“); зарежда се след
+│                                        spells-mark.js, ПРЕДИ app.js
 │                          inventory.js, newchar.js, pcchar.js, quests.js, spells-mark.js
+│                                        (слотове до ниво 20; domain заклинания от domain-spells.json)
 ├── tabs/               ← HTML партиали per tab (flavor, namegen, inventory, pcchar, quests,
-│                          resurrection, sessionNotes, skills + skills-personal/skills-quickref,
+│                          resurrection, spellcasting, sessionNotes, skills + skills-personal/skills-quickref,
 │                          stats + 3 stats под-партиала, campaignNpc)
 ├── themes/             ← 5 самостоятелни face-theme стайла (fog, stone, moss, arcane, bastion),
 │                          swap-ват се като <link id="cubeThemeLink"> от cube.js — без @import
 ├── cube.css            ← стилове за Cube widget-а, дилога, drain accordion-а и news ticker-а
 ├── styles.css, manifest.json, service-worker.js
 ├── *.json данни        ← one-liners, excuses, insults, dark-jokes, tasha-jokes (Flavor);
-│                          familiars, npc-names (Names); cleric-features, skills-and-features…
+│                          familiars, npc-names (Names); cleric-features, grave-features (Grave Domain), skills-and-features, domain-spells (по домейн: death/grave),
+│                          local-spells (локални заклинания извън API-то)…
 │                          Съдържателен таск пипа САМО json, не кода.
 ├── TTS-SETUP.md        ← как е настроен Google TTS ключът/ограниченията
 ├── test/README.md      ← четивен guide за пускане/дебъг на тестовете (⚠ BEHAVIOR_DOCUMENTATION.md
 │                          и TEST_CASES.md вече ги НЯМА — изтрити; поведението живее в самите e2e спекове;
 │                          самият README е с остаряла „Test Coverage" секция отпреди Flavor/TTS/Cube/NPC — не му вярвай)
-├── test/e2e/           ← 46 Playwright спек файла (вкл. flavor-ui, namegen-ui, tts-core,
+├── test/e2e/           ← 51 Playwright спек файла (вкл. flavor-ui, namegen-ui, tts-core,
 │                          flavor-tts, flavor-text-quality, cube-widget, cube-themes, cube-integration,
 │                          campaign-npc, class-profile, cleric-profile, armor-ac, character-switch,
-│                          character-io, campaign-container, cleric-end-to-end)
+│                          character-io, campaign-container, cleric-end-to-end, profile-surface, full-caster,
+│                          local-spells, spell-library, flavor-per-profile)
 ├── test/network-flake-reporter.js ← reporter на гейта за retry политиката (виж „Тестово състояние“)
 └── playwright.config.js  ← testDir test/e2e, baseURL localhost:45278, webServer 'npm run serve', workers 1
 ```
@@ -51,6 +58,7 @@ monk_combat_app/
 ## Модел
 
 - **Персистенция: localStorage, `st` на героя + отделен campaign контейнер (виж „Герои, класове и кампания“).** Ключове: `monkSheet_v3` (монк, жив запис), `cleric_v1` (клерик), `activeCharacter` (указател; липсва → монк), `campaign_v1` (NPCs + session notes, общ за героите). Multiclass: `st.monkLevel`/`st.clericLevel` (Death Domain, interleaved accordion) — поведението на level/class логиката е кодифицирано в `multiclass-levelup.spec.js` / `rest-mechanics.spec.js` (старите BEHAVIOR_DOCUMENTATION.md / TEST_CASES.md са изтрити — спековете са истината). `st.aliases`, `st.npcNames`, `st.familiars` (унифицирани — bundle-ът ги round-trip-ва и трите). `st.campaignNpcs` е ОТДЕЛЕН от `st.npcNames` — виж „Campaign NPCs таб“ по-долу; ⚠ след #1310 истината за NPCs/notes е в `window.Campaign` (campaign_v1), а `st.campaignNpcs`/`st.sessionNotes` са само legacy/seed полета (бившото „даром през {...st}“ вече не важи за тях); при другите типове — без изрично upsert (за разлика от aliases/familiars/npcNames, които buildBundle изрично гарантира като масив — campaignNpcs разчита само на defaultState, работи, но е инконсистентно с прецедента).
+- **Spell cache:** `spellDetailsCache_v1` е отделен localStorage ключ (офлайн детайли на приготвените заклинания, общ за героите) — НАРОЧНО извън `st`: производни SRD данни, не състояние на героя; не влиза в bundle/cloud sync.
 - **Long Rest / prepared spells:** `restoreMarkSlots` (spells-mark.js, при Long Rest) нулира използваните mark slots, но НЕ чисти `preparedClericSpells` — подготовката се сменя РЪЧНО на level-up, не автоматично при почивка.
 - **Bundle:** Export бутонът пише **v3** (`getBundle()`: `{version:3, character, state, campaign:{npcs,sessionNotes,savedAt}}`); `buildBundle()` остава v2 (cloud sync/съвместимост); import чете v3/v2/legacy. Bundle v2 (buildBundle/applyBundle) = стария export/import контракт; нов тип запис → влиза в `st`, НЕ в отделен localStorage ключ (урокът от familiars бъга). buildBundle прави `{...st}`, така че всеки нов default в `st` round-trip-ва автоматично — напр. `st.cube` ({charges, activeFace}, default в defaults обекта на app.js).
 - **TTS (modules/tts.js):** Google Cloud Text-to-Speech, on-demand (клик = заявка, без кеш, без .mp3 в репото), fallback към браузърния speechSynthesis при липсващ ключ/грешка. Ключът е комитнат НАРОЧНО (прието решение): ограничен по HTTP referrer (localhost dev + GitHub Pages) и само за TTS API, $2 billing аларма + rate limits + капната карта. ⛔ Chirp3-HD гласовете връщат 400 при `pitch` параметър — не го добавяй.
@@ -68,17 +76,20 @@ npm run serve           # http-server на 45278 — НЕ пускай от аг
 - Порт **45278** (собствен — без колизия с другите апове).
 - Unit инфраструктура НЯМА — bootstrap по модела на shared-inventory при нужда (localStorage, без Firebase мокове).
 
-## Герои, класове и кампания (ГОТОВО — борд 1100-1400, мърджнат 2026-10-05)
+## Герои, класове и кампания (ГОТОВО — борд 1100-1400 и 1500-1700, мърджнати 2026-10-05)
 
 - **Class profiles (#1100/1200/1210):** `modules/classes/monk.js` и `cleric.js` регистрират `window.CLASS_PROFILES[id]` = `{id, label, storageKey, defaults, derive(st, base), hiddenFieldIds, hasClassBadges, hasLevelUpModal, restoresKi}`. `derived()` в app.js смята неутралното (level, mods, prof, hdMax, maxHP, saves, rangedAtk) и слива `profile.derive()` отгоре. `activeProfile()` / `activeStorageKey()` са изложени на window. Монк е дефолтът и поведението му е непроменено (рефактор без промяна). Cleric = Grave Cleric: линеен (без multiclass/level-up модал/ки), AC = броня + DEX (капнат от `armorMaxDex`) + `acMagic`, без броня → 10+DEX; spell DC/atk само WIS. Входовете `armorAc`/`armorMaxDex` (ред `#armorRow` в stats-basicinfo.html) се показват само при клерик; `armorMaxDex: null` = без таван.
 - **Characters (#1300):** `modules/characters.js` (`window.Characters`: list/active/switchTo/render). Всеки герой = собствен `st` в собствен ключ; указател `localStorage.activeCharacter`; switcher `#charSwitcher` в header-а (скрит при <2 героя). Смяна: persistCurrent → смяна на указателя → loadState → save → rerenderModules. Модулът НИКОГА не пише в чужд ключ (⛔ `cleric_v1` никога не пипа `monkSheet_v3`).
 - **Campaign (#1310):** `modules/campaign.js` (`window.Campaign`: getNpcs/setNpcs/getNotes/setNotes/getSavedAt/setSavedAt/persist) — ключ `campaign_v1` = `{npcs, sessionNotes, savedAt}`, общ за всички герои. Засява се КОПИРАНЕ от `monkSheet_v3` при първо зареждане (старите полета не се трият), със `savedAt: ''` (недатирана). `save()` вика `Campaign.persist()` (записва само при реална промяна). app.js държи фасада за кампанията, ако модулът липсва; `campaign-npc.js` ползва accessor-ите. Скриптовете classes/*, characters, campaign се зареждат в index.html ПРЕДИ app.js.
 - **Export/Import (#1110):** файл v3 носи `character` (липсва = монк); import на файл на друг герой → alert и отказ (`applyBundle` връща false). Кампанията върви САМО НАПРЕД: v3 `campaign` се прилага само ако `savedAt` е по-нов от текущия (`isNewerCampaign`); v2/legacy без дата пипат кампанията само докато тя никога не е била датирана.
+- **Профилът декларира повърхността си (#1500/#1700):** освен горните, всеки профил носи `tabs` (ключове от data-tab, в реда на показване; `applyProfileTabs()` в app.js), `featureFiles` (JSON-ите на Skills → Personal; без тях → тези на монка), `flavorTypes` (id-та на flavor бутоните; `null` = всички) и `ttsVoice` (`null` = гласът по подразбиране). Монк: `tabs` със Resurrection, `featureFiles: [skills-and-features, cleric-features]`, `flavorTypes: null`. Cleric: Spellcasting вместо Resurrection, `featureFiles: [grave-features.json]`, `flavorTypes: ['insult','spare-dying','heal-zero']`. `flavor.js` филтрира бутоните през `applyProfileFilter()` (секция с всички скрити бутони се скрива заедно със заглавието си; филтърът се презасича след `window.save()` през обвита `save`, така че смяната на герой е покрита); `tts.js` `pickVoice()` ползва `ttsVoice` (езиковият код се взима от префикса на името; ⛔ Chirp3-HD + `pitch` остава забранено). Нов клас/герой = нов профил, не `if (classId)` в модулите.
+- **Spellcasting (#1600/#1610):** слотовете на клерика са до ниво 20 (`spells-mark.js`); domain заклинанията са в `domain-spells.json` по домейн (`{death:[…], grave:[…]}`), локалните — в `local-spells.json`. Таб `spellcasting` (`tabs/spellcasting.html`: `#spellSlotsRoot`, `#spellPreparedRoot`, `#spellLibraryRoot`) се рендира от `modules/spell-library.js`: приготвените по ниво (брояч подготвени/макс = clericLevel + WIS mod, мин. 1; domain са винаги подготвени и не се броят), търсима библиотека от API `https://www.dnd5eapi.co/api/2014/classes/cleric/spells` (⚠ версионираният път — `/api/classes/…` връща 301) + local-spells.json; `arcane-eye` е изключен (SRD грешка). Приготвените живеят в `st.preparedClericSpells` (същият списък като в Resurrection таба); без мрежа детайлите идват от `spellDetailsCache_v1`.
 - **#1400:** клерикът е играем end to end (switcher, собствен запис, import/export, кампания споделена с монка); покрит от `cleric-end-to-end.spec.js`.
 
 ## Тестово състояние
 
 - **Baseline 2026-07-27: 452 passed, 0 failed, 13.2 мин** (пълен suite, ексклузивен порт) — събира се комфортно в 45-мин гейт таван. От 2026-08-03 добавени 3 cube спека (cube-widget, cube-themes, cube-integration) → 35 спек файла; гейтът остана зелен (числото 452 е от преди cube-а — не съм пускал suite наново). Peek / Minute-Elapsed / bundle-import поправките (2026-08-10) РАЗШИРИХА cube-widget, cube-integration и rest-mechanics спековете in-place — без нови файлове (пак 35). Таскове 810/820 (2026-08-31) добавиха нов `campaign-npc.spec.js` (CRUD + търсене + details + state-level drag) и РАЗШИРИХА `tabs-navigation.spec.js` in-place → 37 спек файла; verify gate-ът остана зелен (числото 452 не е преброено наново от cube-а насам — не му вярвай буквално, ползвай го само като порядък).
+- **Борд 1500-1700 (2026-10-05): 51 спек файла** (+profile-surface, full-caster, local-spells, spell-library, flavor-per-profile; разширен in-place styles — чака lazy табовете). Общият брой тестове пак не е преброен наново.
 - **Борд 1100-1400 (2026-10-05): 46 спек файла** (+class-profile, cleric-profile, armor-ac, character-switch, character-io, campaign-container, cleric-end-to-end; разширени in-place campaign-npc, critical-path, tabs-accordion-regression, styles). Новите спекове сеят `campaign_v1`/`cleric_v1`/`activeCharacter` през localStorage; общият брой тестове не е преброен наново — 452 остава само порядък. След #1310 спековете за NPCs/notes четат през `window.Campaign`, не през `st`.
 - Legacy спековете (отпреди multiclass модала) носят auto-Monk resolver в beforeEach (interval кликащ cardMonk) — НЕ го махай при редакция; нов тест, който вдига ниво, сетва `st.level` + `st.monkLevel` + `st.clericLevel` директно ИЛИ разчита на resolver-а.
 - **Retry политика (2026-10-05):** `retries: 1` в playwright.config.js е САМО срещу мрежови прекъсвания (`net::ERR_NETWORK_CHANGED`). `test/network-flake-reporter.js` връща exit code 1, ако тест е flaky по НЕ-мрежова причина, така че race/timing бъговете не минават зелено през retry-я. Не махай reporter-а, ако retries остават.
