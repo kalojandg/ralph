@@ -34,6 +34,60 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #1610 — feat(spells): add the searchable spell library with daily preparation and an offline cache
+
+- **Repo:** combat
+- **Files:** modules/spell-library.js (new), test/e2e/spell-library.spec.js (new), test/e2e/profile-surface.spec.js (out-of-scope: stale selector `#tab-spellcasting .section-title` → `> .section-title`)
+- **What:** Cleric Spellcasting tab now renders slots (reusing spells-mark render), prepared-for-the-day list grouped by level with prepared/max counter (domain spells always prepared, not counted), and a full searchable library (dnd5eapi /api/2014 cleric list + local-spells.json, Arcane Eye filtered) with one-click preparation on st.preparedClericSpells. Prepared spell details cached locally for offline use; offline library shows a readable message.
+- **Verify:** full Playwright suite on private port 46391 — 622 passed, 16 skipped (pre-existing), 0 failed. Commits 37f7f2b, 83d8b72.
+
+
+## Task #1700 — feat(flavor): show only the active character's flavor categories and voice
+
+**Repo:** combat · **Commit:** 854510d · **Status:** ✅
+
+- `modules/flavor.js`: `applyProfileFilter()` hides `[data-flavor]` buttons that are not in `activeProfile().flavorTypes` (null = all) and hides a section's title and grid when none of its buttons are visible. It is wired into `attachFlavor` and runs again after every `window.save()` (character switch). It is also exported as `renderFlavorUI`.
+- `modules/tts.js`: `pickVoice(lang)`. If `activeProfile().ttsVoice` is set, it is used as the voice name, with languageCode taken from the voice name. If not, the default from `TTS_CONFIG.voices` is used. The key, referrer and fallback are untouched.
+- New `test/e2e/flavor-per-profile.spec.js` covers (a)–(e). The cleric gets insult / spare-dying / heal-zero, under the sections 'Insults & Jokes' and 'Портиерът на смъртта'.
+- Retry fix: the previous attempt wrote `hookSave`/`applyProfileFilter` but never called them, so (b) and (c) failed. Previous agents also got stuck waiting on `npm test` in the background.
+- Gate: full playwright suite on an isolated port (45391): 610 passed, 16 skipped, 1 flaky (cube-integration, unrelated), exit 0. flavor-ui and flavor-tts are unchanged and green.
+
+
+### 2026-10-05 — Task #1600 (combat): feat(spells): extend cleric slots to level 20 and move domain spells into per-domain data
+
+**Status:** ✅ done — commit 58e4f1e on ralph/task-1600
+
+**What changed:**
+- `modules/spells-mark.js`: `CLERIC_SPELL_SLOTS` now has rows 11-20 (RAW PHB: 6th at 11, 7th at 13, 8th at 15, 9th at 17, extra 5th at 18, 6th at 19, 7th at 20), and the `Math.min(clericLevel, 10)` cap is removed. `renderClericPrepSpells` already builds the accordion from 1 to the highest slot, so it was checked and left unchanged.
+- The hardcoded `DOMAIN_SPELL_ROWS` is gone. The new `domain-spells.json` holds `{ death: [...], grave: [...] }`. Death is copied word for word; Grave is Bane/False Life, Gentle Repose/Ray of Enfeeblement, Revivify/Vampiric Touch, Blight/Death Ward, Antilife Shell/Raise Dead.
+- The profiles have no `domain` field, so the domain comes from `activeProfile().id` (`monk`→`death`, `cleric`→`grave`, unknown→`death`); a comment in the module documents this. The profile files were not touched.
+- The JSON is preloaded when the module loads, because `getClericSpellsGained` (the level-up modal) reads it synchronously. `renderDomainSpells` waits for the load if it isn't done yet. New window helpers: `loadDomainSpells`, `getDomainSpellRows`, `activeDomain`.
+- The static `_ALWAYS_PREPARED` set (Death list + Mark spells) is replaced by `_alwaysPrepared()`, which uses the ACTIVE domain + Mark. The per-level API cache stores the unfiltered list and filters on every read, so switching hero doesn't leave stale data. Domain spells stay always prepared and don't count toward the limit.
+- New `test/e2e/full-caster.spec.js` (6 tests, (a)-(f) from the task notes).
+
+**Verify:** `npx playwright test full-caster mark-spells domain-spells-filter cleric-cantrips resurrection-tab local-spells rest-mechanics` → 108 passed. Extra check: cleric-end-to-end, character-switch, multiclass-levelup, levelup-modal, critical-path → 70 passed, 1 flaky (multiclass Martial Arts die, unrelated to this change), exit 0.
+
+**Notes for the orchestrator:**
+- ⚠ Port 45278 was already held by another agent's http-server (combat-task-1700 worktree), and with `reuseExistingServer: true` the default config would have tested THAT worktree. I ran on my own server (port 3002) through a temporary config outside git, which I deleted afterwards. The other agent's server was left alone.
+- `npm ci` left an untracked `.cache/npm/_cacache/` in the worktree; it was not committed.
+- app.js, index.html, profiles, spell-library.js and the existing specs were not touched.
+
+
+### Task 1500 — refactor(profiles): let each class profile declare its tabs, feature files, flavor set and voice
+**Repo:** combat · **Lane:** core-profile · **Commit:** a0bcbca
+
+**What changed**
+- `modules/classes/monk.js` / `cleric.js`: four new contract fields. Monk: `tabs` = today's 9 tabs including resurrection, `featureFiles` = ['skills-and-features.json','cleric-features.json'], `flavorTypes: null`, `ttsVoice: null`. Cleric: same tabs but `spellcasting` replaces `resurrection`, `featureFiles` = ['grave-features.json'], `flavorTypes` = ['insult','spare-dying','heal-zero'], `ttsVoice: null`.
+- `app.js`: added `spellcasting` to tabMap. New `profileTabs()` (a profile without `tabs` falls back to the monk's set, so the testhero in character-switch keeps working) and `applyProfileTabs()`, called from renderAll. It hides buttons and panels outside the profile, reorders only when the order differs, and switches to the first tab when the active one disappears. `showTab` redirects a key the profile doesn't have (e.g. a remembered activeTab) to the first tab. `renderFeaturesAccordion()` takes no arguments and reads `activeProfile().featureFiles` through `loadFeatureFile` (per-URL cache that reuses loadFeatures/loadClericFeatures). The monk files keep their labels and level sources ([Monk]/monkLevel, [Cleric]/clericLevel); other files take the profile's label and `st.level`. The sort comparator is deliberately the old asymmetric one (`_file === 0 ? -1 : 1`): checked in node that a symmetric version changes the monk's order in 231 level combinations. renderAll re-renders the accordion when the profile changes after a render.
+- `index.html`: Spellcasting button (display:none until applyProfileTabs), `#tab-spellcasting` panel, `<script src="modules/spell-library.js">` before app.js (404 until task 1610).
+- `tabs/spellcasting.html`: skeleton (section-title plus spellSlotsRoot, spellPreparedRoot, spellLibraryRoot).
+- New `test/e2e/profile-surface.spec.js`: contract test plus cases (a)–(f). Before the change, (a) and (f) passed (monk characterization) and the rest failed.
+
+**Note:** the board notes say "10 tabs", but index.html has 9 (`stats, pcchar, resurrection, inventory, flavor, skills, sessionNotes, namegen, campaignNpc`). The monk keeps exactly those 9.
+
+**Verify:** e2e ran on an isolated port (45391) through a temporary config that has been deleted. The task verify set (profile-surface, tabs-navigation, skills-features, character-switch, cleric-profile, class-profile, critical-path) gave 84 passed. derived-values, rest-mechanics, short-rest, multiclass-levelup, levelup-modal, resurrection-tab, cleric-end-to-end, styles, tabs-accordion-regression, cleric-cantrips, mark-spells, domain-spells-filter, local-spells, character-io and armor-ac gave 229 passed. No existing spec was edited.
+
+
 ## Task #1400 - feat(cleric): wire the cleric as a playable second character end to end (retry: gate stabilisation)
 
 - Cleric implementation kept as-is (a864f76: app.js syncLinearLevels, profile-driven ki/level-up/class badges, combat strip hiding + cleric-end-to-end.spec.js).
@@ -4106,6 +4160,10 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
 
 
 
