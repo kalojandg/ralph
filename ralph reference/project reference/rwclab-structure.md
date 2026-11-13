@@ -4,7 +4,8 @@ Repo: `D:\Downloads\monk\sprintray`, remote `kalojandg/rwc-renderer-lab` (privat
 Read these first: `RENDERER-AUDIT.md` (full map of the renderer, calls, flow and pipeline), `PLAN.md`, `README.md`, `aws-emulator/README.md`.
 
 ## Goal of the board
-Turn the copied SprintRay "Design Service" (RayWare Cloud) into a **standalone app**. Starting the app opens straight into the 3D renderer (`/print-setup` → `DeltaModule` → `<delta-renderer>`). Everything unrelated to RayWare/delta is **deleted**: treatments, patients, messenger, billing, dashboards, fleet, sync-box, campaigns, AI, and so on.
+_Статус (2026-11-13): бордът 2000–2320 е изпълнен и слят в `ralph/standalone`. Фронтендът е вече standalone; бекендът още НЕ е орязан (следващ борд, PLAN.md §2.3)._
+Turn the copied SprintRay "Design Service" (RayWare Cloud) into a **standalone app**. Starting the app opens straight into the 3D renderer (`''` и `'**'` → `/print-setup` → `DeltaModule` → `<delta-renderer>`; останалите рутове: `/login`, `/not-authorized`, `/error`). Everything unrelated to RayWare/delta is **deleted**: treatments, patients, messenger, billing, dashboards, fleet, sync-box, campaigns, AI, and so on.
 - Frontend: Angular 9 in `app/frontend`.
 - Backend: .NET Core 3.1 in `app/backend`, cut down to the APIs the renderer uses.
 - AWS: the local AWS Emulator (`aws-emulator/`, `infra/`, `workers/`), never real AWS.
@@ -15,6 +16,7 @@ RENDERER-AUDIT.md / PLAN.md / README.md   docs (audit = the source of truth for 
 aws-emulator/        Dockerfile, env.sh, probes. Local AWS on https://127.0.0.1:9297
 infra/               resources.mjs (names, state machines), bootstrap.mjs (idempotent)
 workers/algorithms/  Docker worker: native mesh binaries via Step Functions Activities
+scripts/gate/        fe-npm-ci.cmd, fe-typecheck.cmd, fe-test.cmd [pattern], fe-build.cmd [dev|ci|production] (Docker, Node 14)
 scripts/e2e.mjs      upload → import → plane cut → events → download (npm run e2e)
 docker-compose.yml   aws-emulator + algorithms-worker
 app/frontend/        Angular 9 (copied from Design-Service/Frontend)
@@ -22,7 +24,7 @@ app/backend/         .NET Core 3.1 solution Backend.sln (copied from Design-Serv
 Design-Service/      ORIGINAL SprintRay repo. Git-ignored, READ-ONLY reference. Never edit, never copy secrets from it.
 ```
 
-### app/frontend: what stays (details: RENDERER-AUDIT.md §1.3–1.7)
+### app/frontend: what stays (СЛЕД борда: това е останало; details: RENDERER-AUDIT.md §1.3–1.7)
 - `src/app/app-modules/delta/**` (19 components; `renderer` is the 3D view).
 - `src/app/core/services/renderer/**` (14 three.js services).
 - `platform-job*.service.ts`, `print-list.service.ts`, `printer-platform.service.ts`, `s3-file.service.ts`, `inbox/inbox.service.ts`, `common/*` (api, appsync, aws-http-api, auth…).
@@ -31,11 +33,20 @@ Design-Service/      ORIGINAL SprintRay repo. Git-ignored, READ-ONLY reference. 
 - `src/assets/models/*.drc`, `assets/images/lighting/*`, `assets/fonts/helvetiker_regular.typeface.json`, `assets/i18n/*`.
 - Partly kept: `app-modules/common` (renderer-instructions, feedback-dialog, notification templates, print-jobs-list/printer-card, network-disconnected-notification), `cloud-drive` v1 (only `CloudDriveModalComponent`), `login`.
 
-### app/frontend: what goes (RENDERER-AUDIT.md §1.6)
+### app/frontend: what went (ИЗТРИТО с борда #2240–#2310, RENDERER-AUDIT.md §1.6)
 `version-2` (+ route `cloud-design`), `treatments`, `new-treatment`, `patients`, `cloud-drive-v2`, `dashboard`, `devices`, `fleet-management`, `administration`, `+inbox` (module only), `messenger`, `notification`, `support`, `+customer-support`, `registration`, `user-profile`, `integrations`, `+sync-box`, `+master-dashboard`, `+campaigns`, `+selective-updater`, `+factory`, `shared/components/model-viewer`, `shared/services/stl-loader.service.ts`.
-⚠ Watch the reverse link: `common/version-2/treatment-feedback-v2` imports delta's `FeedbackComponent`.
+`inbox.service` и inbox store/`InboxEffects` остават (delta model list чете броя нови файлове). `app-modules` сега съдържа само: `cloud-drive`, `common`, `delta`, `login`.
+
+### Какво остава умишлено „дентално“ (README.md, секция standalone)
+- `cloud-drive` v1 + `app-modules/common/version-2` patient компонентите, които то отваря (`PatientVersion2Component`, `PatientModalV2Component`) + `shared/components/version-2/forms` (`f-input-v2`, `f-select-v2`, …).
+- `TreatmentType` enums и `treatmentType` store (print-setup appliance-type picker).
+- `SetDSOOfficeComponent` и останалите noms list-option slices: извън renderer пътя, за по-късно почистване заедно с бекенда.
+
+### Auth: локален stub (#2200)
+`useLocalAuthStub` в `src/environments/*`: **true** в `environment.dev.ts` (конфигурации `dev` и `ci`), **false** в `environment.ts` (default serve/build и jest), staging, prod. `Auth0Service.fetchTokens()` връща unsigned фалшива сесия (един фиксиран потребител) и не вика Auth0. Това НЕ е автентикация; не се включва в staging/prod.
 
 ### app/backend
+_Бекендът не е пипан от борда 2000–2320._
 - Projects: Web, ServiceLayer, DataLayer (EF Core + Npgsql, 533 migrations), DTOs, Common, SprintRay.EventBus (in-process), SprintRay.Logger, Tests (MSTest), SprintRay.IntegrationTest, Database (sqlproj), CodeDeploy.
 - **Keep:** `Web/Controllers/PrintList/*` (PlatformJob, PrintList, PrinterPlatform, ApplianceProfile), `PrinterController`, `Feedback/*`, `Inbox/FileController`, `Resins/*`, `HealthController`, plus the auth/user/feature-flag pieces the shell needs; `PlatformJobService`, `PrintListService`, `Services/AWS/*`, `Services/Files/*`, `EventHandlers/PlatformJob/*`, `EventHandlers/PrintList/*`.
 - **Delete** (RENDERER-AUDIT.md §2.3): Billing, Campaign, CustomerSupport, Dashboard, Factory, Import, Integration, Lab, Manager, MasterDashboard, Noms (check what the frontend lookup lists use first!), Notifications, Organization, Payments, PowerBI, Privacy, Product, RayApp, SyncBox, Conversation, DocumentLink, LiabilityApproval, ScheduledTask, `Treatments/*`, Device/CloudTab/IotProxy/PrintJob (if "send to printer" goes).
@@ -47,7 +58,7 @@ Design-Service/      ORIGINAL SprintRay repo. Git-ignored, READ-ONLY reference. 
 | Postgres (EF Core, Npgsql) | `Startup.cs:65-68`, `SprintRayWriteConnection`/`ReadConnection` | Values are `<set-locally>`. Local Postgres in docker-compose is a future task |
 | S3 / DynamoDB / SQS / SNS / Step Functions | AWS SDK | **only** through the AWS Emulator (`AWS_ENDPOINT_URL=https://127.0.0.1:9297`) |
 | AppSync (job logs/subscriptions) | frontend `appsync.service.ts`, backend `AwsAppSyncService.cs` | the emulator has no data plane, so it gets replaced (WebSocket gateway, SNS→SQS `rwc-platform-job-logs-local`) |
-| Auth0, LaunchDarkly, ResinOnCloud, Sentry, Stripe | environment/appsettings | external SaaS from SprintRay; unreachable or not ours. To be replaced by a local stub/flags file |
+| Auth0, LaunchDarkly, ResinOnCloud, Sentry, Stripe | environment/appsettings | external SaaS from SprintRay; unreachable or not ours. Auth0 е заменен във фронтенда от `useLocalAuthStub` (#2200); останалите още чакат local stub/flags файл |
 | Job log message | `{algorithm, platformId, status(102/200/4xx/500), errorCode, timestamp}` | **live contract** between worker → events → frontend (`PlatformJobAlgorithm`/`PlatformJobAlgorithmStatus` enums) |
 
 ## RED LINES (violation = failed task)
@@ -67,6 +78,7 @@ Deleting a feature module almost always touches the frontend barrels, modules an
 
 ## Commands and ports
 - **Toolchain:** Node 24 on the host. Angular 9 needs **Node 14**, so the frontend runs in Docker `node:14-bullseye` with `node_modules` in volume `rwc-fe-node_modules`. .NET 3.1 runs in Docker `mcr.microsoft.com/dotnet/sdk:3.1` with NuGet cache volume `rwc-nuget`.
+- **Gate скриптове (препоръчителни):** `scripts\gate\fe-npm-ci.cmd` (~8 мин, веднъж/при смяна на deps; никога два паралелно върху един volume), `fe-typecheck.cmd` (~70 s), `fe-test.cmd [pattern]` (jest, 2 CPU/2 workers), `fe-build.cmd [dev|ci|production]`. Бърза конфигурация **`ci`** (AOT, без optimization/source maps, #2010): 4:31 vs `dev` 8:08 (baseline преди борда 24:28 студено); `production` 7:29, зелен, извън gate.
 - **Frontend build (gate):** `docker run --rm -v "<fe>:/w" -v rwc-fe-node_modules:/w/node_modules -w /w node:14-bullseye sh -c "npm ci && NODE_OPTIONS=--max_old_space_size=6144 npx ng build --configuration=dev"`.
 - **Backend build/test (gate):** `docker run --rm -v "<be>:/src" -v rwc-nuget:/root/.nuget/packages -w /src mcr.microsoft.com/dotnet/sdk:3.1 sh -c "dotnet build Backend.sln && dotnet test Tests --no-build"`.
 - **Local AWS:** `docker compose up -d --build` → `source aws-emulator/env.sh` → `npm run e2e`. ⚠ Uses 127.0.0.1:9297.
@@ -76,6 +88,7 @@ Deleting a feature module almost always touches the frontend barrels, modules an
 - **Forbidden for agents:** `ng serve`, `dotnet run`, `docker compose up` of long-running servers. Those belong to the gate and the user only.
 
 ## Test state
-_Filled in after the baseline (see the bottom of this file)._
-- Frontend: 6 `*.spec.ts`, karma with Chrome (none in the container), so in practice there are no unit tests. The gate is the AOT build.
+Измерено 2026-11-13 след борда (#2320), 0 errors / 0 warnings.
+- Frontend: тестовете минаха от Karma/Chrome на **Jest** (`jest 26`, `jest-preset-angular 8.4`, `jest.config.js`, `src/setup-jest.ts`; `npm run test:ci` = `jest --ci`). **99 spec файла, 1361 теста, всички зелени** (~3 мин). Characterization покритие: core utils/helpers/constants/enums/mappers, renderer services (13 spec), store reducers/effects/states (print-list, platform-job-renderer, print-job, defaults, resin, noms, feature-flag, appliance-profile, info-box, loading-mask), http services (platform-job, print-list, printer-platform, s3-file, api, apig, appsync, aws-http-api, auth*), shared components/pipes/directives, delta компоненти (print-setup-page, renderer host, model-list, print-preview, print-confirmation и др.), `app.routing.spec.ts`, `local-auth-stub.spec.ts`.
+- Gate за frontend: `fe-typecheck` → `fe-test` → `fe-build ci` (milestone) / `dev`.
 - Backend: `Tests` (MSTest). `SprintRay.IntegrationTest` needs a real DB, so it is NOT in the gate.
