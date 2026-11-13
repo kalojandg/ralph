@@ -34,6 +34,298 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #2230 — refactor(common): prune app-modules/common to the pieces the renderer uses
+
+**Repo:** rwclab · **Commit:** b26f1cc · **Gates:** fe-typecheck ✅ · fe-test ✅ (100 suites / 1364 tests)
+
+**Done:**
+- Deleted: version-2/{treatment-feedback-v2, payments-v2, tile-v2, delete-save-treatment, patient-create-v2}, file/{file-mgmt, file-handling, file-model-modal, inbox-file-picker}, payment-methods, implant-dimensions, promo-code-info, pro-plan-printer, populate-specialty, profile-photo(-picker), select-printer-page, preview-image-modal, base-model-modal, doc-link, sort-status, used-out-of, and the directives is-taken-facility-number, is-valid-promo-code, is-region-change-allowed, is-sku-exists.
+- common.module.ts: pruned declarations, exports and entryComponents to match, and dropped the duplicate NgbModule/DialogsModule imports.
+- Both links are cut: file-mgmt (-> +inbox/enums/providers) and payments-v2 (-> user-profile) are gone. Nothing left in common imports +inbox or user-profile. delta FeedbackComponent is untouched.
+
+**Kept (renderer):** renderer-instructions, notification-templates (all), feedback-dialog, print-list, printer-jobs, printer-list, models, directives/is-appliance-profile-allowed.
+
+**Kept because tsc required it (outside my zone):** sub-type-templates + sub-type-template.model (core/services/sub-type-template-helper.ts), patient-dialog -> patient (core/services/patient-helper.service.ts), file/assign-patient, delete-warning and version-2/patient-modal-v2 (cloud-drive v1 file picker), plus their closure: version-2/patient-v2, 2d-viewer (+tooth-note), 2d-viewer-v2, is-taken-patient-id. Task 2310 (core/cloud-drive sweep) should release them.
+
+**Method:** listed the reachable files with tsc --listFiles, deleted the drop list, let tsc errors decide what to restore, and checked selectors in reachable templates so AOT keeps resolving them.
+
+
+## Task #2220 - refactor(app): detach every Design Service module from routing and the store
+
+**Date:** 2026-11-13 (retry 3, continuation + scope escalation)
+**Status:** done
+
+### What changed
+- 31c5eaf (earlier attempt, kept as is): removed 18 lazy routes from app.routing.ts. Removed the eager CloudDriveV2Module import and the messenger, user-profile, integration, new-treatment and template-treatment effects from app.module.ts. Removed the messenger, newTreatment, templateTreatment, integration, userProfile, fleetMgmt, preference and defaultSelections store slices, together with their localStorage sync keys. Kept notification, picture, cloudDrive, printerStatus and route because kept code still reads them.
+- dbe067b (this attempt): AOT fix-up. The gate failed because kept code still referenced components declared only in detached modules.
+  - dialog-form.component.ts: removed the unused `organization: OrganizationWrapperComponent` field and its import (AdministrationModule).
+  - common.module.ts: SelectPrinterPageComponent is now declared in CommonComponentsModule and listed in its entryComponents. The kept FileMgmtComponent.print() opens it, and until now only MessengerModule declared it.
+
+### Out-of-scope files touched
+- app/frontend/src/app/dialogs/components/dialog-form/dialog-form.component.ts
+- app/frontend/src/app/app-modules/common/common.module.ts
+
+### Verification
+- `npx ngc -p src/tsconfig.json` (node:14 container): 0 errors. This is the cheap AOT check (~90 s); the full fe-build is left to the gate.
+- `npx tsc -p src/tsconfig.json --noEmit`: clean.
+- `scripts/gate/fe-test.cmd`: 100 suites, 1364 tests passed.
+
+### Follow-ups for the deletion tasks (2240-2290)
+- auth.effects still dispatches GetIsConnectedAction and GetRegionListOptions, and app.component still dispatches GetUserBusinessProfile. They are now no-ops; remove them.
+- MessengerModule still declares SelectPrinterPageComponent. Drop it there when the messenger module is deleted.
+- ngc writes to app/frontend/src/dist/. Delete that folder after running ngc as a check.
+
+
+## Task #2210 — feat(app): boot straight into the RayWare print setup
+
+**Repo:** rwclab · **Branch:** ralph/task-2210 · **Commit:** 83246b1
+
+### Done
+- `app.routing.ts`: `''` → `print-setup` (was `login`), `'**'` → `print-setup` (was `cloud-design`); `appRoutes` is exported for the spec. No dead-module routes were deleted (that is task 2220).
+- `app.component.ts`: a boot at the root sets `redirectUrl = '/print-setup'`. Without this, `handleLoginSucces` sends the stub session to `authHelperService.landingPageLink` (`/patients` → `**`). The notification-center host and its methods are removed (its only opener was the header bell). Websocket ping checked: only `onFocus` pings, once per focus. The `/print-setup` regex drives the reconnect banner, not a ping.
+- Header: removed every link to the dying modules, desktop and mobile (cloud-design, treatments, admin/labs|users|organization, fleet-management, dashboard/printer, master-dashboard, campaigns, selective-updater, notifications, factory, customer-support, the RayWare tab). Also removed: the bell, store/community, DSO office search, new-feature popover, /profile and /support items, release notes/training, the cloud drive v2 icon and delete-save-treatment. Logo and breadcrumb home → `/print-setup`. Kept: print-jobs toggle, profile dropdown with logout, and cloud-drive v1 `CloudDriveModalComponent` → `SetCloudDriveFilesAction`. The `cloud-drive-v2` import is cut, and the header no longer reads the inbox, integration, notification or user-profile stores.
+
+### Tests
+- New: `app.routing.spec.ts` (4), `components/app/app.component.spec.ts` (3), `components/common/header/header.component.spec.ts` (11). These check by DOM that there is no dead link, logo → /print-setup, logout only, v1 modal + dispatch, flag gating and the drawer toggle.
+- RED: redirect was `login`; header failed on its `UserProfileStoreService` dependency. GREEN: full jest 100 suites / 1364 tests passed; `fe-typecheck` passed.
+
+### Notes
+- Header and app component specs must declare a stub for `ftue-tooltip` (with open/close). Otherwise the failure carries a circular object and the jest worker hangs during serialization.
+- `header.component.scss` still has unused styles (`.new-feature-popup`, `.external-link`).
+
+
+## [2026-11-13] - Task #2200: feat(auth): local stub session so the renderer opens without Auth0
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** `/print-setup` sits behind AuthGuard + RoleGuard (doctor). Its session comes only from `Auth0Service.fetchTokens()` (app.component boot, api.service refresh, appsync), and the SprintRay Auth0 tenant is unreachable, so the renderer always bounced to /login.
+
+**What was done:**
+- RED: `core/services/common/local-auth-stub.spec.ts` (env flags, AuthService.localStubSession, Auth0Service with the flag) and `core/guards/local-auth-stub.guards.spec.ts` (AuthGuard/RoleGuard through the real auth reducer, booted like app.component). They were red because the flag-up path bounced to /login and /not-authorized, while the flag-down path already passed.
+- GREEN: added `useLocalAuthStub` to all four environment files (true only in environment.dev.ts; environment.ts, staging and prod are false). Added `buildLocalStubTokens()` in auth0.service.ts, an unsigned fake JWT in Auth0 claim shape: Doctor role, reg_completed, org and office ids, one-year exp. With the flag up, `fetchTokens()` emits it without calling checkSession, and `logout()` skips the Auth0 redirect. Added `AuthService.localStubSession()`, which returns the stub or null. The guards, the reducer and the Auth0 config are untouched, and so are the 2170 specs.
+- Not covered: real authentication (no signature, a fixed user, no permissions, no backend validation). A local `ng serve` uses environment.ts, where the flag is off: flip it there or use the dev configuration.
+
+**Verification:**
+- scripts\gate\fe-test.cmd → 97/97 suites, 1346/1346 tests pass
+- scripts\gate\fe-typecheck.cmd → clean (exit 0)
+
+**Files modified:**
+- app/frontend/src/app/core/services/common/auth0.service.ts
+- app/frontend/src/app/core/services/common/auth.service.ts
+- app/frontend/src/environments/environment{,.dev,.staging,.prod}.ts
+- app/frontend/src/app/core/services/common/local-auth-stub.spec.ts (new)
+- app/frontend/src/app/core/guards/local-auth-stub.guards.spec.ts (new)
+
+**Git commit:** `0baa6d6` — `feat(auth): local stub session so the renderer opens without Auth0`
+
+---
+
+
+## Task #2191 — test(delta): characterize the model list, preview and confirmation components
+**Date:** 2026-11-13 · **Repo:** rwclab · **Lane:** char-delta · **Status:** ✅ done
+
+**What:** 213 characterization tests in 7 new spec files on top of the 2190 `src/app/testing` harness:
+- `platform-model-list`: model selection (single / checkbox / select-all / error items), adding files (drop, cloud-drive modal, `POST /{id}/files`, move-then-add callback), removal (confirm modal, Delete key, copies, multi-select), editing menu (operation ↔ tab, plane-cut height debounce, resize, save/discard = `EditPlatformJobAction`).
+- `base-platform`: option lists, store mirrors, inbox upload pipeline (upload-link → S3 PUT → direct-upload), timers.
+- `platform-print-preview`: printers split by prefix, preselection, print buttons, slice POST + AppSync slice log, Confirmation/FeedbackReason chain.
+- `platform-print-confirmation`, `platform-file-download`, `print-check-error`, `feedback` (its own behaviour only).
+No production code changed.
+
+**Harness (additive):** `createDeltaComponent` now releases the `overrideSelector()` results of the previous harness' MockStore. Before this fix they leaked into the next `create()` in the same spec file.
+
+**Verify:** `scripts\gate\fe-test.cmd delta/components` → 11 suites / 369 tests green; `scripts\gate\fe-typecheck.cmd` green.
+
+**Looks wrong (pinned, not fixed):**
+- file-download: `onCancel()` calls `ngOnDestroy()` itself, so the real destroy throws ObjectUnsubscribedError; a slicer error log never stops the spinner.
+- print-preview: `{ isSubmit, skipped }` opens the confirmation twice.
+- confirmation: a failed `closeJob` resets `printFeedbackSent`.
+
+**Note:** `platform-print-confirmation` is the post-slice "Print job sent" dialog, not "Confirm changes". EditPlatformJob/cutHeight lives in the renderer and in model-list `saveManualEditing`.
+
+**Not covered:** the model-list template (the specs use `template: ''`), the timer-button interplay, and the new-patient path of `onPatientSelected`.
+
+**Commit:** 46637c398efde8fbaed48038a749be443002f109
+
+
+## [2026-11-13] - Task #2190: test(delta): characterize the print setup page and renderer host
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** The RayWare entry point (/print-setup → PrintSetupPageComponent hosting <delta-renderer> + <platform-setup>) had no unit tests, and there was no shared TestBed harness for delta components. WebGL is created only in RendererComponent.initRendering() (new THREE.WebGLRenderer + PMREMGenerator), and jsdom has no WebGL.
+
+**What was done:**
+- Built the shared harness src/app/testing/** (the contract for task 2191): createDeltaComponent() on provideMockStore with the REAL reducer initial states plus a signed-in doctor; HTTP service mocks returning NEVER; store-backed facades (no LaunchDarkly); three.js fakes (WebGLRenderer, PMREMGenerator, CubeTextureLoader, manual requestAnimationFrame); auto-mocks for the renderer's 12 own services; stub components, directives, value accessor and pipes; domain builders.
+- RED/GREEN: 156 characterization tests: print-setup-page 25, renderer 45, renderer-progress 46 (full coverage), platform-setup 40 (tabs + lifecycle). Every failure along the way was a wrong expectation or a harness problem (View Engine deep-copies useValue, so the harness uses useFactory and re-seeds the MockStore). No production code was changed.
+- Pinned "looks wrong" behaviour without fixing it. Renderer: the rAF loop, WebGLRenderer and OrbitControls are never disposed; the wheel listener survives destroy (capture mismatch); the debounced loader subscription leaks; disposeAll skips every other child; offsetParent null crashes the original-files preview. renderer-progress: algorithmName is never set; the interval runs 1800 s instead of 180 s. platform-setup: ExpressionChanged on the first change detection; the 180 s timeout interval and the feature-flag subscription survive destroy; an AppSync race (currentJob.id of null).
+
+**Verification:**
+- scripts\gate\fe-test.cmd delta/components → 156/156 pass (4 suites)
+- full jest suite (scripts\gate\fe-test.cmd) → 49 suites / 602 tests pass
+- scripts\gate\fe-typecheck.cmd → clean
+
+**Files modified:**
+- app/frontend/src/app/testing/index.ts, test-state.ts, builders.ts, service-mocks.ts, three-mocks.ts, renderer-service-mocks.ts, stub-components.ts, stub-pipes.ts, delta-testbed.ts (new)
+- app/frontend/src/app/app-modules/delta/components/print-setup-page/print-setup-page.component.spec.ts (new)
+- app/frontend/src/app/app-modules/delta/components/renderer/renderer.component.spec.ts (new)
+- app/frontend/src/app/app-modules/delta/components/renderer-progress/renderer-progress.component.spec.ts (new)
+- app/frontend/src/app/app-modules/delta/components/platform-setup/platform-setup.component.spec.ts (new)
+
+**Not covered:** renderer pointer/keyboard editing tools, plane/line cut, annotation, bracket removal, supports edit, snapshot/STL export, DRACO/OBJ decoding and the upload preview; platform-setup title editing, job CRUD, AppSync log/error dialogs, SPR import, job-bar pagination and print/send. All of this is listed in the commit body. None of the four components is on the RENDERER-AUDIT.md §1.6 delete list.
+
+**Git commit:** `ad38823` — `test(delta): characterize the print setup page and renderer host`
+
+---
+
+
+## Task #2121 - test(renderer): characterize the scene helpers and platform objects
+
+**Repo:** rwclab · **Lane:** char-renderer · **Commit:** e9089b1 · **Date:** 2026-11-13
+
+### What was done
+- Wrote 7 new characterization specs for the second half of `core/services/renderer`, following the 2120 conventions (direct instantiation, prototype spies for loaders):
+  - three-helpers 8, renderer-helpers 16, platform-helper-objects 30, axes-helper 7, gimbal-helper 17, snapshot 7, upload-model-preview 12 = **97 tests**.
+- platform-helper-objects: asserted the scene contract (`plane` / `platform` names, `userData` type/subtype, plane size per platform, grid line counts and colours, wall sizes/positions/order back-right-front-left, show/visibility, the camera tween). FileLoader, DRACO decode and the cube-map loader are stubbed.
+- Canvas-text helpers (axes, gimbal angle label, upload preview titles) run with a recording fake 2D context; snapshot runs with a fake `WebGLRenderer` plus a fake Image/canvas pixel buffer for the crop.
+
+### Characterized, looks wrong (left as-is)
+- `ModelMesh` default `positionRange` uses `Number.MIN_VALUE` (smallest positive), so a model at the origin lights the back and left walls.
+- `checkBoundingWalls` returns `undefined` with no models and always adds all 4 walls to the scene.
+- The grid stops at i = 182 on a 182.4 wide plate.
+- Snapshot zoom uses model height (Y), not depth (Z), for a top-down camera. An empty scene gives zoom -0, and a crop with no content pixels has a negative size but still dispatches.
+- upload-model-preview splices the caller array, and the title margins are crossed.
+- Label `fillStyle` is `getHexString()` with no `#`. Calling `addGimbal` twice duplicates the pickers.
+
+### Not covered
+- Real WebGL output (snapshot), the pixel content of the canvas sprites, real DRACO and asset loading.
+- bracket-removal (dental, dropped per PLAN.md §3).
+
+### Verification
+- `scripts\gate\fe-test.cmd services/renderer`: 13 suites, 211/211 passed (114 from 2120 + 97 new). No console warnings or errors.
+- `scripts\gate\fe-typecheck.cmd`: exit 0.
+- Production code untouched; only `core/services/renderer/*.spec.ts` added.
+
+
+## Task #2170 - test(services): characterize the api, appsync and aws-http layer
+
+**Repo:** rwclab · **Lane:** char-services-common · **Commit:** 74dfece
+
+### What was done
+- 11 new spec files, 136 tests, no production code changed, no network (HttpClientTestingModule or mocks; all tokens and keys are explicitly fake).
+- `core/services/common/*.spec.ts` (125 tests): api, apig, appsync, auth, auth0, auth-helper, aws-http-api, http-object, toaster, traslation.
+- `core/interceptors/loading.interceptor.service.spec.ts` (11 tests). The code lives in `core/services/interceptors/`. The spec was put under `core/interceptors/` because that is the task zone and the `fe-test.cmd core/interceptors` gate pattern.
+- **AppSync** (the spec for the future WebSocket replacement): pinned the client config (OIDC, endpoint, region), the link order [TokenRefreshLink, AppSyncLink], the ws close/open signals (50 ms debounce, module-level), `pingWithDelay` for each readyState, the refresh link, and the exact selection sets of `subscribeToPlatformJobLogs` and `getPlatformJobLogs` (ID, PLATFORM_JOB_ID, ALGORITHM, STATUS, ERROR_CODE, TIMESTAMP, QUEUE_MESSAGE_ID). Note: the subscription is started by the delta components, not by AppSyncService.
+- **apig**: pinned the direct `environment.dev` import. On localhost the base URL becomes `https://dev.designservice.sprintray.com/api/g/`.
+
+### Characterized current behaviour that looks wrong (left as is)
+- api: `authorize()` calls `refreshTokens()` twice. A failed refresh leaves `refreshing = true`, so later authorized calls spin in the 2 s wait loop. An error with a null body throws a TypeError. `postMultiform` loses the Bearer header. A falsy body sends the options as the body. `handleRefreshExpired` is unreachable.
+- auth: `calculateExpirationDate` is shifted by the time-zone offset.
+- auth-helper: `landingPageLink` points only at routes that are being deleted.
+- loading interceptor: `LoadAction` is dispatched eagerly, so if the request is never subscribed the mask never comes down.
+- appsync relies on the global rxjs-compat `.map` patch.
+
+### No coverage
+- `command.service.ts` (hotkeys, body commented out, not in the task's list) and `picture.service.ts` (avatars, not on the RayWare path).
+
+### Verify
+- `scripts\gate\fe-test.cmd core/services`: 10 suites, 125 passed
+- `scripts\gate\fe-test.cmd core/interceptors`: 1 suite, 11 passed
+- `scripts\gate\fe-typecheck.cmd`: exit 0
+
+
+## Task #2160 — test(services): characterize the platform-job and print-list http contracts
+**Repo:** rwclab · **Lane:** char-services-pj · **Commit:** d743b7d · **Date:** 2026-11-13
+
+**Done:**
+- 6 new spec files in `app/frontend/src/app/core/services/`, 94 characterization tests, zero production-code changes:
+  - `platform-job.service.spec.ts` (42): all 25 endpoints through the real ApiService/ApigService/AwsHttpApiService + HttpTestingController (URL, method, body, headers, background flag, response mapping, 4xx/5xx toasts + rethrow, not-logged-in short-circuit).
+  - `platform-job-updates.service.spec.ts` (11): AppSync watchQuery/subscribeToMore wiring → GetPlatformJobsAction, doctor gate, distinct userId, teardown on user switch.
+  - `platform-job-callbacks.service.spec.ts` (8), `print-list.service.spec.ts` (6), `printer-platform.service.spec.ts` (16), `s3-file.service.spec.ts` (11).
+- RECON: every FE path matches `Web/Controllers/PrintList/*`. The one mismatch: PrinterPlatformService inherits 11 HttpObjectService routes that the backend does not serve (only list-options exists).
+
+**Findings (characterized, not fixed):**
+- ApigService (async save/edit) falls back to `https://dev.designservice.sprintray.com/api/g/` when appBaseUrl contains localhost.
+- Query values (download-link key, extract-spr-metadata fileKey, search term) are not URL-encoded.
+- downloadModelBuffer ignores ifModifiedSince.
+- moveToNewPlatformJob(0) sends the options object as the PUT body.
+- PlatformJobUpdatesService does not unsubscribe on logout.
+- **s3-file.service relies on `.takeWhile/.filter` rxjs-compat patches registered only by other modules, several of which are on the §1.6 delete list.** Pinned by a test; this will break downloadS3File once those modules are deleted.
+
+**Not covered:** S3 key assembly and presigned PUT upload (inbox.service.ts / AwsHttpApiService.put, outside the zone).
+
+**Verify:** `scripts\\gate\\fe-test.cmd core/services` 94/94 ✅ · full suite 35 suites / 308 tests ✅ · `scripts\\gate\\fe-typecheck.cmd` exit 0 ✅
+
+
+## Task 2180 - test(shared): characterize the shared components the renderer keeps
+
+- Added 77 characterization tests in 9 specs (next to the real files in components/buttons, components/ftue, forms, directives/drag-drop, services, models).
+- The task's files globs name components/icon-btn etc., but the real paths are components/buttons/ and components/ftue/.
+- Looks wrong, left as is: f-file uses appDragDrop, not appDroppable; the droppable directive's JSON.parse is unguarded; f-file minBytes rejects a size equal to the limit.
+- No coverage for the interface-only models form-file and f-number-slider-steps.
+- Verify: fe-test shared (120 passed), fe-typecheck exit 0.
+
+
+## Task #2120 - test(renderer): characterize the geometry and cut services
+
+**Repo:** rwclab · **Lane:** char-renderer · **Commit:** 9bbac2a · **Date:** 2026-11-13
+
+### What was done
+- Continued from an interrupted attempt that left 3 untracked specs (plane-cut, printability-check, rebase); printability-check had 3 red isCollisional tests.
+- Root cause: three-mesh-bvh 0.5.8 `intersectsGeometry` returns true for disjoint meshes when the geometry has groups (BoxGeometry has 6, so the BVH has 6 roots). Probed in the container: group-free geometry behaves correctly. Specs now clear groups before building the BVH, matching loaded DRACO/STL models, and a dedicated test pins the false positive.
+- Wrote the missing specs: line-cut (19), supports-edit (18), annotation (18).
+- Totals: plane-cut 19, printability-check 27, rebase 13, line-cut 19, supports-edit 18, annotation 18 = **114 tests**.
+
+### Characterized, looks wrong (left as-is)
+- supports-edit `_addSupport` inverts the support mesh matrix in place, so every second add is offset by the support translation.
+- annotation `updateState` inverts `selectedModel.obj.matrix` in place, so fontMatrix alternates between dispatches.
+- annotation `setWidget` on a miss still finishes and dispatches all-zero points and normal.
+- line-cut `_cancalColoring` loops over the deprecated `index.length` (index count) instead of the vertex count.
+- printability `_isSupportRequired` (unused) says a flat cube needs supports.
+
+### Not covered
+- bracket-removal (dental, dropped per PLAN.md §3); the second-half helpers belong to task 2121; WebGL-bound rendering (TransformControls/Line2 are only constructed).
+
+### Verification
+- `scripts\gate\fe-test.cmd services/renderer`: 6 suites, 114/114 passed.
+- `scripts\gate\fe-typecheck.cmd`: exit 0.
+- Production code untouched; only `core/services/renderer/*.spec.ts` added.
+
+
+## Task #2150 - test(store): characterize the defaults, resin, noms and feature-flag stores
+- **Repo:** rwclab (branch ralph/task-2150), commit de3d072
+- **What:** 11 new spec files (~96 characterization tests) under app/frontend/src/app/core/store: reducers for defaults, resin, feature-flag, info-box-visibility, loading-mask, appliance-profile, noms (printer-type, layer-thickness, treatment-type); effects for resin, appliance-platform, appliance-profile, noms. No production code changed.
+- **Findings (characterized, left as is):** every effect passes its error handler as the 2nd arg of Observable.map (a thisArg), so *_ERROR actions are never emitted and errors propagate; loading-mask LOAD_MODULE throws TypeError on strings not matching the regex; feature-flag reducer merges null/unknown flags as-is; defaultFeatureFlags has 21 flags, all false.
+- **Skipped:** noms coverage-type/scanner/tightness/treatment-status/treatment-sub-type (treatment-only, delete list); register store (outside files).
+- **Verify:** scripts\gate\fe-test.cmd core/store - 15 suites, 130 tests passed; scripts\gate\fe-typecheck.cmd - exit 0.
+
+
+## Task #2130 - test(store): characterize the print-list store
+- Added `print-list.reducers.spec.ts` (61 tests) and `print-list.effects.spec.ts` (53 tests); zero production changes.
+- Effects: success + error paths, optimistic deletes, toasts, save/edit flows, navigation into /print-setup (setCloudDriveFiles, treatment toast click).
+- Looks wrong (characterized, left as is): ADD_MODEL_TO_SELECTED toggles off on duplicate (fall-through); RESET_PRINT_SETUP writes `platformJobTimers` typo; SET_NOT_PRINTABLE_MODELS never stores payload; `.map(ok, errFn)` means most *_ERROR actions are never emitted.
+- Not covered: print-list.actions.ts / print-list.states.ts have no dedicated spec (exercised indirectly).
+- Verify: fe-test.cmd print-list (114 passed), fe-typecheck.cmd green.
+
+
+## Task #2110 - test(core): lock the renderer constants, enums and mappers
+
+- Added 3 characterization spec files (22 tests): renderer-enums, renderer-constants, new-file-to-form-file mapper. No production code changed.
+- Findings: worker publishes algorithm 'planeCut' but PlatformJobAlgorithm enum has no member for it; PlatformJobAlgorithmStatus matches the worker status map; DeltaFileKeys is unused in workers/algorithms.
+- Merge: ralph/standalone merged cleanly (merge commit 6d0d222). Gate re-run green (7 suites, 56 tests).
+
+
+## Task #2100 - test(core): characterize renderer utils and common helpers
+
+- Added 19 spec files: 5 in core/utils (27 tests), 14 in core/helpers/common (107 tests).
+- Production code untouched.
+- Gates: fe-test core/utils OK, fe-test core/helpers OK, fe-typecheck OK.
+- Not covered: countries-utils, download-csv, flatten, get-all-unique, map, uncase, auth-helper, date-helper, error-message-helper, generate-start-or-end-date, new-treatment-helper, plan-helper, registration-helper (not on the priority list).
+- Commit: 4d5f559
+
+
 ## Task 2000 - chore(test): run the frontend unit suite on Jest instead of browser Karma
 **Repo:** rwclab (app/frontend) | **Commit:** 41efb4e | **Status:** DONE
 
@@ -4192,6 +4484,21 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
