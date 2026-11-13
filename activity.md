@@ -34,6 +34,38 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task 2000 - chore(test): run the frontend unit suite on Jest instead of browser Karma
+**Repo:** rwclab (app/frontend) | **Commit:** 41efb4e | **Status:** DONE
+
+### What was done
+- Added jest 26.6.3, jest-preset-angular 8.4.0, @types/jest 26.0.24 to devDeps and the npm script `test:ci` (`jest --ci`).
+- `jest.config.js`: preset jest-preset-angular, testMatch `src/**/*.spec.ts` (so the Karma bootstrap src/test.ts is not collected), moduleNameMapper for the `app/`, `environments/` and `assets/` aliases, three's `build/three.module.js` mapped to the CommonJS main (one THREE instance), babel-jest (modules-commonjs only) for the vendored ESM `.js` (src/app/shared/libs, three/examples/jsm), node_modules (UMD) and draco_decoder.js left untransformed. Coverage off by default.
+- `src/setup-jest.ts`: preset setup, a default-export interop jest.mock for the Emscripten CommonJS draco_decoder.js (global esModuleInterop would break `import * as moment` + `moment()`), and a DragEvent shim for jsdom.
+- `src/tsconfig.spec.json`: commonjs and types `jest` + `offscreencanvas` (matches the app; `node` turned setInterval into Timeout, giving TS2322).
+- `.gitignore`: `app/frontend/coverage/`.
+- Specs (no production code changed): the print-time-display and resin-volume specs expected a space or an uppercase "L" that the pipes never produce, so they were rewritten to the real output. In the dashboard spec, jasmine.createSpyObj became jest.fn, and it got a translateValue stub pipe plus NO_ERRORS_SCHEMA for ngb-datepicker.
+
+### Verification
+- RED: config errors (TS2322 Timeout, `__karma__` in test.ts, draco default import, ESM libs, DragEvent, template parse), then GREEN.
+- scripts\gate\fe-npm-ci.cmd: exit 0 (96 s).
+- scripts\gate\fe-test.cmd: 6 suites / 46 tests passed, jest 88 s.
+- scripts\gate\fe-typecheck.cmd: exit 0.
+
+### Notes
+- Karma is intentionally untouched (karma.conf.js, angular.json test target, src/test.ts), so `ng test` is now broken on purpose. Removing it belongs to the lane that owns angular.json.
+- package-lock (v2) also bumped hoisted transitive deps (@babel/* 7.12 to 7.29, browserslist, resolve, and others) from the earlier host lockfile-only install. A fe-build run is advisable.
+
+
+## 2026-11-13 — Task 2010: chore(build): add a fast aot-only ci configuration for the milestone gate
+
+**Repo:** rwclab · **Branch:** ralph/task-2010 · **Commit:** f8ca0ad
+
+- Added a new, purely additive `ci` configuration to the `internal-system` build target in `app/frontend/angular.json`: `aot: true`, `optimization: false`, `buildOptimizer: false`, `sourceMap: false`, `extractLicenses: false`, `vendorChunk: true`, `namedChunks: false`, `fileReplacements` as in dev. dev/staging/production/es5 and the karma test target are untouched.
+- Verify: `scripts\gate\fe-build.cmd ci` is green (exit 0, 0 errors and 0 warnings).
+- **Measured:** `ci` = **10 min 10 s** (ng `Time: 609662ms`, 10 min 14 s wall clock) vs **24 min 28 s** for `dev`. That is about 2.4x faster (14 min 18 s less) and still runs the full AOT template compile.
+- Notes: earlier attempts ended their sessions while builds ran in the background, which left three orphaned `ci` build containers on this worktree. I stopped them so the timing ran on a single uncontended build. RED step 2010.2 was skipped because the config was already present from an earlier attempt. No out-of-scope files were touched.
+
+
 ## Task #1610 — feat(spells): add the searchable spell library with daily preparation and an offline cache
 
 - **Repo:** combat
@@ -4160,6 +4192,8 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
 
 
 
