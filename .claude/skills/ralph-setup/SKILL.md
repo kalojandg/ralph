@@ -95,3 +95,55 @@ architecture-rules.md + i18n-rules.md; за малък ап — стига кр�
 
 ## 5. Финал
 Board-ът се пише с `/ralph-plan`. Диагностиката след run — `/ralph-diagnose`.
+
+---
+
+## Добавено 13.11.2026 (закачане на rwclab)
+
+## 0а. GitNexus `analyze` ЛЪЖЕ с exit кода — проверявай резултата, не кода
+`analyze` може да приключи с код **127 (или 0)** след ~1 минута, БЕЗ да създаде `.gitnexus/`.
+Затова винаги сверявай:
+```bash
+npx gitnexus status      # "Repository not indexed." = НЕ е минало, каквото и да е върнал
+ls .gitnexus
+```
+Симптом в лога: `Worker N parse job idle timeout. Splitting into 40/40 item jobs.` и после тишина.
+Хипотеза, която се проверява първа: **минифицирани бъндъли в работното дърво** (`dist/` с 1-36 MB
+.js файлове) давят parse worker-ите — изчисти билд артефактите и пробвай пак. Че инсталацията е
+здрава се доказва с `npx gitnexus list` (другите репота индексирани ли са).
+⛔ Не позволявай на индекса да блокира board — той е удобство за агентския RECON, НЕ гейт
+(impact/shape са само MCP инструменти, без exit код; виж /ralph-plan §1а).
+
+## 1в. Гейт скриптове В РЕПОТО, вместо команди в repos.json
+Гейтът се пуска с `& cmd /c $cmd` от `repo.location` (ralph-swarm.ps1 → Invoke-VerifyGate).
+Еднословни команди (`npm test`) са си добре в repos.json. Но щом гейтът иска docker, контейнер или
+няколко стъпки — **сложи го в `scripts/gate/<name>.cmd` и в repos.json остави само името**.
+Печалби: нула вложени кавички в cmd веригата; машинно-независимо (пътят се смята от `%~dp0`, не от
+абсолютен път в repos.json); агентите в worktree-тата пускат СЪЩИЯ скрипт върху своето копие;
+и ти можеш да го пуснеш на ръка с една дума.
+
+Шаблон (`%%~fI` нормализира пътя — docker не обича `..` в mount):
+```bat
+@echo off
+setlocal
+for %%I in ("%~dp0..\..\app\frontend") do set FE=%%~fI
+docker run --rm -v "%FE%:/w" -v <key>-node_modules:/w/node_modules -w /w node:14-bullseye sh -c "npx tsc -p src/tsconfig.json --noEmit"
+exit /b %ERRORLEVEL%
+```
+Провери го ТОЧНО както го прави оркестраторът: `cd <location> && cmd //c "scripts\gate\x.cmd"`.
+
+⚠ **LINE ENDINGS**: репо с `* text=auto eol=lf` в `.gitattributes` изкарва и `.cmd` файловете с LF.
+Добави `*.cmd text eol=crlf` — иначе гейт скриптът се чекаутва с LF на машината, където трябва да
+върви под cmd.exe.
+⚠ **Споделен docker volume за node_modules**: САМО таскът, който мени package.json, пуска `npm ci`.
+Паралелен `npm ci` по един named volume го разваля. Запиши правилото в `_verify_note` на репото.
+⚠ **Билд артефактите в .gitignore ПРЕДИ първия гейт** (`dist/`, `coverage/`): гейт, който оставя
+untracked файлове, прави чекаута мръсен и всички следващи merge-ове стават dirty-skipped (т.3.3).
+⚠ **Запиши измереното време на гейта** в `_verify_note` и го сверù с `verify_timeout_min` ПРИ N
+едновременни агента: 25-минутен гейт × 5 агента на една машина не се събира в 45 минути. Ако пълният
+гейт е десетки минути, обърни конвенцията — евтин дефолт + тежък билд само на майлстоун таскове
+(/ralph-plan §3а).
+⛔ **Собствените ти setup файлове трябва да са КОМИТНАТИ преди старта** (гейт скриптове,
+`.gitattributes`, `.gitignore`). Чеклистът т.2 иска чист checkout, а най-лесно се забравят точно
+промените, които току-що си направил сам — worktree-ите се клонират от mainBranch и некомитнатият
+скрипт просто го няма там.

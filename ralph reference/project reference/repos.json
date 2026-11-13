@@ -116,6 +116,27 @@
         "serve": "npm run serve   (локален преглед на 45277 — НЕ от агент)",
         "e2e": "няма e2e — страницата е една и се проверява през jsdom"
       }
+    },
+    "rwclab": {
+      "location": "D:\\Downloads\\monk\\sprintray",
+      "gitRoot": "D:\\Downloads\\monk\\sprintray",
+      "workSubdir": "",
+      "mainBranch": "ralph/standalone",
+      "reference": "rwclab-structure.md",
+      "description": "RayWare Cloud renderer като САМОСТОЯТЕЛЕН апп. Копиран SprintRay Design Service: app/frontend (Angular 9, ngrx 9, three.js 0.125 — ИСКА Node 14, върви само в контейнер), app/backend (.NET Core 3.1, 9 проекта). Пази се САМО RayWare пътят (/print-setup → DeltaModule → <delta-renderer> + core/services/renderer/*); всичко зъболекарско се ТРИЕ. Бекендът е локален AWS Emulator (aws-emulator/, infra/, workers/ + native mesh бинарни), НИКОГА истински AWS. Фронтендът няма тестова традиция: 6 spec файла и karma, вързана за десктоп Chrome.",
+      "verify": [
+        "scripts\\gate\\fe-typecheck.cmd"
+      ],
+      "_verify_note": "ОБЪРНАТА конвенция, нарочно (13.11.2026): дефолтният гейт е САМО tsc --noEmit (~70 с, в контейнер), защото истинският AOT билд е 24 мин 28 с измерено — при 5 агента и verify_timeout_min=45 това гарантирано тайм-аутва. tsc хваща точно режима на провал при триене: висящи импорти, счупени barrel-и, символи, още сочени от app.module/app.routing/store индексите. Пълният AOT НЕ е дефолт — носят го ИЗРИЧНО само майлстоун таскове (fe-build.cmd), виж steps-овете им. Хигиена: node_modules живеят в споделен docker volume rwc-fe-node_modules; САМО таскът, който мени package.json, пуска fe-npm-ci.cmd (паралелен npm ci по един volume го разваля). dist/ и coverage/ ТРЯБВА да останат gitignore-нати — иначе гейтът оставя untracked файлове и всички следващи merge-ове стават dirty-skipped.",
+      "commands": {
+        "fe_typecheck": "scripts\\gate\\fe-typecheck.cmd   (~70 с — дефолтният гейт)",
+        "fe_test": "scripts\\gate\\fe-test.cmd [jest-pattern]   (целият suite или подмножество)",
+        "fe_build": "scripts\\gate\\fe-build.cmd [dev|ci|production]   (AOT, минути — само майлстоун)",
+        "fe_npm_ci": "scripts\\gate\\fe-npm-ci.cmd   (~8 мин, опреснява volume-а — само при смяна на зависимости)",
+        "aws_up": "docker compose up -d --build   (aws-emulator + algorithms-worker — НЕ от агент)",
+        "e2e": "source aws-emulator/env.sh && npm run e2e   (измерено зелено 13.11.2026: 10.7 с)",
+        "forbidden": "ng serve, dotnet run, docker compose up на дълготрайни сървъри — само гейтът и потребителят"
+      }
     }
   },
   "fallback": {

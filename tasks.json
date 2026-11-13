@@ -1,178 +1,1302 @@
 ﻿[
-    {
-        "id":  1500,
-        "category":  "refactor",
-        "repo":  "combat",
-        "lane":  "core-profile",
-        "model":  "heavy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "app.js",
-                      "index.html",
-                      "modules/classes/monk.js",
-                      "modules/classes/cleric.js",
-                      "tabs/spellcasting.html",
-                      "test/e2e/profile-surface.spec.js"
-                  ],
-        "description":  "refactor(profiles): let each class profile declare its tabs, feature files, flavor set and voice",
-        "specRef":  "monk-combat-structure.md «Файлове» (index.html tab-nav, loadTabs, tabs/ партиали) + «Червени линии» т.1",
-        "tddWorkflow":  true,
-        "verify":  [
-                       "npx playwright test profile-surface tabs-navigation skills-features character-switch cleric-profile class-profile critical-path"
-                   ],
-        "notes":  "🔑 СКЕЛЕТЕН ТАСК на board 2. Пипа отровните файлове (app.js, index.html) и ДВАТА профила ВЕДНЪЖ, за да могат останалите таскове да работят само в своите модули. ⛔ Монкът не сменя нищо видимо.\n\nСЪСТОЯНИЕ СЛЕД BOARD 1: `window.CLASS_PROFILES` съдържа monk и cleric със следните полета: `id, label, storageKey, defaults, derive(st, base), hiddenFieldIds, hasClassBadges, hasLevelUpModal, restoresKi`. Табовете са ФИКСИРАНИ: 10 бутона `data-tab` в index.html + `tabMap` в `loadTabs()` (app.js, най-отгоре). Акордеонът с уменията се кара от НИВАТА: `renderFeaturesAccordion(st.monkLevel || 1, st.clericLevel || 0)` (app.js:1849), а вътре чете `skills-and-features.json` (монк) и `cleric-features.json` (**Death Domain** — дипът на монка).\n\nРАЗШИРИ ДОГОВОРА с четири полета (и в двата профила):\n1. `tabs: [...]` — ключовете на табовете, които този герой вижда, В РЕДА на показване. За монка: всички 10 както са днес, включително `resurrection`, БЕЗ `spellcasting`. За клерика: същите, но `resurrection` се МАХА и на негово място идва `spellcasting`.\n2. `featureFiles: [...]` — кои JSON файла пълнят Skills → Personal. Монк: `[\u0027skills-and-features.json\u0027, \u0027cleric-features.json\u0027]` (точно днешното поведение). Клерик: `[\u0027grave-features.json\u0027]` (вече съществува в репото, 19 записа, форма 1:1 с cleric-features.json).\n3. `flavorTypes` — id-та на flavor бутоните, които този герой вижда (`null` = всички). Монк: `null`. Клерик: `[\u0027insult\u0027, \u0027spare-dying\u0027, \u0027heal-zero\u0027]`. ⚠ ТУК само декларацията; самото филтриране е таск 1700.\n4. `ttsVoice` — име на глас за TTS (`null` = конфигурацията по подразбиране в modules/tts.js). Монк: `null`. Клерик: `null` засега, но полето трябва да съществува — таск 1700 го ползва.\n\nЗАДАЧИ В ТОЗИ ТАСК:\n(а) **Табовете стават профилно-зависими.** `loadTabs()` добавя `\u0027spellcasting\u0027: \u0027tabs/spellcasting.html\u0027` в tabMap. В index.html добави бутона `data-tab=\"spellcasting\"` и контейнера `\u003cdiv id=\"tab-spellcasting\" class=\"tab hidden\"\u003e\u003c/div\u003e`. При рендер скрий бутоните и панелите, които НЕ са в `activeProfile().tabs`, и подреди видимите по реда от профила. При смяна на герой това се пресмята наново (виж как `Characters.switchTo` пререндерира). Ако активният таб изчезне за новия герой, превключи на първия му таб.\n(б) **Акордеонът с уменията става профилно-зависим.** `renderFeaturesAccordion` да чете `activeProfile().featureFiles` вместо да приема monkLevel/clericLevel. Филтърът по ниво остава: за монк файловете си карат по `st.monkLevel`/`st.clericLevel` както досега (запази точно сегашното подреждане и етикетите `[Monk]`/`[Cleric]`), за клерика — по `st.level`, с етикет `[Cleric]`. ⚠ skills-features.spec.js асертва монашеското поведение — то НЕ бива да се променя; ако спекът трябва да се докосне, адаптирай го, не го заобикаляй.\n(в) **`tabs/spellcasting.html`** — само скелет: `\u003cdiv class=\"section-title\"\u003eSpellcasting\u003c/div\u003e` + празни контейнери, които таск 1610 пълни: `\u003cdiv id=\"spellSlotsRoot\"\u003e\u003c/div\u003e`, `\u003cdiv id=\"spellPreparedRoot\"\u003e\u003c/div\u003e`, `\u003cdiv id=\"spellLibraryRoot\"\u003e\u003c/div\u003e`. Нищо повече.\n(г) **index.html**: добави `\u003cscript src=\"modules/spell-library.js\"\u003e\u003c/script\u003e` ПРЕДИ app.js (файлът ще липсва до таск 1610 — 404 е нормално и не чупи нищо).\n\nЧЕРВЕНИ ЛИНИИ: монашеският изглед е непроменен — същите 10 таба в същия ред, същият акордеон. derived-values, critical-path, rest-mechanics, short-rest, multiclass-levelup, levelup-modal и resurrection-tab минават БЕЗ промени. Не пипай spells-mark.js, flavor.js, tts.js (чужди зони).\n\nТЕСТ (нов test/e2e/profile-surface.spec.js): (а) при монк се виждат точно днешните 10 таба, вкл. Resurrection, и НЯМА Spellcasting; (б) при клерик НЯМА Resurrection, а ИМА Spellcasting; (в) превключване монк→клерик→монк връща правилния набор всеки път; (г) ако активният таб изчезне при смяна, апът показва първия таб на новия герой, а не празен екран; (д) Skills → Personal при клерик показва Grave умения (напр. \u0027Circle of Mortality\u0027) и НЕ показва монашески (напр. \u0027Martial Arts\u0027); (е) при монк акордеонът е непроменен — съдържа и [Monk], и [Cleric] записи както днес.",
-        "steps":  [
-                      {
-                          "id":  "1500.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети: loadTabs() и tabMap (началото на app.js), tab-nav в index.html, showTab/activeProfile/applyHiddenFields в app.js, renderFeaturesAccordion (app.js ~1440) и извикването му (~1849), modules/classes/monk.js и cleric.js (договорът), modules/characters.js (switchTo и пререндера), grave-features.json и cleric-features.json (еднаква форма). Виж и test/e2e/skills-features.spec.js и tabs-navigation.spec.js."
-                      },
-                      {
-                          "id":  "1500.2",
-                          "phase":  "RED",
-                          "action":  "Напиши test/e2e/profile-surface.spec.js с асерциите (а)-(е) от notes. Червен."
-                      },
-                      {
-                          "id":  "1500.3",
-                          "phase":  "GREEN",
-                          "action":  "Добави четирите полета в двата профила; направи табовете и акордеона профилно-зависими; създай tabs/spellcasting.html (скелет) и script тага за modules/spell-library.js в index.html."
-                      },
-                      {
-                          "id":  "1500.4",
-                          "phase":  "DONE",
-                          "action":  "npx playwright test profile-surface tabs-navigation skills-features character-switch cleric-profile class-profile critical-path — зелено, при това монашеските спекове непроменени. Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  1600,
-        "category":  "feature",
-        "repo":  "combat",
-        "lane":  "spellcasting",
-        "model":  "heavy",
-        "dependsOn":  [
-                          1500
-                      ],
-        "files":  [
-                      "modules/spells-mark.js",
-                      "domain-spells.json",
-                      "test/e2e/full-caster.spec.js"
-                  ],
-        "description":  "feat(spells): extend cleric slots to level 20 and move domain spells into per-domain data",
-        "specRef":  "monk-combat-structure.md «Модел» (Long Rest / prepared spells, restoreMarkSlots)",
-        "tddWorkflow":  true,
-        "verify":  [
-                       "npx playwright test full-caster mark-spells domain-spells-filter cleric-cantrips resurrection-tab local-spells rest-mechanics"
-                   ],
-        "notes":  "Прави клерика ПЪЛЕН кастър и отвързва domain заклинанията от Death Domain.\n\n1) **Слотове до ниво 20.** `CLERIC_SPELL_SLOTS` (modules/spells-mark.js:87-98) има редове само за нива 1-10 (слотове до 5-то), а `initMarkSpells` реже нивото с `Math.min(clericLevel, 10)`. Допълни таблицата с редове 11-20 по RAW таблицата на клерика (слотове до 9-то) и МАХНИ отрязването. ⚠ Акордеонът за подготовка се генерира динамично от 1 до най-високия наличен слот (`renderClericPrepSpells`), затова UI-ят следва таблицата без нов код — провери го, не го пренаписвай.\n\n2) **Domain заклинанията стават данни.** `DOMAIN_SPELL_ROWS` (modules/spells-mark.js:3+) е HARDCODED **Death Domain** — това е дипът на МОНКА и трябва да си остане негов. Клерикът е **Grave Domain** с друг списък. Изнеси ги в нов `domain-spells.json` с форма:\n```\n{ \"death\": [ { \"minLevel\": 1, \"spells\": [ { \"index\": \"false-life\", \"name\": \"False Life\" } ] } ],\n  \"grave\": [ ... ] }\n```\nGrave списъкът (от PHB/XGE, потвърден от потребителя):\n- 1 ниво: bane (Bane), false-life (False Life)\n- 3 ниво: gentle-repose (Gentle Repose), ray-of-enfeeblement (Ray of Enfeeblement)\n- 5 ниво: revivify (Revivify), vampiric-touch (Vampiric Touch)\n- 7 ниво: blight (Blight), death-ward (Death Ward)\n- 9 ниво: antilife-shell (Antilife Shell), raise-dead (Raise Dead)\nDeath списъкът се ПРЕНАСЯ дословно от сегашния `DOMAIN_SPELL_ROWS`, без промени.\nКой домейн се ползва се решава от активния профил: добави `domain` в профилите чрез… ⛔ НЕ — modules/classes/*.js са на таск 1500 и вече са merge-нати; ако там няма поле `domain`, изведи домейна от `activeProfile().id` (monk → \u0027death\u0027, cleric → \u0027grave\u0027) в spells-mark.js и ОПИШИ го с коментар. Не пипай профилните файлове.\n\n⚠ Правилото остава: domain заклинанията са ВИНАГИ подготвени и НЕ се броят срещу лимита.\n\nЧЕРВЕНИ ЛИНИИ: не пипай app.js, index.html, профилите, spell-library.js. `domain-spells-filter.spec.js`, `mark-spells.spec.js`, `cleric-cantrips.spec.js` и `resurrection-tab.spec.js` описват монашеския Resurrection таб — поведението му при МОНК не се променя; ако асертват конкретни Death заклинания, те трябва да продължат да минават (Death списъкът е пренесен дословно). Ако някой от тях чете вътрешни константи, адаптирай го към новия файл, не го заобикаляй.\n\nТЕСТ (нов test/e2e/full-caster.spec.js): (а) клерик 20 ниво има слотове от 1-во до 9-то с правилните бройки; (б) клерик 11 ниво получава 6-то ниво слот (днес не получава); (в) акордеонът за подготовка показва толкова нива, колкото слотове има; (г) `domain-spells.json` е валиден, има и \u0027death\u0027, и \u0027grave\u0027; (д) при монк се ползва death списъкът и той е идентичен с предишния; (е) при клерик се ползва grave списъкът (напр. Bane на 1-во, Vampiric Touch на 5-то).",
-        "steps":  [
-                      {
-                          "id":  "1600.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети modules/spells-mark.js: DOMAIN_SPELL_ROWS (начало), CLERIC_SPELL_SLOTS (87-98), initMarkSpells, restoreMarkSlots, renderDomainSpells, renderClericPrepSpells (динамичният акордеон), _loadLocalSpells. Прочети спековете domain-spells-filter, mark-spells, resurrection-tab — какво точно асертват."
-                      },
-                      {
-                          "id":  "1600.2",
-                          "phase":  "RED",
-                          "action":  "Напиши test/e2e/full-caster.spec.js с асерциите (а)-(е) от notes. Червен."
-                      },
-                      {
-                          "id":  "1600.3",
-                          "phase":  "GREEN",
-                          "action":  "Допълни CLERIC_SPELL_SLOTS до ниво 20, махни Math.min(clericLevel, 10), създай domain-spells.json с death (дословно пренесен) и grave, и избери списъка според активния профил."
-                      },
-                      {
-                          "id":  "1600.4",
-                          "phase":  "DONE",
-                          "action":  "npx playwright test full-caster mark-spells domain-spells-filter cleric-cantrips resurrection-tab local-spells rest-mechanics — зелено. Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  1610,
-        "category":  "feature",
-        "repo":  "combat",
-        "lane":  "spellcasting",
-        "model":  "heavy",
-        "dependsOn":  [
-
-                      ],
-        "files":  [
-                      "modules/spell-library.js",
-                      "test/e2e/spell-library.spec.js"
-                  ],
-        "description":  "feat(spells): add the searchable spell library with daily preparation and an offline cache",
-        "specRef":  "monk-combat-structure.md «Файлове» (modules/ IIFE, *.json данни)",
-        "tddWorkflow":  true,
-        "notes":  "ФИНАЛНИЯТ таск на lane-а — БЕЗ verify override: пълният гейт е задната мрежа.\n\nСтъпва на 1500 (табът `spellcasting` и празните контейнери вече съществуват) и на 1600 (слотовете стигат до 20, domain заклинанията са данни) — и двата са merge-нати.\n\nКАКВО ИСКА ПОТРЕБИТЕЛЯТ (негово решение, не го предоговаряй): пълен списък със заклинания + търсене, плюс механизъм за приготвяне, който ФИКСИРА достъпните за деня. Работата на масата е в бой; подготовката е между срещите.\n\nИЗТОЧНИК НА СПИСЪКА: `https://www.dnd5eapi.co/api/2014/classes/cleric/spells` ⚠ ползвай ВЕРСИОНИРАНИЯ път `/api/2014/...`; старият `/api/classes/...` връща 301 и работи само защото fetch следва пренасочването. Слей го с `local-spells.json` (32 заклинания извън API-то; вече се чете през `_loadLocalSpells()` в spells-mark.js — изложи я или я повтори, но НЕ дублирай данните). ⚠ API-то връща и `Arcane Eye` в клерик списъка — чужда магия, SRD грешка; ФИЛТРИРАЙ я.\n\n⛔ НЕ пипай `tabs/spellcasting.html` — той е на таск 1500 и трите контейнера ВЕЧЕ съществуват. Този таск само рендерира в тях от JS. Ако ти трябва нов възел, създай го динамично вътре в съществуващ контейнер.\n\nUI (контейнерите вече ги има):\n- `#spellSlotsRoot` — слотовете с харчене/възстановяване (преизползвай рендера от spells-mark.js, не го преписвай; ако трябва, изложи го на window).\n- `#spellPreparedRoot` — ПРИГОТВЕНИТЕ за деня, групирани по ниво, с брояч `подготвени/макс` (макс = `clericLevel + WIS mod`, минимум 1). Domain заклинанията се показват като винаги подготвени и НЕ се броят.\n- `#spellLibraryRoot` — цялата библиотека с поле за търсене (по име, без диакритика, case-insensitive) и филтър по ниво. Приготвянето е ЕДНО цъкане от библиотеката (клерикът знае целия списък — не прави двустъпков „known → prepared\").\n\n⚠ ОФЛАЙН: детайлите на ПРИГОТВЕНИТЕ заклинания се кешират локално (в `st` или собствен localStorage ключ — избери и обоснови в коментар), за да работят без мрежа. Библиотеката може да иска мрежа при първо зареждане; приготвените — НЕ. Липсваща мрежа да дава четимо съобщение, не празен екран.\n\nСЪСТОЯНИЕ: подготвените вече живеят в `st.preparedClericSpells` (масив от index-и) — ПРЕИЗПОЛЗВАЙ го, не въвеждай втори списък. Лимитът и правилото за това, че domain не се брои, вече съществуват в `renderClericPrepSpells`.\n\nЧЕРВЕНИ ЛИНИИ: не пипай app.js, index.html, профилите (чужди зони). Монашеският Resurrection таб остава непроменен — тази библиотека е САМО в Spellcasting таба на клерика.\n\nТЕСТ (нов test/e2e/spell-library.spec.js, с мокнато API по модела на cleric-cantrips.spec.js): (а) библиотеката показва и API, и local-spells заклинания; (б) `Arcane Eye` НЕ се показва; (в) търсенето филтрира по име; (г) приготвянето е едно цъкане и вдига брояча; (д) лимитът спира над `clericLevel + WIS mod`; (е) domain заклинанията са подготвени и НЕ се броят; (ж) при изключена мрежа приготвените се показват с детайли от кеша, а библиотеката дава съобщение, не празен екран.",
-        "steps":  [
-                      {
-                          "id":  "1610.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети tabs/spellcasting.html (скелетът от 1500), modules/spells-mark.js (renderClericPrepSpells, _renderMarkSlots, _fetchSpellDetails, _loadLocalSpells, лимитът и domain правилото), local-spells.json и domain-spells.json. Виж как cleric-cantrips.spec.js мокне API-то."
-                      },
-                      {
-                          "id":  "1610.2",
-                          "phase":  "RED",
-                          "action":  "Напиши test/e2e/spell-library.spec.js с асерциите (а)-(ж) от notes, включително офлайн случая. Червен."
-                      },
-                      {
-                          "id":  "1610.3",
-                          "phase":  "GREEN",
-                          "action":  "Създай modules/spell-library.js: слят списък (API 2014 + local, без Arcane Eye), търсене и филтър по ниво, приготвяне на едно цъкане върху st.preparedClericSpells, кеш на детайлите на приготвените, рендер в трите контейнера."
-                      },
-                      {
-                          "id":  "1610.4",
-                          "phase":  "DONE",
-                          "action":  "Пълният гейт (npm test) зелен — последен таск на lane-а, без verify override. Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    },
-    {
-        "id":  1700,
-        "category":  "feature",
-        "repo":  "combat",
-        "lane":  "flavor-voice",
-        "model":  "easy",
-        "dependsOn":  [
-                          1500
-                      ],
-        "files":  [
-                      "modules/flavor.js",
-                      "modules/tts.js",
-                      "test/e2e/flavor-per-profile.spec.js"
-                  ],
-        "description":  "feat(flavor): show only the active character\u0027s flavor categories and voice",
-        "specRef":  "monk-combat-structure.md «Файлове» (modules/flavor.js registry, modules/tts.js) + «Модел» (TTS)",
-        "tddWorkflow":  true,
-        "notes":  "Профилът вече ДЕКЛАРИРА какво да се вижда (таск 1500 е merge-нат): `activeProfile().flavorTypes` (масив от id-та, или `null` = всички) и `activeProfile().ttsVoice` (име на глас, или `null` = по подразбиране). Тук се прави самото ФИЛТРИРАНЕ.\n\n1) **Flavor бутоните.** `modules/flavor.js` има registry `FLAVOR_TYPES` (19 записа) и `window.attachFlavor`, който намира бутоните по `#tab-flavor [data-flavor=\"\u003cid\u003e\"]`. Табът `tabs/flavor.html` съдържа ВСИЧКИ бутони, групирани по секции. Скрий бутоните, чието id не е в `flavorTypes`, и СКРИЙ секцията, ако всичките ѝ бутони са скрити (иначе остава празно заглавие). При `null` → показва се всичко, точно както днес. Пресмята се наново при смяна на герой.\nЗа клерика остават точно три: `insult`, `spare-dying`, `heal-zero`.\n⚠ Провери реалните id-та в `FLAVOR_TYPES` преди да ги закодираш — ако портиерските са с други id-та, ползвай истинските и го отбележи.\n\n2) **TTS гласът.** `modules/tts.js` има `TTS_CONFIG.voices` (мапинг език → име на глас) и го ползва в заявката (`voice: { languageCode, name, ssmlGender }`). Ако активният профил има `ttsVoice`, той ПРЕГАЗВА гласа по подразбиране; при `null` нищо не се променя. ⛔ НЕ пипай ключа, referrer ограниченията и fallback пътя към браузърния глас — апът трябва да работи и без ключ (червена линия на репото).\n\nЧЕРВЕНИ ЛИНИИ: не пипай app.js, index.html, профилите, tabs/flavor.html (съдържа всички бутони — само ги скриваш от JS). Монкът има `flavorTypes: null`, значи неговият Flavor таб е ВИЗУАЛНО непроменен — flavor-ui.spec.js и flavor-tts.spec.js асертват точно това (включително броя бутони) и трябва да минат непроменени.\n\nТЕСТ (нов test/e2e/flavor-per-profile.spec.js): (а) при монк се виждат всички бутони и всички секции — както днес; (б) при клерик се виждат точно три бутона и само техните секции, без празни заглавия; (в) превключване монк→клерик→монк връща правилния набор; (г) цъкане на видим бутон при клерика пълни изхода; (д) при зададен `ttsVoice` заявката към TTS носи този глас, а при `null` — гласа по подразбиране (мокни заявката, както прави flavor-tts.spec.js).",
-        "steps":  [
-                      {
-                          "id":  "1700.1",
-                          "phase":  "RECON",
-                          "action":  "Прочети modules/flavor.js (FLAVOR_TYPES с истинските id-та, attachFlavor, setActive), tabs/flavor.html (секциите и бутоните), modules/tts.js (TTS_CONFIG.voices и мястото, където се сглобява заявката), и спековете flavor-ui.spec.js и flavor-tts.spec.js — те заковават монашеското поведение."
-                      },
-                      {
-                          "id":  "1700.2",
-                          "phase":  "RED",
-                          "action":  "Напиши test/e2e/flavor-per-profile.spec.js с асерциите (а)-(д) от notes. Червен."
-                      },
-                      {
-                          "id":  "1700.3",
-                          "phase":  "GREEN",
-                          "action":  "Филтрирай бутоните и секциите по activeProfile().flavorTypes (null = всички) с пресмятане при смяна на герой; подай activeProfile().ttsVoice към TTS заявката, без да пипаш ключа и fallback-а."
-                      },
-                      {
-                          "id":  "1700.4",
-                          "phase":  "DONE",
-                          "action":  "Пълният гейт (npm test) зелен — последен таск на lane-а, без verify override. Commit с description-а дословно."
-                      }
-                  ],
-        "passes":  true
-    }
+  {
+    "id": 2000,
+    "category": "chore",
+    "repo": "rwclab",
+    "lane": "infra-jest",
+    "model": "heavy",
+    "dependsOn": [],
+    "files": [
+      "app/frontend/package.json",
+      "app/frontend/package-lock.json",
+      "app/frontend/jest.config.js",
+      "app/frontend/src/setup-jest.ts",
+      "app/frontend/src/tsconfig.spec.json",
+      "app/frontend/src/app/shared/pipes/*.spec.ts",
+      "app/frontend/src/app/app-modules/dashboard/components/upcoming-appointments/upcoming-appointments.component.spec.ts",
+      ".gitignore"
+    ],
+    "description": "chore(test): run the frontend unit suite on Jest instead of browser Karma",
+    "specRef": "rwclab-structure.md «Commands and ports» (Node 14 в контейнер, volume rwc-fe-node_modules) + «Test state»",
+    "tddWorkflow": true,
+    "notes": "ПЪРВИЯТ таск на board-а и предпоставка за всичко останало: без работещ юнит гейт няма как да характеризираме поведението, преди да трием.\n\nЗАЩО Jest: сегашната karma.conf.js е негодна за гейт — `browsers: ['Chrome']`, `singleRun: false`, `autoWatch: true`, а в node:14-bullseye няма Chrome. Освен това Karma е мъртва в модерния Angular, тоест при по-късния ъпгрейд пак щеше да се сменя — не плащаме миграция два пъти.\n\nВЕРСИИ (Angular 9 линията — НЕ слагай по-нови, те искат Angular 13+): jest@26, jest-preset-angular@8.4.0, @types/jest@26, ts-jest идва с пресета. Добави npm script `\"test:ci\": \"jest --ci\"`.\n\nКОНФИГУРАЦИЯ: jest.config.js с preset jest-preset-angular, setupFilesAfterEnv: [\"<rootDir>/src/setup-jest.ts\"], moduleNameMapper за `app/` → `<rootDir>/src/app/` (целият код импортира с абсолютни `app/...` пътища — виж paths в src/tsconfig.json), transformIgnorePatterns за ESM пакетите. КОВЕРИДЖ по подразбиране ИЗКЛЮЧЕН (бавен е и пише coverage/ в чекаута).\n\nМИГРАЦИЯ НА 6-ТЕ СЪЩЕСТВУВАЩИ СПЕКА (всички трябва да минават): 5 pipe спека в shared/pipes (bytes, print-time-display, resin-volume, short-number, text-omission) + app-modules/dashboard/.../upcoming-appointments.component.spec.ts. ⚠ Дашбордният спек е част от модул, който ПО-КЪСНО се трие (таск 2250) — мигрирай го сега, за да е suite-ът зелен, а таск 2250 ще го изтрие заедно с модула. Това НЕ е противоречие: сега го пазим жив, после си отива със собственика си.\n\nКАРМА ОСТАВА НЕПИПНАТА в този таск (karma.conf.js, angular.json test target, src/test.ts). `ng test` ще е счупен — това е приемливо и нарочно: махането на karma пипа angular.json, който е отровен файл и е собственост на друг lane. Отбележи го в commit тялото.\n\n.gitignore: добави `app/frontend/coverage/`. ⛔ Това е критично за харнеса — untracked файлове след гейт правят чекаута мръсен и ВСИЧКИ следващи merge-ове стават dirty-skipped.\n\n⛔ НЕ пипай package.json на КОРЕНА на репото (той е за AWS емулатора и e2e-то) — само app/frontend/package.json.",
+    "verify": [
+      "scripts\\gate\\fe-npm-ci.cmd",
+      "scripts\\gate\\fe-test.cmd",
+      "scripts\\gate\\fe-typecheck.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2000.1",
+        "phase": "RECON",
+        "action": "Прочети app/frontend/karma.conf.js, src/test.ts, src/tsconfig.spec.json, src/tsconfig.json (секцията paths — там е `app/*` алиасът), package.json (devDependencies) и 6-те .spec.ts файла. Виж и scripts/gate/*.cmd — това е единственият позволен начин да пускаш jest/tsc."
+      },
+      {
+        "id": "2000.2",
+        "phase": "RED",
+        "action": "Добави jest конфигурацията и пусни scripts\\gate\\fe-test.cmd — трябва да е ЧЕРВЕНО с реална причина (ненамерени модули/алиаси), не със \"no tests found\"."
+      },
+      {
+        "id": "2000.3",
+        "phase": "GREEN",
+        "action": "Докарай 6-те мигрирани спека до зелено. Нулева промяна по продукционен код — ако спек иска промяна в кода, значи конфигурацията още е грешна."
+      },
+      {
+        "id": "2000.4",
+        "phase": "DONE",
+        "action": "scripts\\gate\\fe-npm-ci.cmd (опреснява volume-а с новите devDeps), после fe-test.cmd и fe-typecheck.cmd — всички зелени. В commit тялото напиши времето на jest suite-а и че ng test/karma остава счупен нарочно. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2010,
+    "category": "chore",
+    "repo": "rwclab",
+    "lane": "infra-build",
+    "model": "easy",
+    "dependsOn": [],
+    "files": [
+      "app/frontend/angular.json"
+    ],
+    "description": "chore(build): add a fast aot-only ci configuration for the milestone gate",
+    "specRef": "rwclab-structure.md «Commands and ports» (Frontend build gate)",
+    "tddWorkflow": false,
+    "notes": "Майлстоун гейтът е истинският AOT билд, а той е ИЗМЕРЕН на 24 мин 28 с с `--configuration=dev` (13.11.2026, студен volume, 0 грешки/0 предупреждения). При verify_timeout_min = 45 и няколко агента на една машина това е на косъм от тайм-аут. Причината за бавнотията не е AOT, а оптимизациите: и четирите конфигурации (dev, staging, production) са с `optimization: true` + `buildOptimizer: true`.\n\nЗАДАЧА: добави НОВА конфигурация `ci` в build таргета на проект `internal-system` с `aot: true`, `optimization: false`, `buildOptimizer: false`, `sourceMap: false`, `extractLicenses: false`, `vendorChunk: true`, `namedChunks: false`, `fileReplacements` като при dev. Целта е да хваща същите template/AOT грешки, но без минификация.\n\n⛔ НЕ пипай dev, staging, production и es5 конфигурациите — те правят истинските артефакти. ⛔ НЕ пипай test таргета (karma) — той е чужда зона (таск 2000 нарочно го остави счупен).\n\nangular.json е ОТРОВЕН файл (структурният reference го изброява): затова този таск е сам в своя lane и пипа само него. Добавяш конфигурация, не променяш съществуваща — diff-ът трябва да е чисто additive.\n\nВ commit тялото ЗАДЪЛЖИТЕЛНО напиши измереното време на `ci` конфигурацията срещу 24 мин 28 с за dev — това число решава колко често board-ът може да си позволи майлстоун.",
+    "verify": [
+      "scripts\\gate\\fe-build.cmd ci"
+    ],
+    "steps": [
+      {
+        "id": "2010.1",
+        "phase": "RECON",
+        "action": "Прочети app/frontend/angular.json — build таргета на internal-system, четирите конфигурации и кои опции се различават. Виж scripts/gate/fe-build.cmd (приема конфигурацията като аргумент)."
+      },
+      {
+        "id": "2010.2",
+        "phase": "RED",
+        "action": "Пусни scripts\\gate\\fe-build.cmd ci — трябва да е червено с \"Configuration 'ci' is not set\", което доказва, че гейтът наистина чете новата конфигурация."
+      },
+      {
+        "id": "2010.3",
+        "phase": "GREEN",
+        "action": "Добави `ci` конфигурацията и я докарай до зелен билд."
+      },
+      {
+        "id": "2010.4",
+        "phase": "DONE",
+        "action": "scripts\\gate\\fe-build.cmd ci зелен. В commit тялото: измереното време срещу 24 мин 28 с за dev. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2100,
+    "category": "test",
+    "repo": "rwclab",
+    "lane": "char-utils",
+    "model": "easy",
+    "dependsOn": [
+      2000
+    ],
+    "files": [
+      "app/frontend/src/app/core/utils/**",
+      "app/frontend/src/app/core/helpers/common/**"
+    ],
+    "description": "test(core): characterize renderer utils and common helpers",
+    "specRef": "RENDERER-AUDIT.md §1.3 «Utils» и «Helpers» + rwclab-structure.md «app/frontend: what stays»",
+    "tddWorkflow": true,
+    "notes": "Най-евтиното покритие в целия board: 11 файла / 177 реда в core/utils и 25 файла / 1271 реда в core/helpers/common, почти всичко чисти функции без Angular DI. Тук се вземат най-много тестове на единица усилие.\n\nПРИОРИТЕТ (това е кодът, който рендърът ползва на всяко действие): `renderer-position-conversion` (превръща позиции между рендъра и бекенда — греши ли, моделът скача), `platform-job-utils`, `platform-job-algorithm-utils`, `delta-file-key-helper` (сглобява S3 ключовете `delta/individual/{id}/shared/{id}.drc` — сбъркан ключ = тих 404), `download-file`, и от helpers/common: `degree-helper`, `orientation-helper`, `renderer-position-conversion`, `time-helper`, `file-helper`, `file-type-check-helper`, `percent-helper`, `platform-job-helper`, `custom-http-params`.\n\nЗА ВСЯКА експортирана функция: щастлив път + границите (0, отрицателно, null/undefined, празен масив/стринг, и за ъглите — 0/90/180/360 и отрицателни). Числовите преобразувания се асертват с ТОЧНИ стойности (`toBeCloseTo` при плаваща точка), не с `toBeTruthy` — целта е да заковем аритметиката.\n\nЧЕРВЕНИ ЛИНИИ (важат за ВСИЧКИ характеризиращи таскове):\n1. Това са ХАРАКТЕРИЗИРАЩИ тестове върху ЗАМРАЗЕН код: НЕ поправяй продукционния код, дори да видиш бъг. Документирай каквото КОДЪТ ПРАВИ ДНЕС — тестът е мрежата, под която после ще трием и ъпгрейдваме. Намериш ли истински бъг, опиши го в commit тялото като \"characterized current behaviour, looks wrong: ...\" и го ОСТАВИ да минава.\n2. НЕ пипай файл извън своята зона (`files`). Споделените TestBed мокове са собственост САМО на lane char-delta (src/app/testing/**) — не създавай такава папка в друг таск, защото два lane-а ще се бият за нея.\n3. Тестваме САМО кода, който остава (RayWare пътят по RENDERER-AUDIT.md §1.3). Ако файл от зоната ти е в списъка за триене (§1.6), ПРОПУСНИ го и го отбележи — тест за код, който ще бъде изтрит, е чиста загуба.\n4. Гейтът ти е jest subset + tsc (секунди). НЕ пускай AOT билд — той е майлстоун, 24+ минути.\n5. Jest върви САМО в контейнер през scripts\\gate\\fe-test.cmd (Angular 9 иска Node 14). НЕ пускай npm ci — volume-ът е споделен и паралелен npm ci го разваля.",
+    "verify": [
+      "scripts\\gate\\fe-test.cmd core/(utils|helpers/common)",
+      "scripts\\gate\\fe-typecheck.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2100.1",
+        "phase": "RECON",
+        "action": "Изброй експортите в core/utils/** и core/helpers/common/** и за всеки виж КОЙ го вика (grep в app-modules/delta и core/services/renderer) — приоритет на ползваните от рендъра. Пропусни файлове, които RENDERER-AUDIT.md §1.6 слага за триене."
+      },
+      {
+        "id": "2100.2",
+        "phase": "RED",
+        "action": "Напиши спековете до тях (co-located *.spec.ts). Пусни subset-а — очаквай червено само там, където си сбъркал очакването; поправяй ТЕСТА, не кода."
+      },
+      {
+        "id": "2100.3",
+        "phase": "GREEN",
+        "action": "Целият subset зелен, без нито една промяна по продукционен файл."
+      },
+      {
+        "id": "2100.4",
+        "phase": "DONE",
+        "action": "Целият subset зелен през scripts\\gate\\fe-test.cmd core/(utils|helpers/common), tsc зелен. В commit тялото напиши КОЛКО теста добави и кои файлове остават без покритие и защо. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2110,
+    "category": "test",
+    "repo": "rwclab",
+    "lane": "char-core-data",
+    "model": "easy",
+    "dependsOn": [
+      2000
+    ],
+    "files": [
+      "app/frontend/src/app/core/constants/**",
+      "app/frontend/src/app/core/enums/**",
+      "app/frontend/src/app/core/helpers/mappers/**"
+    ],
+    "description": "test(core): lock the renderer constants, enums and mappers",
+    "specRef": "RENDERER-AUDIT.md §1.3 «Константи», «Enums», «Helpers» + rwclab-structure.md «Persistence and external contracts»",
+    "tddWorkflow": true,
+    "notes": "Тези файлове са ДАННИ, а данните се чупят най-тихо: сбъркана стойност не гърми, а просто спира да работи някъде другаде. Затова ги заковаваме със стойности, а не с типове.\n\nНАЙ-ВАЖНОТО: `delta-pipeline-file-keys` (имената на ключовете в S3 — те са живият договор с DeltaPipeline и worker-а в workers/algorithms), `renderer-constants`, `platform-job-orientation-parameters`, `renderer-progress`, `annotation-font`, `printer-platform-views`, `key-codes`, `default-feature-flags`.\nEnums: `platform-job-*` (ВКЛЮЧИТЕЛНО `PlatformJobAlgorithm` и `PlatformJobAlgorithmStatus` — те са живият договор на job log съобщението `{algorithm, platformId, status, errorCode, timestamp}` между worker-а и фронтенда, виж rwclab-structure.md), `spr-mesh-types`, `renderer-instruction-type`, `annotation-state`, `platform-setup-tab`, `printer-platform`.\n\nФОРМА НА ТЕСТА: за enum — асертирай ТОЧНИТЕ числови/стрингови стойности на всеки член (не само че съществува); за константи — стойността и, където е масив/обект, пълното съдържание. Така по-късен ъпгрейд или невнимателно \"подреждане\" на enum няма как да мине тихо.\nЗа mappers (`new-file-to-form-file`): вход → очакван изход, включително липсващи полета.\n\nЧЕРВЕНИ ЛИНИИ (важат за ВСИЧКИ характеризиращи таскове):\n1. Това са ХАРАКТЕРИЗИРАЩИ тестове върху ЗАМРАЗЕН код: НЕ поправяй продукционния код, дори да видиш бъг. Документирай каквото КОДЪТ ПРАВИ ДНЕС — тестът е мрежата, под която после ще трием и ъпгрейдваме. Намериш ли истински бъг, опиши го в commit тялото като \"characterized current behaviour, looks wrong: ...\" и го ОСТАВИ да минава.\n2. НЕ пипай файл извън своята зона (`files`). Споделените TestBed мокове са собственост САМО на lane char-delta (src/app/testing/**) — не създавай такава папка в друг таск, защото два lane-а ще се бият за нея.\n3. Тестваме САМО кода, който остава (RayWare пътят по RENDERER-AUDIT.md §1.3). Ако файл от зоната ти е в списъка за триене (§1.6), ПРОПУСНИ го и го отбележи — тест за код, който ще бъде изтрит, е чиста загуба.\n4. Гейтът ти е jest subset + tsc (секунди). НЕ пускай AOT билд — той е майлстоун, 24+ минути.\n5. Jest върви САМО в контейнер през scripts\\gate\\fe-test.cmd (Angular 9 иска Node 14). НЕ пускай npm ci — volume-ът е споделен и паралелен npm ci го разваля.",
+    "verify": [
+      "scripts\\gate\\fe-test.cmd core/(constants|enums|helpers/mappers)",
+      "scripts\\gate\\fe-typecheck.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2110.1",
+        "phase": "RECON",
+        "action": "Прочети core/constants/**, core/enums/** и core/helpers/mappers/**. За enum-ите на job log-а сравни стойностите с workers/algorithms/src/steps/*.mjs и infra/resources.mjs — ако се разминават, това е находка за commit тялото (НЕ го поправяй)."
+      },
+      {
+        "id": "2110.2",
+        "phase": "RED",
+        "action": "Напиши спековете със ТОЧНИ стойности. Червено само при сбъркано очакване."
+      },
+      {
+        "id": "2110.3",
+        "phase": "GREEN",
+        "action": "Целият subset зелен. Нулева промяна по продукционен код."
+      },
+      {
+        "id": "2110.4",
+        "phase": "DONE",
+        "action": "Целият subset зелен през scripts\\gate\\fe-test.cmd core/(constants|enums|helpers/mappers), tsc зелен. В commit тялото напиши КОЛКО теста добави и кои файлове остават без покритие и защо. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2120,
+    "category": "test",
+    "repo": "rwclab",
+    "lane": "char-renderer",
+    "model": "heavy",
+    "dependsOn": [
+      2000
+    ],
+    "files": [
+      "app/frontend/src/app/core/services/renderer/**"
+    ],
+    "description": "test(renderer): characterize the geometry and cut services",
+    "specRef": "RENDERER-AUDIT.md §1.3 «Core услуги» (core/services/renderer/*) + §3.4 «Операция в рендъра → Lambda»",
+    "tddWorkflow": true,
+    "notes": "Сърцето на RayWare: 14 файла / 3380 реда. Тази ПЪРВА половина взема геометрията и рязането — `plane-cut`, `line-cut`, `rebase`, `printability-check`, `supports-edit`, `annotation`.\nВтората половина (`three-helpers`, `renderer-helpers`, `platform-helper-objects`, `axes-helper`, `gimbal-helper`, `snapshot`, `upload-model-preview`) е таск 2121 в същия lane — НЕ я пипай, за да не се бием за файлове.\n\n⛔ ПРОПУСНИ `bracket-removal` — PLAN.md §3 го обявява за зъболекарски и отпадащ. Тест за него е загуба.\n\nWEBGL: в jsdom НЯМА WebGL контекст. three.js обектите (Vector3, Matrix4, BufferGeometry, Mesh, Raycaster, геометрична математика) работят ОТЛИЧНО без него — чупи се само реален `WebGLRenderer`/canvas контекст. Затова: тествай математиката с истински three.js обекти, а където услугата иска рендърер/сцена, подавай минимален мок (обект с нужните полета). Ако услуга е НЕразделима от WebGL, отбележи я като непокрита в commit тялото вместо да я мъчиш.\n\nФОРМА: за plane-cut и line-cut — геометрия с известни размери (например куб 20 mm), срез на известна височина, асерт на bounding box-а и броя върхове/стени след операцията. Точно така e2e-то на бекенда доказва същата операция (20 mm куб, срез на 5 → 15 mm височина, виж scripts/e2e.mjs) — ползвай същата аритметика като ориентир.\nЗа rebase/printability-check — входна ориентация → очакван резултат, включително граничните случаи (модел под платформата, нулев обем).\n\nЧЕРВЕНИ ЛИНИИ (важат за ВСИЧКИ характеризиращи таскове):\n1. Това са ХАРАКТЕРИЗИРАЩИ тестове върху ЗАМРАЗЕН код: НЕ поправяй продукционния код, дори да видиш бъг. Документирай каквото КОДЪТ ПРАВИ ДНЕС — тестът е мрежата, под която после ще трием и ъпгрейдваме. Намериш ли истински бъг, опиши го в commit тялото като \"characterized current behaviour, looks wrong: ...\" и го ОСТАВИ да минава.\n2. НЕ пипай файл извън своята зона (`files`). Споделените TestBed мокове са собственост САМО на lane char-delta (src/app/testing/**) — не създавай такава папка в друг таск, защото два lane-а ще се бият за нея.\n3. Тестваме САМО кода, който остава (RayWare пътят по RENDERER-AUDIT.md §1.3). Ако файл от зоната ти е в списъка за триене (§1.6), ПРОПУСНИ го и го отбележи — тест за код, който ще бъде изтрит, е чиста загуба.\n4. Гейтът ти е jest subset + tsc (секунди). НЕ пускай AOT билд — той е майлстоун, 24+ минути.\n5. Jest върви САМО в контейнер през scripts\\gate\\fe-test.cmd (Angular 9 иска Node 14). НЕ пускай npm ci — volume-ът е споделен и паралелен npm ci го разваля.",
+    "verify": [
+      "scripts\\gate\\fe-test.cmd services/renderer",
+      "scripts\\gate\\fe-typecheck.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2120.1",
+        "phase": "RECON",
+        "action": "Прочети 6-те целеви услуги. За всяка установи: кои методи са чиста математика (тестваеми директно) и кои искат сцена/рендърер (искат мок). Виж и core/utils/renderer-position-conversion (чужда зона — таск 2100 — само го ползвай)."
+      },
+      {
+        "id": "2120.2",
+        "phase": "RED",
+        "action": "Напиши спековете с известни геометрии и ТОЧНИ очаквани числа."
+      },
+      {
+        "id": "2120.3",
+        "phase": "GREEN",
+        "action": "Зелен subset. Нулева промяна по продукционен код."
+      },
+      {
+        "id": "2120.4",
+        "phase": "DONE",
+        "action": "Целият subset зелен през scripts\\gate\\fe-test.cmd services/renderer, tsc зелен. В commit тялото напиши КОЛКО теста добави и кои файлове остават без покритие и защо. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2121,
+    "category": "test",
+    "repo": "rwclab",
+    "lane": "char-renderer",
+    "model": "heavy",
+    "dependsOn": [
+      2000
+    ],
+    "files": [
+      "app/frontend/src/app/core/services/renderer/**"
+    ],
+    "description": "test(renderer): characterize the scene helpers and platform objects",
+    "specRef": "RENDERER-AUDIT.md §1.3 «Core услуги» (core/services/renderer/*)",
+    "tddWorkflow": true,
+    "notes": "Втората половина на core/services/renderer: `three-helpers`, `renderer-helpers`, `platform-helper-objects`, `axes-helper`, `gimbal-helper`, `snapshot`, `upload-model-preview`.\n\nСЕРИАЛИЗАЦИЯТА С 2120 Е НАРОЧНА: двата таска живеят в една и съща папка (core/services/renderer/**), тоест нямат разделими зони на собственост. Един lane, последователно — иначе гарантиран merge конфликт. Таск 2120 вече е merge-нат, значи неговите спекове и мокове са ти налични: ПРЕИЗПОЛЗВАЙ ги, не си прави свои паралелни помощници за същото.\n\nWEBGL: виж бележката в 2120 — three.js математиката върви в jsdom, реален WebGLRenderer не. `snapshot` почти сигурно иска canvas → ако е така, тествай само чистата му част (сметки за рамка/мащаб) и отбележи остатъка като непокрит.\n`platform-helper-objects` и `axes-helper` строят помощна геометрия на платформата — асертирай позиции, размери и имена на обектите в сцената (те са договорът, по който другите услуги ги намират).\n\n⛔ ПРОПУСНИ `bracket-removal` (зъболекарски, отпада по PLAN.md §3).\n\nЧЕРВЕНИ ЛИНИИ (важат за ВСИЧКИ характеризиращи таскове):\n1. Това са ХАРАКТЕРИЗИРАЩИ тестове върху ЗАМРАЗЕН код: НЕ поправяй продукционния код, дори да видиш бъг. Документирай каквото КОДЪТ ПРАВИ ДНЕС — тестът е мрежата, под която после ще трием и ъпгрейдваме. Намериш ли истински бъг, опиши го в commit тялото като \"characterized current behaviour, looks wrong: ...\" и го ОСТАВИ да минава.\n2. НЕ пипай файл извън своята зона (`files`). Споделените TestBed мокове са собственост САМО на lane char-delta (src/app/testing/**) — не създавай такава папка в друг таск, защото два lane-а ще се бият за нея.\n3. Тестваме САМО кода, който остава (RayWare пътят по RENDERER-AUDIT.md §1.3). Ако файл от зоната ти е в списъка за триене (§1.6), ПРОПУСНИ го и го отбележи — тест за код, който ще бъде изтрит, е чиста загуба.\n4. Гейтът ти е jest subset + tsc (секунди). НЕ пускай AOT билд — той е майлстоун, 24+ минути.\n5. Jest върви САМО в контейнер през scripts\\gate\\fe-test.cmd (Angular 9 иска Node 14). НЕ пускай npm ci — volume-ът е споделен и паралелен npm ci го разваля.",
+    "verify": [
+      "scripts\\gate\\fe-test.cmd services/renderer",
+      "scripts\\gate\\fe-typecheck.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2121.1",
+        "phase": "RECON",
+        "action": "Прочети 7-те целеви услуги И спековете/моковете от таск 2120 (вече merge-нати) — тръгваш от тях."
+      },
+      {
+        "id": "2121.2",
+        "phase": "RED",
+        "action": "Напиши новите спекове. Червено само при сбъркано очакване."
+      },
+      {
+        "id": "2121.3",
+        "phase": "GREEN",
+        "action": "Зелен целият subset services/renderer (и твоите, и тези от 2120). Нулева промяна по продукционен код."
+      },
+      {
+        "id": "2121.4",
+        "phase": "DONE",
+        "action": "Зелен subset + tsc. В commit тялото: брой нови тестове и кои услуги остават непокрити заради WebGL. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2130,
+    "category": "test",
+    "repo": "rwclab",
+    "lane": "char-store-printlist",
+    "model": "easy",
+    "dependsOn": [
+      2000
+    ],
+    "files": [
+      "app/frontend/src/app/core/store/**/print-list.*"
+    ],
+    "description": "test(store): characterize the print-list store",
+    "specRef": "RENDERER-AUDIT.md §1.3 «ngrx store» (print-list.*) + §1.5 «Процесът end-to-end»",
+    "tddWorkflow": true,
+    "notes": "print-list е ngrx фичата, през която минава целият RayWare поток: качване на файл, списъкът с модели на платформата, стартирането на job-овете. Зоната ти са само файловете print-list.* в core/store (actions, reducers, states, effects) — НЕ index.ts файловете (те са отровни и са чужда собственост).\n\nREDUCER-ите са чисти функции → най-лесните и най-ценните тестове: за всеки action асертирай новото състояние поле по поле, включително че НЕ променя останалите полета (immutability).\nEFFECT-ите искат `provideMockActions` + мокнати услуги. Тествай: правилният action на изхода, правилните аргументи към услугата, и пътя при ГРЕШКА (той се забравя най-често, а точно той е видимото поведение при падане на бекенда).\nSELECTOR-ите (ако има) — вход състояние → очакван изход.\n\n⚠ print-list.effects.ts съдържа навигация към рендъра (`navigate` към /print-setup, редове ~510-523 по RENDERER-AUDIT.md §1.2). Закови това поведение с тест — то е буквално „как се влиза в RayWare\" и точно то ще бъде пипано, когато апът стане самостоятелен.\n\nЧЕРВЕНИ ЛИНИИ (важат за ВСИЧКИ характеризиращи таскове):\n1. Това са ХАРАКТЕРИЗИРАЩИ тестове върху ЗАМРАЗЕН код: НЕ поправяй продукционния код, дори да видиш бъг. Документирай каквото КОДЪТ ПРАВИ ДНЕС — тестът е мрежата, под която после ще трием и ъпгрейдваме. Намериш ли истински бъг, опиши го в commit тялото като \"characterized current behaviour, looks wrong: ...\" и го ОСТАВИ да минава.\n2. НЕ пипай файл извън своята зона (`files`). Споделените TestBed мокове са собственост САМО на lane char-delta (src/app/testing/**) — не създавай такава папка в друг таск, защото два lane-а ще се бият за нея.\n3. Тестваме САМО кода, който остава (RayWare пътят по RENDERER-AUDIT.md §1.3). Ако файл от зоната ти е в списъка за триене (§1.6), ПРОПУСНИ го и го отбележи — тест за код, който ще бъде изтрит, е чиста загуба.\n4. Гейтът ти е jest subset + tsc (секунди). НЕ пускай AOT билд — той е майлстоун, 24+ минути.\n5. Jest върви САМО в контейнер през scripts\\gate\\fe-test.cmd (Angular 9 иска Node 14). НЕ пускай npm ci — volume-ът е споделен и паралелен npm ci го разваля.",
+    "verify": [
+      "scripts\\gate\\fe-test.cmd print-list",
+      "scripts\\gate\\fe-typecheck.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2130.1",
+        "phase": "RECON",
+        "action": "Прочети print-list.actions/reducers/states/effects и RENDERER-AUDIT.md §1.5. Отбележи кои effect-и викат кои услуги (те ти трябват като мокове)."
+      },
+      {
+        "id": "2130.2",
+        "phase": "RED",
+        "action": "Спекове за reducer-ите (всеки action), после за effect-ите (успех И грешка)."
+      },
+      {
+        "id": "2130.3",
+        "phase": "GREEN",
+        "action": "Зелен subset print-list. Нулева промяна по продукционен код."
+      },
+      {
+        "id": "2130.4",
+        "phase": "DONE",
+        "action": "Целият subset зелен през scripts\\gate\\fe-test.cmd print-list, tsc зелен. В commit тялото напиши КОЛКО теста добави и кои файлове остават без покритие и защо. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2140,
+    "category": "test",
+    "repo": "rwclab",
+    "lane": "char-store-platformjob",
+    "model": "easy",
+    "dependsOn": [
+      2000
+    ],
+    "files": [
+      "app/frontend/src/app/core/store/**/platform-job-renderer.*",
+      "app/frontend/src/app/core/store/**/print-job.*"
+    ],
+    "description": "test(store): characterize the platform-job-renderer and print-job stores",
+    "specRef": "RENDERER-AUDIT.md §1.3 «ngrx store» (platform-job-renderer.*, print-job.*) + §1.5",
+    "tddWorkflow": true,
+    "notes": "platform-job-renderer е състоянието на самия рендър (какво е заредено, какво се обработва, прогресът), а print-job е изпращането към принтер. Двете са в един таск, защото се четат заедно, и в отделен lane от print-list (таск 2130) — файловете не се пресичат, значи вървят паралелно.\n\nПРИОРИТЕТ: преходите на състоянието при job log събитие. Съобщението `{algorithm, platformId, status (102/200/4xx/500), errorCode, timestamp}` е ЖИВИЯТ договор между worker-а и фронтенда (rwclab-structure.md «Persistence and external contracts»). Закови: 102 = в ход, 200 = готово, 4xx/5xx = грешка с errorCode, и какво става при съобщение за ЧУЖД platformId (трябва да се игнорира).\n\nСъщо: reducer-ите поле по поле + immutability; effect-ите с успех и грешка; и поведението при ПОСЛЕДОВАТЕЛНИ съобщения за един и същ модел (ред и препокриване).\n\nЧЕРВЕНИ ЛИНИИ (важат за ВСИЧКИ характеризиращи таскове):\n1. Това са ХАРАКТЕРИЗИРАЩИ тестове върху ЗАМРАЗЕН код: НЕ поправяй продукционния код, дори да видиш бъг. Документирай каквото КОДЪТ ПРАВИ ДНЕС — тестът е мрежата, под която после ще трием и ъпгрейдваме. Намериш ли истински бъг, опиши го в commit тялото като \"characterized current behaviour, looks wrong: ...\" и го ОСТАВИ да минава.\n2. НЕ пипай файл извън своята зона (`files`). Споделените TestBed мокове са собственост САМО на lane char-delta (src/app/testing/**) — не създавай такава папка в друг таск, защото два lane-а ще се бият за нея.\n3. Тестваме САМО кода, който остава (RayWare пътят по RENDERER-AUDIT.md §1.3). Ако файл от зоната ти е в списъка за триене (§1.6), ПРОПУСНИ го и го отбележи — тест за код, който ще бъде изтрит, е чиста загуба.\n4. Гейтът ти е jest subset + tsc (секунди). НЕ пускай AOT билд — той е майлстоун, 24+ минути.\n5. Jest върви САМО в контейнер през scripts\\gate\\fe-test.cmd (Angular 9 иска Node 14). НЕ пускай npm ci — volume-ът е споделен и паралелен npm ci го разваля.",
+    "verify": [
+      "scripts\\gate\\fe-test.cmd (platform-job-renderer|print-job)",
+      "scripts\\gate\\fe-typecheck.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2140.1",
+        "phase": "RECON",
+        "action": "Прочети platform-job-renderer.* и print-job.* + RENDERER-AUDIT.md §1.5. Сравни статусите с workers/algorithms/src/worker.mjs (какво реално публикува worker-ът) — разминаване е находка за commit тялото, не за поправка."
+      },
+      {
+        "id": "2140.2",
+        "phase": "RED",
+        "action": "Спекове за reducer-ите и effect-ите, с акцент на job log преходите."
+      },
+      {
+        "id": "2140.3",
+        "phase": "GREEN",
+        "action": "Зелен subset. Нулева промяна по продукционен код."
+      },
+      {
+        "id": "2140.4",
+        "phase": "DONE",
+        "action": "Целият subset зелен през scripts\\gate\\fe-test.cmd (platform-job-renderer|print-job), tsc зелен. В commit тялото напиши КОЛКО теста добави и кои файлове остават без покритие и защо. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2150,
+    "category": "test",
+    "repo": "rwclab",
+    "lane": "char-store-support",
+    "model": "easy",
+    "dependsOn": [
+      2000
+    ],
+    "files": [
+      "app/frontend/src/app/core/store/**/defaults.*",
+      "app/frontend/src/app/core/store/**/resin.*",
+      "app/frontend/src/app/core/store/**/feature-flag.*",
+      "app/frontend/src/app/core/store/**/noms/**",
+      "app/frontend/src/app/core/store/**/info-box-visibility.*",
+      "app/frontend/src/app/core/store/**/loading-mask.*",
+      "app/frontend/src/app/core/store/**/appliance-profile.*",
+      "app/frontend/src/app/core/store/**/appliance-platform.effects.ts"
+    ],
+    "description": "test(store): characterize the defaults, resin, noms and feature-flag stores",
+    "specRef": "RENDERER-AUDIT.md §1.3 «ngrx store» (defaults, resin, register, noms, feature-flag, info-box-visibility, loading-mask)",
+    "tddWorkflow": true,
+    "notes": "Поддържащите ngrx фичи, без които рендърът не се конфигурира: `defaults` (подразбиращи се избори), `resin` (смоли), `noms` (номенклатури: printer-type, layer-thickness, treatment-type), `feature-flag`, `appliance-profile` + `appliance-platform.effects`, `info-box-visibility`, `loading-mask`.\n\nОСОБЕНО ВАЖНО: `feature-flag` — структурният reference казва, че LaunchDarkly е външен SaaS на SprintRay и ще бъде заменен с локален файл с флагове. Затова закови ТОЧНО днешното поведение: какво се случва при липсващ флаг, при null, и кои са подразбиращите се стойности (core/constants/default-feature-flags). Тези тестове са спецификацията, по която после ще се пише локалният заместител.\n\n`loading-mask` и `info-box-visibility` са прости булеви/броячни редюсъри — бързи тестове, пълно покритие.\nЗа noms: асертирай и сортирането/филтрирането, ако има такова — то се вижда директно в UI списъците.\n\nЧЕРВЕНИ ЛИНИИ (важат за ВСИЧКИ характеризиращи таскове):\n1. Това са ХАРАКТЕРИЗИРАЩИ тестове върху ЗАМРАЗЕН код: НЕ поправяй продукционния код, дори да видиш бъг. Документирай каквото КОДЪТ ПРАВИ ДНЕС — тестът е мрежата, под която после ще трием и ъпгрейдваме. Намериш ли истински бъг, опиши го в commit тялото като \"characterized current behaviour, looks wrong: ...\" и го ОСТАВИ да минава.\n2. НЕ пипай файл извън своята зона (`files`). Споделените TestBed мокове са собственост САМО на lane char-delta (src/app/testing/**) — не създавай такава папка в друг таск, защото два lane-а ще се бият за нея.\n3. Тестваме САМО кода, който остава (RayWare пътят по RENDERER-AUDIT.md §1.3). Ако файл от зоната ти е в списъка за триене (§1.6), ПРОПУСНИ го и го отбележи — тест за код, който ще бъде изтрит, е чиста загуба.\n4. Гейтът ти е jest subset + tsc (секунди). НЕ пускай AOT билд — той е майлстоун, 24+ минути.\n5. Jest върви САМО в контейнер през scripts\\gate\\fe-test.cmd (Angular 9 иска Node 14). НЕ пускай npm ci — volume-ът е споделен и паралелен npm ci го разваля.",
+    "verify": [
+      "scripts\\gate\\fe-test.cmd (defaults|resin|feature-flag|noms|info-box|loading-mask|appliance-profile)",
+      "scripts\\gate\\fe-typecheck.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2150.1",
+        "phase": "RECON",
+        "action": "Прочети целевите store файлове + core/constants/default-feature-flags. Отбележи кои effect-и удрят HTTP услуги (мокове)."
+      },
+      {
+        "id": "2150.2",
+        "phase": "RED",
+        "action": "Спекове за всеки reducer (action по action) и за effect-ите (успех и грешка)."
+      },
+      {
+        "id": "2150.3",
+        "phase": "GREEN",
+        "action": "Зелен subset. Нулева промяна по продукционен код."
+      },
+      {
+        "id": "2150.4",
+        "phase": "DONE",
+        "action": "Целият subset зелен през scripts\\gate\\fe-test.cmd (defaults|resin|feature-flag|noms|info-box|loading-mask|appliance-profile), tsc зелен. В commit тялото напиши КОЛКО теста добави и кои файлове остават без покритие и защо. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2160,
+    "category": "test",
+    "repo": "rwclab",
+    "lane": "char-services-pj",
+    "model": "heavy",
+    "dependsOn": [
+      2000
+    ],
+    "files": [
+      "app/frontend/src/app/core/services/platform-job.service.ts",
+      "app/frontend/src/app/core/services/platform-job-updates.service.ts",
+      "app/frontend/src/app/core/services/platform-job-callbacks.service.ts",
+      "app/frontend/src/app/core/services/print-list.service.ts",
+      "app/frontend/src/app/core/services/printer-platform.service.ts",
+      "app/frontend/src/app/core/services/s3-file.service.ts",
+      "app/frontend/src/app/core/services/platform-job*.spec.ts"
+    ],
+    "description": "test(services): characterize the platform-job and print-list http contracts",
+    "specRef": "RENDERER-AUDIT.md §1.4 «Извиквания към бекенда» + rwclab-structure.md «Persistence and external contracts»",
+    "tddWorkflow": true,
+    "notes": "ТОВА Е ДОГОВОРЪТ С БЕКЕНДА и най-ценните тестове в целия board: всеки път, всеки payload, всеки query параметър. RENDERER-AUDIT.md §1.4 изброява пътищата (всички в platform-job.service.ts започват с `platform-job`). Сбъркан път не гърми при компилация — умира тихо по време на работа.\n\nФОРМА (HttpClientTestingModule + HttpTestingController): за всеки публичен метод асертирай (1) ТОЧНИЯ URL, (2) HTTP метода, (3) тялото на заявката поле по поле, (4) хедърите, ако услугата слага такива, (5) как се мапва отговорът, (6) какво става при 4xx/5xx.\n\n`s3-file.service` работи с presigned URL-и (PUT за качване, GET за сваляне) — закови как сглобява ключовете и как качва, защото точно този поток е проверен end-to-end срещу емулатора (scripts/e2e.mjs, зелен 13.11.2026).\n`platform-job-updates.service` и `platform-job-callbacks.service` носят живите обновявания — закови кои callback-и се викат при кой статус.\n\nАко вече има .spec.ts до някоя от тези услуги, ДОПЪЛНИ го, не го пренаписвай.\n\nЧЕРВЕНИ ЛИНИИ (важат за ВСИЧКИ характеризиращи таскове):\n1. Това са ХАРАКТЕРИЗИРАЩИ тестове върху ЗАМРАЗЕН код: НЕ поправяй продукционния код, дори да видиш бъг. Документирай каквото КОДЪТ ПРАВИ ДНЕС — тестът е мрежата, под която после ще трием и ъпгрейдваме. Намериш ли истински бъг, опиши го в commit тялото като \"characterized current behaviour, looks wrong: ...\" и го ОСТАВИ да минава.\n2. НЕ пипай файл извън своята зона (`files`). Споделените TestBed мокове са собственост САМО на lane char-delta (src/app/testing/**) — не създавай такава папка в друг таск, защото два lane-а ще се бият за нея.\n3. Тестваме САМО кода, който остава (RayWare пътят по RENDERER-AUDIT.md §1.3). Ако файл от зоната ти е в списъка за триене (§1.6), ПРОПУСНИ го и го отбележи — тест за код, който ще бъде изтрит, е чиста загуба.\n4. Гейтът ти е jest subset + tsc (секунди). НЕ пускай AOT билд — той е майлстоун, 24+ минути.\n5. Jest върви САМО в контейнер през scripts\\gate\\fe-test.cmd (Angular 9 иска Node 14). НЕ пускай npm ci — volume-ът е споделен и паралелен npm ci го разваля.",
+    "verify": [
+      "scripts\\gate\\fe-test.cmd core/services/(platform-job|print-list|printer-platform|s3-file)",
+      "scripts\\gate\\fe-typecheck.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2160.1",
+        "phase": "RECON",
+        "action": "Прочети 6-те услуги И RENDERER-AUDIT.md §1.4 (там са изброени пътищата). Сравни с реалните контролери в app/backend/Web/Controllers/PrintList/* — разминаване между фронтенд път и бекенд route е находка за commit тялото."
+      },
+      {
+        "id": "2160.2",
+        "phase": "RED",
+        "action": "Спекове с HttpTestingController: точен URL, метод, тяло, мапване, грешки."
+      },
+      {
+        "id": "2160.3",
+        "phase": "GREEN",
+        "action": "Зелен subset. Нулева промяна по продукционен код."
+      },
+      {
+        "id": "2160.4",
+        "phase": "DONE",
+        "action": "Целият subset зелен през scripts\\gate\\fe-test.cmd core/services/(platform-job|print-list|printer-platform|s3-file), tsc зелен. В commit тялото напиши КОЛКО теста добави и кои файлове остават без покритие и защо. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2170,
+    "category": "test",
+    "repo": "rwclab",
+    "lane": "char-services-common",
+    "model": "heavy",
+    "dependsOn": [
+      2000
+    ],
+    "files": [
+      "app/frontend/src/app/core/services/common/**",
+      "app/frontend/src/app/core/interceptors/**"
+    ],
+    "description": "test(services): characterize the api, appsync and aws-http layer",
+    "specRef": "RENDERER-AUDIT.md §1.3 «Core услуги» (common/*) + §2.4 «AppSync схема» + rwclab-structure.md «Persistence and external contracts»",
+    "tddWorkflow": true,
+    "notes": "Транспортният слой под всичко: `api`, `apig`, `appsync`, `aws-http-api`, `auth`, `auth0`, `auth-helper`, `translation`, `toaster`, `http-object` + `interceptors/loading.interceptor.service.ts`.\n\nНАЙ-ВАЖНОТО: `appsync.service` държи субскрипцията `subscribeToPlatformJobLogs` — това е каналът, по който рендърът научава, че алгоритъм е свършил. Структурният reference казва, че AppSync ЩЕ БЪДЕ ЗАМЕНЕН (емулаторът няма data plane; заместникът е SNS → SQS → WebSocket gateway). Затова закови ТОЧНО формата на съобщението и как услугата го разпраща навътре — тези тестове са спецификацията на бъдещия WebSocket заместител. Мокни самия AppSync клиент; НЕ пускай мрежа.\n\n⚠ `apig.service.ts:5` импортира `environment.dev` ДИРЕКТНО (не през environment индекса) — закови го с тест, защото е точно капанът, който ще гръмне при подреждането на средите.\n`auth`/`auth0`/`auth-helper`: Auth0 е недостъпен (чужд SaaS). Тествай САМО чистата логика — парсване на токен, проверка на роли, изтичане — с подадени наготово токени. ⛔ Никакви истински ключове в тестове; ползвай явно фалшиви стойности.\n`loading.interceptor`: закови кога вдига и кога пуска маската, включително при грешка (иначе маската увисва).\n\n⛔ НУЛА мрежа в тестовете: всичко през HttpClientTestingModule или мок. Червена линия на репото.\n\nЧЕРВЕНИ ЛИНИИ (важат за ВСИЧКИ характеризиращи таскове):\n1. Това са ХАРАКТЕРИЗИРАЩИ тестове върху ЗАМРАЗЕН код: НЕ поправяй продукционния код, дори да видиш бъг. Документирай каквото КОДЪТ ПРАВИ ДНЕС — тестът е мрежата, под която после ще трием и ъпгрейдваме. Намериш ли истински бъг, опиши го в commit тялото като \"characterized current behaviour, looks wrong: ...\" и го ОСТАВИ да минава.\n2. НЕ пипай файл извън своята зона (`files`). Споделените TestBed мокове са собственост САМО на lane char-delta (src/app/testing/**) — не създавай такава папка в друг таск, защото два lane-а ще се бият за нея.\n3. Тестваме САМО кода, който остава (RayWare пътят по RENDERER-AUDIT.md §1.3). Ако файл от зоната ти е в списъка за триене (§1.6), ПРОПУСНИ го и го отбележи — тест за код, който ще бъде изтрит, е чиста загуба.\n4. Гейтът ти е jest subset + tsc (секунди). НЕ пускай AOT билд — той е майлстоун, 24+ минути.\n5. Jest върви САМО в контейнер през scripts\\gate\\fe-test.cmd (Angular 9 иска Node 14). НЕ пускай npm ci — volume-ът е споделен и паралелен npm ci го разваля.",
+    "verify": [
+      "scripts\\gate\\fe-test.cmd core/(services/common|interceptors)",
+      "scripts\\gate\\fe-typecheck.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2170.1",
+        "phase": "RECON",
+        "action": "Прочети core/services/common/** и interceptors/**. За appsync сравни формата на съобщението с workers/algorithms/src/worker.mjs и RENDERER-AUDIT.md §2.4."
+      },
+      {
+        "id": "2170.2",
+        "phase": "RED",
+        "action": "Спекове с HttpClientTestingModule/мокове: договори, грешки, маска."
+      },
+      {
+        "id": "2170.3",
+        "phase": "GREEN",
+        "action": "Зелен subset. Нулева промяна по продукционен код."
+      },
+      {
+        "id": "2170.4",
+        "phase": "DONE",
+        "action": "Целият subset зелен през scripts\\gate\\fe-test.cmd core/(services/common|interceptors), tsc зелен. В commit тялото напиши КОЛКО теста добави и кои файлове остават без покритие и защо. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2180,
+    "category": "test",
+    "repo": "rwclab",
+    "lane": "char-shared",
+    "model": "easy",
+    "dependsOn": [
+      2000
+    ],
+    "files": [
+      "app/frontend/src/app/shared/components/icon-btn/**",
+      "app/frontend/src/app/shared/components/timer-button/**",
+      "app/frontend/src/app/shared/components/ftue-tooltip/**",
+      "app/frontend/src/app/shared/components/forms/**",
+      "app/frontend/src/app/shared/directives/drag-drop/**",
+      "app/frontend/src/app/shared/services/toast-v2.service.ts",
+      "app/frontend/src/app/shared/models/**"
+    ],
+    "description": "test(shared): characterize the shared components the renderer keeps",
+    "specRef": "RENDERER-AUDIT.md §1.3 «Shared» (компоненти, директива, pipe-ове, toast-v2)",
+    "tddWorkflow": true,
+    "notes": "Само онова от shared/, което рендърът НАИСТИНА ползва по RENDERER-AUDIT.md §1.3: компонентите `icon-btn`, `timer-button`, `ftue-tooltip`, формите `forms/f-file`, `f-base`, `abstract-value-accessor`, директивата `drag-drop/droppable`, `toast-v2.service` и моделите `form-file`, `toastEvent`, `f-number-slider-steps`.\n\n⛔ НЕ пипай shared/pipes/** — 5-те pipe спека там са собственост на таск 2000 (миграцията към Jest). Двоен собственик на един файл = merge конфликт.\n⛔ НЕ пипай shared/libs/** (DRACO-loader, OrbitControls, TransformControls, OBJLoader, STLExporter) — това е вендорен three.js код, не наш; тест за него не документира НАШЕ поведение.\n⛔ НЕ пипай shared/components/model-viewer и shared/services/stl-loader.service.ts — те СЕ ТРИЯТ (таск 2300).\n\nФОРМА: TestBed с реален компонент + проверка на рендерирания DOM (`fixture.nativeElement.querySelector`), input-и → изход, emit-ване на output-и при цъкане. За `droppable` директивата — drag/drop събития и какво emit-ва. За `f-file` — избор на файл, валидация, стойност към формата (ControlValueAccessor договорът).\n\nЧЕРВЕНИ ЛИНИИ (важат за ВСИЧКИ характеризиращи таскове):\n1. Това са ХАРАКТЕРИЗИРАЩИ тестове върху ЗАМРАЗЕН код: НЕ поправяй продукционния код, дори да видиш бъг. Документирай каквото КОДЪТ ПРАВИ ДНЕС — тестът е мрежата, под която после ще трием и ъпгрейдваме. Намериш ли истински бъг, опиши го в commit тялото като \"characterized current behaviour, looks wrong: ...\" и го ОСТАВИ да минава.\n2. НЕ пипай файл извън своята зона (`files`). Споделените TestBed мокове са собственост САМО на lane char-delta (src/app/testing/**) — не създавай такава папка в друг таск, защото два lane-а ще се бият за нея.\n3. Тестваме САМО кода, който остава (RayWare пътят по RENDERER-AUDIT.md §1.3). Ако файл от зоната ти е в списъка за триене (§1.6), ПРОПУСНИ го и го отбележи — тест за код, който ще бъде изтрит, е чиста загуба.\n4. Гейтът ти е jest subset + tsc (секунди). НЕ пускай AOT билд — той е майлстоун, 24+ минути.\n5. Jest върви САМО в контейнер през scripts\\gate\\fe-test.cmd (Angular 9 иска Node 14). НЕ пускай npm ci — volume-ът е споделен и паралелен npm ci го разваля.",
+    "verify": [
+      "scripts\\gate\\fe-test.cmd shared/(components|directives|services)",
+      "scripts\\gate\\fe-typecheck.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2180.1",
+        "phase": "RECON",
+        "action": "Прочети целевите компоненти/директива/услуга и виж КОЙ ги ползва в app-modules/delta — приоритет на реално ползваните входове и изходи."
+      },
+      {
+        "id": "2180.2",
+        "phase": "RED",
+        "action": "TestBed спекове: DOM, input/output, ControlValueAccessor."
+      },
+      {
+        "id": "2180.3",
+        "phase": "GREEN",
+        "action": "Зелен subset. Нулева промяна по продукционен код."
+      },
+      {
+        "id": "2180.4",
+        "phase": "DONE",
+        "action": "Целият subset зелен през scripts\\gate\\fe-test.cmd shared/(components|directives|services), tsc зелен. В commit тялото напиши КОЛКО теста добави и кои файлове остават без покритие и защо. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2190,
+    "category": "test",
+    "repo": "rwclab",
+    "lane": "char-delta",
+    "model": "heavy",
+    "dependsOn": [
+      2000
+    ],
+    "files": [
+      "app/frontend/src/app/app-modules/delta/components/print-setup-page/**",
+      "app/frontend/src/app/app-modules/delta/components/renderer/**",
+      "app/frontend/src/app/app-modules/delta/components/renderer-progress/**",
+      "app/frontend/src/app/app-modules/delta/components/platform-setup/**",
+      "app/frontend/src/app/testing/**"
+    ],
+    "description": "test(delta): characterize the print setup page and renderer host",
+    "specRef": "RENDERER-AUDIT.md §1.2 «Точки на влизане» и §1.3 «Delta модулът»",
+    "tddWorkflow": true,
+    "notes": "Влизането в RayWare: `/print-setup` → `PrintSetupPageComponent`, който хоства `<delta-renderer>` редом с `<platform-setup>` (print-setup-page.component.html:2) и му подава `fetchModel` (print-setup-page.component.ts:65-80). Селекторът `delta-renderer` е в renderer.component.ts:112.\n\nТОЗИ ТАСК СЪЗДАВА СПОДЕЛЕНИЯ TESTBED ХАРНЕС `src/app/testing/**` и той е ДОГОВОР за таск 2191: мок store (ngrx `provideMockStore` с реалистично начално състояние), моки на platform-job/print-list услугите, мок на три.js сцената и helper за сглобяване на delta компонент. Напиши го чисто и го опиши в commit тялото — 2191 стъпва директно отгоре. Никой друг lane НЕ пипа src/app/testing/**.\n\nWEBGL: `renderer.component` почти сигурно създава реален WebGLRenderer върху canvas — в jsdom това НЕ работи. Затова: тествай жизнения цикъл и входовете/изходите с мокнат рендърер (spy на класа/услугата), а не истинско рисуване. Асертирай: инициализация, реакция на нов модел, прогрес събития, почистване при destroy (утечките тук са реален риск при по-късния ъпгрейд).\n`renderer-progress` е почти чист UI → пълно покритие на състоянията.\n`platform-setup` — табовете (enum `platform-setup-tab`) и превключването между тях.\n\nЧЕРВЕНИ ЛИНИИ (важат за ВСИЧКИ характеризиращи таскове):\n1. Това са ХАРАКТЕРИЗИРАЩИ тестове върху ЗАМРАЗЕН код: НЕ поправяй продукционния код, дори да видиш бъг. Документирай каквото КОДЪТ ПРАВИ ДНЕС — тестът е мрежата, под която после ще трием и ъпгрейдваме. Намериш ли истински бъг, опиши го в commit тялото като \"characterized current behaviour, looks wrong: ...\" и го ОСТАВИ да минава.\n2. НЕ пипай файл извън своята зона (`files`). Споделените TestBed мокове са собственост САМО на lane char-delta (src/app/testing/**) — не създавай такава папка в друг таск, защото два lane-а ще се бият за нея.\n3. Тестваме САМО кода, който остава (RayWare пътят по RENDERER-AUDIT.md §1.3). Ако файл от зоната ти е в списъка за триене (§1.6), ПРОПУСНИ го и го отбележи — тест за код, който ще бъде изтрит, е чиста загуба.\n4. Гейтът ти е jest subset + tsc (секунди). НЕ пускай AOT билд — той е майлстоун, 24+ минути.\n5. Jest върви САМО в контейнер през scripts\\gate\\fe-test.cmd (Angular 9 иска Node 14). НЕ пускай npm ci — volume-ът е споделен и паралелен npm ci го разваля.",
+    "verify": [
+      "scripts\\gate\\fe-test.cmd delta/components/(print-setup-page|renderer|renderer-progress|platform-setup)",
+      "scripts\\gate\\fe-typecheck.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2190.1",
+        "phase": "RECON",
+        "action": "Прочети 4-те компонента + delta.routing.ts (guard-овете AuthGuard/RoleGuard/CanDeactivateGuard) и RENDERER-AUDIT.md §1.2. Установи точно къде се създава WebGL контекст — това определя какво мокваш."
+      },
+      {
+        "id": "2190.2",
+        "phase": "RED",
+        "action": "Построй src/app/testing/** харнеса и спековете. Червено само при сбъркано очакване."
+      },
+      {
+        "id": "2190.3",
+        "phase": "GREEN",
+        "action": "Зелен subset. Нулева промяна по продукционен код."
+      },
+      {
+        "id": "2190.4",
+        "phase": "DONE",
+        "action": "Целият subset зелен през scripts\\gate\\fe-test.cmd delta/components/(print-setup-page|renderer|renderer-progress|platform-setup), tsc зелен. В commit тялото напиши КОЛКО теста добави и кои файлове остават без покритие и защо. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2191,
+    "category": "test",
+    "repo": "rwclab",
+    "lane": "char-delta",
+    "model": "heavy",
+    "dependsOn": [
+      2000,
+      2190
+    ],
+    "files": [
+      "app/frontend/src/app/app-modules/delta/components/platform-model-list/**",
+      "app/frontend/src/app/app-modules/delta/components/platform-print-preview/**",
+      "app/frontend/src/app/app-modules/delta/components/platform-print-confirmation/**",
+      "app/frontend/src/app/app-modules/delta/components/platform-file-download/**",
+      "app/frontend/src/app/app-modules/delta/components/print-check-error/**",
+      "app/frontend/src/app/app-modules/delta/components/base-platform/**",
+      "app/frontend/src/app/app-modules/delta/components/feedback/**"
+    ],
+    "description": "test(delta): characterize the model list, preview and confirmation components",
+    "specRef": "RENDERER-AUDIT.md §1.3 «Delta модулът» (ключовите компоненти)",
+    "tddWorkflow": true,
+    "notes": "Втората половина на delta компонентите: `platform-model-list`, `platform-print-preview`, `platform-print-confirmation`, `platform-file-download`, `print-check-error`, `base-platform`, `feedback`.\n\ndependsOn [2190] Е НАРОЧНО и е единствената реална серилизация в тестовата фаза: таск 2190 създава `src/app/testing/**` харнеса (мок store, моки на услугите, мок сцена) и ти трябва РЕАЛНИЯТ merge-нат код, не мок на мока. Преизползвай го; не си прави втори паралелен харнес.\n\nПРИОРИТЕТ: `platform-model-list` е списъкът с модели и мястото, където се вика cloud-drive modal-ът (platform-model-list.component.ts:71,1104 по RENDERER-AUDIT.md) — закови избора на модел, добавянето и махането. `platform-print-confirmation` е „Confirm changes\", тоест точката, от която тръгва EditPlatformJob потокът (същият, който e2e-то кара зелено срещу емулатора) — закови какво точно се emit-ва при потвърждение, включително cutHeight при plane cut.\n`feedback` ОСТАВА (delta е негов собственик), но внимавай: `common/version-2/treatment-feedback-v2` и `+master-dashboard` го импортират ОТВЪН — тези двата се трият по-късно (таскове 2230 и 2270). Твоят тест документира собственото му поведение, не чуждите потребители.\n\nЧЕРВЕНИ ЛИНИИ (важат за ВСИЧКИ характеризиращи таскове):\n1. Това са ХАРАКТЕРИЗИРАЩИ тестове върху ЗАМРАЗЕН код: НЕ поправяй продукционния код, дори да видиш бъг. Документирай каквото КОДЪТ ПРАВИ ДНЕС — тестът е мрежата, под която после ще трием и ъпгрейдваме. Намериш ли истински бъг, опиши го в commit тялото като \"characterized current behaviour, looks wrong: ...\" и го ОСТАВИ да минава.\n2. НЕ пипай файл извън своята зона (`files`). Споделените TestBed мокове са собственост САМО на lane char-delta (src/app/testing/**) — не създавай такава папка в друг таск, защото два lane-а ще се бият за нея.\n3. Тестваме САМО кода, който остава (RayWare пътят по RENDERER-AUDIT.md §1.3). Ако файл от зоната ти е в списъка за триене (§1.6), ПРОПУСНИ го и го отбележи — тест за код, който ще бъде изтрит, е чиста загуба.\n4. Гейтът ти е jest subset + tsc (секунди). НЕ пускай AOT билд — той е майлстоун, 24+ минути.\n5. Jest върви САМО в контейнер през scripts\\gate\\fe-test.cmd (Angular 9 иска Node 14). НЕ пускай npm ci — volume-ът е споделен и паралелен npm ci го разваля.",
+    "verify": [
+      "scripts\\gate\\fe-test.cmd delta/components",
+      "scripts\\gate\\fe-typecheck.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2191.1",
+        "phase": "RECON",
+        "action": "Прочети 7-те компонента И src/app/testing/** от таск 2190 (вече merge-нат). Виж RENDERER-AUDIT.md §1.5 за това кой компонент къде е в потока."
+      },
+      {
+        "id": "2191.2",
+        "phase": "RED",
+        "action": "Напиши спековете върху съществуващия харнес. Разшириш ли харнеса, допълвай го адитивно — 2190 вече има тестове върху него."
+      },
+      {
+        "id": "2191.3",
+        "phase": "GREEN",
+        "action": "Зелен целият subset delta/components (твоите + тези от 2190). Нулева промяна по продукционен код."
+      },
+      {
+        "id": "2191.4",
+        "phase": "DONE",
+        "action": "Зелен subset + tsc. В commit тялото: брой нови тестове и какво остава непокрито. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2200,
+    "category": "feature",
+    "repo": "rwclab",
+    "lane": "standalone-entry",
+    "model": "heavy",
+    "dependsOn": [
+      2100,
+      2110,
+      2120,
+      2121,
+      2130,
+      2140,
+      2150,
+      2160,
+      2170,
+      2180,
+      2190,
+      2191
+    ],
+    "files": [
+      "app/frontend/src/app/core/guards/**",
+      "app/frontend/src/app/core/services/common/auth.service.ts",
+      "app/frontend/src/app/core/services/common/auth0.service.ts",
+      "app/frontend/src/app/core/services/common/auth-helper.service.ts",
+      "app/frontend/src/app/core/services/store/auth*",
+      "app/frontend/src/environments/**"
+    ],
+    "description": "feat(auth): local stub session so the renderer opens without Auth0",
+    "specRef": "rwclab-structure.md «Persistence and external contracts» (Auth0 → local stub) + RENDERER-AUDIT.md §1.2 (guard-овете на /print-setup)",
+    "tddWorkflow": true,
+    "notes": "ТОЗИ ТАСК Е ПРЕДПОСТАВКА ЗА ЦЕЛТА НА BOARD-А и затова е пръв в триещата фаза.\n\nПРОБЛЕМЪТ: `/print-setup` е зад `AuthGuard` + `RoleGuard` (doctor роля) + `CanDeactivateGuard` (delta.routing.ts:10-21). Auth0 tenant-ът е на SprintRay и е НЕДОСТЪПЕН. Тоест дори да пренасочим апа към рендъра (таск 2210), той ще отскача към login и RayWare няма да се отвори. Без този таск „пускаш апа и зарежда само RayWare\" е невъзможно.\n\nРЕШЕНИЕ: локална stub сесия зад флаг в `src/environments/environment*.ts` (например `useLocalAuthStub`). При включен флаг `AuthService` връща наготово потребител с doctor роля и валиден (фалшив) токен, така че AuthGuard и RoleGuard пускат. При изключен флаг поведението остава ТОЧНО както днес.\n\n⛔ НЕ ТРИЙ guard-овете и НЕ ги прави no-op. Те са структурата, в която после ще влезе истинска автентикация; махнеш ли ги, губим мястото ѝ. Флагът пренасочва ИЗТОЧНИКА на сесията, не проверката.\n⛔ НЕ пипай Auth0 конфигурацията и НЕ слагай истински ключове — всички чувствителни стойности остават `<set-locally>` (rwclab-structure.md RED LINES §2).\n⚠ `apig.service.ts:5` импортира `environment.dev` ДИРЕКТНО, не през индекса (RENDERER-AUDIT.md §1.3) — добавиш ли поле в средите, добави го във ВСИЧКИТЕ ЧЕТИРИ файла, иначе билдът на друга конфигурация пада.\n\nТЕСТОВЕ (в същия commit — поведението се мени): AuthGuard пуска при включен stub и не пуска при изключен; RoleGuard вижда doctor ролята от stub-а; AuthService връща stub потребителя само при вдигнат флаг. Таск 2170 вече е характеризирал чистата логика на auth-helper — тези спекове трябва да продължат да минават НЕПРОМЕНЕНИ (ако се чупят, значи си сменил и логиката на парсване, което не е в обхвата).",
+    "verify": [
+      "scripts\\gate\\fe-test.cmd",
+      "scripts\\gate\\fe-typecheck.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2200.1",
+        "phase": "RECON",
+        "action": "Прочети core/guards/** (auth, role, can-deactivate), core/services/common/auth*.ts, core/services/store/auth*, delta.routing.ts и четирите src/environments/*.ts. Виж и спековете от таск 2170 — те заковават сегашната auth логика."
+      },
+      {
+        "id": "2200.2",
+        "phase": "RED",
+        "action": "Напиши спековете за stub-а (включен/изключен флаг). Червено."
+      },
+      {
+        "id": "2200.3",
+        "phase": "GREEN",
+        "action": "Вкарай флага и stub сесията. Зелено, БЕЗ да променяш спековете от 2170."
+      },
+      {
+        "id": "2200.4",
+        "phase": "DONE",
+        "action": "Целият jest suite + tsc зелени. В commit тялото: как се включва stub-ът и какво ТОЧНО не покрива (истинска автентикация). Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2210,
+    "category": "feature",
+    "repo": "rwclab",
+    "lane": "standalone-entry",
+    "model": "heavy",
+    "dependsOn": [
+      2200
+    ],
+    "files": [
+      "app/frontend/src/app/app.routing.ts",
+      "app/frontend/src/app/components/common/header/**",
+      "app/frontend/src/app/app.component.ts",
+      "app/frontend/src/app/components/app/**"
+    ],
+    "description": "feat(app): boot straight into the RayWare print setup",
+    "specRef": "RENDERER-AUDIT.md §1.2 «Точки на влизане» + §1.6 + rwclab-structure.md «Goal of the board»",
+    "tddWorkflow": true,
+    "notes": "ТОВА Е ВИДИМАТА ЦЕЛ НА BOARD-А: пускаш апа и той отваря RayWare, а не Design Service с таб RayWare вътре.\n\nДНЕС: `app.routing.ts` праща `path: ''` към `login`, а RayWare е таб в хедъра (`routerLink=\"/print-setup\"`, header.component.html:102,405). Хедърът носи 18 рута към зъболекарските модули (treatments, cloud-design, dashboard/printer, devices, admin/*, sync-box, master-dashboard, campaigns, selective-updater, factory, customer-support, fleet-management, notifications, inbox).\n\nЗАДАЧА:\n1. `path: ''` → redirect към `print-setup` (stub сесията от таск 2200 вече пуска guard-овете).\n2. От хедъра махни ВСИЧКИ навигационни елементи към умиращите модули. ОСТАВА: логото (сочещо print-setup), профилното меню и изходът. Остава и cloud-drive modal-ът — той е v1 и рендърът го ползва (`SetCloudDriveFilesAction`, header.component.ts:240-261 → navigate в print-list.effects.ts:510-523).\n⚠ `header.component.ts` ИМПОРТИРА `app/app-modules/cloud-drive-v2` — среж тази връзка СЕГА и остави само v1 `CloudDriveModalComponent`. Иначе таск 2280 (който трие cloud-drive-v2) ще изчерви tsc, а хедърът е извън неговата зона.\n3. `app.component.ts:99` пингва websocket, докато си на `/print-setup` — сега това е постоянното състояние; провери, че не се пингва двойно.\n\n⛔ НЕ трий рутовете на умиращите модули в този таск — те са работа на таск 2220 (DETACH), който пипа app.module.ts и store индексите в ЕДИН commit. Ти пипаш САМО подразбиращия се рут и хедъра. (app.routing.ts е споделен между 2210 и 2220, затова са в един lane, последователно.)\n\nТЕСТОВЕ: рутерът при `''` води до print-setup; хедърът рендира само позволените елементи (асертирай по DOM, че НЯМА линк към /treatments, /admin/users, /dashboard/printer и т.н.); cloud-drive v1 modal-ът още се отваря от хедъра.",
+    "verify": [
+      "scripts\\gate\\fe-test.cmd",
+      "scripts\\gate\\fe-typecheck.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2210.1",
+        "phase": "RECON",
+        "action": "Прочети app.routing.ts, header.component.{ts,html}, app.component.ts и RENDERER-AUDIT.md §1.2. Изброй точно кои navigation елементи остават и кои падат."
+      },
+      {
+        "id": "2210.2",
+        "phase": "RED",
+        "action": "Напиши спековете (подразбиращ се рут + DOM на хедъра + cloud-drive v1). Червено."
+      },
+      {
+        "id": "2210.3",
+        "phase": "GREEN",
+        "action": "Пренасочи рута, изчисти хедъра, среж cloud-drive-v2 импорта. Зелено."
+      },
+      {
+        "id": "2210.4",
+        "phase": "DONE",
+        "action": "Целият jest suite + tsc зелени. В commit тялото: кои линкове са махнати и че cloud-drive v1 остава. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2220,
+    "category": "refactor",
+    "repo": "rwclab",
+    "lane": "standalone-entry",
+    "model": "heavy",
+    "dependsOn": [
+      2210
+    ],
+    "files": [
+      "app/frontend/src/app/app.module.ts",
+      "app/frontend/src/app/app.routing.ts",
+      "app/frontend/src/app/core/store/reducers/index.ts",
+      "app/frontend/src/app/core/store/states/index.ts",
+      "app/frontend/src/app/core/store/effects/**/index.ts"
+    ],
+    "description": "refactor(app): detach every Design Service module from routing and the store",
+    "specRef": "RENDERER-AUDIT.md §1.1 («ако просто изтриеш папка, билдът ще се счупи») и §1.6 + rwclab-structure.md «POISON LIST»",
+    "tddWorkflow": false,
+    "notes": "НАЙ-ВАЖНИЯТ СТРУКТУРЕН ТАСК В BOARD-А. Прочети внимателно защо съществува.\n\nСтруктурният reference предупреждава, че триенето на модули е СЕРИЙНО, защото всяко триене пипа едни и същи отровни файлове (app.module.ts, app.routing.ts, store индексите) — тоест 7 триещи таска биха чакали един друг. Този таск къса този възел: ОТКАЧА всички умиращи модули от апликацията в ЕДИН commit, а самите папки ОСТАВАТ на диска, вече никому ненужни. След него 6-те триещи таска пипат само СВОИ директории и вървят ПАРАЛЕЛНО.\n\nЗАДАЧА — махни от отровните файлове всяка следа от модулите в RENDERER-AUDIT.md §1.6:\n• `app.routing.ts`: изтрий lazy рутовете към version-2, +inbox, administration, dashboard, devices, version-2/patients (рут `cloud-design`), treatments, registration, user-profile, +sync-box, +master-dashboard, +campaigns, +selective-updater, notification, support, +customer-support, fleet-management, +factory. ОСТАВАТ: `''` → print-setup (таск 2210), `print-setup`, `login`, `error`, `not-authorized` и wildcard-ът, ако има такъв.\n• `app.module.ts`: махни eager импорта на `./app-modules/cloud-drive-v2` (той е единственият умиращ модул, импортиран там) и всяка друга декларация/провайдър на умиращ модул.\n• `core/store/reducers/index.ts`, `core/store/states/index.ts`, `core/store/effects/**/index.ts`: махни регистрациите на мъртвите фичи — messenger, treatments/template-treatment, new-treatment, notification, picture, fleet-mgmt, integration, user-profile, cloud-drive, printer-status (ПРОВЕРИ!), preference, route, default-selections (ПРОВЕРИ!).\n⛔ ОСТАВАТ ЗАДЪЛЖИТЕЛНО (RENDERER-AUDIT.md §1.3): print-list, platform-job-renderer, print-job, appliance-profile, defaults, resin, **register**, noms/*, feature-flag, auth, info-box-visibility, loading-mask, inbox.states, smart-table редюсърите.\n⚠ `register` звучи като registration модула, но е ЗАПАЗЕНА store фича — не я бъркай.\n\nКАК СЕ ПРОВЕРЯВА: tsc трябва да е ЗЕЛЕН след откачането, въпреки че папките още стоят. Това е нормално — осиротелите модули още се компилират сами за себе си. Ако tsc почервенее, значи си махнал нещо ЗАПАЗЕНО.\nВТОРА ПРОВЕРКА (задължителна, в DONE стъпката): `scripts\\gate\\fe-build.cmd ci` — AOT билдът доказва, че откачените lazy модули вече НЕ влизат в бъндъла. Това е единственият триещ таск с билд в гейта, защото точно тук се решава дали апът е самостоятелен.",
+    "verify": [
+      "scripts\\gate\\fe-typecheck.cmd",
+      "scripts\\gate\\fe-test.cmd",
+      "scripts\\gate\\fe-build.cmd ci"
+    ],
+    "steps": [
+      {
+        "id": "2220.1",
+        "phase": "RECON",
+        "action": "Прочети app.routing.ts, app.module.ts, core/store/{reducers,states,effects}/index.ts и RENDERER-AUDIT.md §1.3 (запазеното) срещу §1.6 (отпадащото). Направи списък „махам / оставям\" за всеки рут и всяка store фича ПРЕДИ да пипнеш файл."
+      },
+      {
+        "id": "2220.2",
+        "phase": "RED",
+        "action": "Махни рутовете и регистрациите. Пусни tsc — червеното сочи ЗАПАЗЕН код, който е зависел от махнатото."
+      },
+      {
+        "id": "2220.3",
+        "phase": "GREEN",
+        "action": "Докарай tsc + целия jest suite до зелено, като ВРЪЩАШ погрешно махнатото, а не като триеш още."
+      },
+      {
+        "id": "2220.4",
+        "phase": "DONE",
+        "action": "tsc + jest + `fe-build.cmd ci` зелени. В commit тялото: списъкът на махнатите рутове и store фичи, и че папките остават за таскове 2240-2290. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2230,
+    "category": "refactor",
+    "repo": "rwclab",
+    "lane": "standalone-entry",
+    "model": "heavy",
+    "dependsOn": [
+      2220
+    ],
+    "files": [
+      "app/frontend/src/app/app-modules/common/**"
+    ],
+    "description": "refactor(common): prune app-modules/common to the pieces the renderer uses",
+    "specRef": "RENDERER-AUDIT.md §1.3 («От app-modules/common») и §1.2 («обратна връзка, която може да те изненада») + rwclab-structure.md «Partly kept»",
+    "tddWorkflow": false,
+    "notes": "`app-modules/common` е 70 .ts файла в 30 подпапки и е ЧАСТИЧНО запазен — затова е отделен таск и затова е ПРЕДИ шестте триещи lane-а: той разплита двете връзки, с които запазен код сочи умиращ.\n\nОСТАВАТ (RENDERER-AUDIT.md §1.3): `renderer-instructions`, `notification-templates/new-feature-notification` (+ halloween, `UserNotificationService`, `ItemService`), `feedback-dialog`, `print-list`/`printer-jobs`/`printer-list` частите, които дават print-jobs-list и printer-card, `network-disconnected-notification`, `directives` и `models`, доколкото запазеният код ги ползва.\nПАДАТ: `version-2` (ВКЛЮЧИТЕЛНО `treatment-feedback-v2` и `payments-v2`), `file`/`file-mgmt`, `patient`, `patient-dialog`, `payment-methods`, `implant-dimensions`, `sub-type-templates`, `promo-code-info`, `pro-plan-printer`, `populate-specialty`, `profile-photo*`, `select-printer-page`, `2d-viewer*`, `preview-image-modal`, `base-model-modal`, `delete-warning`, `doc-link`, `sort-status`, `used-out-of` — ОСВЕН ако tsc докаже, че запазен код ги ползва.\n\nДВЕТЕ ВРЪЗКИ, КОИТО ТОЗИ ТАСК ТРЯБВА ДА СРЕЖЕ (измерени 13.11.2026):\n• `common/file/file-mgmt/file-mgmt.component.ts:9` импортира `Providers` от `+inbox/enums/providers` — file-mgmt пада, значи връзката умира с него.\n• `common/version-2/payments-v2/payments-v2.component.ts:4` импортира `BaseUserProfileComponent` от `user-profile` — payments-v2 пада, значи и тази умира.\nАко ги оставиш, таскове 2290 (+inbox) и 2260 (user-profile) ще се ударят в тях и ще изчервят гейта в ЧУЖДА зона.\n\n⚠ ОБРАТНАТА ВРЪЗКА КЪМ DELTA: `common/version-2/treatment-feedback-v2` импортира `FeedbackComponent` ОТ delta. Тук пада `treatment-feedback-v2`, а `FeedbackComponent` ОСТАВА (delta е негов собственик, таск 2191 го е характеризирал). Да не ти хрумне да триеш delta компонента.\n⚠ `+master-dashboard` също ползва `<app-feedback>` — той пада в таск 2270, не тук.\n\nМЕТОД: махни подпапка, пусни tsc, върни ако е нужно. `common.module.ts` е отровен файл в твоята зона — чисти declarations/exports/providers заедно с папките.",
+    "verify": [
+      "scripts\\gate\\fe-typecheck.cmd",
+      "scripts\\gate\\fe-test.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2230.1",
+        "phase": "RECON",
+        "action": "Прочети app-modules/common/common.module.ts и RENDERER-AUDIT.md §1.3 («От app-modules/common»). Направи списък „остава / пада\" за всяка от 30-те подпапки. Провери двете връзки от notes с grep."
+      },
+      {
+        "id": "2230.2",
+        "phase": "RED",
+        "action": "Изтрий падащите подпапки и ги махни от common.module.ts. Пусни tsc — червеното ти казва какво запазеният код наистина ползва."
+      },
+      {
+        "id": "2230.3",
+        "phase": "GREEN",
+        "action": "Върни погрешно изтритото, докарай tsc + целия jest suite до зелено."
+      },
+      {
+        "id": "2230.4",
+        "phase": "DONE",
+        "action": "tsc + jest зелени. В commit тялото: кои подпапки останаха и че двете връзки към +inbox и user-profile са срязани. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2240,
+    "category": "refactor",
+    "repo": "rwclab",
+    "lane": "kill-v2",
+    "model": "heavy",
+    "dependsOn": [
+      2230
+    ],
+    "files": [
+      "app/frontend/src/app/app-modules/version-2/**",
+      "app/frontend/src/app/app-modules/new-treatment/**",
+      "app/frontend/src/app/app-modules/patients/**",
+      "app/frontend/src/app/app-modules/notification/**",
+      "app/frontend/src/app/app-modules/messenger/**",
+      "app/frontend/src/app/core/models/treatment/**",
+      "app/frontend/src/app/core/services/treatment.service.ts",
+      "app/frontend/src/app/core/store/**/messenger.*",
+      "app/frontend/src/app/core/store/**/new-treatment.*",
+      "app/frontend/src/app/core/store/**/template-treatment.*",
+      "app/frontend/src/app/core/store/**/notification.*",
+      "app/frontend/src/app/core/store/**/picture.*"
+    ],
+    "description": "refactor(app): delete version-2, treatments, patients, notification and messenger",
+    "specRef": "RENDERER-AUDIT.md §1.6 «Модули, които не трябват на рендъра» + rwclab-structure.md «app/frontend: what goes» и «POISON LIST»",
+    "tddWorkflow": false,
+    "notes": "НАЙ-ГОЛЯМАТА хапка: 99 .ts файла в пет сраснати модула. Те са В ЕДИН таск, защото се импортират взаимно (измерено 13.11.2026) и всяко разделяне би оставило висящ импорт:\n• `messenger` → `version-2/new-treatment/services/{removable-dentures,clear-aligner}-details-helper.service`\n• `new-treatment` → `version-2`;  `version-2` → `new-treatment`, `patients`\n• `patients/patinets.module.ts:21` → `../notification/notification.module` (да, файлът е с печатка в името)\n⚠ `new-treatment` и `patients` съществуват И като папки от горно ниво, И вложени в `version-2/` — трий и двете.\n\nВХОДЯЩИ ВРЪЗКИ ОТ ЗАПАЗЕН КОД, които ТИ трябва да срежеш (иначе tsc е червен):\n• `core/models/treatment/in-progress/new-message.ts` → `messenger/models` — целият `core/models/treatment/**` е зъболекарски и пада с теб.\n• `core/services/treatment.service.ts` → `messenger/models/doctor-review` — пада с теб.\n• `core/store/actions/messenger.actions.ts` и `core/store/states/messenger.states.ts` → `messenger/models` — пада с теб (регистрациите им вече са махнати от индексите в таск 2220).\n\nstore фичите `picture` и `template-threatment/template-treatment` са в зоната ти, но ПРОВЕРИ с grep, че никой запазен код не ги ползва; при съмнение ги остави на таск 2310 (sweep) и го напиши в commit тялото.\n\nЧЕРВЕНИ ЛИНИИ (важат за ВСИЧКИ триещи таскове):\n1. **Трий наистина.** Никакъв закоментиран код, никакви „засега оставям\" рутове или модули. Файловете си отиват от диска, не от полезрението. (rwclab-structure.md RED LINES §6)\n2. **Характеризиращите тестове са мрежата, не мишената.** Ако твое триене изчерви спек на ЗАПАЗЕН код, значи триеш нещо нужно — върни го. Ако изчерви спек на код, който ТИ триеш, изтрий и спека В СЪЩИЯ commit (иначе гейтът е червен по конструкция).\n3. **Не пипай отровните файлове, които вече са изчистени от таск 2220** (app.module.ts, app.routing.ts, store index-ите). Те са чужда собственост и вече не сочат твоите модули. Ако ти се наложи да ги пипнеш — значи DETACH-ът е пропуснал нещо: отбележи го и го поправи МИНИМАЛНО, само за твоя модул.\n4. **Гейтът ти е tsc + ЦЕЛИЯТ jest suite** (~70 с + секунди). tsc е истинският тест за триене: висящ импорт, счупен barrel или останал символ го изчервяват веднага. AOT билдът НЕ е твой гейт — той е майлстоун (таск 2320).\n5. **Никакви секрети, никога истински AWS.** Стойностите в конфигурациите остават `<set-locally>`. (rwclab-structure.md RED LINES §2-3)\n6. **Design-Service/ не се пипа** — това е оригиналното репо, read-only референция.",
+    "verify": [
+      "scripts\\gate\\fe-typecheck.cmd",
+      "scripts\\gate\\fe-test.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2240.1",
+        "phase": "RECON",
+        "action": "grep за всеки от петте модула от целия src/app (ts и html), за да видиш входящите връзки. Прочети RENDERER-AUDIT.md §1.6 и потвърди, че всичките пет са в списъка за триене. Потвърди, че delta/components/feedback НЕ е в зоната ти."
+      },
+      {
+        "id": "2240.2",
+        "phase": "RED",
+        "action": "Изтрий зоната си НАЦЯЛО и пусни scripts\\gate\\fe-typecheck.cmd. Червеното тук е картата на останалите връзки — всяка грешка от tsc сочи файл, който още сочи изтритото."
+      },
+      {
+        "id": "2240.3",
+        "phase": "GREEN",
+        "action": "Среж изброените входящи връзки и докарай tsc + целия jest suite до зелено. Нулева промяна по поведение на ЗАПАЗЕНИЯ код."
+      },
+      {
+        "id": "2240.4",
+        "phase": "DONE",
+        "action": "tsc зелен + целият jest suite зелен. В commit тялото: колко файла са изтрити (`git diff --stat`) и кои входящи връзки си срязал. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2250,
+    "category": "refactor",
+    "repo": "rwclab",
+    "lane": "kill-fleet",
+    "model": "easy",
+    "dependsOn": [
+      2230
+    ],
+    "files": [
+      "app/frontend/src/app/app-modules/dashboard/**",
+      "app/frontend/src/app/app-modules/devices/**",
+      "app/frontend/src/app/app-modules/fleet-management/**",
+      "app/frontend/src/app/core/store/**/fleet-mgmt.*"
+    ],
+    "description": "refactor(app): delete dashboard, devices and fleet-management",
+    "specRef": "RENDERER-AUDIT.md §1.6 «Модули, които не трябват на рендъра» + rwclab-structure.md «app/frontend: what goes» и «POISON LIST»",
+    "tddWorkflow": false,
+    "notes": "29 .ts файла, нула взаимни връзки с други умиращи модули (измерено) — затова е прост, механичен таск.\n\n⚠ ТУК УМИРА МИГРИРАНИЯТ СПЕК: `app-modules/dashboard/components/upcoming-appointments/upcoming-appointments.component.spec.ts`. Таск 2000 го мигрира към Jest нарочно, за да е suite-ът зелен дотогава; сега си отива заедно с модула си. Изтрий го В СЪЩИЯ commit — остане ли, jest ще се спъне в липсващия компонент и гейтът е червен по конструкция.\n\nПРОВЕРИ `printer-status` store фичата: тя звучи като fleet-management, но printer-card (ЗАПАЗЕН, RENDERER-AUDIT.md §1.3) може да я ползва. При най-малко съмнение я ОСТАВИ на таск 2310 и го напиши.\n\nЧЕРВЕНИ ЛИНИИ (важат за ВСИЧКИ триещи таскове):\n1. **Трий наистина.** Никакъв закоментиран код, никакви „засега оставям\" рутове или модули. Файловете си отиват от диска, не от полезрението. (rwclab-structure.md RED LINES §6)\n2. **Характеризиращите тестове са мрежата, не мишената.** Ако твое триене изчерви спек на ЗАПАЗЕН код, значи триеш нещо нужно — върни го. Ако изчерви спек на код, който ТИ триеш, изтрий и спека В СЪЩИЯ commit (иначе гейтът е червен по конструкция).\n3. **Не пипай отровните файлове, които вече са изчистени от таск 2220** (app.module.ts, app.routing.ts, store index-ите). Те са чужда собственост и вече не сочат твоите модули. Ако ти се наложи да ги пипнеш — значи DETACH-ът е пропуснал нещо: отбележи го и го поправи МИНИМАЛНО, само за твоя модул.\n4. **Гейтът ти е tsc + ЦЕЛИЯТ jest suite** (~70 с + секунди). tsc е истинският тест за триене: висящ импорт, счупен barrel или останал символ го изчервяват веднага. AOT билдът НЕ е твой гейт — той е майлстоун (таск 2320).\n5. **Никакви секрети, никога истински AWS.** Стойностите в конфигурациите остават `<set-locally>`. (rwclab-structure.md RED LINES §2-3)\n6. **Design-Service/ не се пипа** — това е оригиналното репо, read-only референция.",
+    "verify": [
+      "scripts\\gate\\fe-typecheck.cmd",
+      "scripts\\gate\\fe-test.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2250.1",
+        "phase": "RECON",
+        "action": "grep за dashboard/devices/fleet-management от целия src/app. Провери кой ползва printer-status store фичата и дали printer-card зависи от нея."
+      },
+      {
+        "id": "2250.2",
+        "phase": "RED",
+        "action": "Изтрий зоната си НАЦЯЛО и пусни scripts\\gate\\fe-typecheck.cmd. Червеното тук е картата на останалите връзки — всяка грешка от tsc сочи файл, който още сочи изтритото."
+      },
+      {
+        "id": "2250.3",
+        "phase": "GREEN",
+        "action": "Среж изброените входящи връзки и докарай tsc + целия jest suite до зелено. Нулева промяна по поведение на ЗАПАЗЕНИЯ код."
+      },
+      {
+        "id": "2250.4",
+        "phase": "DONE",
+        "action": "tsc зелен + целият jest suite зелен. В commit тялото: колко файла са изтрити (`git diff --stat`) и кои входящи връзки си срязал. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2260,
+    "category": "refactor",
+    "repo": "rwclab",
+    "lane": "kill-admin",
+    "model": "heavy",
+    "dependsOn": [
+      2230
+    ],
+    "files": [
+      "app/frontend/src/app/app-modules/administration/**",
+      "app/frontend/src/app/app-modules/registration/**",
+      "app/frontend/src/app/app-modules/user-profile/**",
+      "app/frontend/src/app/dialogs/components/dialog-form/**",
+      "app/frontend/src/app/core/store/**/user-profile.*"
+    ],
+    "description": "refactor(app): delete administration, registration and user-profile",
+    "specRef": "RENDERER-AUDIT.md §1.6 «Модули, които не трябват на рендъра» + rwclab-structure.md «app/frontend: what goes» и «POISON LIST»",
+    "tddWorkflow": false,
+    "notes": "61 .ts файла. Няма взаимни връзки с други умиращи модули, НО има една входяща от ЗАПАЗЕН код:\n• `dialogs/components/dialog-form/dialog-form.component.ts` импортира `administration/organization/organization-wrapper/organization-wrapper.component` (измерено 13.11.2026). `dialogs/*` е ЗАПАЗЕН шел (RENDERER-AUDIT.md §1.3), затова файлът ОСТАВА, а импортът и свързаният с него клон от логиката падат. Това е единствената причина dialog-form да е в зоната ти — не пипай нищо друго в `dialogs/`.\n\n⛔ `core/store/**/register.*` НЕ СЕ ТРИЕ. `register` е ЗАПАЗЕНА store фича (RENDERER-AUDIT.md §1.3), въпреки че името ѝ звучи като `registration` модула. Трий само `user-profile.*`.\n⚠ `user-profile` се ползваше и от `common/version-2/payments-v2` — таск 2230 вече го е изтрил, значи тази връзка я няма. Ако tsc още я показва, 2230 е пропуснал: отбележи го.\n\nЧЕРВЕНИ ЛИНИИ (важат за ВСИЧКИ триещи таскове):\n1. **Трий наистина.** Никакъв закоментиран код, никакви „засега оставям\" рутове или модули. Файловете си отиват от диска, не от полезрението. (rwclab-structure.md RED LINES §6)\n2. **Характеризиращите тестове са мрежата, не мишената.** Ако твое триене изчерви спек на ЗАПАЗЕН код, значи триеш нещо нужно — върни го. Ако изчерви спек на код, който ТИ триеш, изтрий и спека В СЪЩИЯ commit (иначе гейтът е червен по конструкция).\n3. **Не пипай отровните файлове, които вече са изчистени от таск 2220** (app.module.ts, app.routing.ts, store index-ите). Те са чужда собственост и вече не сочат твоите модули. Ако ти се наложи да ги пипнеш — значи DETACH-ът е пропуснал нещо: отбележи го и го поправи МИНИМАЛНО, само за твоя модул.\n4. **Гейтът ти е tsc + ЦЕЛИЯТ jest suite** (~70 с + секунди). tsc е истинският тест за триене: висящ импорт, счупен barrel или останал символ го изчервяват веднага. AOT билдът НЕ е твой гейт — той е майлстоун (таск 2320).\n5. **Никакви секрети, никога истински AWS.** Стойностите в конфигурациите остават `<set-locally>`. (rwclab-structure.md RED LINES §2-3)\n6. **Design-Service/ не се пипа** — това е оригиналното репо, read-only референция.",
+    "verify": [
+      "scripts\\gate\\fe-typecheck.cmd",
+      "scripts\\gate\\fe-test.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2260.1",
+        "phase": "RECON",
+        "action": "grep за administration/registration/user-profile от целия src/app. Прочети dialog-form.component.ts и реши как пада клонът с organization-wrapper. Потвърди, че register.* store фичата НЕ е в зоната ти."
+      },
+      {
+        "id": "2260.2",
+        "phase": "RED",
+        "action": "Изтрий зоната си НАЦЯЛО и пусни scripts\\gate\\fe-typecheck.cmd. Червеното тук е картата на останалите връзки — всяка грешка от tsc сочи файл, който още сочи изтритото."
+      },
+      {
+        "id": "2260.3",
+        "phase": "GREEN",
+        "action": "Среж изброените входящи връзки и докарай tsc + целия jest suite до зелено. Нулева промяна по поведение на ЗАПАЗЕНИЯ код."
+      },
+      {
+        "id": "2260.4",
+        "phase": "DONE",
+        "action": "tsc зелен + целият jest suite зелен. В commit тялото: колко файла са изтрити (`git diff --stat`) и кои входящи връзки си срязал. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2270,
+    "category": "refactor",
+    "repo": "rwclab",
+    "lane": "kill-support",
+    "model": "easy",
+    "dependsOn": [
+      2230
+    ],
+    "files": [
+      "app/frontend/src/app/app-modules/support/**",
+      "app/frontend/src/app/app-modules/+customer-support/**",
+      "app/frontend/src/app/app-modules/+master-dashboard/**"
+    ],
+    "description": "refactor(app): delete support, customer-support and master-dashboard",
+    "specRef": "RENDERER-AUDIT.md §1.6 «Модули, които не трябват на рендъра» + rwclab-structure.md «app/frontend: what goes» и «POISON LIST»",
+    "tddWorkflow": false,
+    "notes": "27 .ts файла, нула взаимни връзки с други умиращи модули (измерено).\n\n⚠ `+master-dashboard` ползва `<app-feedback>` — компонента `FeedbackComponent` на delta (RENDERER-AUDIT.md §1.2 «обратна връзка, която може да те изненада»). Ти триеш ПОТРЕБИТЕЛЯ, не компонента: `delta/components/feedback` ОСТАВА и е характеризиран от таск 2191. Да не ти хрумне да го пипаш.\n\nЧЕРВЕНИ ЛИНИИ (важат за ВСИЧКИ триещи таскове):\n1. **Трий наистина.** Никакъв закоментиран код, никакви „засега оставям\" рутове или модули. Файловете си отиват от диска, не от полезрението. (rwclab-structure.md RED LINES §6)\n2. **Характеризиращите тестове са мрежата, не мишената.** Ако твое триене изчерви спек на ЗАПАЗЕН код, значи триеш нещо нужно — върни го. Ако изчерви спек на код, който ТИ триеш, изтрий и спека В СЪЩИЯ commit (иначе гейтът е червен по конструкция).\n3. **Не пипай отровните файлове, които вече са изчистени от таск 2220** (app.module.ts, app.routing.ts, store index-ите). Те са чужда собственост и вече не сочат твоите модули. Ако ти се наложи да ги пипнеш — значи DETACH-ът е пропуснал нещо: отбележи го и го поправи МИНИМАЛНО, само за твоя модул.\n4. **Гейтът ти е tsc + ЦЕЛИЯТ jest suite** (~70 с + секунди). tsc е истинският тест за триене: висящ импорт, счупен barrel или останал символ го изчервяват веднага. AOT билдът НЕ е твой гейт — той е майлстоун (таск 2320).\n5. **Никакви секрети, никога истински AWS.** Стойностите в конфигурациите остават `<set-locally>`. (rwclab-structure.md RED LINES §2-3)\n6. **Design-Service/ не се пипа** — това е оригиналното репо, read-only референция.",
+    "verify": [
+      "scripts\\gate\\fe-typecheck.cmd",
+      "scripts\\gate\\fe-test.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2270.1",
+        "phase": "RECON",
+        "action": "grep за support/+customer-support/+master-dashboard от целия src/app. Потвърди, че единствената връзка към delta е употреба на <app-feedback>, която си отива с шаблона."
+      },
+      {
+        "id": "2270.2",
+        "phase": "RED",
+        "action": "Изтрий зоната си НАЦЯЛО и пусни scripts\\gate\\fe-typecheck.cmd. Червеното тук е картата на останалите връзки — всяка грешка от tsc сочи файл, който още сочи изтритото."
+      },
+      {
+        "id": "2270.3",
+        "phase": "GREEN",
+        "action": "Среж изброените входящи връзки и докарай tsc + целия jest suite до зелено. Нулева промяна по поведение на ЗАПАЗЕНИЯ код."
+      },
+      {
+        "id": "2270.4",
+        "phase": "DONE",
+        "action": "tsc зелен + целият jest suite зелен. В commit тялото: колко файла са изтрити (`git diff --stat`) и кои входящи връзки си срязал. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2280,
+    "category": "refactor",
+    "repo": "rwclab",
+    "lane": "kill-misc",
+    "model": "heavy",
+    "dependsOn": [
+      2230
+    ],
+    "files": [
+      "app/frontend/src/app/app-modules/cloud-drive-v2/**",
+      "app/frontend/src/app/app-modules/treatments/**",
+      "app/frontend/src/app/app-modules/integrations/**",
+      "app/frontend/src/app/app-modules/+campaigns/**",
+      "app/frontend/src/app/app-modules/+selective-updater/**",
+      "app/frontend/src/app/app-modules/+factory/**",
+      "app/frontend/src/app/core/store/**/integration.*"
+    ],
+    "description": "refactor(app): delete cloud-drive-v2, treatments, integrations, campaigns, selective-updater and factory",
+    "specRef": "RENDERER-AUDIT.md §1.6 «Модули, които не трябват на рендъра» + rwclab-structure.md «app/frontend: what goes» и «POISON LIST»",
+    "tddWorkflow": false,
+    "notes": "63 .ts файла, шест независими модула (нула взаимни връзки, измерено) — затова са в един таск.\n\n⛔ НАЙ-ВАЖНОТО: `cloud-drive-v2` пада, а `cloud-drive` (v1) ОСТАВА. Рендърът ползва точно v1 — `CloudDriveModalComponent` се вика от `platform-model-list.component.ts:71,1104` и от хедъра (RENDERER-AUDIT.md §1.3). Две папки с близки имена: трий само тази с `-v2`.\n⚠ Хедърът импортираше `cloud-drive-v2`, но таск 2210 вече е срязал тази връзка. Ако tsc още я показва, 2210 е пропуснал: отбележи го и среж минимално.\n⚠ `treatments` (v1) е различно от `version-2` — последното падна в таск 2240.\n\nstore фичата `cloud-drive` е ОБЩА за v1 и v2: НЕ я трий. Ако след триенето в нея остане мъртъв код, това е работа на таск 2310.\n\nЧЕРВЕНИ ЛИНИИ (важат за ВСИЧКИ триещи таскове):\n1. **Трий наистина.** Никакъв закоментиран код, никакви „засега оставям\" рутове или модули. Файловете си отиват от диска, не от полезрението. (rwclab-structure.md RED LINES §6)\n2. **Характеризиращите тестове са мрежата, не мишената.** Ако твое триене изчерви спек на ЗАПАЗЕН код, значи триеш нещо нужно — върни го. Ако изчерви спек на код, който ТИ триеш, изтрий и спека В СЪЩИЯ commit (иначе гейтът е червен по конструкция).\n3. **Не пипай отровните файлове, които вече са изчистени от таск 2220** (app.module.ts, app.routing.ts, store index-ите). Те са чужда собственост и вече не сочат твоите модули. Ако ти се наложи да ги пипнеш — значи DETACH-ът е пропуснал нещо: отбележи го и го поправи МИНИМАЛНО, само за твоя модул.\n4. **Гейтът ти е tsc + ЦЕЛИЯТ jest suite** (~70 с + секунди). tsc е истинският тест за триене: висящ импорт, счупен barrel или останал символ го изчервяват веднага. AOT билдът НЕ е твой гейт — той е майлстоун (таск 2320).\n5. **Никакви секрети, никога истински AWS.** Стойностите в конфигурациите остават `<set-locally>`. (rwclab-structure.md RED LINES §2-3)\n6. **Design-Service/ не се пипа** — това е оригиналното репо, read-only референция.",
+    "verify": [
+      "scripts\\gate\\fe-typecheck.cmd",
+      "scripts\\gate\\fe-test.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2280.1",
+        "phase": "RECON",
+        "action": "grep за шестте модула от целия src/app. Внимателно разграничи cloud-drive-v2 от cloud-drive (v1) — виж кой точно импортира кое."
+      },
+      {
+        "id": "2280.2",
+        "phase": "RED",
+        "action": "Изтрий зоната си НАЦЯЛО и пусни scripts\\gate\\fe-typecheck.cmd. Червеното тук е картата на останалите връзки — всяка грешка от tsc сочи файл, който още сочи изтритото."
+      },
+      {
+        "id": "2280.3",
+        "phase": "GREEN",
+        "action": "Среж изброените входящи връзки и докарай tsc + целия jest suite до зелено. Нулева промяна по поведение на ЗАПАЗЕНИЯ код."
+      },
+      {
+        "id": "2280.4",
+        "phase": "DONE",
+        "action": "tsc зелен + целият jest suite зелен. В commit тялото: колко файла са изтрити (`git diff --stat`) и кои входящи връзки си срязал. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2290,
+    "category": "refactor",
+    "repo": "rwclab",
+    "lane": "kill-inbox",
+    "model": "heavy",
+    "dependsOn": [
+      2230
+    ],
+    "files": [
+      "app/frontend/src/app/app-modules/+inbox/**",
+      "app/frontend/src/app/app-modules/+sync-box/**",
+      "app/frontend/src/app/core/models/inbox/**"
+    ],
+    "description": "refactor(app): delete the inbox and sync-box modules, keeping the inbox service",
+    "specRef": "RENDERER-AUDIT.md §1.6 «Модули, които не трябват на рендъра» + rwclab-structure.md «app/frontend: what goes» и «POISON LIST»",
+    "tddWorkflow": false,
+    "notes": "Малък таск (9 .ts файла), но с най-острия капан в целия board.\n\n⛔⛔ `core/services/inbox/inbox.service.ts` ОСТАВА. Рендърът го ползва (RENDERER-AUDIT.md §1.3) и `core/store/**/inbox.states` също ОСТАВА. Пада САМО МОДУЛЪТ `app-modules/+inbox` (RENDERER-AUDIT.md §1.6: „+inbox (module only)\"). Изтриеш ли услугата, чупиш RayWare.\n\nВРЪЗКАТА, КОЯТО ТРЯБВА ДА ПРЕМЕСТИШ (измерено 13.11.2026):\n`core/models/inbox/file.ts` импортира enum-а `Providers` от `app-modules/+inbox/enums/providers`. `core/models/inbox/**` е ЗАПАЗЕН (RENDERER-AUDIT.md §1.3 «Модели»), значи enum-ът трябва да ПРЕЖИВЕЕ модула: премести го в НОВ файл `core/models/inbox/providers.ts` (вътре в твоята зона) и оправи импорта. Не го дублирай — премести го.\n⚠ `+sync-box/device-details-wrapper/device-details-wrapper.component.ts:4` ползва същия enum, но sync-box пада с теб, значи този потребител си отива.\n⚠ `common/file/file-mgmt` също го ползваше — таск 2230 вече го е изтрил.\n\n⛔ НЕ пипай `core/services/inbox/**` и `core/store/**/inbox.*` — те са извън зоната ти и остават.\n\nЧЕРВЕНИ ЛИНИИ (важат за ВСИЧКИ триещи таскове):\n1. **Трий наистина.** Никакъв закоментиран код, никакви „засега оставям\" рутове или модули. Файловете си отиват от диска, не от полезрението. (rwclab-structure.md RED LINES §6)\n2. **Характеризиращите тестове са мрежата, не мишената.** Ако твое триене изчерви спек на ЗАПАЗЕН код, значи триеш нещо нужно — върни го. Ако изчерви спек на код, който ТИ триеш, изтрий и спека В СЪЩИЯ commit (иначе гейтът е червен по конструкция).\n3. **Не пипай отровните файлове, които вече са изчистени от таск 2220** (app.module.ts, app.routing.ts, store index-ите). Те са чужда собственост и вече не сочат твоите модули. Ако ти се наложи да ги пипнеш — значи DETACH-ът е пропуснал нещо: отбележи го и го поправи МИНИМАЛНО, само за твоя модул.\n4. **Гейтът ти е tsc + ЦЕЛИЯТ jest suite** (~70 с + секунди). tsc е истинският тест за триене: висящ импорт, счупен barrel или останал символ го изчервяват веднага. AOT билдът НЕ е твой гейт — той е майлстоун (таск 2320).\n5. **Никакви секрети, никога истински AWS.** Стойностите в конфигурациите остават `<set-locally>`. (rwclab-structure.md RED LINES §2-3)\n6. **Design-Service/ не се пипа** — това е оригиналното репо, read-only референция.",
+    "verify": [
+      "scripts\\gate\\fe-typecheck.cmd",
+      "scripts\\gate\\fe-test.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2290.1",
+        "phase": "RECON",
+        "action": "grep за `+inbox` и `+sync-box` от целия src/app. Прочети +inbox/enums/providers.ts и core/models/inbox/file.ts. Потвърди, че core/services/inbox/inbox.service.ts НЕ е в зоната ти и остава."
+      },
+      {
+        "id": "2290.2",
+        "phase": "RED",
+        "action": "Изтрий зоната си НАЦЯЛО и пусни scripts\\gate\\fe-typecheck.cmd. Червеното тук е картата на останалите връзки — всяка грешка от tsc сочи файл, който още сочи изтритото."
+      },
+      {
+        "id": "2290.3",
+        "phase": "GREEN",
+        "action": "Среж изброените входящи връзки и докарай tsc + целия jest suite до зелено. Нулева промяна по поведение на ЗАПАЗЕНИЯ код."
+      },
+      {
+        "id": "2290.4",
+        "phase": "DONE",
+        "action": "tsc зелен + целият jest suite зелен. В commit тялото: колко файла са изтрити (`git diff --stat`) и кои входящи връзки си срязал. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2300,
+    "category": "refactor",
+    "repo": "rwclab",
+    "lane": "kill-shared",
+    "model": "easy",
+    "dependsOn": [
+      2230,
+      2240
+    ],
+    "files": [
+      "app/frontend/src/app/shared/components/model-viewer/**",
+      "app/frontend/src/app/shared/services/stl-loader.service.ts",
+      "app/frontend/src/app/shared/index.ts",
+      "app/frontend/src/app/shared/shared.module.ts"
+    ],
+    "description": "refactor(shared): delete model-viewer and the legacy stl-loader service",
+    "specRef": "RENDERER-AUDIT.md §1.1 («рендърът НЕ ползва model-viewer и stl-loader.service») + §1.6",
+    "tddWorkflow": false,
+    "notes": "Малък, но нарочно ОТДЕЛЕН и ЗАВИСИМ таск.\n\nRENDERER-AUDIT.md §1.1 казва го изрично: рендърът е `<delta-renderer>` и НЕ ползва `shared/components/model-viewer` и `shared/services/stl-loader.service.ts`. Техните единствени потребители бяха messenger и modal-ът за преглед на файл в common.\n\nЗАТОВА dependsOn [2230, 2240]: ако това се изтрие ПРЕДИ messenger (2240) и преди пренията на common (2230), tsc веднага почервенява в чужда зона. Това е единствената реална серилизация в триещата фаза и причината е измерена, не предполагаема.\n\n⛔ НЕ пипай `shared/libs/**` (DRACO-loader, OrbitControls, TransformControls, OBJLoader, STLExporter) — това е точно обратното: вендорните three.js библиотеки, БЕЗ които рендърът не работи (RENDERER-AUDIT.md §1.3 «Shared»).\n⛔ НЕ пипай shared/pipes/** и shared/components/{icon-btn,timer-button,ftue-tooltip,forms} — запазени са и са характеризирани от таскове 2000 и 2180.\n\nЧЕРВЕНИ ЛИНИИ (важат за ВСИЧКИ триещи таскове):\n1. **Трий наистина.** Никакъв закоментиран код, никакви „засега оставям\" рутове или модули. Файловете си отиват от диска, не от полезрението. (rwclab-structure.md RED LINES §6)\n2. **Характеризиращите тестове са мрежата, не мишената.** Ако твое триене изчерви спек на ЗАПАЗЕН код, значи триеш нещо нужно — върни го. Ако изчерви спек на код, който ТИ триеш, изтрий и спека В СЪЩИЯ commit (иначе гейтът е червен по конструкция).\n3. **Не пипай отровните файлове, които вече са изчистени от таск 2220** (app.module.ts, app.routing.ts, store index-ите). Те са чужда собственост и вече не сочат твоите модули. Ако ти се наложи да ги пипнеш — значи DETACH-ът е пропуснал нещо: отбележи го и го поправи МИНИМАЛНО, само за твоя модул.\n4. **Гейтът ти е tsc + ЦЕЛИЯТ jest suite** (~70 с + секунди). tsc е истинският тест за триене: висящ импорт, счупен barrel или останал символ го изчервяват веднага. AOT билдът НЕ е твой гейт — той е майлстоун (таск 2320).\n5. **Никакви секрети, никога истински AWS.** Стойностите в конфигурациите остават `<set-locally>`. (rwclab-structure.md RED LINES §2-3)\n6. **Design-Service/ не се пипа** — това е оригиналното репо, read-only референция.",
+    "verify": [
+      "scripts\\gate\\fe-typecheck.cmd",
+      "scripts\\gate\\fe-test.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2300.1",
+        "phase": "RECON",
+        "action": "grep за `model-viewer` и `stl-loader` от целия src/app — трябва да НЯМА останали потребители (2230 и 2240 са merge-нати). Ако има, спри и го опиши: значи нещо запазено наистина ги ползва."
+      },
+      {
+        "id": "2300.2",
+        "phase": "RED",
+        "action": "Изтрий двата и ги махни от shared/index.ts и shared.module.ts. Пусни tsc."
+      },
+      {
+        "id": "2300.3",
+        "phase": "GREEN",
+        "action": "tsc + целият jest suite зелени."
+      },
+      {
+        "id": "2300.4",
+        "phase": "DONE",
+        "action": "tsc + jest зелени. В commit тялото: потвърждение, че shared/libs/** е непипнат. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2310,
+    "category": "refactor",
+    "repo": "rwclab",
+    "lane": "finalize",
+    "model": "heavy",
+    "dependsOn": [
+      2240,
+      2250,
+      2260,
+      2270,
+      2280,
+      2290,
+      2300
+    ],
+    "files": [
+      "app/frontend/src/app/core/core.module.ts",
+      "app/frontend/src/app/core/index.ts",
+      "app/frontend/src/app/core/services/index.ts",
+      "app/frontend/src/app/core/store/**",
+      "app/frontend/src/app/core/models/**",
+      "app/frontend/src/app/core/services/**",
+      "app/frontend/src/app/app-modules/cloud-drive/**",
+      "app/frontend/src/app/graphql/**",
+      "app/frontend/src/app/app.module.ts"
+    ],
+    "description": "refactor(core): sweep the dead services, stores, models and barrel exports",
+    "specRef": "RENDERER-AUDIT.md §1.3 (пълният списък на запазеното) + rwclab-structure.md «POISON LIST»",
+    "tddWorkflow": false,
+    "notes": "ПОСЛЕДНОТО чистене: всички модули вече ги няма, значи сега се вижда какво в `core/` е останало без потребител. Този таск е сам в lane-а си и зависи от ВСИЧКИ триещи таскове, защото едва след тях „мъртво\" е доказуемо.\n\nОБХВАТ:\n1. `core/core.module.ts`, `core/index.ts`, `core/services/index.ts` — махни експортите и провайдърите на изтритите услуги. Тези barrel-и са причината RENDERER-AUDIT.md §1.1 да предупреждава, че „ако просто изтриеш папка, билдът ще се счупи\".\n2. `core/services/**` — услугите, чиито единствени потребители бяха изтритите модули (съпостави с ЗАПАЗЕНИЯ списък в RENDERER-AUDIT.md §1.3; каквото не е в него и нищо не го вика → пада).\n3. `core/store/**` — остатъците, които триещите таскове са оставили при съмнение: `picture`, `printer-status`, `preference`, `route`, `default-selections`, `template-treatment`, `cloud-drive` (мъртвите му части). ⛔ ОСТАВАТ: print-list, platform-job-renderer, print-job, appliance-profile, defaults, resin, **register**, noms/*, feature-flag, auth, info-box-visibility, loading-mask, inbox.states, smart-table.\n4. `core/models/**` — 227 файла, повечето зъболекарски. Трий каквото никой не вика.\n5. `app-modules/cloud-drive/**` — остава САМО `CloudDriveModalComponent` (RENDERER-AUDIT.md §1.3); другите 8 файла падат, ако нищо не ги вика.\n6. `graphql/**` — остават само `getPlatformJobLogs`, `getUserPlatformJobUpdates`, `subscribeToPlatformJobLogs`, `subsribeToUserPlatformJobUpdates` (да, с печатката) и `operation-result-types.ts`. Останалите заявки/мутации падат.\n\nМЕТОД: НЕ трий на доверие. За всеки кандидат — grep от целия `src/`; нула потребители → пада; има потребител → остава, дори да изглежда зъболекарски. tsc + целият jest suite са доказателството.\n⚠ Характеризиращите тестове от таскове 2100-2191 живеят точно в тази зона. Изчерви ли се спек, значи триеш ЗАПАЗЕН код — върни го. Спек може да падне САМО ако покрива код, който ТИ правомерно триеш, и тогава пада в същия commit.\n\nЧЕРВЕНИ ЛИНИИ (важат за ВСИЧКИ триещи таскове):\n1. **Трий наистина.** Никакъв закоментиран код, никакви „засега оставям\" рутове или модули. Файловете си отиват от диска, не от полезрението. (rwclab-structure.md RED LINES §6)\n2. **Характеризиращите тестове са мрежата, не мишената.** Ако твое триене изчерви спек на ЗАПАЗЕН код, значи триеш нещо нужно — върни го. Ако изчерви спек на код, който ТИ триеш, изтрий и спека В СЪЩИЯ commit (иначе гейтът е червен по конструкция).\n3. **Не пипай отровните файлове, които вече са изчистени от таск 2220** (app.module.ts, app.routing.ts, store index-ите). Те са чужда собственост и вече не сочат твоите модули. Ако ти се наложи да ги пипнеш — значи DETACH-ът е пропуснал нещо: отбележи го и го поправи МИНИМАЛНО, само за твоя модул.\n4. **Гейтът ти е tsc + ЦЕЛИЯТ jest suite** (~70 с + секунди). tsc е истинският тест за триене: висящ импорт, счупен barrel или останал символ го изчервяват веднага. AOT билдът НЕ е твой гейт — той е майлстоун (таск 2320).\n5. **Никакви секрети, никога истински AWS.** Стойностите в конфигурациите остават `<set-locally>`. (rwclab-structure.md RED LINES §2-3)\n6. **Design-Service/ не се пипа** — това е оригиналното репо, read-only референция.",
+    "verify": [
+      "scripts\\gate\\fe-typecheck.cmd",
+      "scripts\\gate\\fe-test.cmd"
+    ],
+    "steps": [
+      {
+        "id": "2310.1",
+        "phase": "RECON",
+        "action": "Сглоби списъка на ЗАПАЗЕНОТО от RENDERER-AUDIT.md §1.3 (услуги, store фичи, модели, graphql, utils, helpers, константи, enums). После за всеки файл в core/** и graphql/** провери с grep има ли потребител. Напиши списъка ПРЕДИ да триеш."
+      },
+      {
+        "id": "2310.2",
+        "phase": "RED",
+        "action": "Трий на партиди (store, после services, после models, после graphql) и пускай tsc след всяка партида — така червеното винаги сочи последната партида."
+      },
+      {
+        "id": "2310.3",
+        "phase": "GREEN",
+        "action": "tsc + целият jest suite зелени, с непроменени характеризиращи спекове на запазения код."
+      },
+      {
+        "id": "2310.4",
+        "phase": "DONE",
+        "action": "tsc + jest зелени. В commit тялото: `git diff --stat` общо и списък на нещата, които си ОСТАВИЛ, въпреки че изглеждат мъртви, с причината. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  },
+  {
+    "id": 2320,
+    "category": "chore",
+    "repo": "rwclab",
+    "lane": "finalize",
+    "model": "heavy",
+    "dependsOn": [
+      2010,
+      2310
+    ],
+    "files": [
+      "README.md",
+      "PLAN.md"
+    ],
+    "description": "chore(build): prove the standalone RayWare app builds and document the new entry point",
+    "specRef": "rwclab-structure.md «Commands and ports» + «Goal of the board»; RENDERER-AUDIT.md §1.2",
+    "tddWorkflow": false,
+    "notes": "МАЙЛСТОУН ТАСК — единственият с пълния AOT билд в гейта и финалът на този board.\n\nДотук всеки гейт беше евтин нарочно (tsc ~70 с + jest), защото истинският AOT билд е ИЗМЕРЕН на 24 мин 28 с и при няколко агента не се събира в verify_timeout_min = 45. Сега, когато всичко е слято, плащаме пълната цена ЕДИН път и доказваме, че самостоятелният RayWare наистина се билдва.\n\nГЕЙТЪТ (в този ред, всяка команда е отделна, за да се вижда кой етап пада):\n1. `fe-npm-ci.cmd` — чист volume от package-lock.json.\n2. `fe-test.cmd` — ЦЕЛИЯТ jest suite.\n3. `fe-build.cmd ci` — бързият AOT (конфигурацията от таск 2010).\n4. `fe-build.cmd dev` — ИСТИНСКИЯТ билд. Точно той беше зелен на baseline-а 13.11.2026 (24 мин 28 с, 0 грешки, 0 предупреждения) — значи е справедливо да искаме пак зелено.\n\nДОКУМЕНТАЦИЯ (в същия commit):\n• `README.md` — апът вече отваря направо RayWare: опиши новата входна точка (`''` → `/print-setup`), локалната stub сесия от таск 2200 и трите гейт команди от `scripts/gate/`.\n• `PLAN.md` — секция 1 и 2 описват ПЪРВАТА версия (Vite + React port). Този board тръгна по друг път: Angular 9 се ЗАПАЗВА и ще се ъпгрейдва по-късно. Отбележи го ясно, за да не въвежда в заблуда. НЕ пренаписвай PLAN.md целия — добави датирана бележка, както прави секция 0.\n\n⛔ НЕ пипай код в този таск. Почервенее ли някой етап, това е находка за следващ board, не за „бърза поправка\" тук — таскът е ДОКАЗАТЕЛСТВО, не ремонт. Падне ли билдът, опиши точната грешка в retry контекста.\n⚠ `production` конфигурацията НЕ е в гейта: тя никога не е била мерена на тази машина и може да има собствени проблеми (budgets, license extraction). Пусни я в DONE стъпката и просто ДОКЛАДВАЙ резултата.",
+    "verify": [
+      "scripts\\gate\\fe-npm-ci.cmd",
+      "scripts\\gate\\fe-test.cmd",
+      "scripts\\gate\\fe-build.cmd ci",
+      "scripts\\gate\\fe-build.cmd dev"
+    ],
+    "steps": [
+      {
+        "id": "2320.1",
+        "phase": "RECON",
+        "action": "Прочети README.md и PLAN.md и виж какво вече не е вярно след board-а (входна точка, какво е изтрито, кои са гейт командите). Виж rwclab-structure.md «Commands and ports» за точните команди."
+      },
+      {
+        "id": "2320.2",
+        "phase": "RED",
+        "action": "Пусни целия гейт ръчно в този ред: fe-npm-ci, fe-test, fe-build ci, fe-build dev. Всяко червено е находка, не повод да пипаш код."
+      },
+      {
+        "id": "2320.3",
+        "phase": "GREEN",
+        "action": "Обнови README.md и PLAN.md според notes."
+      },
+      {
+        "id": "2320.4",
+        "phase": "DONE",
+        "action": "Четирите гейт команди зелени. После пусни `fe-build.cmd production` и ДОКЛАДВАЙ резултата в commit тялото (зелено или точната грешка), заедно с времената на ci срещу dev. Commit с description-а дословно."
+      }
+    ],
+    "passes": false
+  }
 ]
