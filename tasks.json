@@ -914,7 +914,7 @@
                           "action":  "tsc зелен + целият jest suite зелен. В commit тялото: колко файла са изтрити (`git diff --stat`) и кои входящи връзки си срязал. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  2250,
@@ -961,7 +961,7 @@
                           "action":  "tsc зелен + целият jest suite зелен. В commit тялото: колко файла са изтрити (`git diff --stat`) и кои входящи връзки си срязал. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  2260,
@@ -1009,7 +1009,7 @@
                           "action":  "tsc зелен + целият jest suite зелен. В commit тялото: колко файла са изтрити (`git diff --stat`) и кои входящи връзки си срязал. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  2270,
@@ -1055,7 +1055,7 @@
                           "action":  "tsc зелен + целият jest suite зелен. В commit тялото: колко файла са изтрити (`git diff --stat`) и кои входящи връзки си срязал. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  2280,
@@ -1105,7 +1105,7 @@
                           "action":  "tsc зелен + целият jest suite зелен. В commit тялото: колко файла са изтрити (`git diff --stat`) и кои входящи връзки си срязал. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  2290,
@@ -1151,7 +1151,7 @@
                           "action":  "tsc зелен + целият jest suite зелен. В commit тялото: колко файла са изтрити (`git diff --stat`) и кои входящи връзки си срязал. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  2300,
@@ -1199,7 +1199,7 @@
                           "action":  "tsc + jest зелени. В commit тялото: потвърждение, че shared/libs/** е непипнат. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  2310,
@@ -1257,7 +1257,7 @@
                           "action":  "tsc + jest зелени. В commit тялото: `git diff --stat` общо и списък на нещата, които си ОСТАВИЛ, въпреки че изглеждат мъртви, с причината. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  2320,
@@ -1305,6 +1305,6 @@
                           "action":  "Четирите гейт команди зелени. После пусни `fe-build.cmd production` и ДОКЛАДВАЙ резултата в commit тялото (зелено или точната грешка), заедно с времената на ci срещу dev. Commit с description-а дословно."
                       }
                   ],
-        "passes":  false
+        "passes":  true
     }
 ]

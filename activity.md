@@ -34,6 +34,137 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #2320 — chore(build): prove the standalone RayWare app builds and document the new entry point
+
+**Repo:** rwclab · **Commit:** c30d6bf · **Date:** 2026-11-13
+
+### Gate (run by hand, in order)
+| Step | Result | Time |
+|---|---|---|
+| fe-npm-ci.cmd | green | 56 s (first attempt stalled on the npm registry for ~30 min at 0% CPU; container killed, retry clean) |
+| fe-test.cmd | green: 99 suites, 1361 tests | 192 s |
+| fe-build.cmd ci | green, 0 errors / 0 warnings | 271 s |
+| fe-build.cmd dev | green, 0 errors / 0 warnings | 488 s (baseline was 24 min 28 s cold) |
+| fe-build.cmd production (not in the gate) | green, 0 warnings, no budget or license errors | 449 s (1st attempt: Docker engine 'unexpected EOF' at 108 s, an environment failure) |
+
+### Docs
+- README.md: new section on the standalone RayWare app. Covers the entry point ('' and '**' -> /print-setup -> DeltaModule), the useLocalAuthStub session (on in dev/ci, off in default, staging and prod), a table of the scripts/gate commands and the measured times.
+- PLAN.md: dated note 0.1 (2026-11-13). Angular 9 is kept and will be upgraded later, and the backend is the copied .NET Core 3.1, so sections 1-2 (Vite + React + Fastify) are historical.
+
+### Findings for the next board
+- npm ci against the registry can stall indefinitely with no error. The gate has no timeout inside the container, so consider `--fetch-timeout` or a retry wrapper.
+- Docker Desktop can drop a long-running container (EOF) under heavy memory load. The production build peaks at ~5.4 GiB.
+
+
+### Task #2310 — refactor(core): sweep the dead services, stores, models and barrel exports
+
+**Repo:** rwclab · **Commit:** 0dee235 · **Status:** ✅
+
+**What was done:**
+- Built a usage graph with the TypeScript compiler API in the Node 14 container. It maps each identifier to the file that declares it, following barrels. core.module providers and pure re-export barrels count as weak edges. Reachability starts from every live file outside the task scope.
+- Deleted in batches with tsc after each one (services → store → models → graphql, top-down so tsc stays green between batches):
+  - 55 services, plus CommandService (provided but never injected);
+  - 21 store files (default-selections, fleet-mgmt, integration, new-treatment, preference, template-treatment effects/reducer/state, user-status-type enums);
+  - 110 models and 13 emptied barrels;
+  - 22 graphql operations;
+  - cloud-drive/drive-setup.
+- Cleaned up core.module.ts, app.module.ts (CommandService), cloud-drive.module.ts and every services/models barrel.
+- Fixpoint re-check after deletion: 0 dead files in scope, and no spec imports a deleted file. No spec was edited.
+
+**Kept on purpose (each has a live consumer):** the picture, route, cloud-drive, printer-status, app, user-preferences, inbox and notification store features. template-treatment actions/states, because auth.effects dispatches them. The rest of cloud-drive, because the modal renders it. The graphql printer-status and print-job-status-log operations. Details are in the commit body.
+
+**Verify:** fe-typecheck ✅. Targeted jest ✅: src/app/core (71 suites, 854 tests), header, platform-model-list, components/app. The full jest suite was not run and is left for the gate.
+
+
+### Task #2260 - refactor(app): delete administration, registration and user-profile
+
+**Status:** done (retry: merge-conflict resolution)
+
+**Changes:**
+- 4c27221: deleted the `administration`, `registration` and `user-profile` modules, the `user-profile.*` store actions/effects/reducers, `user.profile.states.ts` and `user-profile-store.service.ts` (147 files). Removed leftover references in `app.component.ts` (dead `GetUserBusinessProfile` dispatch), `core/core.module.ts` (two `UserProfileStoreService` providers) and `core/services/store/index.ts` (export).
+- 6091fdc: merged `ralph/standalone`; conflict in `core/services/store/index.ts` resolved by keeping both deletions (`messenger-store.service` removed by #2240, `user-profile-store.service` removed here).
+
+**Left for #2310:** `core/store/**/register.*` and `core/models/user/user-profile.ts` - still used by `user.service.ts`.
+
+**Verification:** `scripts\gate\fe-typecheck.cmd` exit 0 after the merge. Full `fe-test.cmd` not run by the agent (operator note) - left to the post-merge gate.
+
+
+## Task #2290 — refactor(app): delete the inbox and sync-box modules, keeping the inbox service
+
+**Repo:** rwclab · **Lane:** kill-inbox · **Commit:** ad44ba3
+
+### What changed
+- Deleted `app-modules/+inbox/**` (inbox-wrapper component, inbox.module, inbox.routing) and `app-modules/+sync-box/**` (device-mgmt, device-details-wrapper, device-details, sync-box.module, sync-box.routing): 15 files, 616 lines.
+- Moved (git mv, not copied) `+inbox/enums/providers.ts` to `core/models/inbox/providers.ts`. `core/models/inbox/file.ts` now imports `Providers` from `./providers`, which was the only incoming link from kept code. The `core/models/inbox` barrel is unchanged.
+- Not touched: `core/services/inbox/**`, `core/store/**/inbox.*`, `core/services/sync-box/**`, and all poison files. tsc found no other references.
+
+### Verification
+- `scripts\gate\fe-typecheck.cmd`: green, exit 0.
+- Targeted jest runs: delta (12 suites, 373 tests), header.component (11), platform-job (7 suites, 96), s3-file (11), print-list.reducers (61). All green.
+- The full jest suite was not run by the agent; it is left to the orchestrator gate after merge.
+
+
+## Task #2300 - refactor(shared): delete model-viewer and the legacy stl-loader service
+
+- RECON: grep showed no consumers outside the two deleted units (renderer uses the `three-stl-loader` npm package, not StlLoaderService).
+- Deleted shared/components/model-viewer/** and shared/services/stl-loader.service.ts; removed ModelViewerComponent from shared/components/index.ts and StlLoaderService from shared.module.ts.
+- shared/libs/** untouched.
+- Verify: fe-typecheck.cmd exit 0; fe-test.cmd 100 suites / 1364 tests passed.
+
+
+## Task #2250 - refactor(app): delete dashboard, devices and fleet-management
+- Deleted app-modules/dashboard, devices and fleet-management (71 files, including the migrated upcoming-appointments spec). Task 2220 had already detached them, so no incoming links needed cutting.
+- Left in place: core/store/**/fleet-mgmt.* (still imported by core/services/store/fleet-mgmt.service.ts, outside this task's files; flagged for task 2310) and the printer-status store (used by print-job.states.ts / printer-card).
+- Verify: fe-typecheck (tsc) green. Full jest suite was green earlier (99 suites, 1361 tests); the full fe-test run is left to the orchestrator gate.
+- Commit: a463efa
+
+
+## Task #2280 - refactor(app): delete cloud-drive-v2, treatments, integrations, campaigns, selective-updater and factory
+
+**Date:** 2026-11-13
+**Repo/branch:** ralph/task-2280 (commit cca6b60)
+
+### Done
+- Deleted modules: `cloud-drive-v2`, `treatments`, `integrations`, `+campaigns`, `+selective-updater`, `+factory` (109 files, 6810 lines removed). No spec files lived in them.
+- Kept `cloud-drive` (v1) - still used by the renderer.
+- No links had to be cut: after #2220 none of the six modules is reachable from `main.ts`.
+
+### Left for #2310
+- The four `core/store/**/integration.*` files: deleting them breaks tsc because `integrations-store.service.ts` and `auth.effects.ts` (outside this task's files) still import them.
+
+### Verification
+- `scripts\gate\fe-typecheck.cmd` (tsc --noEmit): GREEN (re-run on retry after the Docker HTTP 500 environment failure).
+- Full jest suite: not run by the agent per operator note - left to the orchestrator's post-merge gate.
+
+
+## Task #2240 - refactor(app): delete version-2, treatments, patients, notification and messenger
+
+**Repo:** rwc-renderer-lab (app/frontend) · **Commit:** 5030285
+
+### What was done
+- Deleted these modules: `version-2`, `new-treatment`, `patients`, `notification`, `messenger`, including the copies nested inside version-2 (227 files, -24,674 lines).
+- Deleted `core/services/treatment.service.ts`, `core/store/**/messenger.*`, `core/services/store/messenger-store.service.ts` (its only consumer was the messenger store) and `core/models/treatment/in-progress/new-message.ts`.
+- Removed their exports from `core/services/index.ts`, `core/services/store/index.ts` and `core/models/treatment/in-progress/index.ts`, and removed the TreatmentService and MessengerStoreService providers from `core.module.ts`.
+- Moved `import 'rxjs/add/operator/takeWhile'` into `core/services/index.ts`. It used to arrive as a side effect of treatment.service, and kept code (s3-file.service, base-platform, feedback-dialog) calls it.
+
+### Deviations from the task notes
+- Most of `core/models/treatment/**` is kept because the kept delta components and s3-file.service use it (red line 2).
+- The picture, notification, new-treatment and template-treatment store files are left for #2310 because they are still wired into app.module, the store indexes and app.component.
+
+### Verification
+- `scripts/gate/fe-typecheck.cmd` (tsc): green.
+- Filtered jest: `core/store/effects` 6/6 suites, 89 tests; `core/services` 30/30 suites, 438 tests.
+- Full jest suite: left to the post-merge gate.
+- The earlier red gates came from the Docker Desktop outage (HTTP 500), not from code.
+
+
+## Task 2270 - refactor(app): delete support, customer-support and master-dashboard
+
+- Deleted `support`, `+customer-support` and `+master-dashboard` (68 files, 4035 lines), commit 36b1bc1.
+- Task 2220 had already detached them from routing and the store; the only remaining link to delta was `<app-feedback>` inside the deleted master-dashboard templates, so `delta/components/feedback` is untouched.
+- Verify: `scripts\gate\fe-typecheck.cmd` green. Full jest not run by the agent (left to the post-merge gate, per operator note).
+
+
 ## Task #2230 — refactor(common): prune app-modules/common to the pieces the renderer uses
 
 **Repo:** rwclab · **Commit:** b26f1cc · **Gates:** fe-typecheck ✅ · fe-test ✅ (100 suites / 1364 tests)
@@ -4484,6 +4615,15 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
+
+
+
+
 
 
 
