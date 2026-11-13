@@ -1080,6 +1080,42 @@ function Complete-Agent($info) {
                 return "failed"
             }
 
+            # CLOUDFLARE CHALLENGE (13.11.2026, rwclab run): "Failed to authenticate. API Error:
+            # 403 Attention Required! | Cloudflare" — бърза поредица НОВИ CLI сесии (5 слота плюс
+            # retry-та през ~18 с) си докарва WAF challenge вместо API отговор. НЕ е вина на
+            # агента и НЕ се лекува с незабавен retry: следващият опит удря същата стена, а
+            # понеже шаблонът отдолу не го познава, отива във FAIL бюджета. Точно така таск #2000
+            # изгоря 4/4 за 56 секунди, след като ДВА предишни опита бяха работили нормално.
+            # Затова: преходно, но със ЗАБАВЯНЕ (незабавният re-queue е част от проблема).
+            # fastFails НЕ се нулира нарочно — трайна блокада трябва да спре run-а шумно за ~10
+            # минути, а не да го остави да се върти цяла нощ.
+            if ($apiTail -match 'Attention Required|Cloudflare') {
+                $n = $script:timeoutCounts[$t.id]; if (-not $n) { $n = 0 }
+                if ($n -lt $maxTimeoutRequeues) {
+                    $script:timeoutCounts[$t.id] = $n + 1
+                    Save-RetryContext $t.id "resume" "CLOUDFLARE 403 CHALLENGE - предишният агент НЕ стигна до API-то (challenge страница вместо отговор). Това не е провал на работата: worktree-ът е ЗАПАЗЕН. Пусни git status/diff и продължи оттам, докъдето е стигнато."
+                    Write-Host "[~] Task #$($t.id): Cloudflare 403 challenge (not an agent failure) - backing off 3 min, then RE-QUEUE on timeout budget ($($n + 1)/$maxTimeoutRequeues), fail budget untouched" -ForegroundColor Yellow
+                    Write-Host "    Ако се повтаря: VPN/прокси или твърде много едновременни сесии - смъкни swarm.agents." -ForegroundColor DarkYellow
+                    Start-Sleep -Seconds 180
+                    Release-Claim $t.id
+                    return "timeout_requeue"
+                }
+            }
+
+            # ИЗТЕКЪЛ ВХОД (13.11.2026): "Failed to authenticate" БЕЗ Cloudflare маркер не е
+            # преходно - всеки таск ще умре мигновено по същата причина. FATAL с точния лек,
+            # вместо 4 изгорени опита на таск.
+            if ($apiTail -match 'Failed to authenticate') {
+                $script:fastFails = 99   # спира run-а на следващата проверка в главния цикъл
+                Write-Host ""
+                Write-Host "[X] FATAL: claude CLI cannot authenticate (not a task failure)." -ForegroundColor Red
+                Write-Host "    $($apiTail -split "`n" | Where-Object { $_ -match 'authenticate' } | Select-Object -First 1)" -ForegroundColor Red
+                Write-Host "    Fix: claude -p 'say OK'  -> ако и то пада, влез наново (/login) и провери VPN/прокси." -ForegroundColor Red
+                Write-Host ""
+                Release-Claim $t.id
+                return "failed"
+            }
+
             if ($apiTail -match 'API Error:\s*(529|5\d\d\s+Overloaded|Connection closed|Overloaded)') {
                 $n = $script:timeoutCounts[$t.id]; if (-not $n) { $n = 0 }
                 if ($n -lt $maxTimeoutRequeues) {
