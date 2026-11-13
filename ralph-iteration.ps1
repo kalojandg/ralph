@@ -440,7 +440,19 @@ if (Test-Path $outputFile) {
     # Затова: до 4 думи, с апостроф и тире (за "channel's" и подобни).
     # ⚠ Таблицата е в CLI-я, не в API-то - при всяко обновяване на claude се проверява
     # наново (виж /ralph-config, секцията за моделите).
-    if ($result -match "hit your(?:\s+[\w'-]+){0,4}\s+limit") {
+    #
+    # 13.11.2026 (CLI 2.1.323) - НОВ КЛАС съобщения, който НЕ съдържа "hit your ... limit":
+    #   "You're out of usage credits. /model to switch models."
+    #   "Your org is out of usage credits. Contact your admin to add more."
+    # Таблицата също се размести (seven_day_overage_included -> extra_usage /
+    # tengu_usage_overage_included_models, + нови seven_day_oauth_apps, blocked_seven_day),
+    # и се появи "hit your fast limit" (fast mode) - него старият шаблон си го хваща.
+    # РАЗГРАНИЧЕНИЕТО Е НАРОЧНО: кредитите СЪС "resets" са изчакваеми (прозорецът се подновява)
+    # и влизат в квотния клон; БЕЗ reset е билинг състояние (org без средства), което НЕ се
+    # оправя с чакане - оставя се да падне по нормалния път, за да гръмне бързият FATAL
+    # ("3 consecutive agents died"), вместо да requeue-ва безкрайно всеки час.
+    if ($result -match "hit your(?:\s+[\w'-]+){0,4}\s+limit" -or
+        ($result -match "out of usage credits" -and $result -match "resets")) {
         $waitMinutes = 60  # default fallback: wait 1 hour
 
         $resetHour = $null

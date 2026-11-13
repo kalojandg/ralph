@@ -504,7 +504,11 @@ function Invoke-ReviewStage($tasks, $repoKeys) {
                     $cycle--
                     continue
                 }
-                if (-not $quotaWaited -and $outText -match "hit your(?:\s+[\w'-]+){0,4}\s+limit") {
+                # 13.11.2026 (CLI 2.1.323): "out of usage credits" е нов квотен клас БЕЗ
+                # "hit your ... limit". Със "resets" е изчакваем; без него е билинг състояние
+                # и нарочно пада по нормалния път (виж ralph-iteration.ps1, QUOTA DETECTION).
+                if (-not $quotaWaited -and ($outText -match "hit your(?:\s+[\w'-]+){0,4}\s+limit" -or
+                    ($outText -match "out of usage credits" -and $outText -match "resets"))) {
                     $resetWait = 60
                     if ($outText -match "resets\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)") {
                         $h = [int]$Matches[1]; $mn = if ($Matches[2]) { [int]$Matches[2] } else { 0 }
@@ -1061,8 +1065,16 @@ function Complete-Agent($info) {
                 Write-Host ""
                 Write-Host "[X] FATAL: claude CLI is too old for a model in ralph-config.json." -ForegroundColor Red
                 Write-Host "    $($apiTail -split "`n" | Where-Object { $_ -match 'does not support this model' } | Select-Object -First 1)" -ForegroundColor Red
-                Write-Host "    Fix: npm install -g @anthropic-ai/claude-code@latest" -ForegroundColor Red
+                # 13.11.2026: лекът зависи от ВИДА инсталация. Native инсталаторът слага бинара в
+                # ~/.local/bin/claude.exe и `npm ls -g @anthropic-ai/claude-code` е ПРАЗЕН — там
+                # `npm install -g` слага ВТОРИ екземпляр до първия и PATH решава кой върви.
+                if ((& npm ls -g @anthropic-ai/claude-code --depth=0 2>$null | Out-String) -match 'claude-code@') {
+                    Write-Host "    Fix (npm install): npm install -g @anthropic-ai/claude-code@latest" -ForegroundColor Red
+                } else {
+                    Write-Host "    Fix (native install - npm global е празен): claude update" -ForegroundColor Red
+                }
                 Write-Host "    Then verify EVERY tier: claude -p 'say OK' --model <id>   (see /ralph-config)" -ForegroundColor Red
+                Write-Host "    After updating, re-check the quota patterns (see /ralph-diagnose)" -ForegroundColor Red
                 Write-Host ""
                 Release-Claim $t.id
                 return "failed"

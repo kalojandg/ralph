@@ -67,10 +67,18 @@ git 2.21 (без `--show-current`); PS 5.1 (ANSI parsing на no-BOM .ps1 — AS
 CLI бинар, не в API-то. Извлечи ги:
 
 ```bash
-B="$APPDATA/npm/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
-grep -ao "Oye=\{.\{0,300\}" "$B"        # таблицата име-на-лимит
-grep -ao "hit your[^\"]\{0,60\}" "$B"   # шаблоните на съобщението
+# КОЙ бинар: провери вида инсталация, преди да търсиш пътя (13.11.2026)
+npm ls -g @anthropic-ai/claude-code --depth=0     # празно => NATIVE инсталация
+B="$APPDATA/npm/node_modules/@anthropic-ai/claude-code/bin/claude.exe"   # npm инсталация
+B="$HOME/.local/bin/claude.exe"                                          # native инсталация
+grep -ao "hit your[^\"]\{0,60\}" "$B" | sort -u          # шаблоните на съобщението
+grep -ao "five_hour[^\"]\{0,220\}" "$B" | head -2        # таблицата име-на-лимит
+grep -ao "out of usage credits[^\"]\{0,120\}" "$B" | sort -u
 ```
+
+⚠ **Лекът зависи от вида инсталация.** При native (`~/.local/bin/claude.exe`, npm global празен)
+обновяването е **`claude update`**; `npm install -g` там слага ВТОРИ екземпляр до първия и PATH-ът
+решава кой върви. FATAL съобщението в `ralph-swarm.ps1` вече разпознава двата случая.
 
 Към 2.1.288 таблицата е: `five_hour`→„session limit", `seven_day`→„weekly limit",
 `seven_day_opus`→„Opus limit", `seven_day_sonnet`→„Sonnet limit",
@@ -79,3 +87,28 @@ grep -ao "hit your[^\"]\{0,60\}" "$B"   # шаблоните на съобщен
 
 ⚠ Точно тук се счупи предния път: старият шаблон позволяваше най-много ЕДНА дума пред
 „limit", а „usage credit limit" са две.
+
+### 2.1.323 (сверено 13.11.2026) — и защо сверяването не е формалност
+
+Обновяване 2.1.123 → 2.1.323 завари **нов клас квотни съобщения БЕЗ „hit your … limit"**:
+```
+You're out of usage credits. /model to switch models.
+Your org is out of usage credits. Contact your admin to add more.
+out of usage credits · resets <час>
+```
+Старият шаблон не ги хващаше — тоест опреш ли до кредити посред нощ, пауза нямаше да има и
+бюджетът щеше да изгори. **Закърпено в двата файла** (`ralph-iteration.ps1` QUOTA DETECTION и
+`ralph-swarm.ps1` ревюерът) с нарочно разграничение:
+- „out of usage credits" **+ „resets"** → квота, чака се (прозорецът се подновява);
+- без reset → билинг състояние (org без средства), което чакане НЕ лекува → пада по нормалния
+  път, за да гръмне бързият FATAL вместо безкраен requeue на всеки час.
+
+Другите промени в 2.1.323: таблицата се размести (`seven_day_overage_included` вече го няма;
+появиха се `extra_usage`, `tengu_usage_overage_included_models`, `seven_day_oauth_apps`,
+`blocked_seven_day`), и има ново „hit your **fast** limit" (fast mode) — него старият шаблон
+си го хваща. Форматът `resets 4pm` оцелява, но вече има и дата-базирани форми
+(„resets next month", „resets Dec 5"), които падат на 60-минутния дефолт.
+
+**Проверявай с таблица на истинност, не на око.** Скрипт, който пуска новото условие срещу
+реалните низове (включително отрицателните случаи: „API Error: 529", обикновен провал), струва
+две минути и показва веднага дали си разширил шаблона твърде много.
