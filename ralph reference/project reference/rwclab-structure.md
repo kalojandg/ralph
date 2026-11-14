@@ -4,7 +4,8 @@ Repo: `D:\Downloads\monk\sprintray`, remote `kalojandg/rwc-renderer-lab` (privat
 Read these first: `RENDERER-AUDIT.md` (full map of the renderer, calls, flow and pipeline), `PLAN.md`, `README.md`, `aws-emulator/README.md`.
 
 ## Goal of the board
-_Статус (2026-11-13): бордът 2000–2320 е изпълнен и слят в `ralph/standalone`. Фронтендът е вече standalone; бекендът още НЕ е орязан (следващ борд, PLAN.md §2.3)._
+_Статус (2026-11-13): бордът 2000–2320 е изпълнен и слят в `ralph/standalone`. Фронтендът е вече standalone; бекендът още НЕ е орязан._
+_Roadmap (решение на потребителя, 2026-11-14): **board 2** (2500–2650) = (а) ЗАПУШВАНЕ на всички външни пътища на фронтенда — само localhost, без GTM/Stripe/Calendly/Fonts/Sentry/LaunchDarkly, AppSync клиентът става „изключен" клиент със същата повърхност; заявки към `localhost:45281` ПАДАТ нарочно, НЯМА локален API и НЯМА нова логика; банерът „Not connected to SprintRay Cloud" ОСТАВА и се показва (той казва истината: няма бекенд); (б) rxjs-compat → pipe, мъртви пакети, Angular 10 → 22 по един мажор на таск. **Board 3** = .NET ъпгрейд „както идва", закачане бекенд↔фронтенд и пренасочване на бекенда към локалния AWS емулатор — бекендът се ПАЗИ, не се заменя и не се трие. Разузнаването за board 3 е в `rwclab-local-aws-recon.md` (същата папка)._
 Turn the copied SprintRay "Design Service" (RayWare Cloud) into a **standalone app**. Starting the app opens straight into the 3D renderer (`''` и `'**'` → `/print-setup` → `DeltaModule` → `<delta-renderer>`; останалите рутове: `/login`, `/not-authorized`, `/error`). Everything unrelated to RayWare/delta is **deleted**: treatments, patients, messenger, billing, dashboards, fleet, sync-box, campaigns, AI, and so on.
 - Frontend: Angular 9 in `app/frontend`.
 - Backend: .NET Core 3.1 in `app/backend`, cut down to the APIs the renderer uses.
