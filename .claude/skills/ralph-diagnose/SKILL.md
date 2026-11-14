@@ -139,6 +139,14 @@ Cloudflare съобщението СЪДЪРЖА „Failed to authenticate", т�
 И погледни ОЦЕЛЯЛОТО, преди да обявиш загуба — worktree-тата се пазят и при 4/4, а CONTINUATION
 продължава оттам (обикновено по-голямата част от работата е налична в worktree-то).
 
+### Поправка на board-а ПО ВРЕМЕ на run = състезание с незабавния retry
+Fail retry тръгва СЕКУНДИ след провала (claim → prompt файл в `%TEMP%\ralph-prompt-<id>.txt`
+се строи веднага от текущия tasks.json + retry/task-<id>.md). Поправиш ли board-а или retry
+бележката СЛЕД този момент, следващият опит върви със СТАРИЯ обхват и гори още един retry за
+същата причина. Правило: **първо спри swarm-а (или изчакай claim-а и сравни LastWriteTime на
+tasks.json с `%TEMP%\ralph-prompt-<id>.txt`), после поправяй.** Рестартът нулира fail броячите,
+а CONTINUATION пази worktree-то и commit-а на предишния опит — нищо не се губи.
+
 ### Спрян оркестратор = board и git могат да се РАЗМИНАТ (13.11.2026)
 
 Ctrl+C/kill между merge-а и гейта оставя merge commit на integration branch-а, а в `tasks.json`
