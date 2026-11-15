@@ -123,7 +123,7 @@
       "workSubdir": "",
       "mainBranch": "ralph/standalone",
       "reference": "rwclab-structure.md",
-      "description": "RayWare Cloud renderer като САМОСТОЯТЕЛЕН апп. Копиран SprintRay Design Service: app/frontend (Angular 9, ngrx 9, three.js 0.125 — ИСКА Node 14, върви само в контейнер), app/backend (.NET Core 3.1, 9 проекта). Пази се САМО RayWare пътят (/print-setup → DeltaModule → <delta-renderer> + core/services/renderer/*); всичко зъболекарско се ТРИЕ. Бекендът е локален AWS Emulator (aws-emulator/, infra/, workers/ + native mesh бинарни), НИКОГА истински AWS. Фронтендът няма тестова традиция: 6 spec файла и karma, вързана за десктоп Chrome.",
+      "description": "RayWare Cloud renderer като САМОСТОЯТЕЛЕН апп. Копиран SprintRay Design Service: app/frontend (след board 2: Angular 22, ngrx 22, Jest 30, Node 22 в контейнер — образ/volume от app/frontend/.node-image), app/backend (.NET Core 3.1 → board 3 го вдига до .NET 10; 9 проекта; гейт в контейнер от app/backend/.dotnet-image). Пази се САМО RayWare пътят (/print-setup → DeltaModule → <delta-renderer> + core/services/renderer/*); всичко зъболекарско се ТРИЕ. AWS = локалният AWS Emulator (aws-emulator/, infra/, workers/ + native mesh бинарни), НИКОГА истински AWS. Фронтендът: 107 spec файла / 1394 jest теста (board 1-2).",
       "verify": [
         "scripts\\gate\\fe-typecheck.cmd"
       ],

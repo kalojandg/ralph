@@ -149,3 +149,19 @@ _Събрано 2026-11-14 (три read-only Explore прохода: бекен�
 5. Дентално орязване: сега (намалява SaaS повърхността) или само неутрализация на външните клиенти + запазена схема.
 6. RoC stub, Stripe секрет в емулатора, LaunchDarkly дефолти, Auth0 → локален HS256 — ред и групиране по таскове.
 7. Гейт: `scripts/gate/be-build.cmd` (`dotnet build Backend.sln` в `sdk:3.1`) + `be-test.cmd` (`dotnet test Tests`) — да се ИЗМЕРЯТ преди авторството (/ralph-setup §1в).
+
+## 12. Взети решения при авторството на board 3 (15.11.2026)
+
+Проби на оператора: (а) **SNS → HTTP subscription в емулатора се приема, но остава `PendingConfirmation` и никога не доставя** (listener в namespace-а на емулатора не получи нито SubscriptionConfirmation, нито Notification); (б) **SecretsManager** CreateSecret/GetSecretValue работят; (в) **nginx HTTP proxy** пред емулатора (`proxy_pass https://127.0.0.1:9297`, `proxy_ssl_verify off`, `proxy_set_header Host $http_host`) — ListBuckets, presigned PUT и GET през `http://127.0.0.1:45284` връщат 200, т.е. SigV4 подписът оцелява и CA-то на емулатора става ненужно за бекенда и браузъра; (г) бекенд гейт в `sdk:3.1`: restore 101 s, build 154 s, 148 unit теста за 15 s.
+
+| Отворен въпрос (§11) | Решение | Таск |
+|---|---|---|
+| 1. Ъпгрейд преди/след пренасочване | **Преди**: .NET 10 (LTS) → AWSSDK 3.7 (носи `AWS_ENDPOINT_URL`) → конфигурация → контейнер. Един таск флипва всичките 9 csproj. | 3110, 3120 |
+| 2. Presigned URL-и и CA | HTTP proxy `aws-http` на 127.0.0.1:45284 в namespace-а на емулатора; бекендът с `AWS_ENDPOINT_URL=http://127.0.0.1:45284`, path-style S3, http presign. | 3120, 3160 |
+| 3. Разминавания на pipeline входовете | Адаптери **извън бекенда**: worker-ът приема и масивната форма на preprocess входа и публикува `bind` payload; `PlatformJobLocal` е placeholder (Pass) машина; FIFO опашките се създават без консуматор. | 3200, 3210 |
+| 4. Realtime | **Board 4.** Сега само мостът SQS → бекенд callback-и (`workers/callback-bridge`). | 3210 |
+| 5. Дентално орязване | **Board 4/5.** Сега само неутрализация на външните клиенти (AppSync off при празен endpoint, LaunchDarkly off при празен ключ, Stripe `ApiBase` към localhost, RoC → `api/local-roc` stub, Auth0 URL-и → localhost) + гейт `be-config-offline`. | 3140 |
+| 6. RoC/Stripe/LD/Auth0 ред | В един таск (3140) + Stripe секретът в емулатора (3200). Токенът: без подпис, `aud ["rwclab-local"]`, договорът е дословно в 3030/3140/3150. | 3030, 3140, 3200 |
+| 7. Гейт | Измерен (виж горе); `be-build.cmd`/`be-test.cmd`/`be-exec.cmd` + `.dotnet-image`. | 3100 |
+
+Допълнително: Postgres 16 в compose (`POSTGRES_HOST_AUTH_METHOD=trust`, без парола в git; 127.0.0.1:45283), миграции + seed при старт зад `Database:MigrateOnStartup=true`, `IF EXISTS` в миграцията `20220216100534`, Npgsql legacy timestamp switch. Фронтенд follow-up-и в същия борд: NG0600/NG0100 (3000), `*_ERROR` action-и + без `logActions$` (3010), headless smoke гейт с Playwright 1.65.1 (3020), rxjs 7 + без `legacy-peer-deps` (3040).
