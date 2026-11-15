@@ -34,6 +34,158 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task 3300 - docs: local stack, gates and what still fails on purpose
+
+- README.md: .NET 10 everywhere (was 3.1); 'Run the whole flow' now uses scripts\local-stack.cmd then scripts\fe-serve.cmd, with the port table (45280/45281/45283/45284/9297); new subsection 'Local token contract' under the stub session; gate table gained fe-smoke, be-build, be-test, be-exec, be-config-offline, be-image, compose-config, lab-e2e; new section 'What the backend talks to' (Auth0, RoC, LaunchDarkly, Stripe, AppSync, AWS, Postgres, CORS, callback bridge); 'what fails on purpose' updated (REST works, realtime and the full PlatformJob pipeline do not, banner stays); legacy-peer-deps paragraph replaced by the result of 3040 (.npmrc deleted, rxjs 7).
+- PLAN.md: new note 0.3 marking board 3 done, board 4 (realtime SNS->SQS->WebSocket, PlatformJob pipeline, dental cut of the backend) described as next; stale .npmrc / --browserTarget / .NET 3.1 statements corrected.
+- RENDERER-AUDIT.md: unchanged, no claim about the backend that became false.
+- Be-build and be-test times are from task 3100 on the sdk:3.1 image; marked as such, nothing re-measured.
+- Verify: scripts\gate\no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd all exit 0.
+- Commit: 05249cb
+
+
+## [2026-11-15 12:24] - Task #3160: feat(stack): backend, Postgres and plain-HTTP AWS proxy in docker-compose, one command for the whole local stack
+
+**Status:** ✅ Complete
+
+**Problem:** The backend (.NET 10 after board 3) had no container and the stack had no Postgres. The emulator recreates its self-signed CA on every start, so the backend and the browser must not depend on it.
+
+**What was done:**
+- app/backend/Dockerfile: multi-stage sdk:10.0 restore+publish Web/SprintRay.Web.csproj (BuildKit NuGet cache mount) -> aspnet:10.0. .dockerignore (bin/obj/TestResults). docker-entrypoint.sh waits for the emulator credentials file, then exec dotnet SprintRay.Web.dll.
+- docker-compose.yml: aws-emulator also publishes 127.0.0.1:45281 (backend) and 127.0.0.1:45284 (aws-http). New aws-http (nginx:1.27-alpine in the emulator namespace, inline compose config, proxy_pass https://127.0.0.1:9297, proxy_ssl_verify off, Host passthrough, unbuffered unlimited bodies). New postgres (postgres:16, sprintray/trust, volume rwc-pg-data, pg_isready healthcheck, 127.0.0.1:45283). New backend (emulator namespace, Development, :45281, AWS_ENDPOINT_URL=http://127.0.0.1:45284, emulator creds/config from /emu ro, AWS__S3ForcePathStyle, Database__MigrateOnStartup; depends_on emulator healthy + postgres healthy + aws-http started).
+- scripts/local-stack.cmd (for the user): compose up -d --build, wait for emulator health (curl, 120 s), bootstrap with the env.sh variables for cmd, print the URLs.
+- Gates: scripts/gate/compose-config.cmd (docker compose config -q), scripts/gate/be-image.cmd (docker build -t rwc-backend:gate app/backend).
+
+**Verification:**
+- compose-config.cmd → exit 0
+- be-image.cmd → exit 0, 168 s with an empty NuGet cache (publish ~140 s); the image contains /app/SprintRay.Web.dll + the entrypoint
+- be-build.cmd not run by the agent (backend sources unchanged); left to the post-merge gate. compose up was not run (it starts long-running servers); the manual check is written in the commit body.
+
+**Files modified:**
+- app/backend/Dockerfile, app/backend/.dockerignore, app/backend/docker-entrypoint.sh
+- docker-compose.yml
+- scripts/local-stack.cmd, scripts/gate/be-image.cmd, scripts/gate/compose-config.cmd
+
+**Git commit:** `25fad00` — `feat(stack): backend, Postgres and plain-HTTP AWS proxy in docker-compose, one command for the whole local stack`
+
+
+## Task #3150 — feat(backend): local Postgres bootstrap (2026-11-15)
+
+**Repo:** rwclab · **Branch:** ralph/task-3150 · **Commit:** 57efde7
+
+**What changed**
+- `Web/Infrastructure/LocalDatabase/LocalDatabaseBootstrap.cs` + `Program.cs`: after the host is built and before `Run`, in Development with `Database:MigrateOnStartup=true` (default false in appsettings.json) → `SprintRayWriteContext.Database.Migrate()`, then `DataLayer/Scripts/LocalSeed/*.sql` (copy-to-output) in ordinal order, all in one transaction with `ExecuteSqlRaw`. On failure it logs Critical and rethrows, so the process stops.
+- Migrations on an empty Postgres 16. **4 migrations edited, not 1:** 20220216 (IF EXISTS on all 6 view drops), 20230308 (IF EXISTS on TreatmentsPage), 20210827 PHoneNumberValidation (drops TreatmentsPage first, because the view blocks ALTER of Office.PhoneNumber), 20211015 AddProductOnCloudSchema (`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`). Designer files and the snapshot are untouched.
+- Seed: identity per the token contract (8 rows), PrinterType 7 + PrinterPlatform 8, LayerThickness 3 / TreatmentType 6 (print-setup allowedTypes) / SprModelCount 6 / PrinterPlatformTreatmentType 42 / TreatmentTypeDefaultValue 4, S3Folder inbox, TreatmentStatus 9 / Tightness 3 / CoverageType 1. Platform capacities, SPR model counts, status colours and the CoverageType name are placeholders (nothing in the copy says what they should be).
+- `appsettings.Development.json`: ConnectionStrings `Host=postgres;Port=5432;Database=sprintray;Username=sprintray` (no password). The AWS names already matched infra/resources.mjs, so no change there.
+
+**Verification**
+- Real check against a throwaway postgres:16 container, using a temporary probe test (not committed; the container was removed afterwards): all 266 migrations apply and the seed inserts 98 rows. A second run applies 0 migrations and inserts 0 rows.
+- be-build: 0 errors · be-config-offline: OK (47 keys) · be-test filter `SprintRay.Tests.Extensions`: 43/43 (17 new tests in LocalDatabaseBootstrapTests). The full unit suite is left to the gate.
+
+**Notes for next**
+- 3160 (compose) must start Postgres with POSTGRES_USER=sprintray, POSTGRES_DB=sprintray, POSTGRES_HOST_AUTH_METHOD=trust and set Database__MigrateOnStartup=true. The expected log is in the commit body.
+
+
+## Task #3040 - build(frontend): rxjs 7, no legacy-peer-deps, current @types/node and lodash, distinct environments
+**Repo:** rwclab (app/frontend) | **Commit:** afa53cdb24c8a822161ef9f067411c1e44d381f8 | **Status:** done
+
+**What changed**
+- package.json: rxjs ~6.6.0 -> ^7.8.2, lodash 4.17.15 -> 4.18.1 (the current release), @types/lodash 4.14.165 -> 4.17.27, @types/node ^12.11.1 -> ^22.20.5, graphql-tag ^2.10.3 -> ^2.12.7. That last bump was needed because, once .npmrc was gone, graphql-tag 2.10 vs graphql 15 was a hard ERESOLVE. The lock was regenerated with npm 10 in the container.
+- app/frontend/.npmrc (legacy-peer-deps) deleted; fe-npm-ci.cmd passes without ERESOLVE.
+- rxjs 7 code changes, 9 places in 8 files: 1x toPromise -> firstValueFrom (api.service), 7x subscribe(next, error) -> observer object, renderer Subscription.add chain (returns void in 7) -> two add() calls, f-typeahead merge() union typing.
+- environment.ts useLocalAuthStub: false (environment.dev.ts stays true); env comments fixed; FeatureFlagStoreService loses its unused auth injections; stale comments in jest-ng-transformer.js / jest.config.js fixed.
+- Specs adapted: environments, local-auth-stub, auth0.service (comment), feature-flag-store.service, renderer.component (the no-offsetParent characterization pinned rxjs 6's close-on-error; rxjs 7 keeps the subscriber).
+
+**Verification**
+- fe-npm-ci OK, fe-typecheck OK, fe-test targeted subset (core, environments, delta, shared/forms, components/app, cloud-drive, common, smart-table, dialogs): 1356 passed / 0 failed. fe-build ci OK, fe-smoke PASS (canvas at 9.1 s, 0 errors), no-external-hosts OK.
+- Full jest suite left for the post-merge gate.
+
+**Follow-up**
+- README "Gate commands" (outside app/frontend scope) still describes the deleted .npmrc and needs a one-paragraph update.
+
+
+## [2026-11-15 00:00] - Task #3140: feat(backend): offline Development mode - unsigned local tokens, CORS for 45280, local ResinOnCloud stub, neutralised AppSync, LaunchDarkly and Stripe, offline-config gate
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** A backend started with ASPNETCORE_ENVIRONMENT=Development still went to Auth0 (OIDC metadata, client credentials), AppSync, LaunchDarkly (and the base file held a live server SDK key), Stripe, SprintRay ResinOnCloud and the AWS account 731672801406 / us-west-2. CORS allowed only :4202.
+
+**What was done:**
+- RED: `be-config-offline` gate (new) fails against the old Development file with 47 violations, including the live LD key. 15 new MSTest tests (LocalUnsignedTokensTests, OfflineExternalServicesTests, LocalRocControllerTests) do not compile against the old code because the types they need are missing.
+- GREEN:
+  - A. `Auth0:LocalUnsignedTokens` (default false). In `JwtBearerOptionsExtensions.ConfigureAuth0Bearer`: no Authority, RequireHttpsMetadata=false, issuer/signature/audience not checked, lifetime checked, SignatureValidator returns a JsonWebToken. When false, behaviour is the same as before. Startup calls it.
+  - B. CORS origin `http://localhost:45280`.
+  - C. AppSync: an empty GraphQLEndpoint returns default before GetClientAsync, so no Auth0 token is fetched; logs once at Debug.
+  - D. LaunchDarkly: an empty or `<set-locally>` key gives no LdClient and flags read false. The base key is now `<set-locally>`.
+  - E. Stripe: `Stripe:ApiBase` goes through `StripeServiceFactory.UseApiBase` into every StripeClient. Stripe.net 39 has no `StripeConfiguration.ApiBase`, and nothing in the code uses the global client.
+  - F. `LocalRocController` at api/local-roc (anonymous, 404 outside Development) serves embedded `LocalStubs/roc-resins.json` with 2 resins (2003, 3010).
+  - G. All Auth0, 3Shape, Medit, FullContour, AzureAd, PowerBI and mail values point to localhost or local-stub.test. The AWS block uses local names (us-east-1, 000000000000, *_LOCAL, 127.0.0.1:45284).
+  - H. Gate `scripts/gate/be-config-offline.{cmd,mjs}`.
+
+**Notes for the reviewer / 3150:**
+- RoCService reads `GET resin` as a single RoCViewModel {metadata, data[]}, not as List<RoCViewModel>. The stub follows the code.
+- There are no RoC fixtures in the frontend or backend. The format is copied from the DTO attributes and the AutoMapper rules (rgn and ck are numeric strings). The values are placeholders that use the ResinIds/LayerThicknessIds constants.
+- The gate counts ARNs as local only when they are `arn:aws:<svc>:us-east-1:000000000000:`. Otherwise the local ARNs from the task notes would fail it.
+- DynamoDB table and queue names are temporary local names for 3150 to check against infra.
+
+**Verification:**
+- scriptsgatee-build.cmd → 0 errors
+- scriptsgatee-test.cmd, filtered to the 3 new classes → 5/5, 6/6, 4/4 pass. The full suite is left to the post-merge gate.
+- scriptsgatee-config-offline.cmd → OK (47 keys checked)
+
+**Files modified:**
+- app/backend/Web/Startup.cs, Web/SprintRay.Web.csproj, Web/appsettings.json, Web/appsettings.Development.json
+- app/backend/Web/Infrastructure/Extensions/JwtBearerOptionsExtensions.cs (new)
+- app/backend/Web/Controllers/Local/LocalRocController.cs (new), Web/LocalStubs/roc-resins.json (new)
+- app/backend/ServiceLayer/Services/AWS/AwsAppSyncService.cs, FeatureFlag/LaunchDarklyService.cs, Payments/StripeServiceFactory.cs
+- app/backend/Tests/Extensions/LocalUnsignedTokensTests.cs, Tests/Services/OfflineExternalServicesTests.cs, Tests/Controllers/LocalRocControllerTests.cs (new)
+- scripts/gate/be-config-offline.cmd, scripts/gate/be-config-offline.mjs (new)
+
+**Git commit:** `ae75d4c` — `feat(backend): offline Development mode - unsigned local tokens, CORS for 45280, local ResinOnCloud stub, neutralised AppSync, LaunchDarkly and Stripe, offline-config gate`
+
+
+### Task #3020 - test(gate): headless browser smoke gate that boots the built app offline and fails on runtime errors
+
+**Status:** done (retry 3, scope escalation)
+
+**What changed:**
+- Kept the smoke gate from 460f8f4 (`scripts/gate/fe-smoke.mjs`, `fe-smoke.cmd`) as is.
+- `picture.service.ts` (out of scope): `getProfilePic()` is called from the header template; its `GetUserAvatar` dispatch now runs in a microtask, so NgRx's state signal is no longer written mid-render (NG0600 in HeaderComponent).
+- `renderer.component.ts` (out of scope): the store-driven tail of `ngAfterViewInit` (`getMetadata` + the three subscribe* calls, same order) now runs in a microtask with a `destroy$.closed` guard; `getMetadata -> clearPlatform -> SetModelsToFetchAction` no longer fires inside the first CD pass (NG0100 on `@jobsBarAnimation` in PlatformSetupComponent).
+
+**Verification:**
+- fe-typecheck: exit 0
+- fe-test app-modules/delta: 11 suites / 369 tests passed; fe-test components/common/header: 14 passed
+- fe-build ci: exit 0; fe-smoke: PASS in 15.7 s, canvas at 12.4 s, errors: 0, all 32 aborted requests to localhost
+- Full jest suite left to the orchestrator gate.
+
+**Commit:** 7ea1688
+
+
+## Task #3120 - build(backend): AWSSDK 3.7 with endpoint override from configuration, path-style S3 and no hand-built AWS clients
+
+**Date:** 2026-11-15 | **Repo:** rwclab (app/backend) | **Status:** done (commit 2116e37)
+
+### What changed
+- **Packages:** every AWSSDK.* reference in 6 csproj files moved to the latest 3.7.x: DynamoDBv2 3.7.513.4, SecretsManager 3.7.504.43, CognitoIdentityProvider 3.7.505.13, S3 3.7.511.8, SimpleEmail 3.7.502.58, SNS 3.7.502.61, SQS 3.7.502.57, StepFunctions 3.7.502.50, KMS 3.7.506.18, Lambda 3.7.511.24, KinesisFirehose 3.7.502.56, Extensions.NETCore.Setup 3.3.101 -> 3.7.400.2. The resolved AWSSDK.Core is 3.7.501.1, which is at least 3.7.300, so AWS_ENDPOINT_URL is now read. AWS.Logger.AspNetCore went 2.2.0 -> 3.5.3; staying on 2.2.0 would have kept a 3.3 CloudWatchLogs client running on Core 3.7. Not moved to v4.
+- **Startup:** `AddDefaultAWSOptions(GetAWSOptions())` now runs in every environment. The CloudWatch logger is still added outside Development only. `AddAwsServices(Configuration)` replaces the parameterless call.
+- **S3 DI:** with `AWS:S3ForcePathStyle=true` (bool, default false), IAmazonS3 is registered explicitly with `AmazonS3Config { ForcePathStyle = true }`. ServiceURL comes from AWS:ServiceURL or AWS_ENDPOINT_URL_S3/AWS_ENDPOINT_URL, AuthenticationRegion from AWS:Region, and credentials from the same AWSOptions (Credentials -> Profile -> fallback chain). With the key absent, the old `AddAWSService<IAmazonS3>()` path is used.
+- **New `ServiceLayer/Services/AWS/AwsEndpoint.cs`:** works out the S3 endpoint (client ServiceURL, then env) and the presign Protocol. AwsS3Service, AwsS3LogFilesService and AwsS3StripeFilesService presign with Protocol.HTTP when the endpoint is http://.
+- **Public URL:** with an endpoint configured, `GeneratePublicUrl`/`ExtractKey` build `{endpoint}/{bucket}/{key}` (`AwsS3Keys.PathStylePublicUrlStructure`); without one they keep the old regional form.
+- **DashboardDynamoDbClient:** now takes the injected IAmazonDynamoDB instead of `new AmazonDynamoDBClient(key, secret, USWest1)`. `DashboardSecretKeysOptions` is deleted because nothing uses it any more. The appsettings entries are untouched (task 3150).
+
+### Tests (TDD)
+- RED: the new tests did not compile (`AddAwsServices` had no IConfiguration overload).
+- GREEN: `Tests/Extensions/AwsServicesRegistrationTests.cs` checks that the client is path-style with the endpoint and auth region when the key is true, and virtual-hosted when the key is absent. `Tests/Services/AwsS3ServiceTests.cs` covers the path-style public URL and ExtractKey with an endpoint, the regional URL without one, presign over HTTP for an http endpoint, and HTTPS without an endpoint.
+- `be-test FullyQualifiedName~Aws`: 8/8 green, including the existing AwsSnsServiceTests. `be-build`: 0 errors, 67 warnings, none from the AWS SDK. The full suite was not run and is left to the gate.
+
+### Notes for the next tasks
+- 3150/3160: set `AWS:S3ForcePathStyle=true` and `AWS:Region=us-east-1` locally, and `AWS_ENDPOINT_URL=http://127.0.0.1:45284` in compose.
+
+
 ## [2026-11-15] Task #3110 — build(backend): .NET Core 3.1 -> .NET 10 with EF Core 10, Npgsql 10, AutoMapper 14, MSTest 3; build and unit tests green
 
 **Repo:** rwclab (app/backend) · **Commit:** 7919ab6
@@ -5142,6 +5294,13 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
+
+
 
 
 
