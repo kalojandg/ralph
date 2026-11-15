@@ -34,6 +34,444 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #2650 — chore(build): prove the upgraded RayWare app on the latest Angular and tidy the upgrade leftovers
+**Repo:** rwclab · **Branch:** ralph/task-2650 · **Commit:** 0b36f38 · **Date:** 2026-11-15
+
+**Gate (Angular 22.2, node:22-bookworm, rwc-fe-nm-ng22, one at a time, all green):**
+| gate | time |
+|---|---|
+| fe-npm-ci | 59 s |
+| fe-typecheck | 21 s |
+| fe-test (whole jest) | 4 min 10 s — 107 suites / 1394 tests |
+| fe-build ci | 2 min 59 s |
+| fe-build dev (real build) | 3 min 54 s |
+| no-external-hosts | OK |
+
+**Done:**
+- Specs: HttpClientTestingModule → provideHttpClient(withInterceptorsFromDi()) + provideHttpClientTesting() (19 uses / 8 files, mechanical).
+- .browserslistrc → `baseline widely available on 2026-05-07` (Angular 22.2 CLI default). `standalone: false` left as-is.
+- Docker volumes rwc-fe-nm-ng10…ng21 removed (~6.6 GB). rwc-fe-node_modules NOT removed: still attached to the stopped container rwc-fe-serve.
+- README: Angular 22, .node-image/volumes, new gate-time table, `fe-build production` gone, "Run it in a browser" says localhost-only and REST to :45281 fails on purpose (replaces the dev.api.sprintray.com paragraph). PLAN.md: note 0.2 + next boards (local AWS backend, signals, control flow, esbuild, zoneless).
+
+**Overrides that stay:** .npmrc legacy-peer-deps (npm ci ERESOLVE: angular-user-idle@4.0.0 needs rxjs ^7.5, app has 6.6.7); ngx-toastr patch-package.
+
+**Findings outside scope:** scripts/fe-serve.cmd still passes `--browserTarget` (CLI 22 only knows `--build-target`), so it most likely fails (not run). fe-test.cmd `--testPathPattern` → Jest 30 `--testPathPatterns`.
+
+
+## Task #2644 — build(angular): upgrade to Angular 22 (rwclab)
+**Date:** 2026-11-15 · **Commit:** ace8699 · **Branch:** ralph/task-2644
+
+**What:** Angular 21 → 22 (core 22.2.6, cdk/material/cli 22.2.7, ngrx 22.0.1), TypeScript 6.0.3, jest-preset-angular 17.0.3, ng-bootstrap 21, ng-select 24.2.1, ngx-slider 22, ng-dynamic-component 11.0.0. Node image unchanged (node:22-bookworm), new volume rwc-fe-nm-ng22.
+
+**Migrations:** change-detection-eager (158 components → Eager), http-xhr-backend (withXhr), strict-templates-default, safe-optional-chaining (3 templates). The strict-safe-navigation-narrow extendedDiagnostics block was removed again because of NG4003 with strictTemplates false.
+
+**Manual:** TS6: baseUrl → paths, downlevelIteration dropped, strict:false explicit; esModuleInterop is forced on → moment/jszip/concaveman/deep-equal are default imports; main.ts polyfills import without .ts. menu-dialog: ComponentFactoryResolver → createComponent(type). 2 spec HostComponents get Eager (22's OnPush default).
+
+**⚠ ngx-toastr:** no release works on 22 (19.1.0 and 20.0.5 use the removed ComponentFactoryResolver → build error). Kept 19.1.0 + patches/ngx-toastr+19.1.0.patch via postinstall patch-package (new dev dep). Input for 2650.
+
+**Verified:** fe-npm-ci (patch applied), tsc app+spec, fe-build ci green, jest core/store 244, core/services 429, delta 373, other subsets 352: all green. Full suite left to the gate.
+
+**Notes:** fe-test.cmd <pattern> is still on --testPathPattern (Jest 30 wants --testPathPatterns), outside scope. Lock regeneration now needs --ignore-scripts.
+
+
+## Task #2643 — build(angular): upgrade to Angular 21 (rwclab)
+**Date:** 2026-11-15 · **Commit:** 9ba2743 · **Branch:** ralph/task-2643
+
+**What:** Angular 20.3 → 21.2.26 (cdk/material 21.2.14, cli/build-angular 21.2.30), ngrx 21.1.1, ng-bootstrap 20.0.0, ng-select 21.8.2, ngx-slider 21, TypeScript 5.9.3, jest 29 → 30.5.2 + jest-preset-angular 16.2.0 (15 peers Angular <21) + jest-environment-jsdom 30.5.2 + jsdom 26.1.0. Volume rwc-fe-nm-ng21, image node:22-bookworm unchanged, lock v2.
+
+**Migrations:** only bootstrap-options-migration (main.ts: provideZoneChangeDetection, zone.js kept) and update-typescript-lib (lib kept explicit as dom+es2022 instead of being dropped). The control-flow migration is marked required in 21 but forbidden by the task: it was run once by mistake, then killed and reverted. Retry agents: use --name, not --from/--to.
+
+**Manual:** tsconfig.spec.json now inherits es2020+bundler (Angular 21 types sit behind exports, which node10 resolution cannot see; ts-jest still emits CJS). jest.config ignores TS151001. drag-drop.directive @HostBinding private → protected (Angular 21 AOT type-checks host bindings). Specs adapted: none.
+
+**Verified:** fe-npm-ci, tsc app+spec, jest core/store 244, core/services 429, delta 373, shared/directives 8, routing+auth 17: all green. fe-build ci green. Full suite left to the gate.
+
+**⚠ Outside scope (not changed):** `scriptsgatee-test.cmd <pattern>` uses --testPathPattern, which Jest 30 rejects. The no-arg gate run works. The script needs --testPathPatterns.
+
+
+## Task #2642 - build(angular): upgrade to Angular 20 (2026-11-14)
+
+**Repo:** rwclab · **Lane:** ng-upgrade · **Commit:** 449fdea · **Status:** ✅ done
+
+- Angular 19.2 -> 20.3.35 (cli/build-angular 20.3.43, cdk/material 20.2.14, ngrx 20.1.0, ng-bootstrap 19.0.1, ng-select 15.2.0, ngrx-store-localstorage 20.1.0, ngx-slider 20, jest-preset-angular 14.6.2). TS 5.8.3, zone.js 0.15.1, jest 29.7 and ngx-toastr 19.1.0 are unchanged. `.node-image` -> `node:22-bookworm rwc-fe-nm-ng20`. Lock stays v2, 0 mismatches.
+- Migrations: `DOCUMENT` moved from @angular/common to @angular/core (3 files). angular.json generator defaults keep the .component.ts naming. src/tsconfig.json `moduleResolution` -> `bundler` (only that line kept). Optional migrations were not run (control flow, router-current-navigation, application builder).
+- Manual: tsconfig.spec.json `moduleResolution: node`, because commonjs + bundler is TS5095. Removed the unused `act` import from @ngrx/effects in print-list.effects (v20 removed it).
+- Same procedure as #2641: hand bump -> lock-only install -> npm ci -> `ng update --migrate-only` with NG_DISABLE_VERSION_CHECK. The migrations take ~14 min over the bind mount.
+
+**Verified:** fe-npm-ci, tsc app + spec, jest core/store 244, core/services 429, delta 373, touched specs 108: all green. fe-build ci green (3:23). No specs adapted. The full jest suite is left to the gate.
+
+**Notes for next tasks:** header.component.spec still imports DOCUMENT from @angular/common (deprecated re-export). @angular/platform-browser-dynamic and @angular/animations are deprecated in 20. jest-preset-angular 14.6 peers Angular <21, so Angular 21 needs 15.x (setup-env API).
+
+
+## Task #2641 - build(angular): upgrade to Angular 19 (2026-11-14)
+
+**Repo:** rwclab · **Lane:** ng-upgrade · **Commit:** 9d05142
+
+- Angular 18.2 -> 19.2.25 (cli/build-angular 19.2.27, cdk/material 19.2.19, ngrx 19.2.1, ng-bootstrap 18.0.0, ng-select 14.9.0, ngrx-store-localstorage 19.0.2, ngx-slider 19, zone.js 0.15.1, TS 5.8.3, jest-preset-angular 14.4.2). `.node-image` -> `node:20-bookworm rwc-fe-nm-ng19`. Lock stays v2.
+- Mandatory `standalone: false` migration (216 files), re-applied in the original layout. Also applied to spec/test stubs, which the schematic doesn't see (src/tsconfig.json excludes specs).
+- Manual: f-number-slider TS2872 (`'top' || 'left'` -> `'top'`). delta-testbed's dispatch spy is now typed to the action overload (ngrx 19 added a `() => Action` overload).
+- Gotcha: `ng update`'s internal `npm install` hangs in the container (stalled registry sockets). Workaround: bump package.json by hand -> `npm install --package-lock-only --lockfile-version 2` -> `npm ci` -> `ng update --migrate-only` with `NG_DISABLE_VERSION_CHECK=true`.
+
+**Verified:** fe-typecheck + spec tsc, jest core/store 244, core/services 429, delta 373, touched specs 66: all green. fe-build ci green (3:14). The full jest suite is left to the gate.
+
+
+## Task #2640 — build(angular): upgrade to Angular 18
+
+**Repo:** rwclab (app/frontend) · **Commit:** b872c3f · **Status:** ✅ done
+
+**What changed**
+- `.node-image` → `node:20-bookworm rwc-fe-nm-ng18` (Node 18 → 20, new volume, clean npm ci; the ng17 volume stays for rollback). The lock stays lockfileVersion 2, and package.json ↔ lock root have 0 mismatches.
+- `ng update` core/cli 18, then material/cdk 18 and ngrx 18 (`--force --allow-dirty`). The builder stays `build-angular:browser`, and no optional migrations were run.
+- Versions: @angular/* 17.3.12 → 18.2.14, cdk/material 17.3.10 → 18.2.14, cli/build-angular 17.3.17 → 18.2.21, ngrx 17.2.0 → 18.1.1, ng-bootstrap 16.0.0 → 17.0.1, ng-select 12.0.7 → 13.9.1, ngx-toastr 18.0.0 → 19.1.0, ngrx-store-localstorage 17 → 18.0.0, ngx-slider 17.0.2 → 18.0.0. Unchanged: TS 5.4.5, zone.js 0.14.10, rxjs 6.6, jest 29.7, jest-preset-angular 14.3.3 (peer <19; kept instead of 14.1.x so `setupZoneTestEnv` stays).
+- Mandatory core HTTP migration: `HttpClientModule` → `provideHttpClient(withInterceptorsFromDi())` in AppModule/CoreModule, which is equivalent. It was re-applied by hand in the original layout because the schematic reformatted the whole decorators. The schematic left a dangling `HttpClientModule` in SharedModule exports, so shared.module stays unchanged (deprecated, still present in 19).
+- The ngrx effects migration added an unused `@ngrx/operators` to package.json only; it was removed.
+- ng-bootstrap 17: `getWeekdayLabel` width type → `Exclude<Intl.DateTimeFormatOptions["weekday"], undefined>`.
+- ngx-toastr 19: `Toast.state` is now a signal → toast-form template `state().value`.
+
+**Specs adapted:** toast-form.component.spec.ts, `cmp.state.value` → `cmp.state().value` (the old API is gone; the expectations are the same).
+
+**Verified:** fe-npm-ci (fresh volume), tsc app + spec, jest core/store 244, core/services 429, delta 373, toast 17, all green. fe-build ci green (~3 min). The full suite is left to the gate.
+
+**Notes for next tasks:** Angular 19 needs jest-preset-angular 14.4+ (14.3.3 peers <19). HttpClientModule/HttpClientTestingModule remain in SharedModule exports and in the specs (for 2650).
+
+
+## Task #2639 — build(angular): upgrade to Angular 17
+
+**Repo:** rwclab (app/frontend) · **Commit:** 6d15ead · **Status:** ✅ done
+
+**What changed**
+- `.node-image` → `node:18-bullseye rwc-fe-nm-ng17` (new volume, clean npm ci; the ng16 volume stays for rollback). The lock stays lockfileVersion 2, and package.json ↔ lock root have 0 mismatches.
+- `ng update` core/cli 17, then material/cdk 17 and ngrx 17 (`--force --allow-dirty`). The builder stays `build-angular:browser`, and no optional migrations were run (control flow, standalone, signals).
+- Versions: @angular/* 16.2.12 → 17.3.12, cdk/material 16.2.14 → 17.3.10, cli/build-angular 16.2.16 → 17.3.17, ngrx 16.3.0 → 17.2.0, typescript 5.1.6 → 5.4.5, zone.js 0.13.3 → 0.14.10, ng-bootstrap 15.1.2 → 16.0.0, ng-select 11.2.0 → 12.0.7, ngx-toastr 17.0.2 → 18.0.0, ngrx-store-localstorage 16 → 17.0.0, ngx-slider 16.0.1 → 17.0.2, jest-preset-angular 13.1.6 → 14.3.3. Unchanged: rxjs 6.6, ngx-translate 15/8, ng-dynamic-component 10.8.2, jest 29.7.
+- Migrations: angular.json `browserTarget` → `buildTarget`. The store-devtools migration adds `connectInZone: true`; it wrote a double comma, which was fixed by hand.
+- **ng-bootstrap 16 removed the legacy `<ngb-accordion>/<ngb-panel>`** (it shows up only under AOT/jest; tsc saw only `NgbPanelChangeEvent`). print-jobs, platform-model-list (5 panels) and platform-print-setup moved to the `ngbAccordion` directive API. They are still controlled: `[collapsed]` follows the same component state the old `[activeIds]` did, and the header is a plain button with the old ngbPanelToggle bindings that calls the handler. Handlers now take `(panelId, nextState)`. In model-list, `isMenuTabOpen()` keeps "a disabled tab is never open". The DOM classes are the same Bootstrap 5 markup; SCSS `ngb-accordion ::ng-deep` → `.accordion ::ng-deep`.
+- jest-preset-angular **14.3.3** (not 14.0.x): `setup-env/zone` / `setupZoneTestEnv` exists only from 14.3, which also deprecates the setup-jest import that 15 removes. 14.3.3 peers Angular <19 / jest 29. `setup-jest.ts` → `setupZoneTestEnv({ teardown: { destroyAfterEach: false } })` (same options, no more reset + re-init).
+- `.npmrc legacy-peer-deps=true` stays (angular-user-idle 4 peers on rxjs ^7.5).
+
+**Specs adapted:** none.
+
+**Verified:** fe-npm-ci (fresh volume), fe-typecheck (app + spec tsconfig), jest core/store 244, core/services 429, delta 373, all green. fe-build ci green (3:48). The full single-run suite is left to the gate.
+
+**Notes for next tasks:** the Angular 18 task can stay on jest-preset-angular 14.3.x (peer <19). The accordion templates are already on the new API.
+
+
+### Task #2638 — build(material): finish the MDC migration so Angular 17 can drop the legacy components
+
+**Repo:** rwclab (`app/frontend`) · **Branch:** ralph/task-2638 · **Commit:** 1e3e218
+
+**Done:**
+- `ng generate @angular/material:mdc-migration --components all --directory src` (Node 18 image, volume `rwc-fe-nm-ng16`). All 23 `@angular/material/legacy-*` imports in shared/common/delta/cloud-drive modules and in f-select-v2/f-autocomplete-v2 now use the MDC entry points. `grep material/legacy` gives 0.
+- Mapped the 70 schematic TODOs by hand: `.mat-form-field-label(-wrapper)` → `.mat-mdc-floating-label`, `-infix` → `.mat-mdc-form-field-infix`, `-flex` → `.mat-mdc-text-field-wrapper`, `-underline`/`-ripple` → `.mdc-line-ripple::before/::after` (background-color → border-bottom-color; display:none → `.mdc-line-ripple`), `-wrapper` padding → `.mat-mdc-form-field-bottom-align::before`, `.mat-select-arrow` → `.mat-mdc-select-arrow`, `.mat-option-text` → `.mdc-list-item__primary-text`, `.mat-mdc-selected`/`.mat-active` → `.mdc-list-item--selected`/`.mat-mdc-option-active`, `.mat-autocomplete-panel` → `.mat-mdc-autocomplete-panel`, radio circles → `.mdc-radio__*`, slide toggle → `.mdc-switch` track/handle.
+- Deleted dead rules: the MatSlider styles (no mat-slider in any template) and an `&.mat-option-text` rule on the option itself that never matched.
+- platform-print-setup chips: `mat-chip-set` + `mat-chip`, not listbox/option, because chip options toggle their own selection on click and the legacy chips did not. Label colour is inherited. Card uses `appearance="outlined"`.
+- Removed unused `MatTabsModule` (common.module) and `MatSliderModule` (shared.module).
+- Deleted `_material-legacy-theme.scss` and its import: the indigo-pink prebuilt theme already themes the MDC components and includes the typography hierarchy.
+- Form fields were already `appearance="fill"`. The slide toggle binds only through ngModel, so no event API changed.
+
+**Specs adapted:** none. No spec queries a Material DOM class.
+
+**Verify:** `tsc --noEmit` clean. Jest subsets for shared, delta, common, cloud-drive and components: 29 suites, 514 tests, all green. Sass compile of main.scss and every touched component stylesheet: OK. Not run here, left to the post-merge gate: fe-npm-ci (package.json unchanged), the full jest suite, and `fe-build.cmd ci`.
+
+**Not checked:** how the restyled MDC form fields, switch and chips look in a browser. Only the selectors were mapped; nothing was rendered.
+
+
+## Task #2637 — build(angular): upgrade to Angular 16
+
+**Repo:** rwclab (app/frontend) · **Commit:** 612d350 · **Status:** ✅ done
+
+**What changed**
+- `.node-image` → `node:18-bullseye rwc-fe-nm-ng16` (new volume, clean npm ci). The lock stays lockfileVersion 2.
+- `ng update` core/cli 16, material/cdk 16, ngrx 16 (`--force --allow-dirty`). Core migration: deprecated guard interfaces removed from 8 `core/guards`. @Effect was already 0 (createEffect), and polyfills already used `import 'zone.js'`.
+- Versions: @angular/* 15.2.10 → 16.2.12, cdk/material 15.2.9 → 16.2.14, cli/build-angular 15.2.11 → 16.2.16, ngrx 15.4.0 → 16.3.0, typescript 4.8.4 → 5.1.6, zone.js 0.11 → 0.13.3, ng-bootstrap 14.2.0 → 15.1.2, ng-select 10.0.4 → 11.2.0, ngx-toastr 16.2.0 → 17.0.2, ngrx-store-localstorage 15 → 16.0.0, ngx-translate core 14 → 15 / http-loader 7 → 8, ngx-slider 2 → 16.0.1, ng-circle-progress 1.5 → 1.7.1, angular-user-idle 2.2.7 → 4.0.0, @auth0/angular-jwt 2.1 → 5.2.0, jest-preset-angular 13.0.1 → 13.1.6. Unchanged: rxjs 6.6, ng-dynamic-component 10.8.2, jest 29.7.
+- ngcc is gone, so the View Engine libraries were dealt with: **angular-crumbs** → own `BreadcrumbsService` (same route-data rules) read by `BreadcrumbComponent`; **angular2-hotkeys** deleted (no consumer); **ngx-echarts/echarts** deleted together with their only consumer, the unused `PieProgressComponent`, and its dead `.progress-pie` styles. `jest-global-setup.js` (the ngcc run) and the crumbs jest mapping were deleted.
+- TS 5.1: in `renderer-countdown.pipe`, `seconds >= 10` on `string|number` became `Number(seconds) >= 10` (same coercion).
+- jest.config `fakeTimers: { doNotFake: ['queueMicrotask'] }`: Angular 16's AnimationRendererFactory flushes with queueMicrotask, which jest fakes and counts in getTimerCount(). That broke 3 renderer-progress characterization tests; the spec was not edited.
+- `.npmrc legacy-peer-deps=true` stays, because angular-user-idle 4 peers on rxjs ^7.5.
+
+**Specs adapted:** none.
+
+**Verified:** fe-npm-ci (fresh volume), fe-typecheck (app + spec tsconfig), jest core 845, shared 120, components 14, delta 373, the remaining 8 suites 46. All green. fe-build ci green (3:01). The full single-run suite is left to the gate.
+
+**Notes for next tasks:** @angular-slider/ngx-slider 16 brings its own nested rxjs 7.8.2. The rxjs 7 task can drop legacy-peer-deps once user-idle's peer is satisfied.
+
+
+## Task #2636 — build(angular): upgrade to Angular 15
+
+**Repo:** rwclab (app/frontend) · **Commit:** b00f9c2 · **Status:** ✅ done
+
+**What changed**
+- `.node-image` → `node:18-bullseye rwc-fe-nm-ng15` (npm 10.8.2). The lock stays lockfileVersion 2.
+- `ng update` core/cli 15 (`--force --allow-dirty`). The CLI's update-typescript-target failed because there is no root tsconfig.json, same as #2635. The remaining CLI migrations were run by name, and the core migrations with `--migrate-only` (`relativeLinkResolution: 'legacy'` removed from app.routing.ts).
+- `ng update` material/cdk 15 + ngrx 15. All Material imports → `@angular/material/legacy-*` (the MDC migration is #2638). New `styles/_material-legacy-theme.scss` (`all-legacy-component-themes` + legacy typography, same indigo/pink palette), because the v15 prebuilt theme only themes MDC. Selector parity with the v14 theme was checked; the only gap is `.mat-pseudo-checkbox`, which is unused.
+- Libraries: ng-bootstrap 14.2.0, ng-select 10.0.4, ngx-toastr 16.2.0, ngrx-store-localstorage 15.0.0. Unchanged: @ngx-translate/core 14 (15 needs ng16), typescript 4.8.4, rxjs 6, zone.js 0.11.
+- Jest 29.7 + jest-preset-angular 13.0.1 + @types/jest 29.5.14. `globals['ts-jest']` → transformer options (jest.config.js + jest-ng-transformer.js).
+- `.npmrc legacy-peer-deps=true` (TEMPORARY, 2650 removes it): angular-crumbs, angular2-hotkeys, angular-user-idle, ngx-echarts peers.
+- `@babel/core` 7.29.13 devDependency: @angular/localize pins 7.19.3, which gets hoisted, and jest 29's babel preset needs ≥7.22.
+- `setup-jest.ts`: an identity equality tester (`expect.addEqualityTesters`). Jest 29.4+ toMatchObject walks symbol keys, and a jsdom File leads through them to the whole window, so f-file.component.spec spun forever.
+
+**Specs adapted:** none.
+
+**Verified:** fe-npm-ci (fresh volume), fe-typecheck, jest core/store 244, core/services 429, delta 373, shared 120, everything else 34 suites/232 — all green. fe-build ci green (6.5 min). The full single-run suite is left to the gate.
+
+**Notes for next tasks:** while `ng build` runs, ngcc holds a lock, and a parallel jest globalSetup waits on it (`Waiting up to 250s`). Don't run build and jest on the same volume at the same time.
+
+
+## Task #2635: build(angular): upgrade to Angular 14
+
+**Repo:** rwclab (app/frontend) · **Commit:** 9ba9ea2 · **Status:** ✅ done
+
+### What was done
+- `.node-image` -> `node:14-bullseye rwc-fe-nm-ng14` (new volume, clean npm ci).
+- `ng update @angular/core@14 @angular/cli@14`, then CLI and core migrations via `--migrate-only` under CLI 14 (CLI 13 failed with `tree.readText`); `ng update` material/cdk/ngrx 14; libraries + jest 28 via `npm install --save-exact` (npm 8 in the container, lock v2).
+- Versions: @angular/* 13.4.0 -> 14.3.0, cdk/material 13.3.9 -> 14.2.7, cli/build-angular 13.3.11 -> 14.2.13, ngrx 13.2.0 -> 14.3.3, typescript 4.5.5 -> 4.8.4, ng-bootstrap 11.0.1 -> 13.1.1, ng-select 8.3.0 -> 9.1.0, ngx-toastr 14.3.0 -> 15.2.2, ngrx-store-localstorage 13.0.1 -> 14.0.0, ng-dynamic-component 10.1.0 -> 10.8.2, jest 27.5.1 -> 28.1.3, jest-preset-angular 11.1.2 -> 12.2.6, @types/jest 27.5.2 -> 28.1.8. ngx-echarts 5 / echarts 4 unchanged (ngcc + AOT fine).
+- Migrations: defaultProject removed from angular.json; typed forms -> Untyped* (6 files); `update-tsconfig-target` failed (no root tsconfig), not applied, target stays es2015.
+- Manual: min-date validator dead `control.value === {}` branch removed (TS 4.8 TS2839); `ApiService.postMultiform` passes Content-Type explicitly instead of spreading HttpHeaders (ng14 dev-mode header assert threw; same header sent, spec unchanged, no callers).
+- Adapted specs: auth.service.spec / auth-helper.service.spec `jest.useFakeTimers('modern')` -> `jest.useFakeTimers()` (string arg removed in jest 28).
+- encoding re-pinned to 0.1.13 (+ iconv-lite 0.6.2) in the lock (0.1.14 needs node >= 20).
+
+### Verification
+- fe-npm-ci (npm 6, fresh volume) ✅, fe-typecheck ✅
+- jest: core/store 244 ✅, core/services 429 ✅, delta 373 ✅, shared 120 ✅
+- fe-build ci ✅ (5:08)
+- Full jest suite: left to the gate.
+
+
+## Task #2634 - build(bootstrap): move to Bootstrap 5 and ng-bootstrap 11 on Angular 13
+
+**Repo:** rwclab (app/frontend) · **Commit:** 472ebbe · **Status:** ✅
+
+### Done
+- bootstrap 4.4.1 → 5.3.3, @ng-bootstrap/ng-bootstrap 10.0.0 → 11.0.1, + @popperjs/core 2.11.8, exact versions. Installed with npm 8 in the container, so the lock stays v2 (clean 3-package diff, no encoding re-pin needed). Reused volume rwc-fe-nm-ng13.
+- angular.json: bootstrap.min.js removed from scripts; jQuery, moment and mavenoid stay.
+- ngb 10→11: no TS or template API breakage. tsc and the AOT ci build are clean. NgbModule.forRoot() was already gone. The ngb 11 accordion still renders .card-header/.card-body, so the delta ngb-accordion scss still matches. ngb 11 ships Ivy partial code, so the jest.config.js ngcc comment was updated.
+- New styles/_bootstrap4-shims.scss, imported in main.scss right after bootstrap. It keeps the BS4 rules for .form-group, .form-inline, .input-group-append/-prepend and .close. These classes are still used as TS input defaults (f-base groupCss) and are styled by the app (dialogs/toasts/notifications scss). .close is NOT switched to .btn-close, because those buttons contain text.
+- Mechanical renames in 72 templates/TS files: ml/mr/pl/pr-* → ms/me/ps/pe-*, text/float-left/right → -start/-end, font-weight-* → fw-*, font-italic → fst-italic, border-left/right-0 → border-start/end-0, data-toggle/target → data-bs-*. The float selectors in date-range-picker/treatment-status scss were updated too.
+- _variables.scss: the $theme-colors override already has all 8 BS5 keys, so Sass compiled without changes.
+- Adapted spec: header.component.spec.ts (:not(.ml-auto) → :not(.ms-auto)).
+- Known gap: the mobile-only header hamburger (data-bs-toggle="collapse") had only Bootstrap JS behind it and is inert now. It needs an Angular toggle in a follow-up.
+- The commit body lists every changed template for visual review.
+
+### Verify
+- fe-typecheck ✅
+- fe-build ci ✅ (215 s)
+- jest: shared 120 ✅, app-modules 382 ✅, components 14 ✅, dialogs 7 ✅, smart-table 11 ✅
+- Full jest suite and fe-npm-ci left to the gate.
+
+
+## Task #2633 - build(angular): upgrade to Angular 13
+
+**Repo:** rwclab (app/frontend) · **Commit:** 3d4cce8 · **Status:** ✅
+
+### Done
+- `.node-image` → `node:14-bullseye rwc-fe-nm-ng13` (new volume, fresh `npm ci`).
+- `ng update @angular/core@13 @angular/cli@13`, then the core migrations via `--migrate-only` (CLI 12 could not resolve core 13's exports-mapped migrations), then `ng update @angular/material@13 @angular/cdk@13 @ngrx/*@13` (--force --allow-dirty). Run in the container with npm 8 + legacy-peer-deps, so the lock stays v2. `encoding` pinned back to 0.1.13 by hand again.
+- Versions: @angular/* 13.4.0, cdk/material 13.3.9, cli/build-angular 13.3.11, ngrx 13.2.0, TypeScript 4.5.5 (ng update picked 4.6.4; pinned to 4.5 per the plan), ng-select 8.3.0, ng-dynamic-component 10.1.0, ngrx-store-localstorage 13.0.1, @ngx-translate/core 14.0.0 + http-loader 7.0.0, jest-preset-angular 11.1.2. @types/offscreencanvas removed. ng-bootstrap stays at 10.0.0 (Bootstrap 5 is task 2634).
+- Migrations: entryComponents removed from 7 modules (the schematic also re-indented them; I reverted that and kept only the removal), @Effect → createEffect in all 22 effects classes, `~` dropped from the scss imports (the material one by the migration, the ng-select one by hand), `.angular/cache` added to .gitignore.
+- tsconfig: `offscreencanvas` dropped from `types` in src/tsconfig.json (`[]`) and tsconfig.spec.json (`["jest"]`).
+- Jest: `setup-jest.ts` now opts out of TestBed teardown (`destroyAfterEach: false`). The v13 migration does this, but it could not find the preset's initTestEnvironment call. The new `jest-global-setup.js` runs ngcc before the suite on es2015/module/main, because Angular 13 TestBed rejects View Engine libraries (ng-bootstrap 10, angular-crumbs). `angular-crumbs` is mapped to its ngcc-compiled `module` entry, because its minified UMD `main` can't be compiled by ngcc.
+- Adapted specs: none.
+
+### Verify
+- fe-npm-ci ✅, fe-typecheck ✅ (fresh volume)
+- jest core/store 244 ✅, core/services 429 ✅, delta 373 ✅, shared 120 ✅
+- fe-build ci ✅ (~57 s of compile time). Warnings: Sass division deprecations and CommonJS bailouts, as in #2632.
+- Full jest suite left to the gate.
+
+
+## Task #2632 - build(angular): upgrade to Angular 12
+
+**Repo:** rwclab (app/frontend) · **Commit:** 621eed8 · **Status:** ✅
+
+### Done
+- `.node-image` → `node:14-bullseye rwc-fe-nm-ng12` (new volume, fresh `npm ci`).
+- `ng update @angular/core@12 @angular/cli@12`, then `ng update @angular/material@12 @angular/cdk@12 @ngrx/store@12 @ngrx/effects@12 @ngrx/store-devtools@12` (--force --allow-dirty), in the container with npm 8 + legacy-peer-deps, so the lock stays v2. webpack 4 / webpack-dev-server 3 removed (CLI 12 brings webpack 5); core-js 2 and classlist.js removed together with the IE polyfills.
+- Versions: @angular/* 12.2.17, cdk/material 12.2.13, cli/build-angular 12.2.18, ngrx 12.5.1, TypeScript 4.3.5, zone.js 0.11.8, ng-bootstrap 10.0.0, ng-select 7.4.0, ng-dynamic-component 9.0.0, ngrx-store-localstorage 12.0.1, ngx-toastr 14.3.0, jest 27.5.1, jest-preset-angular 9.0.7, @types/jest 27.5.2, jszip 3.10.2. Transitive `encoding` pinned back to 0.1.13 again by hand.
+- Migrations: production-by-default in angular.json (the old defaults moved into build.options; `dev` and `ci` stay explicit, `ci` is still AOT without optimization), `zone.js` import, emitDecoratorMetadata removed.
+- Manual: removed extractCss, the es5 config, serve es5 and tsconfig-es5.json; browserslist is now `not IE 9-11`; polyfills.ts keeps only zone.js and localize; dropped `import { table } from "console"`.
+- Webpack 5 fixes: jszip 3.10 (3.4 pulled in node `stream`); the en.json `import * as` in traslation.service and translate-value.pipe is now a typed `require`; ng-bootstrap 10 `getWeekdayLabel` in CustomDatepickerI18n.
+- Jest: astTransformers removed. The new `jest-ng-transformer.js` wraps the preset transformer only to keep `allowJs` off, because the preset forces it and TS then infers wrong types from the vendored shared/libs/*.js.
+- One spec adapted: in platform-job.service.spec.ts:296 the predicate param is typed `unknown`, because TS 4.3 raised TS2367 there. Details are in the commit body.
+
+### Verify
+- fe-npm-ci ✅ (npm 6 accepts the v2 lock), fe-typecheck ✅
+- jest core/store 244 ✅, core/services 429 ✅, delta 373 ✅, shared 120 ✅, traslation/s3-file/cloud-drive/app.routing ✅
+- fe-build ci ✅. Warnings: Sass division deprecations, CommonJS bailouts (now also traslation.service). The ES5 differential bundle is still produced, because browserslist still matches ES5 browsers.
+- Full jest suite left to the gate.
+
+
+## Task #2631 - build(angular): upgrade to Angular 11
+
+**Repo:** rwclab (app/frontend) · **Commit:** ab4c79d · **Status:** ✅
+
+### Done
+- `.node-image` → `node:14-bullseye rwc-fe-nm-ng11` (new volume, fresh `npm ci`).
+- `ng update @angular/core@11 @angular/cli@11`, then `ng update @angular/material@11 @angular/cdk@11 @ngrx/store@11 @ngrx/effects@11 @ngrx/store-devtools@11` (--force --allow-dirty), in the container with npm 8 + legacy-peer-deps (lock stays v2).
+- Versions: @angular/* 11.2.14, cdk/material 11.2.13, cli 11.2.19, build-angular 0.1102.19, ngrx 11.1.1, TypeScript 4.1.6, ng-bootstrap 9.1.3, ng-select 6.1.0, ng-dynamic-component 8.0.1, ngrx-store-localstorage 11.0.0. rxjs/tslib/zone.js/jest/jest-preset-angular/ngx-toastr/ngx-translate unchanged. Transitive encoding pinned back to 0.1.13 (+ nested iconv-lite 0.6.2) by hand.
+- Migrations: `relativeLinkResolution: 'legacy'` in app.routing.ts. `extractCss`, which the migration deleted, is restored as the notes require (it goes in 2632).
+- Manual: the Angular 11 DatePipe overloads are declared on ExtendDatePipe/MsgDatePipe/PreviewDatePipe (types only). ng-bootstrap 8+ animations are off (`NgbConfig.animation = false` in AppModule, plus `[animation]="false"` on the platform-setup ngbNav) to keep the old instant behaviour. That nav fix is what makes the platform-setup tab spec pass.
+- No spec adapted. The commit body has the from → to table.
+
+### Verify
+- fe-npm-ci ✅, fe-typecheck ✅
+- jest core/store 244 ✅, core/services 429 ✅, delta 373 ✅, shared/pipes 43 ✅
+- fe-build ci ✅ (only CommonJS and IE9/10 browserslist warnings)
+- Full jest suite left to the gate.
+
+
+## Task #2630 - build(angular): upgrade to Angular 10
+
+**Repo:** rwclab (app/frontend) · **Commit:** 878baf8 · **Status:** ✅
+
+### Done
+- `.node-image` → `node:14-bullseye rwc-fe-nm-ng10` (new volume, fresh `npm ci`).
+- `ng update @angular/core@10 @angular/cli@10`, then `ng update @angular/material@10 @angular/cdk@10 @ngrx/store@10 @ngrx/effects@10 @ngrx/store-devtools@10` (--force --allow-dirty). Both ran in the container with `npm i -g npm@8` + `NPM_CONFIG_LEGACY_PEER_DEPS=true` + `NG_DISABLE_VERSION_CHECK=true`, so package-lock.json stays lockfileVersion 2.
+- Libraries: ng-bootstrap 7.0.0, ng-select 5.1.0, ngx-toastr 13.2.1, ng-dynamic-component 7.0.3, ngrx-store-localstorage 10.1.2, @ngx-translate/core 13.0.0 + http-loader 6.0.0, rxjs ~6.6.0, tslib ^2.0.0. angular-user-idle stays 2.2.7 (3.x needs A13). Transitive `encoding` pinned back to 0.1.13 by hand (0.1.14 needs node 20).
+- Migrations: `.browserslistrc`, tsconfig module es2020, ModuleWithProviders<T> (core/shared). Manual fixes: `@Directive()` on BaseComponent, smart-table ModuleWithProviders now imported from `@angular/core` with its generic, `DynamicModule.forRoot()` → `DynamicIoModule`.
+- No spec adapted. The commit body has the full from → to table.
+
+### Verify
+- fe-npm-ci ✅ (npm 6 accepts the v2 lock), fe-typecheck ✅
+- jest core/store 244 ✅, core/services 429 ✅, delta 373 ✅
+- fe-build ci ✅ (only the new v10 CommonJS warnings)
+- Full jest suite left to the gate.
+
+
+## 2026-11-14 - Task #2620: chore(deps): delete the unused libraries and the Karma, Protractor and TSLint leftovers
+- Repo: rwclab (lane ng-upgrade), commit 6771493
+- Removed ~55 unused/dead packages from package.json (+ 618 orphaned lock entries, lock hand-edited, v2 kept); added lodash 4.17.15 and @types/lodash 4.14.165.
+- Deleted karma.conf.js, protractor.conf.js, tslint.json, e2e/, src/test.ts; angular.json test/lint/e2e targets; package.json lint/test/pree2e/e2e scripts; System declaration.
+- The notes' "apollo grep = 0" was wrong: 9 files still imported apollo-client types and apollo-link; swapped to DisconnectedObservableQuery / rxjs Subscription. feature-flag-store.service.ts dropped the ldclient-js path (defaults only, local FlagSet type) and its spec was trimmed.
+- @types/lodash exposed a number->string assignment in print-list.reducers.ts; cast with a comment.
+- Verified: fe-npm-ci, fe-typecheck, jest core/services (429), core/store (244), shared (120), delta (373) all green. Full jest and fe-build ci left to the gate.
+
+
+## Task #2615 — refactor(rxjs): drop rxjs-compat and every rxjs/add patch import
+**Date:** 2026-11-14 · **Repo:** rwclab · **Commit:** bc69c21 · **Status:** ✅
+
+**What changed**
+- Removed all 41 `rxjs/add/*` / `rxjs-compat/add/*` side-effect imports from 18 src files, including api.service.ts, core/services/index.ts, f-typeahead, modal.service, the reducers, smart-table and translate.service.mock.ts.
+- Removed `rxjs-compat` from package.json. package-lock.json was edited by hand (3 entries, still lockfileVersion 2) because `npm install --package-lock-only` under npm 6 rewrote 28k lines. fe-npm-ci.cmd then refreshed the volume: green, and rxjs-compat is no longer in node_modules.
+- s3-file.service `downloadS3File`: the last prototype `.takeWhile/.filter` calls now go through `pipe(takeWhile, filter)`.
+
+**Specs (rule 6)**
+- s3-file.service.spec.ts: the hidden-dependency test (TypeError "takeWhile is not a function") is replaced by "downloadS3File is self-contained, no patches needed". `loadAppWideRxjsPatches` and its beforeAlls are gone. RED first: 5 downloadS3File tests failed against the unchanged service; all green after the change.
+- print-list.effects.spec.ts: removed the patch imports. The error-path comment now names the real cause, `pipe(map)` with no catchError (from #2611); the assertions are unchanged.
+- appsync.service.spec.ts: already clean (#2510), nothing to do.
+
+**Decision:** the task notes assumed the effects already had catchError after translation. They do not, so the stream-error behaviour comes from plain rxjs, not compat. Adding catchError → *_ERROR is a real behaviour change in about 30 effects (print-list ×16, noms, resin, appliance-*, print-job…) and is pinned by several specs, so it is left for a dedicated task.
+
+**Verify**
+- fe-typecheck: green.
+- jest: core 72/847, shared 14/120, app-modules 14/382, components 2/14, dialogs 1/7, smart-table 1/11, all green.
+- grep for `rxjs/add|rxjs-compat|rxjs/Observable|rxjs/Subject|rxjs/observable/|rxjs/internal` in src: 0 hits outside comments.
+- Full jest suite left to the gate.
+
+
+## Task #2610 - refactor(ui): pipeable rxjs operators instead of prototype patches
+
+**Repo:** rwclab | **Lane:** rx-a | **Status:** done (retry 1) | **Commits:** 1d28b9d, ec77780
+
+### What was done
+- **1d28b9d** (previous attempt, kept as is): 94 prototype-chain rxjs call sites in the zone (cloud-drive, shared, components, dialogs, toasts, smart-table) changed to `.pipe()` across 23 files. Includes the smart-table effects `map`/`catchError` + `of`, `modal.service` `fromPromise` -> `from`, and f-typeahead's static `merge`/`EMPTY`. The `rxjs/Observable`/`rxjs/Subject`/`rxjs/internal` imports now come from `rxjs`. The `rxjs/add/*` patch imports were left for #2615.
+- **ec77780** (gate fix): the gate failed with 'No tests found' because 4 of the task's verify patterns matched no spec. Added characterization specs, with no production code or existing spec changed:
+  - `smart-table/store/smarter-table.effects.spec.ts` (11): success maps to the success action, an error maps to the fail action and the stream stays alive, `empty()` when no object is set, switchMap cancellation. It also pins that save/update errors map to FILTER_FAIL.
+  - `dialogs/modal.service.spec.ts` (7): `from(modalRef.result)`, where resolve gives one value then complete, reject (dismiss) gives an error, and a single modal is shared by every subscriber.
+  - `toasts/components/toast-form/toast-form.component.spec.ts` (4): pins that the `@Input() title = ''` initializer overwrites the package title.
+  - `app-modules/cloud-drive/components/patient-search/patient-search.component.spec.ts` (6): `takeUntil(destroy$)` stops results after destroy.
+
+### Verification
+- fe-test: cloud-drive 6/6, dialogs 7/7, toasts 4/4, smart-table 11/11, shared 120/120, components 457/457 (21 suites)
+- fe-typecheck: clean
+- The full suite and e2e were not run here; they are left to the orchestrator gate.
+
+
+## Task #2612 - refactor(delta): pipeable rxjs operators instead of prototype patches
+
+**Repo:** rwclab (worktree ralph/task-2612) · **Commit:** 0e140b9
+
+### What changed
+- **185 call sites, 26 files** in `app-modules/delta` (15 files), `app-modules/common` (11 files); login has no rxjs usage. Prototype chains `obs.op1().op2()` became `obs.pipe(op1(), op2())`, with named imports from `rxjs/operators`: takeUntil, first, takeWhile, catchError (from `.catch`), debounceTime, distinctUntilChanged, filter, map, withLatestFrom. `Observable.fromPromise` became `from`. The two `rxjs/observable/of` imports (base-platform, assign-patient) now import from `rxjs`.
+- How the sites were found: a TypeScript type-checker codemod, run in the node:14 container against src/tsconfig.json. A call counts only when the operator symbol is declared by `rxjs-compat/add/operator`, so array and Promise `.map/.filter/.catch` were never touched. Dry-running it again over the zone finds 0 sites.
+- Hand fixes:
+  - `data.first()` in base-platform: the receiver is typed `any`, so the codemod could not see it. At runtime it is an Observable (iif).
+  - platform-model-list: `.pipe(takeUntil).pipe(withLatestFrom)` merged into one pipe, same order.
+  - platform-print-setup: formatting of the `withLatestFrom(...)` arguments.
+  - patient-v2: the catchError selector got the return type `Observable<never>`. Pipeable typing infers `unknown` where compat `.catch` was looser. Runtime behavior is unchanged.
+- The `rxjs/add/operator/*` patch imports (printer, new-feature-notification, api.service, core/services/index) were left in place on purpose; #2615 removes them all at once.
+
+### Tests
+- `fe-typecheck.cmd`: green.
+- `fe-test.cmd app-modules/delta`: 11 suites, 369 tests, all green. The existing characterization specs were not edited.
+- `common` and `login` had **no spec files**, so jest exited 1 with "No tests found" and the task's verify gate would have gone red. I added new characterization specs:
+  - `common/printer-list/printer/printer.component.spec.ts`: 5 tests, including that takeUntil(destroy$) unsubscribes.
+  - `login/login/login.component.spec.ts`: 2 tests.
+  - Both dirs are now green.
+- The full suite was not run; that is left to the orchestrator's gate.
+
+
+## Task #2611 — refactor(core): pipeable rxjs operators instead of prototype patches
+**Repo:** rwclab · **Commit:** b9b691e · **Date:** 2026-11-14
+
+- 67 prototype-верижни места в 25 файла от `core/` → `obs.pipe(...)` с именувани импорти от `rxjs/operators` (api.service 8, s3-file.service 7, store effects 49, treatment-type/patient-helper/auth0 3); дълбоки импорти (`rxjs/Observable`, `rxjs/Subject`, `rxjs/observable/*`, `rxjs/internal/*`) → `rxjs` в още 19 файла. Общо 44 файла.
+- `.map(ok, errFn)` (compat): вторият аргумент е thisArg и никога не се изпълнява → махнат, БЕЗ catchError (поведението е пиннато от спековете: грешката пропагира). Истинският `.catch` в print-list `removeItem$` → `catchError`.
+- Нарочно оставени: вътрешните `.takeWhile/.filter` в `S3FileService.downloadS3File` — `s3-file.service.spec.ts:97-109` пинва compat зависимостта; 2615 ги превежда заедно със спека.
+- Patch импортите (`rxjs/add/*`) непипнати — работа на 2615.
+- Verify: `fe-typecheck.cmd` зелен; `fe-test.cmd core` 72 suites / 847 теста зелени; характеризационните спекове непипнати. Пълният jest — на гейта.
+
+
+## Task #2600 - chore(gate): read the Node image and node_modules volume from app/frontend/.node-image
+
+- Added scripts/gate/_fe-env.cmd (defaults node:14-bullseye / rwc-fe-node_modules, overridden by app/frontend/.node-image).
+- fe-build, fe-npm-ci, fe-test, fe-typecheck and scripts/fe-serve.cmd call it and use %NODE_IMAGE% / %NM_VOL%.
+- New scripts/gate/fe-exec.cmd runs an arbitrary command in the same container and volume.
+- app/frontend/.node-image holds today's values, so behaviour is unchanged. All files are CRLF.
+- Verified: fe-typecheck.cmd rc=0; fe-test.cmd core/utils 5 suites / 27 tests passed; no new named volume.
+- Commit: 5f23bcd
+
+
+## [2026-11-14] - Task #2510: refactor(realtime): disconnected AppSync stand-in with the same query and subscribe surface, no network
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** AppSyncService built a real AWSAppSyncClient (HTTPS + wss to appsync-api.us-west-2.amazonaws.com) with a stub JWT that would never be accepted; platform-job-updates subscribes at boot, so the app reached out to AWS.
+
+**What was done:**
+- RECON: every consumer uses `appsync.client` (Promise) → `client.watchQuery({query, variables, fetchPolicy})` → `.subscribe(...)` + `.subscribeToMore({document, variables, updateQuery})` (not `query`/`subscribe` as the notes said); app.component uses wsConnectionClosed/Opened + pingWithDelay(). That whole surface is kept.
+- RED: rewrote appsync.service.spec: 4 queries → `{data:{<root field>:[]}}`; subscribe for 4 subscriptions + watchQuery/subscribeToMore never emit; no WebSocket/fetch/XHR; closed emits once after hydration (not synchronously) and on every ping, no setTimeout; opened never. Red against the real client (constructor/surface mismatch).
+- GREEN: disconnected client (query → empty list under root field name, watchQuery → NEVER + no-op subscribeToMore, subscribe → NEVER), plain Subjects instead of debounced EventEmitters; removed all aws-appsync/apollo imports from the service, HttpLink import+provider from core.module, `(window as any).global = window` from polyfills (no other src consumer). The message-contract (gql) tests are kept.
+- Note: watchQuery deliberately never emits (not empty data): printer-status treats `data.getPrinterStatus` truthy and would dispatch NaN statuses for `[]`; never-emitting matches the old behaviour of an unreachable endpoint.
+
+**Verification:**
+- fe-typecheck.cmd → clean
+- targeted jest (appsync + all consumers + app.component) → 8 suites / 167 pass, consumer specs unchanged
+- full jest (fe-test.cmd, once, 208 s) → 101 suites / 1361 pass
+- grep: no aws-appsync / apollo-angular-link-http imports left in src; only `core/models/print-list/index.ts:1` has an unused `from` of apollo-link (outside scope, elided by tsc); apollo-client remains as type-only imports in consumers.
+
+**Files modified:**
+- app/frontend/src/app/core/services/common/appsync.service.ts
+- app/frontend/src/app/core/services/common/appsync.service.spec.ts
+- app/frontend/src/app/core/core.module.ts
+- app/frontend/src/polyfills.ts
+
+**Git commit:** `208cf1d` — `refactor(realtime): disconnected AppSync stand-in with the same query and subscribe surface, no network`
+
+---
+
+
+## Task #2500 - feat(app): plug every outbound call - localhost-only environments, no analytics, no feature-flag service
+
+**Status:** done (retry 3, scope escalation)
+
+**Work (e5d6bce, previous attempt):** environment.ts/environment.dev.ts point only at localhost (API 45281, app 45280), AppSync and LaunchDarkly key empty, useLocalAuthStub on; staging/prod environments, build configs and npm scripts removed; index.html/bootstrap stripped of Google Fonts, Stripe, Calendly, GTM, Sentry; LaunchDarkly client not started with an empty key (local defaults, added missing appliance-profile default); apig.service.ts no longer redirects localhost to the SprintRay dev server; Material Icons from the material-icons package; new specs feature-flag-store.service.spec.ts and environments.spec.ts; no-external-hosts gate green.
+
+**Fix (af88b8c):** auth0.service.spec.ts (out of the task's files, allowed by scope escalation) disables useLocalAuthStub in beforeEach and restores it in afterEach, so the 5 real-Auth0 wiring tests (checkSession x4, logout redirect) run again. No assertion weakened.
+
+**Verify:** fe-typecheck green; fe-test core/services 31 suites / 438 tests green. Full suite and e2e left to the orchestrator gate.
+
+**Notes:** fe-build.cmd production no longer applies (prod config removed). The screenshot bucket URL produces a double slash (harmless, nothing listens there).
+
+
 ## Task #2320 — chore(build): prove the standalone RayWare app builds and document the new entry point
 
 **Repo:** rwclab · **Commit:** c30d6bf · **Date:** 2026-11-13
@@ -4615,6 +5053,30 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
