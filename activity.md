@@ -34,6 +34,95 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## [2026-11-15] Task #3110 — build(backend): .NET Core 3.1 -> .NET 10 with EF Core 10, Npgsql 10, AutoMapper 14, MSTest 3; build and unit tests green
+
+**Repo:** rwclab (app/backend) · **Commit:** 7919ab6
+
+**What changed**
+- All 9 csproj and the 3 Web publish profiles: netcoreapp3.1 -> net10.0. The gate image is now `mcr.microsoft.com/dotnet/sdk:10.0 rwc-nuget-net10` (SDK 10.0.404, new NuGet volume).
+- Packages: EF Core 10.0.15, Npgsql EF 10.0.3, ASP.NET packages 10.0.15, Identity.Web 3.16.0, Jwt 8.19.2, Newtonsoft 13.0.4, AutoMapper 14.0.0 (the separate DI package is removed), Swashbuckle 10.3.1, MSTest 3.11.1, Test.Sdk 17.14.2, MockQueryable.Moq 7.0.3, Moq 4.18.4, coverlet 6.0.4, Docker.DotNet 3.125.15, Lambda events 3.x, System.Linq.Dynamic.Core 1.7.4. Removed: the redundant Extensions.Localization/Http references (NU1510) and the duplicate AWSSDK.Extensions.NETCore.Setup.
+- Not changed: AWSSDK.* and AWS.Logger.AspNetCore 2.2.0, both left for #3120 (AWS.Logger 3.x pulls in AWSSDK.Core 3.7, which conflicts with the 3.3 SDK). The SaaS libraries (Stripe, Auth0, PowerBI, NPOI, MimeKit and others) stay on their versions.
+- Program.Main sets the Npgsql legacy timestamp switch. IntegrationTest AssemblyInitialize sets it too.
+- Startup: `AddAutoMapper(cfg => { }, typeof(AutoMapperProfile).Assembly)`. The filter moved into AddControllers and AddMvc was removed.
+- AutoMapper: `[IgnoreMap]` -> `[Ignore]`. AutoMapper 8 used to create some maps implicitly, and 9+ no longer does. The 11 destinations that relied on this now have explicit maps: 10 view models get IMapFrom<>, and AccessTokenResponse->OAuthClientTokensViewModel is in AutoMapperProfile.
+- Test changes for the new library APIs only: MockQueryable 7 now uses `BuildMock()` without `.Object` (32 call sites, 8 files), and IAsyncQueryProvider moved namespace. No assertion was changed.
+
+**Verification**
+- `scriptsgatee-build.cmd`: 0 errors, 134 warnings (mostly MSTEST0006 and NuGet vulnerability warnings). 192 s.
+- `scriptsgatee-test.cmd`: 148/148 passed. 71 s.
+- SprintRay.IntegrationTest compiles; it was not run (outside the gate).
+
+**Notes / follow-ups**
+- Moq: every MockQueryable build for EF 8+ needs Moq >= 4.20.72, so this uses MockQueryable 7.0.3 with Moq 4.18.4 to stay off 4.20.x. It works on EF 10.
+- AutoMapper 14.0.0 has NU1903 advisories. The fixed versions are 15+, which require the commercial licence.
+- Risk: implicit maps reached through generic helpers (NomService<T,G>, GetPagedAsync<T,U>) or through `Map(src, dest)` were not checked. If one is missing, it throws "Missing map" at runtime.
+- rwclab-structure.md still describes the backend gate as sdk:3.1. Updating it is outside this task.
+
+
+## Task 3000 - fix(renderer): no signal writes or state flips inside the first render pass (NG0600, NG0100)
+
+- NG0600: header.component.ts ngAfterViewChecked -> showFTUETooltips -> NgbPopover.open() wrote a signal inside the render pass. Removed AfterViewChecked; tooltip is scheduled via Promise.resolve().then from the showPrintJobsTooltip$ subscription and ngAfterViewInit.
+- NG0100: platform-setup.component.ts ngAfterViewInit -> groupPlatformJobs changed currentJobGroupIndex after the template was checked; now deferred to a microtask.
+- Tests (TDD): 3 new header specs (open() not synchronous in CD, opens after flushMicrotasks, close clears the flag); the platform-setup characterization test of the ExpressionChanged error now asserts no throw and index set after the microtask. Header spec state also got the missing printerStatus slice (fakeAsync surfaced the error the old specs swallowed).
+- Verify: fe-test header 14/14, fe-test platform-setup 40/40, fe-typecheck green. Full suite left to the gate.
+- Commit: 2c3c2fb
+
+
+## Task #3010 — fix(store): dispatch the existing *_ERROR actions from the effects and drop the dev action logger
+**Repo:** rwclab · **Commit:** 2f74195 · **Status:** ✅
+
+**Changes (app/frontend/src/app/core/store/effects/** only):**
+- auth.effects.ts: `logActions$` (console.log of every action in dev) deleted outright; there was no spec for it.
+- `catchError(() => of(new XError()))` added to the INNER service pipe (inside mergeMap/switchMap, never on `actions$`) of 35 effects: app GetModules$, appliance-platform, appliance-profile list options, picture getUserAvatar$, print-job getPrintJobGroups$, register, resin (RWC + DS), 14 print-list effects (addToList, getPlatformJobs/Job, occupied space, move, moveToNewJob, renameItem, savePlatformJobDetails, getPlatformMetadata(+PrintDetails), delete/deleteGroup/deleteAll, editPlatformJob) and all 12 noms effects. None of the existing ErrorAction classes takes a payload.
+- Not touched (no *_ERROR action): auth getNameAndOfficeId$/getCardExpDays$/getCurrenttOrganization$/getDefaultOrganizationId$/setFirstTimeExperience$ (only *FailedAction classes), inbox (FailedAction), notification ×3, user-preferences initPreferences$, every dispatch:false effect. GET_LAST_USED_PLATFORM has no effect. reducers/ not touched.
+
+**Tests (TDD):** the characterization tests that pinned "error propagates, no error action (looks wrong)" were replaced with "1st request fails → *_ERROR, 2nd request → Success, stream not errored". These directly contradicted the fix, so they could not stay. New specs: app, picture, register; noms.effects.spec covers all 12 noms effects; print-list adds a 12-case table plus save/edit. RED: 20 failing tests (the error propagated), plus print-list, which first failed to compile because of an edit-script mistake (fixed before GREEN; its new cases were not separately confirmed red). GREEN: fe-typecheck exit 0; fe-test core/store 20 suites / 270 tests all green.
+
+**Left for the gate:** the full jest suite and e2e (not run by the agent).
+
+**Note:** rxjs is ~6.6, so `throwError(() => new Error())` in the specs makes the error the function itself (rxjs 7 semantics are not active). That makes no difference to these tests.
+
+
+## Task #3210 — feat(worker): accept the backend preprocess input, publish the bind payload, and bridge algorithm-done events to the backend callbacks
+**Date:** 2026-11-15 · **Repo:** rwclab · **Commit:** 5707437 · **Status:** ✅
+
+**What changed**
+- `workers/algorithms/src/input.mjs` (new, has no imports): `normalizeImportInput` accepts the backend JSON array (PrintListService) and the lab object (e2e). For the array form, platformId comes from item 0 and printListItemId is kept. An array without platformId fails with BadRequest. `bindPayload` builds List<PrintListItemBindInputModel> only when the input has printListItemIds. `platformIdOf` reads both shapes.
+- `steps/import.mjs` uses the normalizer. Its models carry printListItemId, and the preProcessing done message gets `bind` only on the backend path. `worker.mjs`: when preprocess fails, it publishes bind with Error = the message and IndividualModels [] for every item. platformId now works for both shapes.
+- `workers/callback-bridge/` (new, Node 24, node:24-bookworm-slim): `route.mjs` (pure, no imports) sends a message with bind to `/api/print-list/bind-print-list-item` and anything else to `/api/platform-job/slice-done` as PlatformAlgorithmDoneInputModel {PlatformId, Status, Algorithm, ErrorCode, SuccessIndividualIds, QueueMessageId=MessageId}. The POST body is the whole SNS envelope with Message rewritten, sent with Content-Type text/plain; charset=UTF-8 and x-amz-sns-message-type: Notification. `bridge.mjs` gets the queue URL with GetQueueUrl, long-polls with WaitTimeSeconds 20, deletes on 2xx, otherwise leaves the message for retry, and deletes it with a "dropped" log after 5 attempts (ApproximateReceiveCount or a local counter).
+- `docker-compose.yml`: new callback-bridge service (network_mode service:aws-emulator, depends_on healthy, restart unless-stopped, same AWS_* env as the worker, BACKEND_URL=http://127.0.0.1:45281). The other services are unchanged.
+- package.json in both packages: `"test": "node --test"`.
+
+**Verification**
+- RED: the tests failed because the modules were missing. GREEN: `npm --prefix workers/algorithms test` 9/9 and `npm --prefix workers/callback-bridge test` 4/4, with no npm install.
+- The bridge image builds. A 25 s smoke run in the shared emulator namespace connected, read real SNS envelopes from rwc-backend-callbacks-local, routed them to slice-done, got ECONNREFUSED (backend not up yet, as expected) and left them for retry. One old `{probe:1}` message from 3200 was unroutable and was dropped.
+- ⚠ `scripts\gate\lab-e2e.cmd` was NOT run in the worktree. `workers/algorithms/vendor/` (git-ignored) is missing there, so the worker image cannot be built, and the shared aws-emulator/worker containers are in use. This is left for the gate after merge. The e2e input/output shape has not changed (no printListItemId means no bind).
+
+
+## Task #3200 — feat(infra): local AWS resources the backend needs (retry: gate dep sync)
+
+- **Commits:** 2be6dd7 (resources), e780696 (gate fix)
+- **What:** appliance-profile DynamoDB tables (default: hash APPLIANCE_TYPE N; user: hash ID + GSI USER_ID-APPLIANCE_TYPE-index), FIFO queues RaywareCloudSPRSlicerLocal.fifo / RaywareCloudPlatformProcessLocal.fifo, rwc-backend-callbacks-local (SNS envelope from RaywareCloudAlgorithmDoneLocal), secret local/DesignService/Stripe (dummy), PlatformJobLocal Pass-state placeholder, topics CloudTabLocal / SyncToDesignLabServiceLocal, @aws-sdk/client-secrets-manager dep, idempotent bootstrap (2nd run all exists/ok), new gate scripts/gate/lab-e2e.cmd.
+- **Retry cause:** gate ran in the main checkout with stale node_modules, so it failed with ERR_MODULE_NOT_FOUND for client-secrets-manager. Fix: the gate runs `npm ls --depth=0 || npm ci` first.
+- **Verify:** node --check infra/bootstrap.mjs OK; lab-e2e.cmd green with the package deliberately missing (npm ci path), e2e PASS 2.8 s.
+- **Notes:** QueueUrl for 3150: http://127.0.0.1:45284/000000000000/<QueueName>. The gate needs the git-ignored workers/algorithms/vendor/. rwc-backend-callbacks-local accumulates messages until 3210.
+
+
+## Task #3100 - test(gate): containerized backend build and unit-test gates driven by app/backend/.dotnet-image
+
+- Added app/backend/.dotnet-image (`mcr.microsoft.com/dotnet/sdk:3.1 rwc-nuget`) and scripts/gate/_be-env.cmd, be-build.cmd, be-test.cmd [filter], be-exec.cmd (CRLF).
+- Measured: be-build 3m18s wall (build 2m52s, 0 errors, 30 warnings); be-test 148/148 passed (~1m56s wall, tests 21s); filter AwsSnsServiceTests: 2 passed.
+- SprintRay.IntegrationTest deliberately excluded (Docker socket, Postgres 10, real Auth0). git status clean after the gates; no .gitignore change needed.
+- Commit: dee9019
+
+
+### Task 3030 - feat(auth): local stub token in the exact shape the local backend accepts
+- auth0.service.ts: unsigned JWT with empty third segment, aud ["rwclab-local"] on access+id token, reg_completed "True", organization/office GUIDs from the contract.
+- local-auth-stub.spec.ts: pinned old signature/'true' adapted; new contract test added.
+- Verify: fe-typecheck OK; fe-test core/services/common 11 suites / 122 tests pass.
+- Commit: b179121
+
+
 ## Task #2650 — chore(build): prove the upgraded RayWare app on the latest Angular and tidy the upgrade leftovers
 **Repo:** rwclab · **Branch:** ralph/task-2650 · **Commit:** 0b36f38 · **Date:** 2026-11-15
 
@@ -5053,6 +5142,13 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
+
+
 
 
 
