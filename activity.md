@@ -34,6 +34,174 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## [2026-11-15 20:30] - Task #4400: docs: local realtime, the pipeline through the browser, the lab-ui and lab-pipeline gates, and what the lab honestly cannot do yet
+
+**Status:** ✅ Complete
+
+**Problem:** The docs went in on d53debb, but the verify gate lab-ui.cmd failed at the upload stage. Retry 3 was run under scope escalation, so the gate evidence decided what to fix.
+
+**What was done:**
+- README.md and PLAN.md (d53debb): added Realtime (local), Pipeline (local), and What the lab cannot do yet. Added lab-ui and lab-pipeline rows to the gate table, the be-smoke count, and new troubleshooting entries. Recorded the Board 4 status and the next board.
+- Out of scope, defect 1. The lab had no default appliance profile, so GET api/appliance-profile returned [] and selectDefaultProfile threw. infra/bootstrap.mjs now seeds one default profile per appliance type 1-20 into RWC_DEFAULT_APPLIANCE_PROFILE_LOCAL. The seed uses idempotent PutItem with deterministic IDs.
+- Out of scope, defect 2. The emulator does not handle CORS: it answers OPTIONS with 501. It also returns 403 SignatureDoesNotMatch for a valid presigned PUT that carries Origin or Sec-Fetch-* headers. The aws-http nginx in docker-compose.yml now answers the preflight, adds the CORS headers, and strips those headers before forwarding. Compose ignores changes to a config's content, so an rwc.aws-http-nginx.rev label now forces the container to be recreated.
+- Out of scope, defect 3. scripts/gate/lab-ui.mjs picked the resin with dispatchEvent('click') on the overlay mat-option, and that never selected it. It now presses Enter, which works because autoActiveFirstOption is set.
+- README.md and PLAN.md were corrected to match: upload is green, two new troubleshooting entries, and the known leftover is closed.
+
+**Verification:**
+- lab-ui.cmd: exit 0, 250 s. load ok, banner ok, and upload ok: PUT 200, POST api/platform-job 200, platform-metadata 200, .drc 200, 1 model.
+- lab-pipeline.cmd: exit 0, 27 s.
+- be-smoke.cmd: exit 0, 32 checks.
+- no-external-hosts, be-config-offline, compose-config: exit 0.
+
+**Files modified:**
+- README.md
+- PLAN.md
+- infra/bootstrap.mjs (out of scope)
+- infra/resources.mjs (out of scope)
+- docker-compose.yml (out of scope)
+- scripts/gate/lab-ui.mjs (out of scope)
+
+**Git commit:** `9280d9c` — `docs: local realtime, the pipeline through the browser, the lab-ui and lab-pipeline gates, and what the lab honestly cannot do yet`
+
+---
+
+
+## Task #4210 - retry 4: lab-ui gate red in fe-build.cmd ci
+
+**Status:** done (commit 7d969d4 on ralph/task-4210)
+
+**Gate failure:** `scripts\gate\lab-ui.cmd load banner` failed in step 1/3, `fe-build.cmd ci`. Webpack's stats step threw `ERR_INVALID_ARG_TYPE` in `ChunkGraph.getChunkModulesSize`.
+
+**Diagnosis:**
+- `ralph/standalone` (the integration branch) adds only worker and backend changes over this branch, so the merged frontend is identical to the one tested here.
+- `fe-build.cmd ci` is green in the worktree, both cold and with a warm cache.
+- Scratch copy: warmed the cache with a build at 1fe7309, overlaid the #4210 `src`, rebuilt: green. Truncated 9 cache packs and rebuilt: green, because webpack rebuilds them.
+- Not reproducible. The suspect is the gate checkout's 4.4 GB `.angular/cache`, which this task may not touch.
+
+**Fix (OUT OF SCOPE, allowed by scope escalation):** `scripts/gate/fe-build.cmd`. If `ng build` fails, it runs `rm -rf .angular/cache` and retries once inside the same container. A real compile error fails both attempts, so the gate still goes red (checked with a bogus config: one retry, then a non-zero exit). `fe-build.cmd ci` is green after the change.
+
+**Not run (left to the gate):** the full jest suite and lab-ui itself (docker stack, ports).
+
+
+## Task #4310 — fix(worker): edit pipeline persists transforms, cuts only when asked, ends with platformProcessing
+
+**Date:** 2026-11-15 · **Repo:** rwclab · **Lane:** worker · **Commit:** 29bc8fb
+
+**What changed**
+- New `workers/algorithms/src/edit-logic.mjs` (pure, no imports): `planEdit(models)` -> per model `cut` (planeCut === true && cutHeight != null) / `transform` (position/rotation/scale given) / `noop`, plus an `unsupported` list (autoOrient, generateSupports, lineCutParams, bracketRemovalParams, autoMeshRepair, annotation, editSupport); `finalLogs(plan)` -> [planeCut, platformProcessing] if anything was cut, else [platformProcessing].
+- `steps/plane-cut.mjs` (same activity rwc-plane-cut-local): cut = existing cutOne (math 1:1); transform = UpdateItem STL.Position/Rotation/Scale as the strings came + LastModified string; unsupported ops are only logged `[edit] <id> <op>: not available locally`. planeCut 200 only after a cut, platformProcessing 200 always; on error platformProcessing 500 + errorCode from the step, planeCut 500 + SendTaskFailure from worker.mjs as before. cutOne LastModified is now a string.
+- Tests: 8 new tests in `test/platform-process.test.mjs` (separate section, because the verify command lists test files by name).
+
+**Verification**
+- `node --test workers/algorithms/test/input.test.mjs workers/algorithms/test/platform-process.test.mjs`: 25/25 pass (RED first: module missing).
+- Rebuilt only algorithms-worker (`docker compose up -d --build --no-deps algorithms-worker`, vendor copied temporarily and removed), then bootstrap + `npm run e2e`: PASS, height 15, logs preProcessing/planeCut/platformProcessing 200.
+- `node scripts/gate/lab-pipeline.mjs create metadata logs edit`: all 4 stages PASS (edit: planeCut 200 + platformProcessing 200 in 2.1 s, metadata, download-links, presigned .drc GET 200).
+- Live probe through EditPlatformJobLocal: transform-only -> STL updated, platformProcessing 200; autoOrient+generateSupports -> noop, logged; unknown individual -> FAILED planeCut.NotFound.
+- I ran the e2e and pipeline gates directly, not through `lab-e2e.cmd` / `lab-pipeline.cmd`, so the full-stack `compose up --build` did not replace the shared rwc containers. The full-stack runs are left to the gate.
+
+**Still not available locally:** auto-orient, support generation/edit, line cut, bracket removal, mesh repair, annotation.
+
+
+### Task #4300 - feat(worker): consume the platform-process and slice queues - platform row, grid auto-layout, honest logs; slicing reports unavailable (retry 4)
+
+**Status:** done (commit 29c279d)
+
+- Kept the worker (fe3226e) and the bridge fix (5d1a3ed: autoLayout 200 carries OriginalPlatformId/SuccessPlatformId).
+- Gate still had userPlatformJobUpdate 0. Probe against the live stack: POST slice-done autoLayout with both ids -> 200, but no WebSocket frame.
+- Root cause: `AddEventSubscriptions` builds its own ServiceProvider for the event bus; `PlatformJobUpdatedUpdateAppSyncEH` resolves IAwsAppSyncService -> LocalRealtimeAppSyncService -> a *different* LocalRealtimeHub singleton (no sockets).
+- Fix: `AddLocalRealtimeIfEnabled` registers one hub per service collection (factory over a locked shared field), so every provider shares it.
+- Test: `Development_EveryProviderBuiltFromTheCollection_SharesOneHub` (RED -> GREEN); `be-test.cmd FullyQualifiedName~LocalRealtime` 39/39.
+- Out of scope (scope escalation): LocalRealtimeServiceCollectionExtensions.cs, LocalRealtimeRegistrationTests.cs.
+- Not run here: full BE suite, lab-pipeline (gate).
+
+
+### 2026-11-15 — Task #4000 (rwclab, gate-ui): lab-ui gate
+
+**Status:** ✅ done (commit 699c102)
+
+**What:** New `scripts/gate/lab-ui.cmd [load|banner|upload]` + `lab-ui.mjs`. The .cmd: `fe-build.cmd ci` (always) → Git Bash `docker compose up -d --build` + `npm run bootstrap` (as lab-e2e.cmd; without the git-ignored `workers/algorithms/vendor` in a fresh worktree the algorithms-worker starts from its existing image with `--no-build`, otherwise the build fails on `COPY vendor/lib`) → Playwright image with `--network container:aws-emulator`. The .mjs waits for health, serves dist via `page.route()` on `http://localhost:45280`, continues :45281/:45284, aborts + FAILs other hosts, and collects pageerror/NG0/responses/websockets. Stages always run in order; only the selected ones FAIL; unknown stage = exit 2. Screenshots of failures go to `dist/lab-ui-<stage>.png`. The output is a stage table with times (build/stack/health/browser).
+
+**Gotcha:** Chromium Local Network Access blocked every XHR to localhost:45281 ("Permission was denied ... `loopback` address space"): a `page.route()` document counts as public. Fixed with `--disable-features=LocalNetworkAccessChecks,...`. Behind the backdrop even `click({force})` times out → `dispatchEvent('click')` fallback, recorded as FAIL.
+
+**Verify:** `scripts\gate\lab-ui.cmd load` → exit 0, total 289 s (build 113 s, stack 24 s, health 4.5 s, browser 150 s; load 24.5 s, canvas 21.5 s, :45281 30/30 2xx). Unknown stage → exit 2. git status clean.
+
+**Observed today (documented in lab-ui.mjs):**
+- banner: notification + `.backdrop-mask` present; elementFromPoint(first card) = `div.backdrop-mask < div.banner-container < app-network-disconnected-notification`; no websocket.
+- upload: card click intercepted by backdrop-mask → name filled → printer type → Material lists 2 local-stub resins → picking one throws `TypeError ... reading 'id'` in `PlatformPrintSetupComponent.selectDefaultProfile` (GET `api/appliance-profile` = `[]`, no default profile for Occlusal Guard) → resin invalid, layer thickness disabled, NEXT disabled. POST platform-job is never reached.
+
+**⚠ For the board:** upload also needs a default appliance profile in the local stack (or a null-safe `selectDefaultProfile`), which none of #4110/#4120/#4130/#4300/#4210 covers as written.
+
+**Files:** `scripts/gate/lab-ui.cmd`, `scripts/gate/lab-ui.mjs`. Full suite → orchestrator gate.
+
+
+## Task #4010 — test(gate): lab-pipeline (rwclab)
+**Date:** 2026-11-15
+**Status:** ✅ done
+**Files:** scripts/gate/lab-pipeline.cmd, scripts/gate/lab-pipeline.mjs (new)
+
+- New REST gate through the real backend (no browser): stages create / metadata / logs / edit; arguments = gating stages (none = all, unknown = exit 2); every stage runs, unselected reds print as info. Stub token copied from be-smoke.mjs; ASCII 20 mm box STL; WebSocket to ws://localhost:45281/local-realtime opened before POST platform-job.
+- lab-pipeline.cmd: Git Bash, npm ci only if needed, docker compose up -d --build (without workers/algorithms/vendor: worker from its existing image), bootstrap, node lab-pipeline.mjs.
+- Verify: `lab-pipeline.cmd create` -> exit 0 (PUT 200, bind 2.8-3.9 s after POST platform-job). Full run -> exit 1 as expected: metadata 204 (4300, then 4130), logs 404 + WS refused (4100/4200), edit not reached (4310). Measured: 436 s wall with a backend image rebuild, ~97 s cached.
+- Notes: the stack is shared by parallel agents; a run tests whatever backend image was last built.
+
+
+## Task #4100 — feat(backend): local realtime in Development (WebSocket /local-realtime, platform job log store + ingest, IAwsAppSyncService swap)
+
+**Repo:** rwclab · **Lane:** be-rt · **Commit:** 280e093 · **Date:** 2026-11-15
+
+**What was done**
+- DTOs/Models/Local: `LocalPlatformJobLog` (Newtonsoft [JsonProperty] + STJ [JsonPropertyName] with the GraphQL names ID/PLATFORM_JOB_ID/ALGORITHM/STATUS/ERROR_CODE/TIMESTAMP/QUEUE_MESSAGE_ID) and `LocalPlatformJobLogInputModel` (the worker message).
+- ServiceLayer: `ILocalRealtimePublisher` (not an IService, not picked up by the AddDomainServices scan) and `LocalRealtimeAppSyncService : IAwsAppSyncService` (mutation with {platformJobId, userId} -> PublishUserPlatformJobUpdate; otherwise LogDebug + default).
+- Web: `LocalRealtimeHub` (singleton; last 500 logs per platform job; broadcast to every socket, per-socket send lock, dead socket dropped; public static `Frame`), `LocalRealtimeWebSocketMiddleware` (/local-realtime: non-WS 400, hello, ping->pong), `LocalRealtimeController` (api/local-realtime, anonymous; GET platform-job-logs/{id} 200, POST platform-job-log 202/400; 404 outside Development or without the publisher - optional ctor param), `LocalRealtimeServiceCollectionExtensions` (AddLocalRealtimeIfEnabled / UseLocalRealtimeIfEnabled on the Auth0:LocalUnsignedTokens switch).
+- Startup.cs: exactly 2 lines (AddLocalRealtimeIfEnabled after AddLocalAuth0IfEnabled; UseLocalRealtimeIfEnabled right after UseCors, before routing/endpoints).
+- be-smoke.mjs: + GET catch-up endpoint and the "WS local-realtime" check (hello <= 5 s, pong <= 2 s); 32 checks unfiltered; exits via process.exitCode and waits for the socket close (process.exit right after ws.close aborted Node on Windows with a libuv UV_HANDLE_CLOSING assertion).
+- Tests/LocalRealtime: 4 classes (hub, AppSync service, controller incl. MVC Newtonsoft serializer keys, DI registration) - RED first (36 failing against throwing skeletons), then green.
+
+**Verification**
+- `be-build.cmd`: 0 errors.
+- `be-test.cmd "FullyQualifiedName~LocalRealtime|FullyQualifiedName~OfflineExternalServicesTests"`: 44/44 green (full suite left to the gate).
+- Live (once): `be-smoke.cmd local-realtime` -> 3/3 green; POST with X-Message-Id t1 -> 202; GET -> 1 record with PLATFORM_JOB_ID and QUEUE_MESSAGE_ID t1; POST {} -> 400; plain GET /local-realtime -> 400; WS client received hello and then the platformJobLog frame of a POST.
+
+**Notes**
+- The compose stack is shared between worktrees: the first be-smoke run hit a container another agent had just recreated from its own image (404); rerun green with this worktree image. Expect that race whenever two agents run be-smoke at the same time.
+- AwsAppSyncService, event handlers, auth, CORS, docker-compose.yml and the FE are untouched. git status clean.
+
+
+## Task #4120 - fix(backend): local RoC stub lists layer thicknesses in microns like ResinOnCloud, so a platform job can be saved
+
+- Cause: stub arrays 55/95/55s/95s/mr held layer thickness IDs (1/3/4), PlatformJobService compares microns (50/100/170) -> 400 code 40001 on save.
+- Fix: roc-resins.json values mapped 1->50, 3->100, 4->170 for both resins.
+- Tests: new Tests/Controllers/Local/LocalRocStubTests.cs (RED before, GREEN after); be-build OK; LocalRoc* 6/6 pass.
+- FE grep: only .length used in platform-print-setup.component.ts:1248-1257; FE untouched.
+- Commit: abfaa57
+
+
+## Task #4200 - feat(bridge): forward every algorithm-done message to the backend realtime ingest
+
+- RED: 4 realtimePost tests in workers/callback-bridge/test/route.test.mjs (failed on the missing export).
+- GREEN: route.mjs exports REALTIME_PATH and a pure realtimePost(envelope) -> {path, body: env.Message, messageId} or null. bridge.mjs handle() first POSTs it (Content-Type application/json, X-Message-Id), fire-and-forget with try/catch (log '-> realtime <status>' or warn and continue), then runs the unchanged callback logic. post() now accepts headers. Optional env RWC_REALTIME_PATH overrides the path.
+- Retry semantics: only the SNS callback decides DeleteMessage/retry; the realtime POST failing never changes it.
+- Verify: node --test route.test.mjs 8/8 pass. compose-config gate not completed locally (docker hung); no compose changes.
+- Commit: 0bd6b8c
+
+
+## Task #4110 - fix(backend): presign S3 URLs with SigV4 - the emulator rejects the SigV2 links the browser gets today
+
+- **Repo:** rwclab (lane be-s3), commit 4e20225 on ralph/task-4110
+- **Cause:** AWSSDK.S3 falls back to SigV2 presigned URLs (AWSAccessKeyId=...) for us-east-1 / custom ServiceURL when SigV4 is not explicitly requested; the emulator answers those with 403 AccessDenied.
+- **Fix:** ServiceCollectionExtenstions.CreatePathStyleS3Client sets `Amazon.AWSConfigsS3.UseSignatureVersion4 = true` (static, marks SigV4 explicit) and `SignatureVersion = "4"` on the AmazonS3Config. AuthenticationRegion unchanged. AwsS3Service.cs, compose and appsettings untouched.
+- **Tests (TDD):** RED first - new `AddAwsServices_S3ForcePathStyleTrue_PresignsWithSigV4` (PUT+GET) in Tests/Extensions/AwsServicesRegistrationTests.cs built the real client via AddAwsServices and failed on SigV2 URLs (2 failures); GREEN after the fix. The test went into AwsServicesRegistrationTests because the path Tests/Services/Aws/AwsS3ServiceTests.cs from the task does not exist (the file is Tests/Services/AwsS3ServiceTests.cs).
+- **Verify:** be-build.cmd - 0 errors; be-test.cmd with the AwsS3ServiceTests|AwsServicesRegistrationTests filter - 11/11 passed. Full suite and e2e left to the orchestrator gate.
+
+
+## Task #4130 - fix(backend): declare the AutoMapper maps for the platform metadata view models (print details, models, stl)
+
+- GET api/platform-job/{id}/platform-metadata and .../platform-metadata-print-details returned 500 (code 50005) with AutoMapperMappingException 'Missing type map configuration'.
+- Cause: AutoMapper 14 no longer creates nested maps on the fly. Added PlatformMetadataPrintDetails -> PlatformMetadataPrintDetailsViewModel and PlatformMetadataModels -> PlatformMetadataModelsViewModel to app/backend/Web/Infrastructure/Mapping/AutoMapperProfile.cs. StlMetadata already had a map.
+- Tests: added PlatformMetadataMapsNestedPrintDetailsAndModels (RED before the fix, GREEN after) and PlatformMetadataWithoutPrintDetailsAndModelsMapsToNulls in app/backend/Tests/Mapping/AutoMapperProfileTests.cs. AutoMapperProfileTests subset 11/11 passed, build 0 errors. Full suite left to the post-merge gate.
+- Commit: 0a5c5ec
+
+
 ## Task #3460 - docs: no Auth0 and no Azure AD in the local stack, the be-smoke gate, and the start-up call table after board 3b
 
 - README.md: Local token contract now says IAuth0Service is LocalAuth0Service in Development (no HTTP to Auth0, no-op writes, stub token everywhere) and that Azure AD / OpenIdConnect / Power BI are gone (#3400); added be-smoke.cmd [filter] to Gate commands (30 checks; 21 s full run with image up to date, 284 s rebuild from the #3420 commit); all 28 start-up requests are 2xx, the "Not connected to SprintRay Cloud" banner stays (realtime is board 4); new Troubleshooting entry for health 400 "MetadataAddress or Authority must use HTTPS" -> docker compose up -d --build.
@@ -5402,6 +5570,17 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
+
+
+
+
+
+
 
 
 
