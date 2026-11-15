@@ -34,6 +34,114 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #3460 - docs: no Auth0 and no Azure AD in the local stack, the be-smoke gate, and the start-up call table after board 3b
+
+- README.md: Local token contract now says IAuth0Service is LocalAuth0Service in Development (no HTTP to Auth0, no-op writes, stub token everywhere) and that Azure AD / OpenIdConnect / Power BI are gone (#3400); added be-smoke.cmd [filter] to Gate commands (30 checks; 21 s full run with image up to date, 284 s rebuild from the #3420 commit); all 28 start-up requests are 2xx, the "Not connected to SprintRay Cloud" banner stays (realtime is board 4); new Troubleshooting entry for health 400 "MetadataAddress or Authority must use HTTPS" -> docker compose up -d --build.
+- PLAN.md: added section 0.4, board 3b done; Auth0 code deletion stays in the dental cut (board 4).
+- Verify: be-smoke.cmd (full, exit 0, 30 checks green), no-external-hosts, be-config-offline, compose-config all exit 0. git status clean.
+- Commit: 49c0dfe
+
+
+### Task #3450 - feat(backend): seed the local stub user's preferences so GET users/{id}/preferences returns a body and the frontend stops reading language of null
+
+**Date:** 2026-11-15  
+**Repo:** rwclab (app/backend)
+
+**Status:** ✅ Complete (retry 3, scope escalation)
+
+**Problem:** No "UserPreference" row for local-stub|doctor -> Ok(null) -> 204 without body -> FE SetLanguage$ threw "TypeError: Cannot read properties of null (reading 'language')" at start-up. Retries 1-2 wrote the seed but stopped: with the row present the endpoint returned 500 (AutoMapperMappingException UserPreference -> UserPreferencesViewModel, UserPreferenceService.cs:76) and the map was outside the files boundary.
+
+**What was done:**
+- Kept the seed DataLayer/Scripts/LocalSeed/060-local-stub-preferences.sql (INSERT ... ('local-stub|doctor', 'en', 1) ON CONFLICT DO NOTHING; no curly braces - LocalDatabaseBootstrap passes raw text to ExecuteSqlRaw).
+- UserPreferencesViewModel : IMapFrom<UserPreference> (out of scope, escalation) - AutoMapper 8 CreateMissingTypeMaps made this map on the fly; 9+ needs it declared. Picked up by the reflection scan in Web/Infrastructure/Mapping/AutoMapperProfile.cs.
+
+**Verification:**
+- scripts\gate\be-smoke.cmd "GET api/users/local-stub%7Cdoctor/preferences" -> exit 0 (200 + preflight ok); direct fetch body {"language":"en","requestDeleteAccountDate":null,"dentalNotation":1}
+- be-test.cmd FullyQualifiedName~Services.Treatment (tests that build AutoMapperProfile) -> 25/25 pass; full suite left to the gate
+- Gotcha: be-test.cmd filter cannot contain '|' (quotes are stripped, cmd sees a pipe)
+
+**Files modified:**
+- app/backend/DataLayer/Scripts/LocalSeed/060-local-stub-preferences.sql (new)
+- app/backend/DTOs/ViewModels/User/UserPreferencesViewModel.cs (out of scope)
+
+**Git commit:** `2b922ec` — `feat(backend): seed the local stub user's preferences so GET users/{id}/preferences returns a body and the frontend stops reading language of null`
+
+---
+
+
+### Task #3430 - fix(backend): declare the maps AutoMapper 8 used to create on the fly - every INom<T> to BaseNomViewModel<T> for ProjectTo, and the nested RoC support parameters
+
+**Date:** 2026-11-15  
+**Repo:** rwclab (app/backend)  
+**Commit:** c228692
+
+**What changed:**
+- `Web/Infrastructure/Mapping/AutoMapperProfile.cs`: for each class implementing `INom<T>` in the SprintRay assembly scan, `CreateMap(t, BaseNomViewModel<T>)` and `CreateMap(t, BaseNomViewModelActive<T>)`. These are per type because ProjectTo needs the exact source type. Covers Organization (`INom<Guid>`) and the 6 treatment noms.
+- `DTOs/ViewModels/Resins/ResinViewModel.cs`: `RoCSupportViewModel -> ResinSupportViewModel` and `RoCSupportParamViewModel -> ResinSupportParamViewModel`.
+- New `Tests/Mapping/AutoMapperProfileTests.cs` (9 tests): ProjectTo for LayerThickness/PrinterType/Scanner/Tightness/CoverageType/TreatmentStatus -> `BaseNomViewModel<int>`, Organization -> `BaseNomViewModel<Guid>` / `BaseNomViewModelActive<Guid>`, and RoCViewModel -> ResinInfoViewModel with nested SupportParameters.
+
+**Verification:**
+- RED: 9/9 failed with `Missing map from SprintRay.Models.X to BaseNomViewModel`1[...]`; GREEN: 9/9 passed (`be-test.cmd "FullyQualifiedName~AutoMapperProfileTests"`).
+- `be-build.cmd`: 0 errors.
+- `be-smoke.cmd` on the 9 endpoints: 6 list-options went from 400 to 200; organization/current-organization, rwc-resin and ds-resin went from 500 to 200; the CORS preflight returned 204.
+- The full be-test suite is left to the orchestrator gate.
+
+**Notes:** `MapperConfiguration` in AutoMapper 14 has no ILoggerFactory constructor (that came in 15), so the test uses the single-argument constructor. No class implements `IParent`, so no `ChildNomViewModel` maps were needed.
+
+
+### Task #3410 - local IAuth0Service in Development (2026-11-15)
+
+**Status:** done (retry 3, scope escalation)
+
+**Changes:**
+- (daeb139, earlier attempt) `LocalAuth0Service`: reads users from the Postgres `User` table, all 12 writes are no-ops, every token call returns the unsigned stub token. The token builder moved to `Common/Auth/LocalStubToken.cs` (same bytes), and the service is registered through `AddLocalAuth0IfEnabled` when `Auth0:LocalUnsignedTokens` is on. 4 new tests in `LocalAuth0ServiceTests`.
+- (dbd4f3d) **Out-of-scope gate fix**: `scripts/gate/be-test.cmd` now accepts a `--filter` containing `|`. It uses `setlocal EnableDelayedExpansion`, the filter is single-quoted for `sh -c`, and it is expanded as `!FLT!`. Before this, cmd read the `|` as a pipe and exited with 255.
+
+**Verification:**
+- `scripts\gate\be-test.cmd "FullyQualifiedName~LocalAuth0ServiceTests|FullyQualifiedName~LocalUnsignedTokensTests"`, run the orchestrator's way (`cmd /c $c` from PowerShell): 12/12, exit 0.
+- Filter with no `|` (`FullyQualifiedName~LocalUnsignedTokensTests`): 8/8, exit 0.
+- The full suite is left to the gate after merge.
+
+**Note:** run from Git Bash as `cmd //c`, the command still fails, because MSYS re-quotes the arguments. That comes from the shell, not the script.
+
+
+## Task #3440 - fix(backend): enable Npgsql dynamic JSON so the jsonb POCO columns read again on Npgsql 10
+
+- **Repo:** rwclab (app/backend/Web/Startup.cs only)
+- **What:** Replaced the two `options.UseNpgsql(<connection string>)` calls with `NpgsqlDataSourceBuilder` -> `EnableDynamicJson()` -> `Build()`, built once in ConfigureServices (write + read), with a comment on the Npgsql 8+ opt-in and the docs link. Added `using Npgsql;`.
+- **Verify:** be-build 0 errors; be-test 192 passed / 0 failed; be-smoke `GET api/treatment-type/list-options` -> 200, `GET api/platform-job` -> 200 (first run timed out at 15 s on cold backend start; rerun warm: 4/4 green). git status clean.
+- **Commit:** cfc1551
+
+
+## Task #3420 - test(gate): be-smoke (rwclab, lane be-auth) - 2026-11-15
+
+**Done:** new `scripts/gate/be-smoke.cmd` (Git bash, CRLF, `docker compose up -d --build backend` + node) and `scripts/gate/be-smoke.mjs` (built-in Node only, 127.0.0.1 only). It waits up to 240 s for `GET api/health` (on a timeout it prints the last 40 lines of the backend logs), builds the stub token from the README contract (exp = now + 1 h), calls the 28 `/print-setup` start-up endpoints (a constant, Playwright trace of 15.11.2026) with Bearer + Origin http://localhost:45280, and checks the OPTIONS preflight (ACAO). Substring filters on "METHOD path"; no match = exit 2.
+
+**Deviation:** `up -d --build backend` instead of building every service. The algorithms-worker image needs the git-ignored `vendor/` binaries, which a fresh worktree does not have, so building every service failed there.
+
+**Measured:** image older than the worktree code: 284 s wall (publish 208 s, health 15 s); image up to date: 19 s.
+
+**Full run (exit 1, 19 green / 11 red):** 17 start-up calls + health + preflight are 2xx. 400 for the 6 list-options (AutoMapper missing map) -> 3430; 400 for profile-picture (INVALID_USER) -> 3410; 500 for ds-resin, current-organization, rwc-resin -> 3430; 500 for treatment-type/list-options -> 3440. Preferences is already 204.
+
+**Verify:** the verify filter -> exit 0 (10 green); `"GET api/nope"` -> exit 2; no-external-hosts.cmd OK; git status clean. Full suite left to the gate.
+
+
+## Task #3400 — fix(backend): drop Azure AD / OpenIdConnect + Power BI embedding
+**Date:** 2026-11-15 · **Repo:** rwclab · **Commit:** 7637fab
+
+**What changed**
+- Startup.cs: removed `using Microsoft.Identity.Web`, `Configure<PowerBIOptions>` and the `AddMicrosoftIdentityWebAppAuthentication(...).EnableTokenAcquisitionToCallDownstreamApi(...).AddInMemoryTokenCaches()` chain. The http Authority made the OIDC scheme throw on every request (GET api/health -> 400). Auth0 JwtBearer is untouched.
+- Deleted PowerBIController, PowerBIService, IPowerBIService, PowerBIOptions, DTOs/InputModels/PowerBI/.
+- ServiceLayer csproj: removed Microsoft.Identity.Web 3.16.0 and Microsoft.PowerBI.Api 4.10.0. Nothing uses either any more.
+- appsettings.json / appsettings.Development.json: removed the "AzureAd" and "PowerBI" sections.
+- New file Web/Infrastructure/Extensions/LocalAuthServiceCollectionExtensions.cs: a no-op `AddLocalAuth0IfEnabled`, called right after `AddDomainServices()`. This is the hook task 3410 fills in.
+
+**Verification**
+- be-build.cmd: 0 errors · be-test.cmd: 192/192 passed · be-config-offline.cmd: OK (44 keys).
+- grep: no Identity.Web / ITokenAcquisition / PowerBI / AzureAd left in app/backend.
+- Live docker check skipped: in parallel mode a compose run from the worktree would start a second compose project on the same ports. Left to the gate / task 3420.
+
+
 ## Task 3300 - docs: local stack, gates and what still fails on purpose
 
 - README.md: .NET 10 everywhere (was 3.1); 'Run the whole flow' now uses scripts\local-stack.cmd then scripts\fe-serve.cmd, with the port table (45280/45281/45283/45284/9297); new subsection 'Local token contract' under the stub session; gate table gained fe-smoke, be-build, be-test, be-exec, be-config-offline, be-image, compose-config, lab-e2e; new section 'What the backend talks to' (Auth0, RoC, LaunchDarkly, Stripe, AppSync, AWS, Postgres, CORS, callback bridge); 'what fails on purpose' updated (REST works, realtime and the full PlatformJob pipeline do not, banner stays); legacy-peer-deps paragraph replaced by the result of 3040 (.npmrc deleted, rxjs 7).
@@ -5294,6 +5402,13 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
+
+
 
 
 
