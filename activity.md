@@ -34,6 +34,28 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #5100 - feat(worker): platform row carries the build plate instead of printer, resin and layer thickness; grid auto-layout reports when the models do not fit the plate; slice consumer removed
+
+**Date:** 2026-11-16
+**Repo:** rwclab (workers/algorithms)
+**Commit:** 8153a69
+
+### What changed
+- `platform-process-logic.mjs`: `parsePipelineMessage` -> printDetails with exactly BuildPlateId/BuildPlateName/BuildPlateWidthMm/BuildPlateDepthMm/BuildPlateHeightMm/BuildPlateShape (strings via str()) + PrintJobTypeId/ApplianceTypeId/IsAligner/NeedRaft/PlatformOrientation/SliceOffset/NoGrayScale; LayerThickness/ResinName/PrinterModel/PrinterPlatformId removed; returns parsed `buildPlate` (numbers) or null. Old message (no buildPlate) parses with BuildPlate* null.
+- `gridLayout(models, gap = 5, plate = null)` keeps its placement; new pure `fitsPlate(layout, models, plate)`: footprint = position + bounds; Rectangle inside +-widthMm/2 (X), +-depthMm/2 (Z), border inclusive; Circle: 4 footprint corners inside radius widthMm/2; no plate -> true.
+- `steps/platform-process.mjs`: if a plate is present and the grid does not fit -> positions still written, `autoLayout` 400 `MODELS_DO_NOT_FIT_BUILD_PLATE`, then `platformProcessing` 200; log line prints the plate name/shape/size.
+- Slice consumer deleted: `steps/slice.mjs`, `parseSliceMessage`, the slice `consume()` in worker.mjs, `R.sliceQueue`/`RWC_SLICE_QUEUE` (env var now ignored; FIFO + compose env go in 5400).
+- Tests: platform-process.test.mjs uses the new captured message (buildPlate object), asserts the exact printDetails keys, old-message tolerance, fitsPlate cases (1 box 20 mm fits plate 1; 100 boxes do not; Z depth check; border; circle plate); input.test.mjs fixture without resinId.
+
+### Verification
+- `node --test workers/algorithms/test/input.test.mjs workers/algorithms/test/platform-process.test.mjs` -> 33/33 pass (RED first: missing `fitsPlate` export)
+- `scripts\gate\compose-config.cmd` -> PASS
+- `scripts\gate\lab-e2e.cmd` -> PASS (20mm box cut at 5mm -> 15mm, 3 job log events); worker log shows only the platform-process consumer.
+
+### Notes
+- Fresh worktrees lack the git-ignored `workers/algorithms/vendor/` binaries, so the worker image build fails; copied them from the main checkout (not committed) to run lab-e2e.
+
+
 ## [2026-11-15 20:30] - Task #4400: docs: local realtime, the pipeline through the browser, the lab-ui and lab-pipeline gates, and what the lab honestly cannot do yet
 
 **Status:** ✅ Complete
@@ -5570,6 +5592,7 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
 
 
 
