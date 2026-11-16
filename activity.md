@@ -34,6 +34,192 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #5600 - docs: build plates instead of printers and resins
+
+- **Repo:** rwclab (branch ralph/task-5600), commit c5f1a2c
+- **What:** README.md: noms line (job type picker + buildPlate store), REST count 28 -> 22 (be-smoke: 22 REST + health + WS + preflight = 25 checks), lab-ui upload = job type + name + build plate, platform job no longer takes a resin, realtime has no printer subscriptions, "What the lab cannot do yet" (no slice queue, no printer integration by design, build plates are data rows via GET api/build-plate), ResinOnCloud row deleted, troubleshooting: appliance-profile and microns entries replaced by the build-plate/first-run list from infra/bootstrap.mjs. PLAN.md: smoke counts, RoC/slice/printer rows, Board 5 summary, Board 6 next. RENDERER-AUDIT.md: dated 16.11.2026 note under section 4, platform line now says parametric; findings of the original audit untouched.
+- **Scope:** only README.md, PLAN.md, RENDERER-AUDIT.md. rwclab-structure.md not touched.
+- **Verify:** docs only, no code changes; the verify list is run by the post-merge gate.
+
+
+## Task #5340 — refactor(frontend): delete the printer integration (2026-11-16)
+
+**Repo:** rwclab (worktree ralph/task-5340) · **Commit:** e3cd28b · **Retry:** 2 (scope escalation)
+
+**What changed**
+- RED first: `core/printer-surface-gone.spec.ts` (require.resolve pattern from 5330) failed 5/5 against the old tree, now 5/5 green.
+- Deleted: `common/printer-list/**`, `common/printer-jobs/**` (the "Your printers" drawer), delta `platform-print-preview`, `platform-print-confirmation`, `feedback-reason`, `print-check-error`; the printer, printer-status, print-job and print-job-status-log services; the print-job and printer-status store slices; PrintJobEffects and RegisterEffects; the registered-printers part of the register slice, `app.isPrintListVisible`, `infoBoxVisibility.showPrintJobsTooltip`, the printer fields in `defaults`; the printer models, enums and helper that had no callers left; four printer/print-job GraphQL documents and their result type; `PlatformJobService.sendForSliceAndPrint`; NgCircleProgressModule imports; 49 i18n keys in all five languages.
+- Header: no printer icon, queue badge, print-jobs tooltip or mobile "Print list" link. app.component no longer has `<print-jobs-list>`.
+- Drawer actions: one primary **Save Print Job** button (Send to Printer is gone). It opens platform-file-download, which uploads the snapshot and then downloads the .spr directly, with no slice step and a retry on failure. Moved models are saved through the edit pipeline first (callback + saveManualEditing). New key `messages.yourPrintJobIsDownloading`. The platform-setup tabs are unchanged.
+- No printer routes existed, so `fe-smoke.mjs` needed no change.
+
+**Out-of-scope files (scope escalation):** `app.module.ts`, `components/common/header/**`, `graphql/**`, `delta/components/feedback-reason/**`, `delta/components/print-check-error/**`, `common/notification-templates/halloween-notification` (unused import only).
+
+**Verification**
+- fe-typecheck ✅ · tsc on tsconfig.spec.json ✅ · fe-test, targeted subset (22 suites / 481 tests) ✅ · no-external-hosts ✅ · fe-build ci ✅ · fe-smoke ✅ (PASS, 0 errors)
+- Left to the post-merge gate: the full fe-test suite, and lab-ui (load banner upload), which starts the shared compose stack.
+
+
+## Task #5400 - chore(infra): first-run seed without appliance profiles or a slice queue
+
+- Deleted `defaultApplianceProfileTable`, `userApplianceProfileTable`, `defaultApplianceProfiles` and the slice FIFO `RaywareCloudSPRSlicerLocal.fifo` from infra/resources.mjs.
+- Deleted `defaultApplianceProfileItem`, `defaultApplianceProfiles()`, both appliance table creations and the unused `PutItemCommand` import from infra/bootstrap.mjs.
+- Added the first-run list (Postgres, DynamoDB, S3, SQS/SNS) to the bootstrap.mjs header comment; README task 5600 copies it.
+- docker-compose.yml, scripts/local-stack.cmd and compose-config needed no edit: no slice-queue env var existed.
+- Kept: bucket, the two metadata tables, SNS topic with its two SQS subscriptions, platform-process FIFO, CloudTab and SyncToDesignLab topics, state machines, activities, IAM role, Stripe secret.
+- Gates green: compose-config, lab-e2e, be-smoke (25 checks), lab-pipeline create metadata logs edit.
+- Leftover outside the task files: README.md:173 still describes the appliance-profile seed (task 5600), and app/backend appsettings still list the CloudTab topic and MessageQueueUrls.
+- Commit: 9cb4ac5.
+
+
+## [2026-11-16 13:30] - Task #5330: refactor(frontend): delete the resin, layer-thickness, printer-platform, printer-type and appliance-profile store slices, services, models, enums, helpers and pipes
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** Retry 3. The deletion work from 9fbc59c (an earlier attempt) is kept. The post-merge gate `lab-ui load banner upload` failed with 404s on GET /api/print-job/get-all-groups and /api/printer/all, because backend task 5030 (now on ralph/standalone) deleted those endpoints while the app still called them at start-up.
+
+**What was done:**
+- RED: roc-surface-gone.spec.ts, added in 9fbc59c.
+- GREEN: deletions from 9fbc59c. Gate fix 1ba08ef: removed the start-up dispatches PrintJobActions.GetPrintJobGroupsAction and RegisteredPrintersActions.GetRegisteredPrinters, plus their imports, from app.component.ts. These were the only calls to those endpoints at app load (the other callers are the printer screens, which 5340 deletes).
+
+**Verification:**
+- scripts\gate\fe-typecheck.cmd → exit 0
+- scripts\gate\fe-test.cmd app.component → 2 suites, 20/20 pass
+- Live backend (built from the integration checkout) returns 404 for /api/printer/all, which confirms the cause.
+- Not run here: lab-ui. It rebuilds the shared backend from this branch, which does not have 5030, so it cannot reproduce the integrated state, and it would disrupt other agents. Left to the post-merge gate, along with the unfiltered fe-test suite.
+
+**Files modified:**
+- app/frontend/src/app/components/app/app.component.ts
+
+**Git commit:** `1ba08ef` — `refactor(frontend): delete the resin, layer-thickness, printer-platform, printer-type and appliance-profile store slices, services, models, enums, helpers and pipes`
+
+
+## Task #5030 - refactor(backend): delete the printer integration - printer fleet, send-to-printer, slice queue, print jobs, IoT proxy and CloudTab
+
+**Date:** 2026-11-16 | **Repo:** rwclab | **Commit:** 9fb1a4a | **Retry:** 2 (scope escalation)
+
+- RED: Tests/Controllers/PrinterRoutesGoneTests.cs (no api/printer, print-job, cloud-tab, iot-proxy, organization-device/group, platform-job/{id}/slice; edit/status-change/platform-metadata/download-links/slice-done still served) + Tests/PlatformJob/AlgorithmDoneTests.cs (slice = no-op, autoLayout still runs OrganizeItems) -> 8 red / 7 green before the delete.
+- GREEN: deleted the printer, print-job, CloudTab, IoT-proxy and Device controllers, services and interfaces; AwsApiGatewayService (IoT registration only); slice/print events and handlers plus NotificationPreferenceChanged print-job unsubscribe; PlatformJobService slice/print paths and the ForwardToPrinterId check; Slicer/PlatformSlice input models; orphaned DTOs, Dynamo models, constants, 6 messages, and the appsettings entries (Dynamo tables, AWSApiGateway, CloudTab topic, RayWareCloudSlice queue).
+- Dental consumers adjusted (outside the original files list, allowed by the scope escalation): PrintRecordsService/ShadowOfficeDeviceService query OfficePrinter directly; FileService/TreatmentService/ImportOfficeService/NotificationPreferenceService lose their printer dependencies.
+- Kept for board 6: CloudTabFile/CloudTabPage, OfficePrinter, ImportOfficePrinter, PrinterType tables + seed; PlatflormJob.ForwardToPrinterId is still a mapped entity property (dropping it would leave pending model changes) but is gone from the input/view models.
+- Pipeline message: runSlicer, printOrQueue, printerId, sendToPrinter and runScreenshot removed from the platform-process and edit parameters.
+- Gates: be-build 0 errors; be-test 268/268; be-smoke 25/25; lab-pipeline create/metadata/logs/edit PASS.
+
+
+## Task #5020 - refactor(backend): delete the ResinOnCloud surface - RoC services and stub, resin and layer-thickness endpoints, printer platforms, appliance profiles, RoC constants and seeds
+**Date:** 2026-11-16 | **Repo:** rwclab | **Commit:** a1eb57d | **Retry:** 2 (scope escalation)
+
+- RED: new Tests/Controllers/RoutesGoneTests.cs (MVC route table from the Web assembly): 9 red before the cut, green after; api/build-plate still served.
+- Deleted: RoC services/interfaces/view models, ResinOnCloud options/config/appsettings section, LocalRocController + roc-resins.json (+ csproj EmbeddedResource), resin services/controllers (api/rwc-resin, api/ds-resin), PrinterPlatform service/controller/consts/extensions, LayerThickness service/controller/consts/extensions, TreatmentTypeDefaultValue service + default-values action, ApplianceProfile service/controller/Dynamo models/view model/DynamoDbConfig + appsettings table names, IotProxy appliance-profile action, last-appliance-platforms action + service method + ApplianceTypePlatformPairViewModel, RoCSupportParametersUtils, PrintSettingsVerifier, ResinIds, dead RoC messages/entity names.
+- Dental: TreatmentService/AITreatmentService without IDSRoCService; print settings validated for presence only; AI night guard resin offset/slot tables removed.
+- Seeds: PrinterPlatform, LayerThickness, PrinterPlatformTreatmentType, TreatmentTypeDefaultValue inserts removed (tables stay for board 6). No migration.
+- Gates: be-smoke.mjs drops 6 RoC start-up endpoints (27 checks). be-config-offline unchanged.
+- Out-of-scope files touched: TreatmentTypeController.cs, IPlatformJobService.cs, ApplianceTypePlatformPairViewModel.cs, TreatmentTypeDefaultValueViewModel.cs, EntityNames.cs, Messages.cs, EntityNameResource/MessageResource (.resx + Designer).
+- Verified: be-build 0 errors; be-test subset (RoutesGone, TreatmentService, AutoMapper, PlatformJob, BuildPlate, OfflineExternal, Registration, LocalDatabase) 125/125; be-config-offline OK. Left to the post-merge gate: full be-test, be-smoke, lab-pipeline (they need the shared compose stack).
+- Follow-ups: infra appliance-profile Dynamo tables/seed -> 5400; FE still has rwc-resin/ds-resin/printer-platform/layer-thickness/appliance-profile services -> FE task (5330); README/RENDERER-AUDIT mentions -> docs task.
+
+
+## Task #5310 - feat(frontend): the print-setup form picks a build plate - printer, material, layer thickness, fit offset and appliance-profile controls removed; NEXT enables with job type, name and plate
+
+**Repo:** rwclab (lane fe-form) · **Commit:** 68ce393 · **Status:** ✅ done
+
+### What changed
+- **platform-print-setup (html/ts/scss):** deleted the printer chips, the platformType / crownPlatform groups with the crown-kit tooltip, the resin autocomplete, the layer thickness select, the fit offset slider and the expert-guidance link, the appliance-profile select and its buttons and FTUE tooltip, and the template-layout group (it was Size95-only). All of their methods, subscriptions, services and imports are gone too: searchResins, handleMissingResin, selectDefault*, selectRecommendedThickness, layerThicknesses$, filterPlatform*, the printers origin, the profile select/init/save/delete code, and the defaults/feature-flag/toast/resin pipe injections.
+- **New control:** `f-button-group name="buildPlate"` → `model.buildPlateId`, `[required]`, source `BuildPlateSelectors.getBuildPlates` as `{ id, name }`, label `general.buildPlate`. `onBuildPlateChange()` turns autoLayout on when the plate differs from the current job's plate. `treatmentTypeSelected` falls back to `Unset` when the appliance list is empty. A new job gets `PlatformJobParameters` defaults plus the job-type rules, and plate 1 is preselected. For SPR import, "full" now means job type + appliance type + plate.
+- **platform-setup:** `isPrintButttonDisabled` no longer checks printerPlatformId/resin/layer. The model fallback and the multi-platform copy carry `buildPlateId`. The move rules match on appliance type + `buildPlateId`, with a new message `platformJobDifferentBuildPlateError/Title`. The ApplianceTypeProfilePair/PlatformPair writes after save are deleted, along with the DefaultsStoreService injection.
+- **base-platform:** deleted allPlatformTypes/platformTypes, allResins/groupResins, platformOptions and templateLayoutOptions, with their store subscriptions.
+- **delta.module:** MatChipsModule and MatTooltipModule removed (only the printer chips used them).
+- **i18n:** `general.buildPlate` and `messages.platformJobDifferentBuildPlateError/Title` added in en/de/es/fr/it.
+- **lab-ui.mjs:** the upload stage clicks the first enabled `f-button-group[name="buildPlate"]` button when none is selected; the printer, Material and layer steps and the Enter workaround notes are gone; the disabled-NEXT message is updated.
+
+### Tests
+- New `platform-print-setup.component.spec.ts` (13 cases): the plate control and its source, no RoC controls, form invalid without a plate and valid with job type + title + plate, onBuildPlateChange, treatmentTypeSelected with an empty appliance list and without plates, and the new-job defaults.
+- `platform-setup.component.spec.ts`: +6 cases for the print button, the move rules and no defaults writes. `base-platform.component.spec.ts`: printer-type and resin cases replaced by an absence check.
+- RED first (7 failing + the PPS suite not compiling on a missing `onBuildPlateChange`), then GREEN.
+
+### Verification
+- `scripts\gate\fe-typecheck.cmd` ✅
+- `scripts\gate\fe-test.cmd "platform-print-setup|platform-setup|base-platform|print-list.states"` ✅ 4 suites, 92/92
+- `scripts\gate\no-external-hosts.cmd` ✅
+- `scripts\gate\lab-ui.cmd load banner upload` ✅ PASS: load 22 s, banner ok, upload 61 s (POST platform-job 200, metadata 200, .drc 200; 378 s total)
+- Full jest suite not run here; left to the post-merge gate.
+
+### Notes
+- The `new-appliance-profile` component is no longer used by the form. It is still declared in delta.module because its folder is outside this task's files; deleting it belongs to 5330.
+- `SavePlatformJobInputModel` still has printerPlatformId/resinId/layerThicknessId/profileId (left for 5330). The form no longer sets them, and `buildPlateId` is sent in the POST body (seen in lab-ui).
+- Setup: workers/algorithms/vendor was copied from the main checkout (git-ignored) so lab-ui could build the worker image.
+
+
+## Task #5200 - test(gate): lab-pipeline creates the platform job with a build plate and asserts the build-plate print details instead of resin, layer thickness and pro55
+
+- **Repo:** rwclab, branch ralph/task-5200, commit 7bc5897
+- **Changed:** scripts/gate/lab-pipeline.mjs (header comments, create stage, metadata stage). lab-pipeline.cmd needed no change.
+- **create:** removed GET api/rwc-resin; added GET api/build-plate (must be 200 with >= 1 plate, clear FAIL otherwise) and POST api/platform-job with buildPlateId = plates[0].id; dropped printerPlatformId/resinId/layerThicknessId/profileId.
+- **metadata:** good = 200 && stl.length === 1 && printDetails.buildPlateName non-empty string && printDetails.buildPlateWidthMm === "182.4"; FAIL texts name the new fields; every pro55 mention removed.
+- **Verify:** scripts\gate\lab-pipeline.cmd create metadata logs -> PASS create/metadata/logs (plate "Default plate 182 x 103 mm", width 182.4); edit (info) PASS too. Total 7.0 s.
+- **Note:** the worktree needed workers/algorithms/vendor copied from the main checkout (git-ignored, not committed).
+
+
+### Task #5320 - retry 1 (gate fix)
+- **Diagnosis:** the gate `lab-ui load banner` failed with `GET /api/platform-job -> 500`. The backend log showed `42703: column p.LayerThicknessId does not exist`. The shared `rwc-pg-data` volume had task 5010's migration applied (it drops `PlatflormJob.LayerThicknessId`, `ResinId` and `ProfileId`). The integration tree does not contain 5010 yet, and `Migrate()` only moves forward, so it cannot undo that.
+- **Fix (out of scope):** in `LocalDatabaseBootstrap.Run`, `GetUnknownMigrations(applied, known)` lists the migrations in the DB that this build does not have. If there are any, the bootstrap logs a warning, runs `DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;`, then migrates and seeds. This only runs in Development with `Database:MigrateOnStartup=true`.
+- **Tests:** three new tests in `LocalDatabaseBootstrapTests`. `be-test FullyQualifiedName~LocalDatabaseBootstrapTests` passed 20/20.
+- **Renderer work (6c7145e):** unchanged.
+- **Out-of-scope files:** `app/backend/Web/Infrastructure/LocalDatabase/LocalDatabaseBootstrap.cs`, `app/backend/Tests/Extensions/LocalDatabaseBootstrapTests.cs`.
+- **Not run:** the full suites and lab-ui are left to the post-merge gate.
+
+
+## Task #5010 - feat(backend): platform jobs without resin, layer thickness or appliance profile; no RoC lookups on the print-setup paths; the pipeline message carries the build plate
+
+**Status:** done (retry 1)
+
+**Commits:** eef3bc0 (implementation), 6f20001 (retry fix)
+
+**What changed:**
+- PlatformJob, its input/view models and the DB (migration 20261116084833_PlatformJobWithoutResin) no longer have resin, layer thickness or appliance profile; print details carry the six build plate fields.
+- PlatformJobService / PrintListService print-setup paths make no RoC or appliance-profile calls; preprocess message keeps its shape (resinId/supportParameters null, Balanced preset).
+- Pipeline message carries a single buildPlate object; the resin-less skip guard is gone; a test pins the key list against the worker contract.
+- New tests in Tests/PlatformJob with RoC/appliance-profile mocks that fail on any call.
+- Retry: LayerThickness.PlatformJobs nav deleted and the Ignore workaround in SprintRayContext removed; Tests/BuildPlate/MigrationSnapshotTests no longer requires _BuildPlate to be the newest migration (renamed to Migrations_TheBuildPlateMigrationIsApplied).
+
+**Out-of-scope files (scope escalation):** Tests/BuildPlate/MigrationSnapshotTests.cs, DTOs/Models/Treatment/Noms/LayerThickness.cs.
+
+**Verification:** be-test filter BuildPlate|PlatformJob|AutoMapperProfileTests|LocalRealtime 80/80 green; previous attempt: be-build 0 errors, be-smoke 33/33. Full suite left to the post-merge gate.
+
+**Left for #5020:** unused resin/layer error messages, RoCSupportParametersUtils, layer-thickness extension methods.
+
+
+## Task #5300 — feat(frontend): build-plate model, store and service; print-setup validity keyed on the build plate
+
+**Status:** done (retry 6, continuation; code unchanged since 8e1ec89)
+
+- Build-plate model, BuildPlateService, NgRx actions/reducer/effects/state; print-setup validity now keys on the selected build plate instead of resin / layer thickness / printer platform.
+- Retries 1-5 failed only because the board's verify string was unquoted (cmd /c split on |). The board is now fixed (tasks.json:479 quoted).
+- Re-verified on 8e1ec89 exactly as the gate does (cmd /c): fe-typecheck.cmd exit 0; fe-test.cmd "build-plate|print-list.states|print-list.reducers|app.component" exit 0, 7 suites / 103 tests pass.
+- Full suite and e2e left to the post-merge gate.
+- Note: app/frontend/src/app/app.module.ts (registers BuildPlateEffects) is outside the files list; already in 8e1ec89.
+
+
+### Task #5000 - feat(backend): BuildPlate entity, migration and GET api/build-plate; PlatformJob references a build plate instead of a SprintRay printer platform
+
+**Status:** done (commit 63ef106)
+
+**What changed:**
+- New `BuildPlate` table (`Id`, `Name`, `WidthMm`, `DepthMm`, `HeightMm`, `Shape` with `Rectangle = 1`, `Circle = 2`), seeded via HasData with 3 plates; plate 1 is `BuildPlate.DefaultId`.
+- `GET api/build-plate` ([Authorize]) returns `[{ id, name, widthMm, depthMm, heightMm, shape }]`; unknown id -> 400 "Entity Build plate not found."
+- `PlatformJob.BuildPlateId` (required FK, Restrict) replaces `PrinterPlatformId` in entity, input model and view model; view model carries `BuildPlate`. Pipeline queue messages send `buildPlate` instead of `printerModel`/`printerPlatformId`/`platformSize`; slice message sends `buildPlateId`. Resin/layer fields left for 5010.
+- Migration `20261116080713_BuildPlate` (SprintRayWriteContext): create + seed, add `BuildPlateId` default 1 then drop default, drop `PrinterPlatformId`. Up/Down hand-written (scaffold proposed a rename that would carry printer platform ids into the FK); snapshot is EF-generated.
+- Added `SprintRayWriteContextDesignTimeFactory.cs` so the design-time host sets the Npgsql legacy timestamp switch (otherwise 272 spurious timestamptz AlterColumns).
+- `scripts/gate/be-smoke.mjs` checks `GET api/build-plate` (33 checks).
+- Tests: Tests/BuildPlate (service, controller, migration snapshot, pipeline message) + AutoMapperProfileTests.PlatformJobMapsItsBuildPlate.
+
+**Verification:** be-build green; targeted be-test (BuildPlate|AutoMapperProfileTests) 23/23 green on retry. Full suite left to the post-merge gate.
+
+**Known follow-ups:** lab-pipeline will fail until task 5200 (still posts `printerPlatformId`, expects `printerModel === "pro55"`). dotnet-ef 3.1.3 in Web/.config can't load net10 — use dotnet-ef 10 in the sdk:10.0 container.
+
+
 ## Task #5100 - feat(worker): platform row carries the build plate instead of printer, resin and layer thickness; grid auto-layout reports when the models do not fit the plate; slice consumer removed
 
 **Date:** 2026-11-16
@@ -5592,6 +5778,18 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

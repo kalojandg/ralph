@@ -67,7 +67,7 @@
                        "scripts\\gate\\be-test.cmd \"FullyQualifiedName~BuildPlate|FullyQualifiedName~AutoMapperProfileTests|FullyQualifiedName~PlatformJob\"",
                        "scripts\\gate\\be-smoke.cmd build-plate"
                    ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  5010,
@@ -130,7 +130,7 @@
                        "scripts\\gate\\be-test.cmd \"FullyQualifiedName~PlatformJob|FullyQualifiedName~AutoMapperProfileTests|FullyQualifiedName~LocalRealtime\"",
                        "scripts\\gate\\be-smoke.cmd"
                    ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  5020,
@@ -152,6 +152,7 @@
                       "app/backend/ServiceLayer/Services/PrintList/ApplianceProfileService.cs",
                       "app/backend/ServiceLayer/Interfaces/PrintList/IPrinterPlatformService.cs",
                       "app/backend/ServiceLayer/Interfaces/PrintList/IApplianceProfileService.cs",
+                      "app/backend/ServiceLayer/Interfaces/PrintList/IPlatformJobService.cs",
                       "app/backend/ServiceLayer/Services/PrintList/PlatformJobService.cs",
                       "app/backend/ServiceLayer/Services/Treatments/Noms/LayerThicknessService.cs",
                       "app/backend/ServiceLayer/Services/Treatments/TreatmentTypeDefaultValueService.cs",
@@ -165,7 +166,7 @@
                       "app/backend/Web/Controllers/PrintList/ApplianceProfileController.cs",
                       "app/backend/Web/Controllers/PrintList/PlatformJobController.cs",
                       "app/backend/Web/Controllers/Treatments/Noms/LayerThicknessController.cs",
-                      "app/backend/Web/Controllers/Treatments/TreatmentTypeDefaultValueController.cs",
+                      "app/backend/Web/Controllers/Treatments/Noms/TreatmentTypeController.cs",
                       "app/backend/Web/Controllers/Proxy/IotProxyController.cs",
                       "app/backend/Web/Startup.cs",
                       "app/backend/Web/Infrastructure/Extensions/ServiceCollectionExtenstions.cs",
@@ -184,21 +185,24 @@
                       "app/backend/DTOs/ViewModels/Resins/**",
                       "app/backend/DTOs/Models/DynamoDb/RwcApplianceProfile.cs",
                       "app/backend/DTOs/ViewModels/Printer/ApplianceProfileViewModel.cs",
-                      "app/backend/DTOs/InputModels/PrintList/ApplianceProfile*.cs",
+                      "app/backend/DTOs/ViewModels/Printer/ApplianceTypePlatformPairViewModel.cs",
+                      "app/backend/Common/Configs/EntityNames.cs",
+                      "app/backend/Common/Resources/EntityNameResource.resx",
+                      "app/backend/Common/Resources/EntityNameResource.Designer.cs",
                       "app/backend/DataLayer/Scripts/LocalSeed/**",
                       "app/backend/Tests/Controllers/Local/**",
                       "app/backend/Tests/Controllers/LocalRocControllerTests.cs",
                       "app/backend/Tests/Services/TreatmentServiceTests.cs",
                       "app/backend/Tests/Mapping/**",
                       "app/backend/Tests/Controllers/RoutesGoneTests.cs",
-                      "app/backend/Tests/OfflineExternalServicesTests.cs",
+                      "app/backend/Tests/Services/OfflineExternalServicesTests.cs",
                       "scripts/gate/be-smoke.mjs",
                       "scripts/gate/be-config-offline.mjs"
                   ],
         "description":  "refactor(backend): delete the ResinOnCloud surface - RoC services and stub, resin and layer-thickness endpoints, printer platforms, appliance profiles, RoC constants and seeds",
         "specRef":  "rwclab-roc-recon.md §6.1 (RoC surface table), §6.5 (start-up endpoints), §6.9 (catalog tables); rwclab-structure.md RED LINE 7 (delete for real)",
         "tddWorkflow":  true,
-        "notes":  "Deletion task. Everything RoC: IRoCService/RoCService, IRWCRoCService/RWCRoCService, IDSRoCService/DSRoCService, ResinService/RWCResinService/DSResinService + controllers api/rwc-resin, api/ds-resin, LocalRocController + Web/LocalStubs/roc-resins.json (and its EmbeddedResource entry in SprintRay.Web.csproj), RoCViewModel/ResinViewModel, ResinOnCloudOptions/Config (+ the `ResinOnCloud` section in appsettings*.json and the Startup.cs:126 bind), ResinIds, RoCSupportParametersUtils, PrintSettingsVerifier (its callers in TreatmentService.VerifyPrintSettingsAsync :2121-2152 and the UpdateAiNgSettings resin dictionaries :2058-2100 are dental code: cut the RoC dependency out of them by deleting VerifyPrintSettingsAsync\u0027s RoC branch and the resin checks - the treatment print-settings endpoint then only validates presence; AITreatmentService.cs:264 RoC call deleted, the result is unused today), PrinterPlatforms consts, PrinterPlatformExtensions, LayerThicknessIds/LayerThicknesses/LayerThicknessExtensions (MapLayerThickeness callers were removed in 5010; if a dental caller remains, inline the 0.1 default there and say so), PrinterPlatformService/Controller (api/printer-platform), LayerThicknessService/Controller (api/layer-thickness), TreatmentTypeDefaultValueService/Controller (api/treatment-type/default-values), ApplianceProfileService/Controller + RwcApplianceProfile Dynamo models + ApplianceProfileViewModel/input models + the DynamoDbConfig table names + the two AWSDynamoDB:Tables entries in appsettings*.json, IotProxyController appliance-profile actions (:47-50 - only those; the printer bits of IotProxy go in 5030), PlatformJobController `last-appliance-platforms` action + PlatformJobService.GetLastPlatformTypesByApplianceTypeAsync :1320-1340.\nKeep in the schema (board 6 deletes them with the dental tables): PrinterPlatform, PrinterPlatformTreatmentType, LayerThickness, TreatmentTypeDefaultValue, TreatmentPrintSettings. Do NOT write migrations in this task. Seeds: DataLayer/Scripts/LocalSeed/020-printers.sql keep PrinterType rows (printer cut 5030 decides), DELETE the PrinterPlatform rows; 030-treatment-types.sql DELETE the LayerThickness, PrinterPlatformTreatmentType and TreatmentTypeDefaultValue inserts (TreatmentType + SprModelCount stay). The seed is idempotent and runs on every start, so removing inserts only stops re-seeding; a `DELETE FROM` for the stale rows in the local DB is NOT needed (the local DB is disposable; say so in the commit body).\nDI: services are registered by reflection (AddDomainServices, IFoo/Foo convention) - deleting a class deletes its registration, but every constructor that still asks for a deleted interface fails at runtime: grep `IRoCService|IRWCRoCService|IDSRoCService|IResinService|IPrinterPlatformService|IApplianceProfileService|ILayerThicknessService|ITreatmentTypeDefaultValueService` across ServiceLayer and fix every constructor. Remove `AddLocalRocIfEnabled`-style registrations from Startup.cs / ServiceCollectionExtenstions.cs if they exist (grep LocalRoc).\nGates: be-smoke.mjs start-up list - remove `rwc-resin`, `ds-resin`, `layer-thickness/list-options`, `printer-platform/list-options`, `appliance-profile`, `platform-job/last-appliance-platforms`, `treatment-type/default-values` (if present); keep `api/build-plate`. be-config-offline.mjs: drop the ResinOnCloud expectation if it asserts the `api/local-roc/` URL. Tests: delete LocalRocStubTests/LocalRocControllerTests, the RoC cases in AutoMapperProfileTests (:81) and the IDSRoCService mocks in TreatmentServiceTests (rewrite the two print-settings 400 tests at :364/:376 to the new presence-only validation or delete them with the RoC branch - say which in the body), OfflineExternalServicesTests entries for RoC.\nAdd a characterization test BEFORE deleting (RED/GREEN still applies to deletions): Tests/Controllers/RoutesGoneTests.cs - the MVC route table (ApplicationPartManager/ActionDescriptorCollectionProvider from a WebApplicationFactory, pattern from existing controller tests) contains NO route starting with api/rwc-resin, api/ds-resin, api/local-roc, api/printer-platform, api/layer-thickness, api/appliance-profile, api/platform-job/last-appliance-platforms, and DOES contain api/build-plate. RED first (routes exist), GREEN after deletion.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, in-memory, bootstrap after each start), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -\u003e import -\u003e plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit] (REST pipeline through the backend, no browser), lab-ui.cmd [load banner upload] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
+        "notes":  "Deletion task. Everything RoC: IRoCService/RoCService, IRWCRoCService/RWCRoCService, IDSRoCService/DSRoCService, ResinService/RWCResinService/DSResinService + controllers api/rwc-resin, api/ds-resin, LocalRocController + Web/LocalStubs/roc-resins.json (and its EmbeddedResource entry in SprintRay.Web.csproj), RoCViewModel/ResinViewModel, ResinOnCloudOptions/Config (+ the `ResinOnCloud` section in appsettings*.json and the Startup.cs:126 bind), ResinIds, RoCSupportParametersUtils, PrintSettingsVerifier (its callers in TreatmentService.VerifyPrintSettingsAsync :2121-2152 and the UpdateAiNgSettings resin dictionaries :2058-2100 are dental code: cut the RoC dependency out of them by deleting VerifyPrintSettingsAsync\u0027s RoC branch and the resin checks - the treatment print-settings endpoint then only validates presence; AITreatmentService.cs:264 RoC call deleted, the result is unused today), PrinterPlatforms consts, PrinterPlatformExtensions, LayerThicknessIds/LayerThicknesses/LayerThicknessExtensions (MapLayerThickeness callers were removed in 5010; if a dental caller remains, inline the 0.1 default there and say so), PrinterPlatformService/Controller (api/printer-platform), LayerThicknessService/Controller (api/layer-thickness), TreatmentTypeDefaultValueService + the `default-values` action and the ITreatmentTypeDefaultValueService constructor parameter in Web/Controllers/Treatments/Noms/TreatmentTypeController.cs (:15,19,22,33-38; the controller itself STAYS - dental nom; there is no separate TreatmentTypeDefaultValueController), ApplianceProfileService/Controller + RwcApplianceProfile Dynamo models + ApplianceProfileViewModel/input models + the DynamoDbConfig table names + the two AWSDynamoDB:Tables entries in appsettings*.json, IotProxyController appliance-profile actions (:47-50 - only those; the printer bits of IotProxy go in 5030), PlatformJobController `last-appliance-platforms` action + PlatformJobService.GetLastPlatformTypesByApplianceTypeAsync (:1248-1300 after 5010) + its declaration in Interfaces/PrintList/IPlatformJobService.cs:75 + ApplianceTypePlatformPairViewModel.cs (used only there) + EntityNames.RWC_USER_APPLIANCE_PROFILE (:83) with its EntityNameResource.resx/.Designer.cs entries. OfflineExternalServicesTests lives in Tests/Services/. The appliance-profile Dynamo tables/seed in infra/ are task 5400, not this one.\nKeep in the schema (board 6 deletes them with the dental tables): PrinterPlatform, PrinterPlatformTreatmentType, LayerThickness, TreatmentTypeDefaultValue, TreatmentPrintSettings. Do NOT write migrations in this task. Seeds: DataLayer/Scripts/LocalSeed/020-printers.sql keep PrinterType rows (printer cut 5030 decides), DELETE the PrinterPlatform rows; 030-treatment-types.sql DELETE the LayerThickness, PrinterPlatformTreatmentType and TreatmentTypeDefaultValue inserts (TreatmentType + SprModelCount stay). The seed is idempotent and runs on every start, so removing inserts only stops re-seeding; a `DELETE FROM` for the stale rows in the local DB is NOT needed (the local DB is disposable; say so in the commit body).\nDI: services are registered by reflection (AddDomainServices, IFoo/Foo convention) - deleting a class deletes its registration, but every constructor that still asks for a deleted interface fails at runtime: grep `IRoCService|IRWCRoCService|IDSRoCService|IResinService|IPrinterPlatformService|IApplianceProfileService|ILayerThicknessService|ITreatmentTypeDefaultValueService` across ServiceLayer and fix every constructor. Remove `AddLocalRocIfEnabled`-style registrations from Startup.cs / ServiceCollectionExtenstions.cs if they exist (grep LocalRoc).\nGates: be-smoke.mjs start-up list - remove `rwc-resin`, `ds-resin`, `layer-thickness/list-options`, `printer-platform/list-options`, `appliance-profile`, `platform-job/last-appliance-platforms`, `treatment-type/default-values` (if present); keep `api/build-plate`. be-config-offline.mjs: drop the ResinOnCloud expectation if it asserts the `api/local-roc/` URL. Tests: delete LocalRocStubTests/LocalRocControllerTests, the RoC cases in AutoMapperProfileTests (:81) and the IDSRoCService mocks in TreatmentServiceTests (rewrite the two print-settings 400 tests at :364/:376 to the new presence-only validation or delete them with the RoC branch - say which in the body), OfflineExternalServicesTests entries for RoC.\nAdd a characterization test BEFORE deleting (RED/GREEN still applies to deletions): Tests/Controllers/RoutesGoneTests.cs - the MVC route table (ApplicationPartManager/ActionDescriptorCollectionProvider from a WebApplicationFactory, pattern from existing controller tests) contains NO route starting with api/rwc-resin, api/ds-resin, api/local-roc, api/printer-platform, api/layer-thickness, api/appliance-profile, api/platform-job/last-appliance-platforms, and DOES contain api/build-plate. RED first (routes exist), GREEN after deletion.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, in-memory, bootstrap after each start), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -\u003e import -\u003e plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit] (REST pipeline through the backend, no browser), lab-ui.cmd [load banner upload] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
         "steps":  [
                       {
                           "id":  "5020.1",
@@ -233,7 +237,7 @@
                        "scripts\\gate\\be-config-offline.cmd",
                        "scripts\\gate\\lab-pipeline.cmd create metadata logs"
                    ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  5030,
@@ -255,17 +259,17 @@
                       "app/backend/Web/appsettings*.json",
                       "app/backend/ServiceLayer/Services/PrinterService.cs",
                       "app/backend/ServiceLayer/Services/PrinterStateService.cs",
-                      "app/backend/ServiceLayer/Services/PrintJob/**",
+                      "app/backend/ServiceLayer/Services/DynamoDb/PrintJobService.cs",
+                      "app/backend/ServiceLayer/Services/DynamoDb/PrintJobUnsubscribeService.cs",
                       "app/backend/ServiceLayer/Services/CloudTab/**",
+                      "app/backend/ServiceLayer/Services/CloudTabFileService.cs",
                       "app/backend/ServiceLayer/Services/Device/**",
-                      "app/backend/ServiceLayer/Services/IotProxy/**",
                       "app/backend/ServiceLayer/Services/PrintList/PlatformJobService.cs",
                       "app/backend/ServiceLayer/Interfaces/**",
                       "app/backend/ServiceLayer/EventHandlers/PlatformJob/PlatformJobSlicePostQueueMessageEH.cs",
                       "app/backend/ServiceLayer/EventHandlers/PlatformJob/PlatformJobPrintJobEH.cs",
                       "app/backend/ServiceLayer/EventHandlers/PlatformJob/PlatformJobChangedPostQueueMessageEH.cs",
-                      "app/backend/ServiceLayer/EventHandlers/PrintJob/**",
-                      "app/backend/ServiceLayer/EventHandlers/Printer/**",
+                      "app/backend/ServiceLayer/EventHandlers/NotificationPreference/NotificationPreferenceChangedUpdatePrintJobSubscribtionEH.cs",
                       "app/backend/SprintRay.EventBus/**",
                       "app/backend/DTOs/Models/Printers/PlatformJob.cs",
                       "app/backend/DTOs/InputModels/PrintList/PlatformJobInputModel.cs",
@@ -274,7 +278,7 @@
                       "app/backend/DTOs/Models/DynamoDb/PrinterIdToThingName.cs",
                       "app/backend/Common/Configs/AwsSqsKeys.cs",
                       "app/backend/Common/Configs/PrinterTypes.cs",
-                      "app/backend/EventModels/**",
+                      "app/backend/DTOs/EventModels/**",
                       "app/backend/DataLayer/Scripts/LocalSeed/**",
                       "app/backend/Tests/**",
                       "scripts/gate/be-smoke.mjs",
@@ -283,7 +287,7 @@
         "description":  "refactor(backend): delete the printer integration - printer fleet, send-to-printer, slice queue, print jobs, IoT proxy and CloudTab",
         "specRef":  "rwclab-roc-recon.md §6.1 (PrinterService row), §8 \"what stays deliberately\" (printer integration = user decision 16.11: falls in board 5); RENDERER-AUDIT.md §1.4 printer/all, is-active, slice; recon §2.3 Device/CloudTab/IotProxy/PrintJob",
         "tddWorkflow":  true,
-        "notes":  "Fourth task of the be-core lane (after 5020). No printers in the lab: delete the fleet and the print path. Controllers: PrinterController (api/printer: all, is-active, register...), PrintJobController, CloudTabController, Proxy/IotProxyController (whole file - its appliance-profile actions went in 5020), PlatformJobController actions `slice` (:146), `status-change` stays (FE uses it for Done/Draft), `print-job-to-rwc` (:98 in the audit list) and `spr-download-link`/`import-spr`/`extract-spr-metadata` STAY (SPR import is renderer territory). Services: PrinterService, PrinterStateService, PrintJob/*, CloudTab/*, Device/*, IotProxy/*; Dynamo model PrinterIdToThingName; events + handlers: PlatformJobSliceEvent + PlatformJobSlicePostQueueMessageEH, PlatformJobPrintEvent + PlatformJobPrintJobEH, every EventHandlers/PrintJob/* and EventHandlers/Printer/*, their `AddEventHandlers`/`AddEventSubscriptions` lines; the slice FIFO key `AwsSqsKeys.RaywareCloudSliceMessageQueueUrl` and its appsettings entries (the queue itself is removed from infra in 5400).\nPlatformJobService.cs: delete SliceAsync/SavePrintSettingsChanges (:1026-1049), PrintPlatformAsync + the `case PlatformJobAlgorithm.Slice` in PlatformAlgorithmDoneAsync (:1286-1300: keep AutoLayout -\u003e OrganizeItems), GetRegisteredPlatformAsync (:1351), the ForwardToPrinterId checks (:343-350) and the ForwardToPrinterId/printer bits of the queue message (printerId, sendToPrinter, runScreenshot, printOrQueue -\u003e remove the fields from the message AND from the worker-facing contract: the worker ignores them already; document the final message shape in the commit body). Remove `ForwardToPrinterId` from PlatformJob entity/input/view model ONLY if no migration is needed to keep the column - it is a plain nullable string column; leave the DB column, drop the properties and say so (board 6 migration).\nPrinterTypes.cs consts: delete the code/prefix/size tokens that no longer have callers; the PrinterType TABLE and `020-printers.sql` PrinterType rows stay (TreatmentPrintSettings.PrinterTypeId is a required FK - dental, board 6); the OfficePrinter/ImportOfficePrinter tables stay for the same reason. PrinterTypeController (api/printer-type/list-options) under Treatments/Noms stays (dental nom; FE stops calling it in 5330).\nGates: be-smoke.mjs remove `printer/all?term=` (and `print-job/get-all-groups` if it is in the list); lab-pipeline.mjs: no change expected unless it references slice - it does not (edit stage only); it is in files so the worker-facing message assertions can be adjusted if the edit stage reads removed fields.\nRED first: Tests/Controllers/PrinterRoutesGoneTests.cs (route table has no api/printer, api/print-job, api/cloud-tab, api/iot-proxy, api/platform-job/{id}/slice; still has api/platform-job/{id}/edit, /status-change, /platform-metadata, /download-links) - same pattern as RoutesGoneTests from 5020. Also a unit test that PlatformAlgorithmDoneAsync with Algorithm \"slice\" is a no-op (no event published) and with \"autoLayout\" still calls OrganizeItems.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, in-memory, bootstrap after each start), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -\u003e import -\u003e plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit] (REST pipeline through the backend, no browser), lab-ui.cmd [load banner upload] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
+        "notes":  "Fourth task of the be-core lane (after 5020). No printers in the lab: delete the fleet and the print path. Controllers: PrinterController (api/printer: all, is-active, register...), PrintJobController, CloudTabController, Proxy/IotProxyController (whole file - its appliance-profile actions went in 5020), PlatformJobController actions `slice` (:146), `status-change` stays (FE uses it for Done/Draft), `print-job-to-rwc` (:98 in the audit list) and `spr-download-link`/`import-spr`/`extract-spr-metadata` STAY (SPR import is renderer territory). Services: PrinterService, PrinterStateService, DynamoDb/PrintJobService + DynamoDb/PrintJobUnsubscribeService (+ Interfaces/DynamoDb/IPrintJob*.cs), CloudTab/* + CloudTabFileService.cs (root; the CloudTabFile TABLE stays - board 6 migration), Device/*; IotProxy has no service class - only Controllers/Proxy/IotProxyController; Dynamo model PrinterIdToThingName; events + handlers: PlatformJobSliceEvent + PlatformJobSlicePostQueueMessageEH, PlatformJobPrintEvent + PlatformJobPrintJobEH, EventHandlers/NotificationPreference/NotificationPreferenceChangedUpdatePrintJobSubscribtionEH.cs (print-job subscription; there are NO EventHandlers/PrintJob or /Printer folders - the print handlers are the PlatformJob/* ones listed here), event models live in DTOs/EventModels/ (PlatformJobSliceEvent, PlatformJobPrintEvent), their `AddEventHandlers`/`AddEventSubscriptions` lines; the slice FIFO key `AwsSqsKeys.RaywareCloudSliceMessageQueueUrl` and its appsettings entries (the queue itself is removed from infra in 5400).\nPlatformJobService.cs: delete SliceAsync/SavePrintSettingsChanges (:1026-1049), PrintPlatformAsync + the `case PlatformJobAlgorithm.Slice` in PlatformAlgorithmDoneAsync (:1286-1300: keep AutoLayout -\u003e OrganizeItems), GetRegisteredPlatformAsync (:1351), the ForwardToPrinterId checks (:343-350) and the ForwardToPrinterId/printer bits of the queue message (printerId, sendToPrinter, runScreenshot, printOrQueue -\u003e remove the fields from the message AND from the worker-facing contract: the worker ignores them already; document the final message shape in the commit body). Remove `ForwardToPrinterId` from PlatformJob entity/input/view model ONLY if no migration is needed to keep the column - it is a plain nullable string column; leave the DB column, drop the properties and say so (board 6 migration).\nPrinterTypes.cs consts: delete the code/prefix/size tokens that no longer have callers; the PrinterType TABLE and `020-printers.sql` PrinterType rows stay (TreatmentPrintSettings.PrinterTypeId is a required FK - dental, board 6); the OfficePrinter/ImportOfficePrinter tables stay for the same reason. PrinterTypeController (api/printer-type/list-options) under Treatments/Noms stays (dental nom; FE stops calling it in 5330).\nGates: be-smoke.mjs remove `printer/all?term=` (and `print-job/get-all-groups` if it is in the list); lab-pipeline.mjs: no change expected unless it references slice - it does not (edit stage only); it is in files so the worker-facing message assertions can be adjusted if the edit stage reads removed fields.\nRED first: Tests/Controllers/PrinterRoutesGoneTests.cs (route table has no api/printer, api/print-job, api/cloud-tab, api/iot-proxy, api/platform-job/{id}/slice; still has api/platform-job/{id}/edit, /status-change, /platform-metadata, /download-links) - same pattern as RoutesGoneTests from 5020. Also a unit test that PlatformAlgorithmDoneAsync with Algorithm \"slice\" is a no-op (no event published) and with \"autoLayout\" still calls OrganizeItems.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, in-memory, bootstrap after each start), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -\u003e import -\u003e plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit] (REST pipeline through the backend, no browser), lab-ui.cmd [load banner upload] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
         "steps":  [
                       {
                           "id":  "5030.1",
@@ -317,7 +321,7 @@
                        "scripts\\gate\\be-smoke.cmd",
                        "scripts\\gate\\lab-pipeline.cmd create metadata logs edit"
                    ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  5100,
@@ -409,7 +413,7 @@
         "verify":  [
                        "scripts\\gate\\lab-pipeline.cmd create metadata logs"
                    ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  5300,
@@ -478,7 +482,7 @@
                        "scripts\\gate\\fe-typecheck.cmd",
                        "scripts\\gate\\fe-test.cmd \"build-plate|print-list.states|print-list.reducers|app.component\""
                    ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  5310,
@@ -536,7 +540,7 @@
                        "scripts\\gate\\fe-test.cmd \"platform-print-setup|platform-setup|base-platform|print-list.states\"",
                        "scripts\\gate\\lab-ui.cmd load banner upload"
                    ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  5330,
@@ -602,7 +606,7 @@
                        "scripts\\gate\\no-external-hosts.cmd",
                        "scripts\\gate\\lab-ui.cmd load banner upload"
                    ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  5340,
@@ -670,7 +674,7 @@
                        "scripts\\gate\\fe-smoke.cmd",
                        "scripts\\gate\\lab-ui.cmd load banner upload"
                    ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  5320,
@@ -734,7 +738,7 @@
                        "scripts\\gate\\fe-test.cmd \"renderer|platform-helper-objects|renderer-helpers|build-plate-geometry|plane-cut\"",
                        "scripts\\gate\\lab-ui.cmd load banner"
                    ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  5400,
@@ -750,13 +754,13 @@
                       "infra/**",
                       "docker-compose.yml",
                       "scripts/local-stack.cmd",
-                      "scripts/gate/compose-config.mjs",
+                      "scripts/gate/compose-config.cmd",
                       "scripts/gate/lab-e2e.cmd"
                   ],
         "description":  "chore(infra): first-run seed without appliance profiles or a slice queue; bootstrap and compose match what the standalone app needs",
         "specRef":  "rwclab-roc-recon.md §7 (infra rows), §6.9 (Dynamo tables); user 15.11.2026: \"survey what the first run needs and seed Dynamo + Postgres\"",
         "tddWorkflow":  false,
-        "notes":  "Recipe (easy): infra/resources.mjs - delete `defaultApplianceProfileTable`, `userApplianceProfileTable`, `defaultApplianceProfiles` (:9-16) and the slice FIFO `RaywareCloudSPRSlicerLocal.fifo` (:23-26); infra/bootstrap.mjs - delete `defaultApplianceProfileItem` and both appliance tables (:47-69, :152-156) and the slice queue creation; docker-compose.yml - remove `RWC_SLICE_QUEUE` (or whatever the worker env for the slice queue is named) from the algorithms-worker service; scripts/gate/compose-config.mjs if it asserts those names. Keep: bucket, RWC_INDIVIDUAL/PLATFORM_METADATA tables, SNS topic + the two SQS subscriptions, platform-process FIFO, state machines, activities, IAM role, Stripe secret (be-config-offline still expects it until the dental cut).\nFirst-run survey result (what the standalone app needs at first start, so the README troubleshooting can say it): Postgres - migrations + LocalSeed (users/stub preferences 060, TreatmentType + SprModelCount 030, PrinterType 020 until board 6, BuildPlate via migration HasData); DynamoDB - only the two metadata tables (created empty by bootstrap; rows are written by the worker); S3 - the bucket with CORS; SQS/SNS - topic + logs queue + callbacks queue + platform-process FIFO. Write this list into infra/bootstrap.mjs\u0027s header comment (the README task 5600 copies it).\nVerify: compose-config, then lab-e2e (bootstrap runs inside it) and be-smoke + lab-pipeline against the rebuilt stack.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, in-memory, bootstrap after each start), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -\u003e import -\u003e plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit] (REST pipeline through the backend, no browser), lab-ui.cmd [load banner upload] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
+        "notes":  "Recipe (easy): infra/resources.mjs - delete `defaultApplianceProfileTable`, `userApplianceProfileTable`, `defaultApplianceProfiles` (:9-16) and the slice FIFO `RaywareCloudSPRSlicerLocal.fifo` (:23-26); infra/bootstrap.mjs - delete `defaultApplianceProfileItem` and both appliance tables (:47-69, :152-156) and the slice queue creation; docker-compose.yml - remove `RWC_SLICE_QUEUE` (or whatever the worker env for the slice queue is named) from the algorithms-worker service; scripts/gate/compose-config.cmd only runs `docker compose config -q` (no name assertions, nothing to edit there). Keep: bucket, RWC_INDIVIDUAL/PLATFORM_METADATA tables, SNS topic + the two SQS subscriptions, platform-process FIFO, state machines, activities, IAM role, Stripe secret (be-config-offline still expects it until the dental cut).\nFirst-run survey result (what the standalone app needs at first start, so the README troubleshooting can say it): Postgres - migrations + LocalSeed (users/stub preferences 060, TreatmentType + SprModelCount 030, PrinterType 020 until board 6, BuildPlate via migration HasData); DynamoDB - only the two metadata tables (created empty by bootstrap; rows are written by the worker); S3 - the bucket with CORS; SQS/SNS - topic + logs queue + callbacks queue + platform-process FIFO. Write this list into infra/bootstrap.mjs\u0027s header comment (the README task 5600 copies it).\nVerify: compose-config, then lab-e2e (bootstrap runs inside it) and be-smoke + lab-pipeline against the rebuilt stack.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, in-memory, bootstrap after each start), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -\u003e import -\u003e plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit] (REST pipeline through the backend, no browser), lab-ui.cmd [load banner upload] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
         "steps":  [
                       {
                           "id":  "5400.1",
@@ -780,7 +784,7 @@
                        "scripts\\gate\\be-smoke.cmd",
                        "scripts\\gate\\lab-pipeline.cmd create metadata logs edit"
                    ],
-        "passes":  false
+        "passes":  true
     },
     {
         "id":  5600,
@@ -831,6 +835,6 @@
                        "scripts\\gate\\lab-pipeline.cmd",
                        "scripts\\gate\\lab-ui.cmd"
                    ],
-        "passes":  false
+        "passes":  true
     }
 ]
