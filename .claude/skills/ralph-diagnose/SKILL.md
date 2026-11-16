@@ -38,7 +38,7 @@ RALPH_ROOT = директорията на ralph репото (тук: `D:\Downl
 **Fatal env (exit 4):** целият run спира моментално, тасковете НЕ са failed — оправи средата, пусни пак.
 
 ## Retry стълбицата (какво е правил всеки опит)
-`continue` (наследено worktree, в scope) → `escalate` (след `escalate_after`=2: scope-ът вдигнат за гейт-доказани провали, out-of-scope файловете са изброени в result summary — ПРЕГЛЕДАЙ ГИ) → `conflict` (merge мандат). Бюджет: `max_fail_retries`=4. Continuation значи: worktree/branch се пазят — работата НЕ е губена, дори при failed.
+`continue` (наследено worktree, в scope) → `escalate` (след `escalate_after`=1 от 16.11.2026, беше 2: scope-ът вдигнат за гейт-доказани провали, out-of-scope файловете са изброени в result summary — ПРЕГЛЕДАЙ ГИ) → `conflict` (merge мандат). Бюджет: `max_fail_retries`=6 (беше 4). Continuation значи: worktree/branch се пазят — работата НЕ е губена, дори при failed.
 
 ## Машинни факти (тази машина)
 git 2.21 (без `--show-current`); PS 5.1 (ANSI parsing на no-BOM .ps1 — ASCII only в скриптовете; pipeline→ConvertTo-Json капанът); npm ci изисква байт-точен lockfile; playwright version bump иска `npx playwright install`; фосилният патърн на monk: xp+long-rest тестове отпреди multiclass модала.
