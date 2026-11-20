@@ -1,677 +1,685 @@
 ﻿[
-  {
-    "id": 6000,
-    "category": "refactor(backend)",
-    "repo": "rwclab",
-    "lane": "be-wiring",
-    "model": "heavy",
-    "dependsOn": [],
-    "files": [
-      "app/backend/SprintRay.EventBus/**",
-      "app/backend/Web/Startup.cs",
-      "app/backend/Web/Infrastructure/Extensions/ServiceCollectionExtenstions.cs",
-      "app/backend/Web/Infrastructure/Extensions/LocalRealtimeServiceCollectionExtensions.cs",
-      "app/backend/Tests/EventBus/**",
-      "app/backend/Tests/LocalRealtime/LocalRealtimeRegistrationTests.cs",
-      "app/backend/ServiceLayer/EventHandlers/PrintList/PrintListItemAddedAddToPlatformJobEH.cs",
-      "app/backend/ServiceLayer/EventHandlers/PrintList/PrintListItemPatientChangedRegenerateSupportsEH .cs"
-    ],
-    "description": "refactor(backend): event subscriptions from the app container - singleton bus and handlers, no second BuildServiceProvider, hub shared by plain registration",
-    "specRef": "rwclab-board6-recon.md §0.7, §1; reference: memory [[reference-rwclab-eventbus-second-container]] (board 4 finding)",
-    "tddWorkflow": true,
-    "notes": "Why: `AddEventSubscriptions` (ServiceCollectionExtenstions.cs:254-321) calls `services.BuildServiceProvider()` at :256 and subscribes 40 handler INSTANCES resolved from that throwaway root; every handler keeps that container's IServiceScopeFactory for the life of the process, so singletons inside handlers differ from the app's (board 4 symptom: LocalRealtimeHub without sockets; worked around by a closure-shared hub in LocalRealtimeServiceCollectionExtensions.cs:37-45). Facts: EventBus.cs stores handlers in a STATIC list (:11-12) and Publish (:23-32) never touches the provider; all 34 handlers inject only IServiceScopeFactory and do their work inside CreateScope(); IEventBus is AddScoped (Startup.cs:186) and handlers AddScoped (:201-247); Host.CreateDefaultBuilder validates scopes in Development, so resolving Scoped services from app.ApplicationServices would throw.\nDo: (1) SprintRay.EventBus: make the handler list an instance field (tests build more than one host per process); keep the API (Publish/Subscribe/Unsubscribe); fix Unsubscribe to compare `typeof(T).Name` (today `nameof(T)` = \"T\", never matches; no callers, so delete Unsubscribe from the interface and class instead if you prefer - say which); keep Publish synchronous and exception-transparent (callers rely on it today). (2) Lifetimes: `AddSingleton<IEventBus, EventBus>()`, all 34 handlers `AddSingleton` (they hold only the scope factory). (3) Replace `AddEventSubscriptions(this IServiceCollection)` with `UseEventSubscriptions(this IApplicationBuilder app)` (same 40 Subscribe lines, bus from `app.ApplicationServices.GetRequiredService<IEventBus>()`), called from Startup.Configure right after `UseLocalRealtimeIfEnabled` (:235); delete the BuildServiceProvider at :256-257 and the `.AddEventSubscriptions()` call at Startup.cs:188. (4) Startup.cs:90-92 `ConfigureApiBehaviorOptions` builds a third container to get ILogService: resolve it from `context.HttpContext.RequestServices` inside the InvalidModelStateResponseFactory instead. (5) LocalRealtimeServiceCollectionExtensions.cs:37-45: replace the closure/lock with plain `services.AddSingleton<LocalRealtimeHub>()` (+ the existing publisher forward :46); update the comment. (6) Tests/LocalRealtime/LocalRealtimeRegistrationTests.cs:84-95 `Development_EveryProviderBuiltFromTheCollection_SharesOneHub` describes the two-container situation that no longer exists: rewrite it to assert that ONE provider built with `ValidateScopes = true, ValidateOnBuild = true` resolves the hub, the publisher and `IEventBus` without throwing (ralph-plan rule 10: adapt, do not keep a fossil). (7) Rename the two mis-named handler files to their class names (PrintListItemAddedAddToPlatformJobEH.cs -> PrintListItemPreprocessedAddToPlatformJobEH.cs; the file with the trailing space in its name -> without it) - git mv, no content change.\nRED first (Tests/EventBus/EventBusWiringTests.cs, new): (a) `Subscribe_ResolvesHandlersFromTheGivenProvider_PublishReachesTheAppSingleton`: ServiceCollection with `AddSingleton<Marker>()`, a test event + a test handler (handler takes IServiceScopeFactory, opens a scope, records the Marker instance it sees), `AddSingleton<IEventBus, EventBus>()`, `AddSingleton<TestHandler>()`, provider built with `new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }`; subscribe through the new UseEventSubscriptions path (or the same Subscribe call it makes), Publish, assert the Marker the handler saw is `ReferenceEquals` to `provider.GetRequiredService<Marker>()` and that a SECOND provider built from a copy of the collection does NOT receive the event (instance list, not static). (b) `AddEventHandlers_EveryHandlerResolvesFromAValidatedRoot`: `AddDomainServices`-free collection with only `AddEventHandlers()` + the scope factory the container provides + `AddSingleton<IEventBus, EventBus>()`; build with ValidateOnBuild and resolve each of the 34 handler types (reflection over the registrations) - RED today because they are Scoped and the bus is Scoped. Then GREEN.\nGate after merge: be-smoke + lab-pipeline logs stage prove the realtime path still reaches the hub through PlatformJobUpdatedUpdateAppSyncEH / PlatformJobChangedPostQueueMessageEH.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -> import -> plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
-    "steps": [
-      {
-        "id": "6000.1",
-        "phase": "RECON",
-        "action": "Read recon §1 and EventBus.cs, ServiceCollectionExtenstions.cs:199-321, Startup.cs:85-95,180-190,225-262, LocalRealtimeServiceCollectionExtensions.cs:29-51; list every lifetime you change."
-      },
-      {
-        "id": "6000.2",
-        "phase": "RED",
-        "action": "Write Tests/EventBus/EventBusWiringTests.cs (two tests from the notes); scripts\\gate\\be-test.cmd EventBusWiring - RED."
-      },
-      {
-        "id": "6000.3",
-        "phase": "GREEN",
-        "action": "Instance handler list, singleton bus + handlers, UseEventSubscriptions from Configure, delete both BuildServiceProvider calls, plain hub singleton, adapt LocalRealtimeRegistrationTests, rename the two files; scripts\\gate\\be-build.cmd + scripts\\gate\\be-test.cmd \"FullyQualifiedName~EventBus|FullyQualifiedName~LocalRealtime\" GREEN."
-      },
-      {
-        "id": "6000.4",
-        "phase": "GREEN",
-        "action": "scripts\\gate\\be-smoke.cmd then scripts\\gate\\lab-pipeline.cmd create metadata logs (realtime catch-up still works)."
-      },
-      {
-        "id": "6000.5",
-        "phase": "DONE",
-        "action": "Commit; body = the lifetime table (before/after), the two deleted BuildServiceProvider sites, the renamed files."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "scripts\\gate\\be-build.cmd",
-      "scripts\\gate\\be-test.cmd \"FullyQualifiedName~EventBus|FullyQualifiedName~LocalRealtime|FullyQualifiedName~RoutesGone\"",
-      "scripts\\gate\\be-smoke.cmd",
-      "scripts\\gate\\lab-pipeline.cmd create metadata logs"
-    ]
-  },
-  {
-    "id": 6010,
-    "category": "feat(backend)",
-    "repo": "rwclab",
-    "lane": "be-delete",
-    "model": "heavy",
-    "dependsOn": [
-      6200
-    ],
-    "files": [
-      "app/backend/ServiceLayer/Services/PrintList/PlatformJobService.cs",
-      "app/backend/ServiceLayer/Interfaces/PrintList/IPlatformJobService.cs",
-      "app/backend/ServiceLayer/Services/AWS/AwsS3Service.cs",
-      "app/backend/ServiceLayer/Interfaces/AWS/**",
-      "app/backend/Web/Controllers/PrintList/PlatformJobController.cs",
-      "app/backend/Tests/PlatformJob/**",
-      "app/backend/Tests/Controllers/PrinterRoutesGoneTests.cs",
-      "app/backend/Tests/Services/AwsS3ServiceTests.cs",
-      "scripts/gate/lab-pipeline.mjs",
-      "scripts/gate/lab-pipeline.cmd",
-      "scripts/gate/be-smoke.mjs"
-    ],
-    "description": "feat(backend): deleting a platform job removes its S3 objects; delete-group-job and delete-all routes removed; lab-pipeline delete stage",
-    "specRef": "rwclab-board6-recon.md §0.1, §0.2, §2; user decision 20.11.2026: \"Previous projects + real delete\" and \"save to S3 so a move to real AWS keeps the projects, but downloadable\"",
-    "tddWorkflow": true,
-    "notes": "Why: DELETE api/platform-job/{id} is a soft delete (PlatformJobService.cs:710-717 sets PrintJobStatus.Deleted) and leaves every S3 object of the job behind (no DeleteObject call exists in the service). With one active project and a \"Previous projects\" list in the FE (6320), delete must remove the files too, or the bucket accumulates fossils (and would on real AWS).\nDo: (1) IAwsS3Service (ServiceLayer/Interfaces/AWS/) + AwsS3Service.cs: add `Task<int> DeleteByPrefixAsync(string prefix)` = ListObjectsV2 (paginated, ContinuationToken) + DeleteObjects in batches of up to 1000 against the configured bucket/endpoint (the emulator; the client is already path-style + SigV4, ServiceCollectionExtenstions.cs:70-143). Return the number of deleted keys. (2) PlatformJobService.DeleteAsync(:710-717): keep the status change (the row stays as the audit trail and GET api/platform-job already filters Deleted), then delete the job's prefixes: `delta/platform/{jobId}/`, `delta/platform-screenshot/{jobId}/`, for every print-list item of the job `delta/individual/{itemId}/` and the item's inbox file key (`inbox/{guid}{ext}` from the File row - read AddFilesToPlatformJobAsync :1209-1238 for the item/file relation and `Common/Configs/AwsS3Keys.cs` for the folder names; do NOT invent key shapes, derive them from the code that writes them: FileService.cs:430-432, worker steps/import.mjs:25-26 and plane-cut.mjs:62-63 for the per-item layout). Log the key count. An S3 failure must NOT leave the row undeleted silently: delete S3 first, then the status; if S3 throws, rethrow (500) so the UI shows an error. (3) Delete DeleteGroupJobAsync (:719-728) and DeleteAllAsync (:730-741), their interface members and the controller actions `{groupId}/delete-group-job` and `delete-all` (the FE stops calling them in 6320; RoutesGone asserts). (4) scripts/gate/lab-pipeline.mjs: new stage `delete` after `edit`: POST download-links for the job's model key -> GET the presigned URL -> expect 200; DELETE api/platform-job/{id} -> 2xx; GET api/platform-job -> the id is absent; GET the previously presigned URL again -> 404 (NoSuchKey through aws-http) - this is the proof the objects are gone. lab-pipeline.cmd help text lists the stage. be-smoke.mjs: remove the two deleted routes if they are in the start-up list.\nRED first: Tests/PlatformJob/DeleteCleanupTests.cs (Mock<IAwsS3Service>; a job with two items; assert DeleteByPrefixAsync is called with exactly the expected prefixes/keys, in that order, and that the status becomes Deleted only after S3 succeeded; a second test: S3 throws -> status unchanged, exception propagates); Tests/Services/AwsS3ServiceTests.cs: DeleteByPrefixAsync pages through ListObjectsV2 and batches DeleteObjects (mock IAmazonS3). PrinterRoutesGoneTests.cs: add the two removed routes to the \"gone\" list, keep download-links in the \"present\" list.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -> import -> plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
-    "steps": [
-      {
-        "id": "6010.1",
-        "phase": "RECON",
-        "action": "Read recon §2; grep the key writers (FileService.cs:430-432, PlatformJobService.cs:1182-1191,1209-1238, worker import.mjs/plane-cut.mjs) and list the exact prefixes a job owns."
-      },
-      {
-        "id": "6010.2",
-        "phase": "RED",
-        "action": "Write Tests/PlatformJob/DeleteCleanupTests.cs + Tests/Services/AwsS3ServiceTests.cs cases + RoutesGone entries; scripts\\gate\\be-test.cmd \"FullyQualifiedName~DeleteCleanup|FullyQualifiedName~AwsS3Service|FullyQualifiedName~RoutesGone\" - RED."
-      },
-      {
-        "id": "6010.3",
-        "phase": "GREEN",
-        "action": "DeleteByPrefixAsync, DeleteAsync cleanup, delete the group/all paths; scripts\\gate\\be-build.cmd + scripts\\gate\\be-test.cmd (full) GREEN."
-      },
-      {
-        "id": "6010.4",
-        "phase": "GREEN",
-        "action": "lab-pipeline delete stage; scripts\\gate\\be-smoke.cmd; scripts\\gate\\lab-pipeline.cmd create metadata logs edit delete."
-      },
-      {
-        "id": "6010.5",
-        "phase": "DONE",
-        "action": "Commit; body = prefixes deleted per job, removed routes, the delete stage contract."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "scripts\\gate\\be-build.cmd",
-      "scripts\\gate\\be-test.cmd \"FullyQualifiedName~PlatformJob|FullyQualifiedName~AwsS3Service|FullyQualifiedName~RoutesGone\"",
-      "scripts\\gate\\be-smoke.cmd",
-      "scripts\\gate\\lab-pipeline.cmd create metadata logs edit delete"
-    ]
-  },
-  {
-    "id": 6200,
-    "category": "refactor(gate)",
-    "repo": "rwclab",
-    "lane": "gate",
-    "model": "heavy",
-    "dependsOn": [],
-    "files": [
-      "scripts/gate/lab-ui.mjs",
-      "scripts/gate/lab-ui.cmd",
-      "scripts/gate/lab-ui-stages/**",
-      "scripts/gate/lab-pipeline.mjs"
-    ],
-    "description": "refactor(gate): lab-ui stages become modules under scripts/gate/lab-ui-stages; lab-pipeline posts treatmentTypeId 100",
-    "specRef": "rwclab-board6-recon.md §8; ralph-plan §2 \"registry per feature\" (a shared stage list serializes every UI task)",
-    "tddWorkflow": false,
-    "notes": "Why: four board-6 tasks add or change lab-ui stages (accordion, export, projects, job-type-less banner/upload). With the stage list inside lab-ui.mjs (STAGES :65, run map :466) they would all edit one file. Split the registry: each stage is a module `scripts/gate/lab-ui-stages/NN-<name>.mjs` exporting `{ name, description, run(ctx) }`, loaded by lab-ui.mjs in filename order (`fs.readdirSync` sorted; NN = two digits). Move the three existing stages as-is: `10-load.mjs`, `20-banner.mjs`, `30-upload.mjs` (bodies from stageLoad/stageBanner/stageUpload :200-415). `ctx` carries what the stage functions use today (page, base URLs, the request log/ignore list, the helper functions like the failure-screenshot saver :231-239, the stub token, timings) - put the helpers in `scripts/gate/lab-ui-stages/_ctx.mjs` or export them from lab-ui.mjs; a stage must not import Playwright itself. Semantics unchanged: stages run in order up to the LAST selected stage, only the selected ones can fail, unknown stage name = usage error (:85-91), header comment :25-43 moved to a README line in lab-ui.cmd help + the directory listing. The `/files/` ignore (:259-263) stays for now (6320 removes it). lab-pipeline.mjs:263: `treatmentTypeId: 100` (TreatmentType.Custom; the backend accepts it today: seed 030-treatment-types.sql has the row and SprModelCount 6; 6340 makes the FE send the same) - keep `treatmentApplianceType` as the stage sends it today unless the backend rejects 100 + that value (then Unset = 0 and say so).\nThis is a gate refactor = red line 6 territory: before and after, `scripts\\gate\\lab-ui.cmd load banner upload` must pass with the same checks (diff the assertions, not the prose). No behaviour change, no new assertions.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -> import -> plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
-    "steps": [
-      {
-        "id": "6200.1",
-        "phase": "RECON",
-        "action": "Read lab-ui.mjs fully (stage bodies :200-415, runner :420-470, CLI :60-95) and lab-pipeline.mjs:250-270."
-      },
-      {
-        "id": "6200.2",
-        "phase": "RED",
-        "action": "Run scripts\\gate\\lab-ui.cmd load banner upload and scripts\\gate\\lab-pipeline.cmd create metadata logs edit for the baseline (GREEN is the baseline here; record the stage timings)."
-      },
-      {
-        "id": "6200.3",
-        "phase": "GREEN",
-        "action": "Extract the three stages into lab-ui-stages/10-load.mjs, 20-banner.mjs, 30-upload.mjs; loader + ctx; lab-pipeline treatmentTypeId 100; rerun both gates GREEN."
-      },
-      {
-        "id": "6200.4",
-        "phase": "DONE",
-        "action": "Commit; body = the stage module contract (exports, ctx fields) so later tasks can add stages without reading the runner."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "scripts\\gate\\lab-ui.cmd load banner upload",
-      "scripts\\gate\\lab-pipeline.cmd create metadata logs edit"
-    ]
-  },
-  {
-    "id": 6300,
-    "category": "chore(frontend)",
-    "repo": "rwclab",
-    "lane": "fe-i18n",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "app/frontend/src/assets/i18n/**"
-    ],
-    "description": "chore(frontend): i18n keys for the single-project flow and brand-neutral texts",
-    "specRef": "rwclab-board6-recon.md §4 (values with \"SprintRay\" that templates use), I18N CONTRACT (notes)",
-    "tddWorkflow": false,
-    "notes": "Recipe (easy, JSON only): (1) ADD the keys of the I18N CONTRACT below to en.json, de.json, es.json, fr.json, it.json (English text in all five - the lab has no translators; say so in the body). Put them next to their neighbours alphabetically inside `general` / `messages`. (2) CHANGE three used values so no screen shows the word SprintRay: `messages.notConnectedToSprintRayCloud` -> \"Not connected to the backend\" (key stays, 6310 does not touch the template), `messages.feedbackExperienceOne` -> \"How would you rate your experience?\", `general.cloudDriveWelcomeContent` -> drop the \"in the SprintRay ecosystem\" clause. Same three in the other four locales (English text). (3) Do NOT delete anything (6600 deletes orphaned keys after the feature tasks). (4) If a spec compares locale files for key parity, run it: scripts\\gate\\fe-test.cmd i18n.\ni18n contract (task 6300 adds these keys to en/de/es/fr/it with English text, nobody else edits assets/i18n/*.json before 6600): `general.newProject` = \"New\", `general.previousProjects` = \"Previous projects\", `general.openProject` = \"Open\", `general.deleteProject` = \"Delete\", `general.currentProject` = \"Current\", `general.noPreviousProjects` = \"No saved projects yet\", `messages.newProjectDiscardsChanges` = \"If you confirm, the unsaved changes of the current project will be lost.\", `messages.deleteProjectForReal` = \"This deletes the project and its files. Continue?\", `messages.projectFilesMissing` = \"The files of this project are gone (the local storage was restarted). Delete the project or start a new one.\", `messages.notConnectedToBackend` = \"Not connected to the backend\".\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -> import -> plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
-    "steps": [
-      {
-        "id": "6300.1",
-        "phase": "RECON",
-        "action": "Open en.json `general`/`messages` sections; find the three used SprintRay values (en.json:2508, 2117, 293) and their counterparts in de/es/fr/it."
-      },
-      {
-        "id": "6300.2",
-        "phase": "GREEN",
-        "action": "Add the contract keys + change the three values in all five files; scripts\\gate\\fe-typecheck.cmd; scripts\\gate\\fe-build.cmd ci (JSON validity through the build)."
-      },
-      {
-        "id": "6300.3",
-        "phase": "DONE",
-        "action": "Commit; body = the key list."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "scripts\\gate\\fe-typecheck.cmd",
-      "scripts\\gate\\fe-build.cmd ci"
-    ]
-  },
-  {
-    "id": 6310,
-    "category": "feat(frontend)",
-    "repo": "rwclab",
-    "lane": "fe-shell",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "app/frontend/src/app/components/common/header/**",
-      "app/frontend/src/index.html",
-      "app/frontend/src/assets/images/sprintray-logo.png",
-      "app/frontend/src/assets/images/sprintray-logo-black.png",
-      "app/frontend/src/assets/images/sprintray-favicon-png.png",
-      "app/frontend/src/assets/images/font-icons/sprintray-logo.svg",
-      "app/frontend/src/assets/images/font-icons/sprintray-logo-white.svg",
-      "app/frontend/src/assets/images/sprintray-pro-printer.svg"
-    ],
-    "description": "feat(frontend): brand is \"RWC Lab\" - header text instead of the SprintRay glyph, tab title, unused SprintRay logo assets deleted",
-    "specRef": "rwclab-board6-recon.md §4; user decision 20.11.2026: \"RWC Lab\", no image",
-    "tddWorkflow": true,
-    "notes": "Recipe (easy): header.component.html:4-6 (authenticated) and :103-105 (guest): replace `<span class=\"icon-sprintray-logo ...\">` with `<span class=\"navbar-brand-text\">RWC Lab</span>` (plain text, not i18n - it is a name), keep the `a.navbar-brand [routerLink]=\"logoLink\"`; header.component.scss:17-19: replace the glyph rule with `.navbar-brand-text { font-weight: 600; letter-spacing: .02em; }` in the header's text colour. index.html:6 `<title>RWC Lab</title>`; :9-10 meta description -> \"Local 3D print-prep renderer lab\". Delete the six unreferenced logo files listed in files (verify with grep that nothing references them; the icomoon font itself stays). `assets/images/logo-final.gif` is used by the dead renderer-progress component - 6340 deletes both, not this task.\nRED first: header.component.spec.ts - a test that the brand link text is \"RWC Lab\" and that no element with class `icon-sprintray-logo` exists; keep the existing :90-99 assertions. A second test in `app/components/app` is not needed. GREEN after the template change.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -> import -> plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
-    "steps": [
-      {
-        "id": "6310.1",
-        "phase": "RECON",
-        "action": "Read header.component.html/scss/spec and index.html; grep the six asset names."
-      },
-      {
-        "id": "6310.2",
-        "phase": "RED",
-        "action": "Add the two header spec assertions; scripts\\gate\\fe-test.cmd header - RED."
-      },
-      {
-        "id": "6310.3",
-        "phase": "GREEN",
-        "action": "Template/scss/title changes, delete the assets; scripts\\gate\\fe-test.cmd header GREEN; scripts\\gate\\no-external-hosts.cmd."
-      },
-      {
-        "id": "6310.4",
-        "phase": "DONE",
-        "action": "Commit."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "scripts\\gate\\fe-typecheck.cmd",
-      "scripts\\gate\\fe-test.cmd \"header|app.component\"",
-      "scripts\\gate\\no-external-hosts.cmd",
-      "scripts\\gate\\lab-ui.cmd load"
-    ]
-  },
-  {
-    "id": 6320,
-    "category": "feat(frontend)",
-    "repo": "rwclab",
-    "lane": "fe-setup",
-    "model": "heavy",
-    "dependsOn": [
-      6300,
-      6200
-    ],
-    "files": [
-      "app/frontend/src/app/app-modules/delta/components/platform-setup/platform-setup.component.html",
-      "app/frontend/src/app/app-modules/delta/components/platform-setup/platform-setup.component.ts",
-      "app/frontend/src/app/app-modules/delta/components/platform-setup/platform-setup.component.spec.ts",
-      "app/frontend/src/app/app-modules/delta/components/previous-projects/**",
-      "app/frontend/src/app/app-modules/delta/components/grouped-platform-jobs-pagination/**",
-      "app/frontend/src/app/app-modules/delta/components/grouped-platform-jobs-vertical-pagination/**",
-      "app/frontend/src/app/app-modules/delta/components/renderer/renderer.component.html",
-      "app/frontend/src/app/app-modules/delta/delta.module.ts",
-      "app/frontend/src/app/shared/components/side-button/**",
-      "app/frontend/src/app/shared/shared.module.ts",
-      "app/frontend/src/app/core/store/effects/print-list.effects.ts",
-      "app/frontend/src/app/core/store/effects/print-list.effects.spec.ts",
-      "app/frontend/src/app/core/store/actions/print-list.actions.ts",
-      "app/frontend/src/app/core/store/reducers/print-list.reducers.ts",
-      "app/frontend/src/app/core/store/reducers/print-list.reducers.spec.ts",
-      "app/frontend/src/app/core/services/platform-job.service.ts",
-      "app/frontend/src/app/core/services/platform-job.service.spec.ts",
-      "app/frontend/src/app/core/services/platform-job-updates.service.ts",
-      "app/frontend/src/app/core/services/platform-job-updates.service.spec.ts",
-      "app/frontend/src/app/app-modules/delta/components/print-setup-page/print-setup-page.component.ts",
-      "app/frontend/src/app/app-modules/delta/components/print-setup-page/print-setup-page.component.spec.ts",
-      "app/frontend/src/environments/environment.ts",
-      "app/frontend/src/environments/environment.dev.ts",
-      "app/frontend/src/environments/environments.spec.ts",
-      "scripts/gate/lab-ui.mjs",
-      "scripts/gate/lab-ui-stages/60-projects.mjs"
-    ],
-    "description": "feat(frontend): one active project - \"New\" with a discard confirmation, \"Previous projects\" panel with open and delete, job list widgets and screenshot URLs removed",
-    "specRef": "rwclab-board6-recon.md §0.5, §0.6, §3, §6; user decisions 20.11.2026 (Previous projects + real delete; \"New\" asks before discarding)",
-    "tddWorkflow": true,
-    "notes": "Target UX: the editor always shows at most ONE project (platform job). Header bar of platform-setup: [New] [Previous projects] [Import SPR] + the per-project menu (Rename, Delete). No group tabs, no \"Platforms: 1 2 3 [+]\", no vertical platform list, no delete-all.\n\"New\" (`general.newProject`, replaces the Add button html:63-67, keep the gtm class): if the store says there are unsaved changes (`getShouldShowSaveEditingButtons` || `getHavePrintSettingsUpdated`, print-list.states.ts:109,177-180) ask `modalService.confirm(ModalTypes.Warning, 'messages.newProjectDiscardsChanges', translate('general.newProject'), ModalSize.Medium, translate('general.yes'), translate('general.no'), 'text-center')` (pattern platform-setup.component.ts:894-916); on yes (or when nothing is unsaved, without a dialog - say so in the body) dispatch `ResetTempPlatformMetadataAction`, `ResetSelectedModelListAction`, `ResetCurrentPlatformJobModelAction`, then `SetCurrentPlatformJobIdAction(null)` - the existing \"no current job\" state (reducer :73-81, effect :483-489, component cleanup :547-572, renderer clearPlatform :451-464); the previous project stays saved and listed. The job is still created by the upload flow (POST api/platform-job, :1199-1211) - unchanged.\nEffect change that makes this stable: print-list.effects.ts `resetPlatformJob$` :411-480 - DELETE the auto-select branch (:453-464: current id null + non-empty list -> select a neighbour); keep \"current id not in the list -> ResetPrintSetupAction\" and the empty-list reset (:467-468) and the toasts. Adapt print-list.effects.spec.ts:464-478 accordingly (rule 10: the spec asserts the behaviour you remove - rewrite it to assert null stays null). Fix the `platformJobTimers` typo in RESET_PRINT_SETUP (reducer :148-162: the field is `platformJobsTimers`) and add it to the reducer spec.\n\"Previous projects\" (`general.previousProjects`): new component in `app-modules/delta/components/previous-projects/` (previous-projects.component.ts/html/scss/spec, declared in delta.module.ts) opened as an NgbModal through `modalService.open` (pattern :873-885) from a header button next to New. Content: rows from `getGroupedPlatformJobs` flattened to jobs (title, created/modified date from PlatformJob - read core/models/print-list/platform-job.ts for the field names, model count if present, status), the current one marked `general.currentProject`, per row [Open] (`general.openProject` -> `SetCurrentPlatformJobIdAction(id)` after the same unsaved-changes confirm as New, then close) and [Delete] (`general.deleteProject` -> `modalService.confirm(... 'messages.deleteProjectForReal' ...)` -> `DeletePlatformJobAction(id)`; the backend now removes the S3 objects too, 6010). Empty state `general.noPreviousProjects`. Deleting the current project leaves the editor empty (existing effect path :467-468). Missing files: when opening a project whose model fetch fails (print-setup-page.component.ts:69-86 `fetchModel` / `downloadModelBuffer` error - a 404 from the emulator after a restart), show a toast with `messages.projectFilesMissing` through the existing notification service and leave the editor in the empty state (do not loop re-fetching).\nDelete for real: grouped-platform-jobs-pagination/**, grouped-platform-jobs-vertical-pagination/** (+ its mount renderer.component.html:4), the group tabs block html:5-43 with `selectGroup`/`deleteGroupJob`/hover preview (ts:157, :1281-1297), `createNewJob(true)`/`initNewMultiPlatformJob` (:577-617), move-items-between-jobs checks (:676-681, :722-724 - the whole move-item UI if it only exists for multi-platform groups; say what you deleted), `deleteAllJobs` (:809-825 + html:46-57 menu entry), `deleteGroupJob` (:827-853), `#deletePLatformJob` \"Delete Current Platform\" (html:85-98 -> keep ONE \"Delete\" entry calling `deleteCurrentJob()` :778-807 with the new `messages.deleteProjectForReal` text), `side-button` if nothing else uses it (grep; it lives in shared.module.ts), platform-job.service.ts `deleteGroupJob` :74-76 and `deleteAll` :78-80 + their specs :220-230 and the actions/effects (`DeleteGroupJobAction`, `DeleteAllPlatformJobsAction`, effects :369-398 + specs :152-160, :333-370), `platformScreenshotBucketUrl` and `printPreviewBucketUrl` from both environment files (+ environments.spec.ts if it lists keys). `platform-job-updates.service.ts:62` keeps dispatching GetPlatformJobs on realtime updates (the list refreshes itself). Keep: Import SPR (html:58-62), Save Print Job modal, Rename, localStorage persistence of currentPlatformJobId, GroupJob/groupId in the models (data shape, no UI). Also UNHIDE the Export STL button: remove the `<ng-container *ngIf=\"false\">` wrapper around `<icon-btn (onClick)=\"exportSTL()\">` at html:137-141 so it renders in the footer next to Save Print Job (6330 names the file and adds the gate stage; nothing else to do here beyond a spec line that the button is in the DOM when a project is loaded).\nGate: scripts/gate/lab-ui.mjs - remove the `/files/` ignore (:259-263 and comments :22,27) and ASSERT no request to `/files/` happened during the run; new stage `scripts/gate/lab-ui-stages/60-projects.mjs` (after upload: open Previous projects -> the uploaded job is listed and marked current -> close; click New -> no dialog because nothing is unsaved -> editor empty (no canvas meshes, Print Setup tab) -> open Previous projects -> Open the job -> the model is back (same `.drc` fetched) -> Delete it with confirm -> list empty -> GET api/platform-job returns [] through the page's request log). Specs: platform-setup.component.spec.ts (New with/without unsaved changes, confirm yes/no), previous-projects.component.spec.ts (rows, current marker, open, delete, empty state, missing-files toast path), effects/reducers/service specs adapted as above.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -> import -> plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
-    "steps": [
-      {
-        "id": "6320.1",
-        "phase": "RECON",
-        "action": "Read recon §3/§6 and the listed files; list every symbol you delete and every spec that asserts it."
-      },
-      {
-        "id": "6320.2",
-        "phase": "RED",
-        "action": "Write previous-projects.component.spec.ts + the New-button tests in platform-setup.component.spec.ts + the rewritten resetPlatformJob$ test; scripts\\gate\\fe-test.cmd \"platform-setup|previous-projects|print-list.effects\" - RED."
-      },
-      {
-        "id": "6320.3",
-        "phase": "GREEN",
-        "action": "Implement New + Previous projects, delete the widgets/actions/services listed, environment keys; scripts\\gate\\fe-typecheck.cmd + scripts\\gate\\fe-test.cmd \"platform-setup|previous-projects|print-list|platform-job|print-setup-page|environments\" GREEN."
-      },
-      {
-        "id": "6320.4",
-        "phase": "GREEN",
-        "action": "lab-ui: /files/ assertion + 60-projects.mjs; scripts\\gate\\lab-ui.cmd load banner upload projects GREEN."
-      },
-      {
-        "id": "6320.5",
-        "phase": "DONE",
-        "action": "Commit; body = UX summary, deleted components/actions/endpoints used, orphaned i18n keys list."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "scripts\\gate\\fe-typecheck.cmd",
-      "scripts\\gate\\fe-test.cmd \"platform-setup|previous-projects|print-list|platform-job|print-setup-page|environments\"",
-      "scripts\\gate\\fe-build.cmd ci",
-      "scripts\\gate\\lab-ui.cmd load banner upload projects"
-    ]
-  },
-  {
-    "id": 6330,
-    "category": "feat(frontend)",
-    "repo": "rwclab",
-    "lane": "fe-renderer",
-    "model": "heavy",
-    "dependsOn": [
-      6320,
-      6200
-    ],
-    "files": [
-      "app/frontend/src/app/app-modules/delta/components/renderer/renderer.component.ts",
-      "app/frontend/src/app/app-modules/delta/components/renderer/renderer.component.spec.ts",
-      "app/frontend/src/app/core/utils/download-file.ts",
-      "app/frontend/src/app/core/utils/download-file.spec.ts",
-      "scripts/gate/lab-ui-stages/50-export.mjs"
-    ],
-    "description": "feat(frontend): Export STL downloads a binary STL named after the project; lab-ui export stage",
-    "specRef": "rwclab-board6-recon.md §0.4, §8; user 20.11.2026: \"must be downloadable\"",
-    "tddWorkflow": true,
-    "notes": "Facts: the export exists and works: platform-setup.component.html:137-141 `<icon-btn (onClick)=\"exportSTL()\">` - task 6320 (merged before this one) removed its `*ngIf=\"false\"` wrapper, so the button is visible; exportSTL() dispatches ExportSTLAction (counter in the store, print-list.reducers.ts:459-461, selector getSTLFile states:155); renderer.component.ts:414-419 subscribes and calls exportComposedSTLFile() :2050-2069 (clones every visible mesh of modelMeshes - or only the selected model + its support - into a scene, vendored shared/libs/STLExporter.js `parse(scene, {binary:true})` applies matrixWorld, then `downloadFile(stlBinary, 'platform.stl', 'text/plain')` core/utils/download-file.ts). Ctrl/Cmd+E :2146-2149 is a second trigger gated by canViewDelta.\nDo (renderer + util only; platform-setup and the store belong to other lanes and need no change): (1) file name = `<project title>.stl` - read the title in the renderer from the store selector `getCurrentPlatformJob` (print-list.states.ts:63-65; the renderer already selects from the store), sanitize to [A-Za-z0-9._-], fallback `platform.stl`; MIME `model/stl`; (2) download-file.ts: accept `BlobPart` (the exporter returns a DataView, the signature says string) - keep the existing spec green and add the DataView case; (3) the initial-emission trap: store.select emits 0 at init (:414-419 guards on meshes) - keep that guard and pin it with a spec; (4) keep Ctrl+E; (5) if the exporter is given no visible meshes, do nothing (no empty file).\nRED first: renderer.component.spec.ts - exportComposedSTLFile with two visible meshes calls downloadFile with a DataView whose byteLength is 84 + 50·triangles and the name `<sanitized title>.stl` + MIME model/stl; with no meshes downloadFile is not called; download-file.spec.ts: DataView input. GREEN. Gate: `scripts/gate/lab-ui-stages/50-export.mjs` (after upload, before projects): click the Export STL button (`icon-btn` with the `general.exportSTL` text in the platform-setup footer), `const dl = await page.waitForEvent('download')`, assert `dl.suggestedFilename()` ends with `.stl` and equals the sanitized title the upload stage used, read `dl.path()` and assert the size is 684 bytes (84 + 50·12 for the 20 mm box) and the first 5 bytes are not ASCII `solid`; the context already allows downloads (acceptDownloads default). If the download event does not fire inside the emulator network namespace, say so with the Playwright error - do not replace the check with a weaker one.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -> import -> plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
-    "steps": [
-      {
-        "id": "6330.1",
-        "phase": "RECON",
-        "action": "Read renderer.component.ts:400-420,2040-2070,2120-2150, download-file.ts, STLExporter.js parse signature; confirm the button is visible after 6320 (platform-setup html footer)."
-      },
-      {
-        "id": "6330.2",
-        "phase": "RED",
-        "action": "Specs from the notes; scripts\\gate\\fe-test.cmd \"renderer|download-file\" - RED."
-      },
-      {
-        "id": "6330.3",
-        "phase": "GREEN",
-        "action": "Named file, MIME, typing, no-mesh guard; fe-test GREEN; 50-export.mjs; scripts\\gate\\lab-ui.cmd load banner upload export GREEN."
-      },
-      {
-        "id": "6330.4",
-        "phase": "DONE",
-        "action": "Commit; body = the file-name rule and the stage contract."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "scripts\\gate\\fe-typecheck.cmd",
-      "scripts\\gate\\fe-test.cmd \"renderer|download-file\"",
-      "scripts\\gate\\lab-ui.cmd load banner upload export"
-    ]
-  },
-  {
-    "id": 6350,
-    "category": "refactor(frontend)",
-    "repo": "rwclab",
-    "lane": "fe-form",
-    "model": "heavy",
-    "dependsOn": [
-      6320
-    ],
-    "files": [
-      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.html",
-      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.ts",
-      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.spec.ts",
-      "app/frontend/src/app/app-modules/delta/components/base-platform/base-platform.component.ts",
-      "app/frontend/src/app/app-modules/delta/components/base-platform/base-platform.component.spec.ts",
-      "app/frontend/src/app/app-modules/delta/components/platform-model-list/platform-model-list.component.html",
-      "app/frontend/src/app/app-modules/delta/components/platform-model-list/platform-model-list.component.ts",
-      "app/frontend/src/app/app-modules/delta/components/platform-model-list/platform-model-list.component.spec.ts",
-      "app/frontend/src/app/app-modules/common/print-list/print-list-item/**",
-      "app/frontend/src/app/app-modules/common/patient-dialog/**",
-      "app/frontend/src/app/app-modules/common/common.module.ts",
-      "app/frontend/src/app/core/services/patient-helper.service.ts",
-      "app/frontend/src/app/core/core.module.ts",
-      "app/frontend/src/app/core/models/print-list/save-platform-job-input-model.ts",
-      "app/frontend/src/app/core/services/print-list.service.ts",
-      "app/frontend/src/app/core/services/print-list.service.spec.ts",
-      "app/frontend/src/app/core/store/actions/print-list.actions.ts",
-      "app/frontend/src/app/core/store/effects/print-list.effects.ts",
-      "app/frontend/src/app/core/store/effects/print-list.effects.spec.ts",
-      "app/frontend/src/app/core/store/reducers/print-list.reducers.ts",
-      "app/frontend/src/app/core/store/reducers/print-list.reducers.spec.ts",
-      "app/frontend/src/app/testing/**"
-    ],
-    "description": "refactor(frontend): delete the patient assignment on print setup - typeahead, add-new-patient dialog, per-item patient rename, patientId in the save payload",
-    "specRef": "rwclab-board6-recon.md §5 (patient block); user 16.11.2026: \"това може да се махне, т.к вече няма пациенти\"",
-    "tddWorkflow": true,
-    "notes": "Delete for real (FE only; the backend `PlatformJobInputModel.PatientId` is optional and stays until the dental cut): platform-print-setup.component.html:12-25 (`f-typeahead name=\"patient\"` block + its `#rt` template) and ts:556-564 `onPatientSelected`, `searchPatients`/`patientLoseFocus` bindings; base-platform.component.ts:299-343 (`searchPatients`, `onPatientSelected`, the fake id-0 \"Add New Patient\" entry) + spec :255-275 (+ :203 `patientId: null` expectation -> field gone); the per-item patient rename: platform-model-list.component.html:136-138, print-list-item.component.ts:192-196 / html:21-22 (delete the rename UI, keep the item component otherwise), `RenamePrintListItemAction` + effect + print-list.service.ts rename (PATCH api/print-list/{id}/rename, spec :89-93) if nothing else dispatches it (grep); `PatientDialogComponent` (app-modules/common/patient-dialog/**, declared in common.module.ts) and `PatientHelperService` (core/services/patient-helper.service.ts, registered core.module.ts:143, injected only by platform-setup/platform-model-list after 6320 - remove the injections); `patientId`/`patientName` from save-platform-job-input-model.ts:12-13 and the reducer reset :445-446 (+ spec); testing/ mocks that stub patient services (service-mocks.ts, delta-testbed.ts). KEEP `PatientService` (core/services/patient.service.ts) and patient-modal-v2 / patient-v2 / assign-patient (cloud-drive and treatment territory, not this task). After the deletion the Print Setup form shows: project name, build plate, settings.\nRED first: platform-print-setup spec - no element `f-typeahead[name=patient]` and no `general.assignPrintJobToPatient` text; base-platform spec: `searchPatients`/`onPatientSelected` no longer exist (remove their tests, add one that saveFile sends no patientId); platform-model-list spec: no patient rename control. GREEN after deletion. Orphaned i18n keys (list in the body for 6600): general.assignPrintJobToPatient, general.patientName (if unused elsewhere), general.createNewPatient, general.createNewPatientAndAssign (if the dialog was their only user).\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -> import -> plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
-    "steps": [
-      {
-        "id": "6350.1",
-        "phase": "RECON",
-        "action": "Read recon §5 patient part; grep `patientId|patientName|PatientHelperService|PatientDialogComponent|RenamePrintListItemAction|searchPatients` across src/app and list the users."
-      },
-      {
-        "id": "6350.2",
-        "phase": "RED",
-        "action": "Spec changes from the notes; scripts\\gate\\fe-test.cmd \"platform-print-setup|base-platform|platform-model-list|print-list-item\" - RED."
-      },
-      {
-        "id": "6350.3",
-        "phase": "GREEN",
-        "action": "Delete the listed code, fix modules/testing mocks; scripts\\gate\\fe-typecheck.cmd + scripts\\gate\\fe-test.cmd \"platform-print-setup|base-platform|platform-model-list|print-list\" GREEN; scripts\\gate\\fe-build.cmd ci."
-      },
-      {
-        "id": "6350.4",
-        "phase": "DONE",
-        "action": "Commit; body = deleted symbols + orphaned i18n keys."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "scripts\\gate\\fe-typecheck.cmd",
-      "scripts\\gate\\fe-test.cmd \"platform-print-setup|base-platform|platform-model-list|print-list\"",
-      "scripts\\gate\\fe-build.cmd ci",
-      "scripts\\gate\\lab-ui.cmd load banner upload"
-    ]
-  },
-  {
-    "id": 6340,
-    "category": "refactor(frontend)",
-    "repo": "rwclab",
-    "lane": "fe-form",
-    "model": "heavy",
-    "dependsOn": [
-      6200
-    ],
-    "files": [
-      "app/frontend/src/app/app-modules/delta/components/print-job-type/**",
-      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.html",
-      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.ts",
-      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.spec.ts",
-      "app/frontend/src/app/app-modules/delta/components/platform-model-list/platform-model-list.component.html",
-      "app/frontend/src/app/app-modules/delta/components/platform-model-list/platform-model-list.component.ts",
-      "app/frontend/src/app/app-modules/delta/components/platform-model-list/platform-model-list.component.spec.ts",
-      "app/frontend/src/app/app-modules/delta/components/renderer-progress/**",
-      "app/frontend/src/app/core/constants/renderer-progress.ts",
-      "app/frontend/src/assets/images/logo-final.gif",
-      "app/frontend/src/app/app-modules/delta/delta.module.ts",
-      "app/frontend/src/app/core/store/states/print-list.states.ts",
-      "app/frontend/src/app/core/store/states/print-list.states.spec.ts",
-      "app/frontend/src/app/core/models/print-list/save-platform-job-input-model.ts",
-      "app/frontend/src/app/core/helpers/common/appliance-type-helper.ts",
-      "app/frontend/src/app/core/helpers/common/appliance-type-helper.spec.ts",
-      "app/frontend/src/assets/images/print-job-types/**",
-      "app/frontend/src/app/core/store/actions/noms/treatment-type.actions.ts",
-      "app/frontend/src/app/core/store/effects/noms/treatment-type.effects.ts",
-      "app/frontend/src/app/core/store/reducers/noms/treatment-type.reducers.ts",
-      "app/frontend/src/app/core/store/states/noms/treatment-type.states.ts",
-      "app/frontend/src/app/core/store/effects/index.ts",
-      "app/frontend/src/app/core/store/reducers/index.ts",
-      "app/frontend/src/app/core/store/states/index.ts",
-      "app/frontend/src/app/core/store/effects/noms/noms.effects.spec.ts",
-      "app/frontend/src/app/core/store/reducers/noms/noms.reducers.spec.ts",
-      "app/frontend/src/app/app.module.ts",
-      "app/frontend/src/app/components/app/app.component.ts",
-      "app/frontend/src/app/components/app/app.component.spec.ts",
-      "app/frontend/src/app/core/services/common/http-object.service.ts",
-      "app/frontend/src/app/core/services/common/http-object.service.spec.ts",
-      "scripts/gate/lab-ui-stages/20-banner.mjs",
-      "scripts/gate/lab-ui-stages/30-upload.mjs"
-    ],
-    "description": "refactor(frontend): no Print Job Type picker - every project is \"Other Print\" (TreatmentType.Custom), dental branches and the dead renderer-progress component deleted",
-    "specRef": "rwclab-board6-recon.md §5 (picker); user 16.11.2026: \"това ще може да се махне - реално всичко ще е other\"",
-    "tddWorkflow": true,
-    "notes": "Contract: `treatmentTypeId = TreatmentType.Custom` (100) and `treatmentApplianceType = TreatmentApplianceType.Unset` (0) on every new project, set in `initializeForInexistingPlatform` (platform-print-setup.component.ts:431-434) and as defaults of SavePlatformJobInputModel (:8-9); the backend already accepts them (seed row 100, SprModelCount 6, MapApplianceTypeId passes 100 through; lab-pipeline posts 100 since 6200). The selector `getArePrintSettingsValid` (print-list.states.ts:132-153) becomes `buildPlateId && hasValidOrientation` (+ spec :34-60: the \"null type -> false\" case at :50-53 is replaced by \"no build plate -> false\"); `getHavePrintSettingsUpdated` :113-114 stops comparing type/appliance; `isPrintButttonDisabled` in platform-setup.component.ts:371-386 compares `currentJob.treatmentTypeId !== model.treatmentTypeId` - that file belongs to the fe-setup lane: leave it (the comparison is always false with Custom everywhere) and say so.\nDelete for real: print-job-type/** (+ delta.module.ts:18,40), the picker and the appliance sub-picker in platform-print-setup.component.html:27-37 (and the `[hidden]`/`*ngIf` on :39/:47 that waited for a type), `treatmentTypeSelected`/`applianceTypeSelected`/`allowedTypes`/`filterApplianceTypes`/`betaApplianceTypes`/`treatmentTypes$` (ts:77-84, :140-152, :468-500), the dead branches: `isModelJobType`/`isCrownAndBridgeJobType`/`showCrownRaft` and html:105-147, SmileDesign/CrownAndBridge logic in `applyNewJobDefaults` (:504-526 -> keep generateSupports=true), SPR import type handling (:326-334, :340-350, :370 - SPR metadata still carries printJobTypeId; ignore it and keep Custom: say so), `processModelChanges` aligner part (:549-553), FTUE type tooltips (:595-603), `applianceJobTypePrefix` (:385-387); `isCustomJobType` sections become unconditional (html:73-79 supports slider, :90-103 orientation input stays required). platform-model-list: raft block html:245-259 + `shouldSortFiles` ts:636-640 + `supportsLabel` ts:1154-1160 (static label). appliance-type-helper.ts + spec (delete the whole helper if the names/images were its only purpose; grep first) and assets/images/print-job-types/** (13 files). renderer-progress/** + core/constants/renderer-progress.ts + assets/images/logo-final.gif (component never placed in a template; its per-type timings are dead) + delta.module.ts:38. Treatment-type store: `TreatmentTypeActions.GetListOptions`/`GetApplianceTypeListOptions` dispatches in app.component.ts:251-252 and the noms/treatment-type store files + barrel/store.module entries + http-object.service.ts:42-43,62-63 - delete if the picker was their only consumer (grep `treatmentType` selectors across src/app; the BE endpoints `api/treatment-type/*` stay and be-smoke keeps calling them - dental cut is board 7). Keep `TreatmentType`/`TreatmentApplianceType` enums (payload) and `SprModelCount` behaviour on the backend.\nGate stages (module files from 6200): 20-banner.mjs asserted `.print-job-type-card` in the DOM - replace with the build-plate control (`f-button-group[name=buildPlate]`); 30-upload.mjs clicked the first card - remove the click, the rest (name + build plate + upload) unchanged.\nRED first: platform-print-setup spec :113-144/:169-235 rewritten: validity without any type field, a new project posts treatmentTypeId 100 / appliance 0; print-list.states.spec: new expression; app.component.spec: no treatment-type dispatch at login. GREEN after deletion. Orphaned i18n keys for 6600: general.selectPrintJobType, general.otherPrint, general.fixedRestorations, general.prosthetics, general.surgicalGuideAppliance, general.dentalModel and the appliance sub-type names - list exactly what is unreferenced after your change.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -> import -> plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
-    "steps": [
-      {
-        "id": "6340.1",
-        "phase": "RECON",
-        "action": "Read recon §5 picker part; grep `treatmentTypeId|treatmentApplianceType|TreatmentType\\.|isCustomJobType|getTreatmentTypes|print-job-type` across src/app; list consumers."
-      },
-      {
-        "id": "6340.2",
-        "phase": "RED",
-        "action": "Spec rewrites from the notes; scripts\\gate\\fe-test.cmd \"platform-print-setup|print-list.states|app.component\" - RED."
-      },
-      {
-        "id": "6340.3",
-        "phase": "GREEN",
-        "action": "Defaults + selector + deletions + store cleanup; scripts\\gate\\fe-typecheck.cmd + scripts\\gate\\fe-test.cmd \"platform-print-setup|print-list|platform-model-list|appliance-type|treatment-type|app.component|renderer-progress\" GREEN; scripts\\gate\\fe-build.cmd ci."
-      },
-      {
-        "id": "6340.4",
-        "phase": "GREEN",
-        "action": "Stages 20-banner/30-upload; scripts\\gate\\lab-ui.cmd load banner upload GREEN; scripts\\gate\\lab-pipeline.cmd create metadata."
-      },
-      {
-        "id": "6340.5",
-        "phase": "DONE",
-        "action": "Commit; body = contract, deleted symbols, orphaned i18n keys."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "scripts\\gate\\fe-typecheck.cmd",
-      "scripts\\gate\\fe-test.cmd \"platform-print-setup|print-list|platform-model-list|appliance-type|treatment-type|app.component\"",
-      "scripts\\gate\\fe-build.cmd ci",
-      "scripts\\gate\\lab-ui.cmd load banner upload",
-      "scripts\\gate\\lab-pipeline.cmd create metadata"
-    ]
-  },
-  {
-    "id": 6370,
-    "category": "fix(frontend)",
-    "repo": "rwclab",
-    "lane": "fe-styles",
-    "model": "easy",
-    "dependsOn": [
-      6200
-    ],
-    "files": [
-      "app/frontend/src/app/app-modules/delta/components/base-platform/base-platform.component.scss",
-      "app/frontend/src/app/app-modules/delta/components/platform-setup/platform-setup.component.scss",
-      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.scss",
-      "scripts/gate/lab-ui-stages/40-accordion.mjs"
-    ],
-    "description": "fix(frontend): accordion styles target the ng-bootstrap directive DOM (accordion-header/body instead of card-header/body)",
-    "specRef": "rwclab-board6-recon.md §7 (diagnosis proven 16.11.2026)",
-    "tddWorkflow": true,
-    "notes": "Diagnosis (proven): board 2 commit 6d15ead moved the accordions to the ng-bootstrap directive API; ng-bootstrap 21 renders `accordion-item` / `accordion-header` / `accordion-collapse` / `accordion-body` host classes, the old `.card` / `.card-header` / `.card-body` DOM no longer exists, so the three stylesheets below style nothing and the six header `<button class=\"w-100\">` elements (platform-model-list.component.html:163,227,278,392,440; platform-print-setup.component.html:52 - no ngbAccordionButton, no .btn) show the browser default button look: light-grey inset bars, black text, default-size icons, 16px chevron, no active-state chevron swap.\nRecipe (SCSS only, no template change): base-platform.component.scss:115-187 - `.card-header` -> `.accordion-header`, `.card-body` -> `.accordion-body` (three places incl. `&.panel-active .accordion-header .icon.toggle-arrow::before`); platform-setup.component.scss:291-342 - same two renames in `.editing-panel-card`; platform-print-setup.component.scss:40-48 - `.card-body` -> `.accordion-body`. Keep the `> button` rules (they are what styles the header button). Global styles.scss/scss/ have no accordion rules; nothing else competes. Do not touch any .html/.ts (other lanes own them).\nRED first = the gate stage `scripts/gate/lab-ui-stages/40-accordion.mjs` (runs after upload, when the model list tab shows the editing accordion): for every `.accordion-header > button` on the page assert computed `background-color` is `rgba(0, 0, 0, 0)` (transparent) and `border-style` is `none`, and that `.icon.toggle-arrow` computed `font-size` is `8px` inside `.settings-accordion` and `12px` inside `.editing-menu` (whichever accordions are visible in that state; at least one header must be found or the stage fails). Run `scripts\\gate\\lab-ui.cmd load banner upload accordion` -> RED (default button look), then apply the SCSS -> GREEN.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -> import -> plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
-    "steps": [
-      {
-        "id": "6370.1",
-        "phase": "RECON",
-        "action": "Read the three SCSS blocks and the six header templates; confirm the directive host classes in node_modules/@ng-bootstrap (fesm2022 accordion file)."
-      },
-      {
-        "id": "6370.2",
-        "phase": "RED",
-        "action": "Write lab-ui-stages/40-accordion.mjs; scripts\\gate\\lab-ui.cmd load banner upload accordion - RED."
-      },
-      {
-        "id": "6370.3",
-        "phase": "GREEN",
-        "action": "Rename the selectors; scripts\\gate\\fe-typecheck.cmd; scripts\\gate\\lab-ui.cmd load banner upload accordion GREEN."
-      },
-      {
-        "id": "6370.4",
-        "phase": "DONE",
-        "action": "Commit; body = the diagnosis in two lines."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "scripts\\gate\\fe-typecheck.cmd",
-      "scripts\\gate\\lab-ui.cmd load banner upload accordion"
-    ]
-  },
-  {
-    "id": 6600,
-    "category": "chore(frontend)",
-    "repo": "rwclab",
-    "lane": "fe-i18n",
-    "model": "easy",
-    "dependsOn": [
-      6310,
-      6330,
-      6340,
-      6350,
-      6370
-    ],
-    "files": [
-      "app/frontend/src/assets/i18n/**",
-      "scripts/i18n-orphans.mjs"
-    ],
-    "description": "chore(frontend): delete the i18n keys orphaned by board 6 and every unused SprintRay-branded key",
-    "specRef": "rwclab-board6-recon.md §4 (unused SprintRay keys); commit bodies of 6310/6320/6330/6340/6350 (their \"orphaned keys\" lists)",
-    "tddWorkflow": false,
-    "notes": "Recipe (easy): (1) write `scripts/i18n-orphans.mjs` (node, no deps): for each key path in en.json report whether the literal `'<path>'` / `\"<path>\"` or the tail segment inside a dynamic prefix is referenced under app/frontend/src/app (grep over .ts/.html); keys referenced only dynamically are UNKNOWN, not orphans - print them separately. (2) Delete from all five locale files: the keys listed as orphaned in the commit bodies of 6310, 6320, 6330, 6340, 6350 (read `git log --format=%B` on the integration branch), and the unused keys whose value contains \"SprintRay\" (en.json lines 23, 291, 316, 324, 376, 807, 1508-1515, 1882, 2014, 2050, 2055, 2175, 2345, 2348, 2408, 2432, 2441, 2444, 2452 at the time of the recon - re-run the script, do not trust the line numbers). (3) Only keys the script reports as UNREFERENCED (not UNKNOWN) may be deleted. (4) Keep the five files key-parity equal. (5) Body = the deleted key list and the UNKNOWN list.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -> import -> plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
-    "steps": [
-      {
-        "id": "6600.1",
-        "phase": "RECON",
-        "action": "Read the five commit bodies and en.json; write scripts/i18n-orphans.mjs and run it."
-      },
-      {
-        "id": "6600.2",
-        "phase": "GREEN",
-        "action": "Delete the listed + unreferenced SprintRay keys from all five files; scripts\\gate\\fe-typecheck.cmd; scripts\\gate\\fe-build.cmd ci; scripts\\gate\\no-external-hosts.cmd."
-      },
-      {
-        "id": "6600.3",
-        "phase": "DONE",
-        "action": "Commit."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "scripts\\gate\\fe-typecheck.cmd",
-      "scripts\\gate\\fe-build.cmd ci",
-      "scripts\\gate\\no-external-hosts.cmd",
-      "scripts\\gate\\lab-ui.cmd load"
-    ]
-  },
-  {
-    "id": 6700,
-    "category": "docs",
-    "repo": "rwclab",
-    "lane": "docs",
-    "model": "easy",
-    "dependsOn": [
-      6000,
-      6010,
-      6600
-    ],
-    "files": [
-      "README.md",
-      "PLAN.md",
-      "RENDERER-AUDIT.md",
-      "scripts/gate/lab-ui.cmd"
-    ],
-    "description": "docs: one project at a time - previous projects, delete with S3 cleanup, STL export, RWC Lab brand, event wiring in one container",
-    "specRef": "rwclab-board6-recon.md §0 (facts), §8 (stages); README sections touched by board 5 (5600)",
-    "tddWorkflow": false,
-    "notes": "Recipe (easy): README.md - the \"what the lab is now\" section: one active project, Previous projects panel, New/Open/Delete semantics (delete removes the S3 objects; the emulator is in-memory so files of older projects vanish on restart and the UI says so), Export STL (file named after the project, binary STL in platform coordinates), brand RWC Lab, the Print Job Type/patient fields gone (every project is Custom/Other); the gate list: lab-ui stages now live in scripts/gate/lab-ui-stages/ (list them with one line each), lab-pipeline has a delete stage; remove the \"/files/ screenshot URLs answer 404\" troubleshooting row (README.md:146) and the \"cannot do\" items that this board resolved. PLAN.md: board 6 summary + board 7 next (dental backend cut: TreatmentType/Patient/... tables and services; Hero-Forge direction). RENDERER-AUDIT.md: dated note that the printer/dental form fields are gone and the renderer exports STL. scripts/gate/lab-ui.cmd help text lists the stage directory. No code changes.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -> import -> plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
-    "steps": [
-      {
-        "id": "6700.1",
-        "phase": "RECON",
-        "action": "Read README/PLAN/RENDERER-AUDIT sections that mention screenshots, job types, patients, Add job, SprintRay, lab-ui stages; read the board-6 commit bodies."
-      },
-      {
-        "id": "6700.2",
-        "phase": "GREEN",
-        "action": "Edit the docs; run the full gate list below."
-      },
-      {
-        "id": "6700.3",
-        "phase": "DONE",
-        "action": "Commit."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "scripts\\gate\\be-build.cmd",
-      "scripts\\gate\\be-test.cmd",
-      "scripts\\gate\\be-smoke.cmd",
-      "scripts\\gate\\be-config-offline.cmd",
-      "scripts\\gate\\compose-config.cmd",
-      "scripts\\gate\\fe-typecheck.cmd",
-      "scripts\\gate\\fe-test.cmd",
-      "scripts\\gate\\fe-build.cmd ci",
-      "scripts\\gate\\no-external-hosts.cmd",
-      "scripts\\gate\\lab-e2e.cmd",
-      "scripts\\gate\\lab-pipeline.cmd create metadata logs edit delete",
-      "scripts\\gate\\lab-ui.cmd load banner upload accordion export projects"
-    ]
-  }
+    {
+        "id":  6000,
+        "category":  "refactor(backend)",
+        "repo":  "rwclab",
+        "lane":  "be-wiring",
+        "model":  "heavy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "app/backend/SprintRay.EventBus/**",
+                      "app/backend/Web/Startup.cs",
+                      "app/backend/Web/Infrastructure/Extensions/ServiceCollectionExtenstions.cs",
+                      "app/backend/Web/Infrastructure/Extensions/LocalRealtimeServiceCollectionExtensions.cs",
+                      "app/backend/Tests/EventBus/**",
+                      "app/backend/Tests/LocalRealtime/LocalRealtimeRegistrationTests.cs",
+                      "app/backend/ServiceLayer/EventHandlers/PrintList/PrintListItemAddedAddToPlatformJobEH.cs",
+                      "app/backend/ServiceLayer/EventHandlers/PrintList/PrintListItemPatientChangedRegenerateSupportsEH .cs"
+                  ],
+        "description":  "refactor(backend): event subscriptions from the app container - singleton bus and handlers, no second BuildServiceProvider, hub shared by plain registration",
+        "specRef":  "rwclab-board6-recon.md §0.7, §1; reference: memory [[reference-rwclab-eventbus-second-container]] (board 4 finding)",
+        "tddWorkflow":  true,
+        "notes":  "Why: `AddEventSubscriptions` (ServiceCollectionExtenstions.cs:254-321) calls `services.BuildServiceProvider()` at :256 and subscribes 40 handler INSTANCES resolved from that throwaway root; every handler keeps that container\u0027s IServiceScopeFactory for the life of the process, so singletons inside handlers differ from the app\u0027s (board 4 symptom: LocalRealtimeHub without sockets; worked around by a closure-shared hub in LocalRealtimeServiceCollectionExtensions.cs:37-45). Facts: EventBus.cs stores handlers in a STATIC list (:11-12) and Publish (:23-32) never touches the provider; all 34 handlers inject only IServiceScopeFactory and do their work inside CreateScope(); IEventBus is AddScoped (Startup.cs:186) and handlers AddScoped (:201-247); Host.CreateDefaultBuilder validates scopes in Development, so resolving Scoped services from app.ApplicationServices would throw.\nDo: (1) SprintRay.EventBus: make the handler list an instance field (tests build more than one host per process); keep the API (Publish/Subscribe/Unsubscribe); fix Unsubscribe to compare `typeof(T).Name` (today `nameof(T)` = \"T\", never matches; no callers, so delete Unsubscribe from the interface and class instead if you prefer - say which); keep Publish synchronous and exception-transparent (callers rely on it today). (2) Lifetimes: `AddSingleton\u003cIEventBus, EventBus\u003e()`, all 34 handlers `AddSingleton` (they hold only the scope factory). (3) Replace `AddEventSubscriptions(this IServiceCollection)` with `UseEventSubscriptions(this IApplicationBuilder app)` (same 40 Subscribe lines, bus from `app.ApplicationServices.GetRequiredService\u003cIEventBus\u003e()`), called from Startup.Configure right after `UseLocalRealtimeIfEnabled` (:235); delete the BuildServiceProvider at :256-257 and the `.AddEventSubscriptions()` call at Startup.cs:188. (4) Startup.cs:90-92 `ConfigureApiBehaviorOptions` builds a third container to get ILogService: resolve it from `context.HttpContext.RequestServices` inside the InvalidModelStateResponseFactory instead. (5) LocalRealtimeServiceCollectionExtensions.cs:37-45: replace the closure/lock with plain `services.AddSingleton\u003cLocalRealtimeHub\u003e()` (+ the existing publisher forward :46); update the comment. (6) Tests/LocalRealtime/LocalRealtimeRegistrationTests.cs:84-95 `Development_EveryProviderBuiltFromTheCollection_SharesOneHub` describes the two-container situation that no longer exists: rewrite it to assert that ONE provider built with `ValidateScopes = true, ValidateOnBuild = true` resolves the hub, the publisher and `IEventBus` without throwing (ralph-plan rule 10: adapt, do not keep a fossil). (7) Rename the two mis-named handler files to their class names (PrintListItemAddedAddToPlatformJobEH.cs -\u003e PrintListItemPreprocessedAddToPlatformJobEH.cs; the file with the trailing space in its name -\u003e without it) - git mv, no content change.\nRED first (Tests/EventBus/EventBusWiringTests.cs, new): (a) `Subscribe_ResolvesHandlersFromTheGivenProvider_PublishReachesTheAppSingleton`: ServiceCollection with `AddSingleton\u003cMarker\u003e()`, a test event + a test handler (handler takes IServiceScopeFactory, opens a scope, records the Marker instance it sees), `AddSingleton\u003cIEventBus, EventBus\u003e()`, `AddSingleton\u003cTestHandler\u003e()`, provider built with `new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }`; subscribe through the new UseEventSubscriptions path (or the same Subscribe call it makes), Publish, assert the Marker the handler saw is `ReferenceEquals` to `provider.GetRequiredService\u003cMarker\u003e()` and that a SECOND provider built from a copy of the collection does NOT receive the event (instance list, not static). (b) `AddEventHandlers_EveryHandlerResolvesFromAValidatedRoot`: `AddDomainServices`-free collection with only `AddEventHandlers()` + the scope factory the container provides + `AddSingleton\u003cIEventBus, EventBus\u003e()`; build with ValidateOnBuild and resolve each of the 34 handler types (reflection over the registrations) - RED today because they are Scoped and the bus is Scoped. Then GREEN.\nGate after merge: be-smoke + lab-pipeline logs stage prove the realtime path still reaches the hub through PlatformJobUpdatedUpdateAppSyncEH / PlatformJobChangedPostQueueMessageEH.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -\u003e import -\u003e plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
+        "steps":  [
+                      {
+                          "id":  "6000.1",
+                          "phase":  "RECON",
+                          "action":  "Read recon §1 and EventBus.cs, ServiceCollectionExtenstions.cs:199-321, Startup.cs:85-95,180-190,225-262, LocalRealtimeServiceCollectionExtensions.cs:29-51; list every lifetime you change."
+                      },
+                      {
+                          "id":  "6000.2",
+                          "phase":  "RED",
+                          "action":  "Write Tests/EventBus/EventBusWiringTests.cs (two tests from the notes); scripts\\gate\\be-test.cmd EventBusWiring - RED."
+                      },
+                      {
+                          "id":  "6000.3",
+                          "phase":  "GREEN",
+                          "action":  "Instance handler list, singleton bus + handlers, UseEventSubscriptions from Configure, delete both BuildServiceProvider calls, plain hub singleton, adapt LocalRealtimeRegistrationTests, rename the two files; scripts\\gate\\be-build.cmd + scripts\\gate\\be-test.cmd \"FullyQualifiedName~EventBus|FullyQualifiedName~LocalRealtime\" GREEN."
+                      },
+                      {
+                          "id":  "6000.4",
+                          "phase":  "GREEN",
+                          "action":  "scripts\\gate\\be-smoke.cmd then scripts\\gate\\lab-pipeline.cmd create metadata logs (realtime catch-up still works)."
+                      },
+                      {
+                          "id":  "6000.5",
+                          "phase":  "DONE",
+                          "action":  "Commit; body = the lifetime table (before/after), the two deleted BuildServiceProvider sites, the renamed files."
+                      }
+                  ],
+        "passes":  true,
+        "verify":  [
+                       "scripts\\gate\\be-build.cmd",
+                       "scripts\\gate\\be-test.cmd \"FullyQualifiedName~EventBus|FullyQualifiedName~LocalRealtime|FullyQualifiedName~RoutesGone\"",
+                       "scripts\\gate\\be-smoke.cmd",
+                       "scripts\\gate\\lab-pipeline.cmd create metadata logs"
+                   ]
+    },
+    {
+        "id":  6010,
+        "category":  "feat(backend)",
+        "repo":  "rwclab",
+        "lane":  "be-delete",
+        "model":  "heavy",
+        "dependsOn":  [
+                          6200
+                      ],
+        "files":  [
+                      "app/backend/ServiceLayer/Services/PrintList/PlatformJobService.cs",
+                      "app/backend/ServiceLayer/Interfaces/PrintList/IPlatformJobService.cs",
+                      "app/backend/ServiceLayer/Services/AWS/AwsS3Service.cs",
+                      "app/backend/ServiceLayer/Interfaces/AWS/**",
+                      "app/backend/Web/Controllers/PrintList/PlatformJobController.cs",
+                      "app/backend/Tests/PlatformJob/**",
+                      "app/backend/Tests/Controllers/PrinterRoutesGoneTests.cs",
+                      "app/backend/Tests/Services/AwsS3ServiceTests.cs",
+                      "scripts/gate/lab-pipeline.mjs",
+                      "scripts/gate/lab-pipeline.cmd",
+                      "scripts/gate/be-smoke.mjs"
+                  ],
+        "description":  "feat(backend): deleting a platform job removes its S3 objects; delete-group-job and delete-all routes removed; lab-pipeline delete stage",
+        "specRef":  "rwclab-board6-recon.md §0.1, §0.2, §2; user decision 20.11.2026: \"Previous projects + real delete\" and \"save to S3 so a move to real AWS keeps the projects, but downloadable\"",
+        "tddWorkflow":  true,
+        "notes":  "Why: DELETE api/platform-job/{id} is a soft delete (PlatformJobService.cs:710-717 sets PrintJobStatus.Deleted) and leaves every S3 object of the job behind (no DeleteObject call exists in the service). With one active project and a \"Previous projects\" list in the FE (6320), delete must remove the files too, or the bucket accumulates fossils (and would on real AWS).\nDo: (1) IAwsS3Service (ServiceLayer/Interfaces/AWS/) + AwsS3Service.cs: add `Task\u003cint\u003e DeleteByPrefixAsync(string prefix)` = ListObjectsV2 (paginated, ContinuationToken) + DeleteObjects in batches of up to 1000 against the configured bucket/endpoint (the emulator; the client is already path-style + SigV4, ServiceCollectionExtenstions.cs:70-143). Return the number of deleted keys. (2) PlatformJobService.DeleteAsync(:710-717): keep the status change (the row stays as the audit trail and GET api/platform-job already filters Deleted), then delete the job\u0027s prefixes: `delta/platform/{jobId}/`, `delta/platform-screenshot/{jobId}/`, for every print-list item of the job `delta/individual/{itemId}/` and the item\u0027s inbox file key (`inbox/{guid}{ext}` from the File row - read AddFilesToPlatformJobAsync :1209-1238 for the item/file relation and `Common/Configs/AwsS3Keys.cs` for the folder names; do NOT invent key shapes, derive them from the code that writes them: FileService.cs:430-432, worker steps/import.mjs:25-26 and plane-cut.mjs:62-63 for the per-item layout). Log the key count. An S3 failure must NOT leave the row undeleted silently: delete S3 first, then the status; if S3 throws, rethrow (500) so the UI shows an error. (3) Delete DeleteGroupJobAsync (:719-728) and DeleteAllAsync (:730-741), their interface members and the controller actions `{groupId}/delete-group-job` and `delete-all` (the FE stops calling them in 6320; RoutesGone asserts). (4) scripts/gate/lab-pipeline.mjs: new stage `delete` after `edit`: POST download-links for the job\u0027s model key -\u003e GET the presigned URL -\u003e expect 200; DELETE api/platform-job/{id} -\u003e 2xx; GET api/platform-job -\u003e the id is absent; GET the previously presigned URL again -\u003e 404 (NoSuchKey through aws-http) - this is the proof the objects are gone. lab-pipeline.cmd help text lists the stage. be-smoke.mjs: remove the two deleted routes if they are in the start-up list.\nRED first: Tests/PlatformJob/DeleteCleanupTests.cs (Mock\u003cIAwsS3Service\u003e; a job with two items; assert DeleteByPrefixAsync is called with exactly the expected prefixes/keys, in that order, and that the status becomes Deleted only after S3 succeeded; a second test: S3 throws -\u003e status unchanged, exception propagates); Tests/Services/AwsS3ServiceTests.cs: DeleteByPrefixAsync pages through ListObjectsV2 and batches DeleteObjects (mock IAmazonS3). PrinterRoutesGoneTests.cs: add the two removed routes to the \"gone\" list, keep download-links in the \"present\" list.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -\u003e import -\u003e plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
+        "steps":  [
+                      {
+                          "id":  "6010.1",
+                          "phase":  "RECON",
+                          "action":  "Read recon §2; grep the key writers (FileService.cs:430-432, PlatformJobService.cs:1182-1191,1209-1238, worker import.mjs/plane-cut.mjs) and list the exact prefixes a job owns."
+                      },
+                      {
+                          "id":  "6010.2",
+                          "phase":  "RED",
+                          "action":  "Write Tests/PlatformJob/DeleteCleanupTests.cs + Tests/Services/AwsS3ServiceTests.cs cases + RoutesGone entries; scripts\\gate\\be-test.cmd \"FullyQualifiedName~DeleteCleanup|FullyQualifiedName~AwsS3Service|FullyQualifiedName~RoutesGone\" - RED."
+                      },
+                      {
+                          "id":  "6010.3",
+                          "phase":  "GREEN",
+                          "action":  "DeleteByPrefixAsync, DeleteAsync cleanup, delete the group/all paths; scripts\\gate\\be-build.cmd + scripts\\gate\\be-test.cmd (full) GREEN."
+                      },
+                      {
+                          "id":  "6010.4",
+                          "phase":  "GREEN",
+                          "action":  "lab-pipeline delete stage; scripts\\gate\\be-smoke.cmd; scripts\\gate\\lab-pipeline.cmd create metadata logs edit delete."
+                      },
+                      {
+                          "id":  "6010.5",
+                          "phase":  "DONE",
+                          "action":  "Commit; body = prefixes deleted per job, removed routes, the delete stage contract."
+                      }
+                  ],
+        "passes":  true,
+        "verify":  [
+                       "scripts\\gate\\be-build.cmd",
+                       "scripts\\gate\\be-test.cmd \"FullyQualifiedName~PlatformJob|FullyQualifiedName~AwsS3Service|FullyQualifiedName~RoutesGone\"",
+                       "scripts\\gate\\be-smoke.cmd",
+                       "scripts\\gate\\lab-pipeline.cmd create metadata logs edit delete"
+                   ]
+    },
+    {
+        "id":  6200,
+        "category":  "refactor(gate)",
+        "repo":  "rwclab",
+        "lane":  "gate",
+        "model":  "heavy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "scripts/gate/lab-ui.mjs",
+                      "scripts/gate/lab-ui.cmd",
+                      "scripts/gate/lab-ui-stages/**",
+                      "scripts/gate/lab-pipeline.mjs"
+                  ],
+        "description":  "refactor(gate): lab-ui stages become modules under scripts/gate/lab-ui-stages; lab-pipeline posts treatmentTypeId 100",
+        "specRef":  "rwclab-board6-recon.md §8; ralph-plan §2 \"registry per feature\" (a shared stage list serializes every UI task)",
+        "tddWorkflow":  false,
+        "notes":  "Why: four board-6 tasks add or change lab-ui stages (accordion, export, projects, job-type-less banner/upload). With the stage list inside lab-ui.mjs (STAGES :65, run map :466) they would all edit one file. Split the registry: each stage is a module `scripts/gate/lab-ui-stages/NN-\u003cname\u003e.mjs` exporting `{ name, description, run(ctx) }`, loaded by lab-ui.mjs in filename order (`fs.readdirSync` sorted; NN = two digits). Move the three existing stages as-is: `10-load.mjs`, `20-banner.mjs`, `30-upload.mjs` (bodies from stageLoad/stageBanner/stageUpload :200-415). `ctx` carries what the stage functions use today (page, base URLs, the request log/ignore list, the helper functions like the failure-screenshot saver :231-239, the stub token, timings) - put the helpers in `scripts/gate/lab-ui-stages/_ctx.mjs` or export them from lab-ui.mjs; a stage must not import Playwright itself. Semantics unchanged: stages run in order up to the LAST selected stage, only the selected ones can fail, unknown stage name = usage error (:85-91), header comment :25-43 moved to a README line in lab-ui.cmd help + the directory listing. The `/files/` ignore (:259-263) stays for now (6320 removes it). lab-pipeline.mjs:263: `treatmentTypeId: 100` (TreatmentType.Custom; the backend accepts it today: seed 030-treatment-types.sql has the row and SprModelCount 6; 6340 makes the FE send the same) - keep `treatmentApplianceType` as the stage sends it today unless the backend rejects 100 + that value (then Unset = 0 and say so).\nThis is a gate refactor = red line 6 territory: before and after, `scripts\\gate\\lab-ui.cmd load banner upload` must pass with the same checks (diff the assertions, not the prose). No behaviour change, no new assertions.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -\u003e import -\u003e plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
+        "steps":  [
+                      {
+                          "id":  "6200.1",
+                          "phase":  "RECON",
+                          "action":  "Read lab-ui.mjs fully (stage bodies :200-415, runner :420-470, CLI :60-95) and lab-pipeline.mjs:250-270."
+                      },
+                      {
+                          "id":  "6200.2",
+                          "phase":  "RED",
+                          "action":  "Run scripts\\gate\\lab-ui.cmd load banner upload and scripts\\gate\\lab-pipeline.cmd create metadata logs edit for the baseline (GREEN is the baseline here; record the stage timings)."
+                      },
+                      {
+                          "id":  "6200.3",
+                          "phase":  "GREEN",
+                          "action":  "Extract the three stages into lab-ui-stages/10-load.mjs, 20-banner.mjs, 30-upload.mjs; loader + ctx; lab-pipeline treatmentTypeId 100; rerun both gates GREEN."
+                      },
+                      {
+                          "id":  "6200.4",
+                          "phase":  "DONE",
+                          "action":  "Commit; body = the stage module contract (exports, ctx fields) so later tasks can add stages without reading the runner."
+                      }
+                  ],
+        "passes":  true,
+        "verify":  [
+                       "scripts\\gate\\lab-ui.cmd load banner upload",
+                       "scripts\\gate\\lab-pipeline.cmd create metadata logs edit"
+                   ]
+    },
+    {
+        "id":  6300,
+        "category":  "chore(frontend)",
+        "repo":  "rwclab",
+        "lane":  "fe-i18n",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "app/frontend/src/assets/i18n/**"
+                  ],
+        "description":  "chore(frontend): i18n keys for the single-project flow and brand-neutral texts",
+        "specRef":  "rwclab-board6-recon.md §4 (values with \"SprintRay\" that templates use), I18N CONTRACT (notes)",
+        "tddWorkflow":  false,
+        "notes":  "Recipe (easy, JSON only): (1) ADD the keys of the I18N CONTRACT below to en.json, de.json, es.json, fr.json, it.json (English text in all five - the lab has no translators; say so in the body). Put them next to their neighbours alphabetically inside `general` / `messages`. (2) CHANGE three used values so no screen shows the word SprintRay: `messages.notConnectedToSprintRayCloud` -\u003e \"Not connected to the backend\" (key stays, 6310 does not touch the template), `messages.feedbackExperienceOne` -\u003e \"How would you rate your experience?\", `general.cloudDriveWelcomeContent` -\u003e drop the \"in the SprintRay ecosystem\" clause. Same three in the other four locales (English text). (3) Do NOT delete anything (6600 deletes orphaned keys after the feature tasks). (4) If a spec compares locale files for key parity, run it: scripts\\gate\\fe-test.cmd i18n.\ni18n contract (task 6300 adds these keys to en/de/es/fr/it with English text, nobody else edits assets/i18n/*.json before 6600): `general.newProject` = \"New\", `general.previousProjects` = \"Previous projects\", `general.openProject` = \"Open\", `general.deleteProject` = \"Delete\", `general.currentProject` = \"Current\", `general.noPreviousProjects` = \"No saved projects yet\", `messages.newProjectDiscardsChanges` = \"If you confirm, the unsaved changes of the current project will be lost.\", `messages.deleteProjectForReal` = \"This deletes the project and its files. Continue?\", `messages.projectFilesMissing` = \"The files of this project are gone (the local storage was restarted). Delete the project or start a new one.\", `messages.notConnectedToBackend` = \"Not connected to the backend\".\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -\u003e import -\u003e plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
+        "steps":  [
+                      {
+                          "id":  "6300.1",
+                          "phase":  "RECON",
+                          "action":  "Open en.json `general`/`messages` sections; find the three used SprintRay values (en.json:2508, 2117, 293) and their counterparts in de/es/fr/it."
+                      },
+                      {
+                          "id":  "6300.2",
+                          "phase":  "GREEN",
+                          "action":  "Add the contract keys + change the three values in all five files; scripts\\gate\\fe-typecheck.cmd; scripts\\gate\\fe-build.cmd ci (JSON validity through the build)."
+                      },
+                      {
+                          "id":  "6300.3",
+                          "phase":  "DONE",
+                          "action":  "Commit; body = the key list."
+                      }
+                  ],
+        "passes":  true,
+        "verify":  [
+                       "scripts\\gate\\fe-typecheck.cmd",
+                       "scripts\\gate\\fe-build.cmd ci"
+                   ]
+    },
+    {
+        "id":  6310,
+        "category":  "feat(frontend)",
+        "repo":  "rwclab",
+        "lane":  "fe-shell",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "app/frontend/src/app/components/common/header/**",
+                      "app/frontend/src/index.html",
+                      "app/frontend/src/assets/images/sprintray-logo.png",
+                      "app/frontend/src/assets/images/sprintray-logo-black.png",
+                      "app/frontend/src/assets/images/sprintray-favicon-png.png",
+                      "app/frontend/src/assets/images/font-icons/sprintray-logo.svg",
+                      "app/frontend/src/assets/images/font-icons/sprintray-logo-white.svg",
+                      "app/frontend/src/assets/images/sprintray-pro-printer.svg"
+                  ],
+        "description":  "feat(frontend): brand is \"RWC Lab\" - header text instead of the SprintRay glyph, tab title, unused SprintRay logo assets deleted",
+        "specRef":  "rwclab-board6-recon.md §4; user decision 20.11.2026: \"RWC Lab\", no image",
+        "tddWorkflow":  true,
+        "notes":  "Recipe (easy): header.component.html:4-6 (authenticated) and :103-105 (guest): replace `\u003cspan class=\"icon-sprintray-logo ...\"\u003e` with `\u003cspan class=\"navbar-brand-text\"\u003eRWC Lab\u003c/span\u003e` (plain text, not i18n - it is a name), keep the `a.navbar-brand [routerLink]=\"logoLink\"`; header.component.scss:17-19: replace the glyph rule with `.navbar-brand-text { font-weight: 600; letter-spacing: .02em; }` in the header\u0027s text colour. index.html:6 `\u003ctitle\u003eRWC Lab\u003c/title\u003e`; :9-10 meta description -\u003e \"Local 3D print-prep renderer lab\". Delete the six unreferenced logo files listed in files (verify with grep that nothing references them; the icomoon font itself stays). `assets/images/logo-final.gif` is used by the dead renderer-progress component - 6340 deletes both, not this task.\nRED first: header.component.spec.ts - a test that the brand link text is \"RWC Lab\" and that no element with class `icon-sprintray-logo` exists; keep the existing :90-99 assertions. A second test in `app/components/app` is not needed. GREEN after the template change.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -\u003e import -\u003e plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
+        "steps":  [
+                      {
+                          "id":  "6310.1",
+                          "phase":  "RECON",
+                          "action":  "Read header.component.html/scss/spec and index.html; grep the six asset names."
+                      },
+                      {
+                          "id":  "6310.2",
+                          "phase":  "RED",
+                          "action":  "Add the two header spec assertions; scripts\\gate\\fe-test.cmd header - RED."
+                      },
+                      {
+                          "id":  "6310.3",
+                          "phase":  "GREEN",
+                          "action":  "Template/scss/title changes, delete the assets; scripts\\gate\\fe-test.cmd header GREEN; scripts\\gate\\no-external-hosts.cmd."
+                      },
+                      {
+                          "id":  "6310.4",
+                          "phase":  "DONE",
+                          "action":  "Commit."
+                      }
+                  ],
+        "passes":  true,
+        "verify":  [
+                       "scripts\\gate\\fe-typecheck.cmd",
+                       "scripts\\gate\\fe-test.cmd \"header|app.component\"",
+                       "scripts\\gate\\no-external-hosts.cmd",
+                       "scripts\\gate\\lab-ui.cmd load"
+                   ]
+    },
+    {
+        "id":  6320,
+        "category":  "feat(frontend)",
+        "repo":  "rwclab",
+        "lane":  "fe-setup",
+        "model":  "heavy",
+        "dependsOn":  [
+                          6300,
+                          6200
+                      ],
+        "files":  [
+                      "app/frontend/src/app/app-modules/delta/components/platform-setup/platform-setup.component.html",
+                      "app/frontend/src/app/app-modules/delta/components/platform-setup/platform-setup.component.ts",
+                      "app/frontend/src/app/app-modules/delta/components/platform-setup/platform-setup.component.spec.ts",
+                      "app/frontend/src/app/app-modules/delta/components/previous-projects/**",
+                      "app/frontend/src/app/app-modules/delta/components/grouped-platform-jobs-pagination/**",
+                      "app/frontend/src/app/app-modules/delta/components/grouped-platform-jobs-vertical-pagination/**",
+                      "app/frontend/src/app/app-modules/delta/components/renderer/renderer.component.html",
+                      "app/frontend/src/app/app-modules/delta/delta.module.ts",
+                      "app/frontend/src/app/shared/components/side-button/**",
+                      "app/frontend/src/app/shared/shared.module.ts",
+                      "app/frontend/src/app/core/store/effects/print-list.effects.ts",
+                      "app/frontend/src/app/core/store/effects/print-list.effects.spec.ts",
+                      "app/frontend/src/app/core/store/actions/print-list.actions.ts",
+                      "app/frontend/src/app/core/store/reducers/print-list.reducers.ts",
+                      "app/frontend/src/app/core/store/reducers/print-list.reducers.spec.ts",
+                      "app/frontend/src/app/core/services/platform-job.service.ts",
+                      "app/frontend/src/app/core/services/platform-job.service.spec.ts",
+                      "app/frontend/src/app/core/services/platform-job-updates.service.ts",
+                      "app/frontend/src/app/core/services/platform-job-updates.service.spec.ts",
+                      "app/frontend/src/app/app-modules/delta/components/print-setup-page/print-setup-page.component.ts",
+                      "app/frontend/src/app/app-modules/delta/components/print-setup-page/print-setup-page.component.spec.ts",
+                      "app/frontend/src/environments/environment.ts",
+                      "app/frontend/src/environments/environment.dev.ts",
+                      "app/frontend/src/environments/environments.spec.ts",
+                      "scripts/gate/lab-ui.mjs",
+                      "scripts/gate/lab-ui-stages/60-projects.mjs"
+                  ],
+        "description":  "feat(frontend): one active project - \"New\" with a discard confirmation, \"Previous projects\" panel with open and delete, job list widgets and screenshot URLs removed",
+        "specRef":  "rwclab-board6-recon.md §0.5, §0.6, §3, §6; user decisions 20.11.2026 (Previous projects + real delete; \"New\" asks before discarding)",
+        "tddWorkflow":  true,
+        "notes":  "Target UX: the editor always shows at most ONE project (platform job). Header bar of platform-setup: [New] [Previous projects] [Import SPR] + the per-project menu (Rename, Delete). No group tabs, no \"Platforms: 1 2 3 [+]\", no vertical platform list, no delete-all.\n\"New\" (`general.newProject`, replaces the Add button html:63-67, keep the gtm class): if the store says there are unsaved changes (`getShouldShowSaveEditingButtons` || `getHavePrintSettingsUpdated`, print-list.states.ts:109,177-180) ask `modalService.confirm(ModalTypes.Warning, \u0027messages.newProjectDiscardsChanges\u0027, translate(\u0027general.newProject\u0027), ModalSize.Medium, translate(\u0027general.yes\u0027), translate(\u0027general.no\u0027), \u0027text-center\u0027)` (pattern platform-setup.component.ts:894-916); on yes (or when nothing is unsaved, without a dialog - say so in the body) dispatch `ResetTempPlatformMetadataAction`, `ResetSelectedModelListAction`, `ResetCurrentPlatformJobModelAction`, then `SetCurrentPlatformJobIdAction(null)` - the existing \"no current job\" state (reducer :73-81, effect :483-489, component cleanup :547-572, renderer clearPlatform :451-464); the previous project stays saved and listed. The job is still created by the upload flow (POST api/platform-job, :1199-1211) - unchanged.\nEffect change that makes this stable: print-list.effects.ts `resetPlatformJob$` :411-480 - DELETE the auto-select branch (:453-464: current id null + non-empty list -\u003e select a neighbour); keep \"current id not in the list -\u003e ResetPrintSetupAction\" and the empty-list reset (:467-468) and the toasts. Adapt print-list.effects.spec.ts:464-478 accordingly (rule 10: the spec asserts the behaviour you remove - rewrite it to assert null stays null). Fix the `platformJobTimers` typo in RESET_PRINT_SETUP (reducer :148-162: the field is `platformJobsTimers`) and add it to the reducer spec.\n\"Previous projects\" (`general.previousProjects`): new component in `app-modules/delta/components/previous-projects/` (previous-projects.component.ts/html/scss/spec, declared in delta.module.ts) opened as an NgbModal through `modalService.open` (pattern :873-885) from a header button next to New. Content: rows from `getGroupedPlatformJobs` flattened to jobs (title, created/modified date from PlatformJob - read core/models/print-list/platform-job.ts for the field names, model count if present, status), the current one marked `general.currentProject`, per row [Open] (`general.openProject` -\u003e `SetCurrentPlatformJobIdAction(id)` after the same unsaved-changes confirm as New, then close) and [Delete] (`general.deleteProject` -\u003e `modalService.confirm(... \u0027messages.deleteProjectForReal\u0027 ...)` -\u003e `DeletePlatformJobAction(id)`; the backend now removes the S3 objects too, 6010). Empty state `general.noPreviousProjects`. Deleting the current project leaves the editor empty (existing effect path :467-468). Missing files: when opening a project whose model fetch fails (print-setup-page.component.ts:69-86 `fetchModel` / `downloadModelBuffer` error - a 404 from the emulator after a restart), show a toast with `messages.projectFilesMissing` through the existing notification service and leave the editor in the empty state (do not loop re-fetching).\nDelete for real: grouped-platform-jobs-pagination/**, grouped-platform-jobs-vertical-pagination/** (+ its mount renderer.component.html:4), the group tabs block html:5-43 with `selectGroup`/`deleteGroupJob`/hover preview (ts:157, :1281-1297), `createNewJob(true)`/`initNewMultiPlatformJob` (:577-617), move-items-between-jobs checks (:676-681, :722-724 - the whole move-item UI if it only exists for multi-platform groups; say what you deleted), `deleteAllJobs` (:809-825 + html:46-57 menu entry), `deleteGroupJob` (:827-853), `#deletePLatformJob` \"Delete Current Platform\" (html:85-98 -\u003e keep ONE \"Delete\" entry calling `deleteCurrentJob()` :778-807 with the new `messages.deleteProjectForReal` text), `side-button` if nothing else uses it (grep; it lives in shared.module.ts), platform-job.service.ts `deleteGroupJob` :74-76 and `deleteAll` :78-80 + their specs :220-230 and the actions/effects (`DeleteGroupJobAction`, `DeleteAllPlatformJobsAction`, effects :369-398 + specs :152-160, :333-370), `platformScreenshotBucketUrl` and `printPreviewBucketUrl` from both environment files (+ environments.spec.ts if it lists keys). `platform-job-updates.service.ts:62` keeps dispatching GetPlatformJobs on realtime updates (the list refreshes itself). Keep: Import SPR (html:58-62), Save Print Job modal, Rename, localStorage persistence of currentPlatformJobId, GroupJob/groupId in the models (data shape, no UI). Also UNHIDE the Export STL button: remove the `\u003cng-container *ngIf=\"false\"\u003e` wrapper around `\u003cicon-btn (onClick)=\"exportSTL()\"\u003e` at html:137-141 so it renders in the footer next to Save Print Job (6330 names the file and adds the gate stage; nothing else to do here beyond a spec line that the button is in the DOM when a project is loaded).\nGate: scripts/gate/lab-ui.mjs - remove the `/files/` ignore (:259-263 and comments :22,27) and ASSERT no request to `/files/` happened during the run; new stage `scripts/gate/lab-ui-stages/60-projects.mjs` (after upload: open Previous projects -\u003e the uploaded job is listed and marked current -\u003e close; click New -\u003e no dialog because nothing is unsaved -\u003e editor empty (no canvas meshes, Print Setup tab) -\u003e open Previous projects -\u003e Open the job -\u003e the model is back (same `.drc` fetched) -\u003e Delete it with confirm -\u003e list empty -\u003e GET api/platform-job returns [] through the page\u0027s request log). Specs: platform-setup.component.spec.ts (New with/without unsaved changes, confirm yes/no), previous-projects.component.spec.ts (rows, current marker, open, delete, empty state, missing-files toast path), effects/reducers/service specs adapted as above.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -\u003e import -\u003e plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
+        "steps":  [
+                      {
+                          "id":  "6320.1",
+                          "phase":  "RECON",
+                          "action":  "Read recon §3/§6 and the listed files; list every symbol you delete and every spec that asserts it."
+                      },
+                      {
+                          "id":  "6320.2",
+                          "phase":  "RED",
+                          "action":  "Write previous-projects.component.spec.ts + the New-button tests in platform-setup.component.spec.ts + the rewritten resetPlatformJob$ test; scripts\\gate\\fe-test.cmd \"platform-setup|previous-projects|print-list.effects\" - RED."
+                      },
+                      {
+                          "id":  "6320.3",
+                          "phase":  "GREEN",
+                          "action":  "Implement New + Previous projects, delete the widgets/actions/services listed, environment keys; scripts\\gate\\fe-typecheck.cmd + scripts\\gate\\fe-test.cmd \"platform-setup|previous-projects|print-list|platform-job|print-setup-page|environments\" GREEN."
+                      },
+                      {
+                          "id":  "6320.4",
+                          "phase":  "GREEN",
+                          "action":  "lab-ui: /files/ assertion + 60-projects.mjs; scripts\\gate\\lab-ui.cmd load banner upload projects GREEN."
+                      },
+                      {
+                          "id":  "6320.5",
+                          "phase":  "DONE",
+                          "action":  "Commit; body = UX summary, deleted components/actions/endpoints used, orphaned i18n keys list."
+                      }
+                  ],
+        "passes":  true,
+        "verify":  [
+                       "scripts\\gate\\fe-typecheck.cmd",
+                       "scripts\\gate\\fe-test.cmd \"platform-setup|previous-projects|print-list|platform-job|print-setup-page|environments\"",
+                       "scripts\\gate\\fe-build.cmd ci",
+                       "scripts\\gate\\lab-ui.cmd load banner upload projects"
+                   ]
+    },
+    {
+        "id":  6330,
+        "category":  "feat(frontend)",
+        "repo":  "rwclab",
+        "lane":  "fe-renderer",
+        "model":  "heavy",
+        "dependsOn":  [
+                          6320,
+                          6200
+                      ],
+        "files":  [
+                      "app/frontend/src/app/app-modules/delta/components/renderer/renderer.component.ts",
+                      "app/frontend/src/app/app-modules/delta/components/renderer/renderer.component.spec.ts",
+                      "app/frontend/src/app/core/utils/download-file.ts",
+                      "app/frontend/src/app/core/utils/download-file.spec.ts",
+                      "scripts/gate/lab-ui-stages/50-export.mjs"
+                  ],
+        "description":  "feat(frontend): Export STL downloads a binary STL named after the project; lab-ui export stage",
+        "specRef":  "rwclab-board6-recon.md §0.4, §8; user 20.11.2026: \"must be downloadable\"",
+        "tddWorkflow":  true,
+        "notes":  "Facts: the export exists and works: platform-setup.component.html:137-141 `\u003cicon-btn (onClick)=\"exportSTL()\"\u003e` - task 6320 (merged before this one) removed its `*ngIf=\"false\"` wrapper, so the button is visible; exportSTL() dispatches ExportSTLAction (counter in the store, print-list.reducers.ts:459-461, selector getSTLFile states:155); renderer.component.ts:414-419 subscribes and calls exportComposedSTLFile() :2050-2069 (clones every visible mesh of modelMeshes - or only the selected model + its support - into a scene, vendored shared/libs/STLExporter.js `parse(scene, {binary:true})` applies matrixWorld, then `downloadFile(stlBinary, \u0027platform.stl\u0027, \u0027text/plain\u0027)` core/utils/download-file.ts). Ctrl/Cmd+E :2146-2149 is a second trigger gated by canViewDelta.\nDo (renderer + util only; platform-setup and the store belong to other lanes and need no change): (1) file name = `\u003cproject title\u003e.stl` - read the title in the renderer from the store selector `getCurrentPlatformJob` (print-list.states.ts:63-65; the renderer already selects from the store), sanitize to [A-Za-z0-9._-], fallback `platform.stl`; MIME `model/stl`; (2) download-file.ts: accept `BlobPart` (the exporter returns a DataView, the signature says string) - keep the existing spec green and add the DataView case; (3) the initial-emission trap: store.select emits 0 at init (:414-419 guards on meshes) - keep that guard and pin it with a spec; (4) keep Ctrl+E; (5) if the exporter is given no visible meshes, do nothing (no empty file).\nRED first: renderer.component.spec.ts - exportComposedSTLFile with two visible meshes calls downloadFile with a DataView whose byteLength is 84 + 50·triangles and the name `\u003csanitized title\u003e.stl` + MIME model/stl; with no meshes downloadFile is not called; download-file.spec.ts: DataView input. GREEN. Gate: `scripts/gate/lab-ui-stages/50-export.mjs` (after upload, before projects): click the Export STL button (`icon-btn` with the `general.exportSTL` text in the platform-setup footer), `const dl = await page.waitForEvent(\u0027download\u0027)`, assert `dl.suggestedFilename()` ends with `.stl` and equals the sanitized title the upload stage used, read `dl.path()` and assert the size is 684 bytes (84 + 50·12 for the 20 mm box) and the first 5 bytes are not ASCII `solid`; the context already allows downloads (acceptDownloads default). If the download event does not fire inside the emulator network namespace, say so with the Playwright error - do not replace the check with a weaker one.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -\u003e import -\u003e plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
+        "steps":  [
+                      {
+                          "id":  "6330.1",
+                          "phase":  "RECON",
+                          "action":  "Read renderer.component.ts:400-420,2040-2070,2120-2150, download-file.ts, STLExporter.js parse signature; confirm the button is visible after 6320 (platform-setup html footer)."
+                      },
+                      {
+                          "id":  "6330.2",
+                          "phase":  "RED",
+                          "action":  "Specs from the notes; scripts\\gate\\fe-test.cmd \"renderer|download-file\" - RED."
+                      },
+                      {
+                          "id":  "6330.3",
+                          "phase":  "GREEN",
+                          "action":  "Named file, MIME, typing, no-mesh guard; fe-test GREEN; 50-export.mjs; scripts\\gate\\lab-ui.cmd load banner upload export GREEN."
+                      },
+                      {
+                          "id":  "6330.4",
+                          "phase":  "DONE",
+                          "action":  "Commit; body = the file-name rule and the stage contract."
+                      }
+                  ],
+        "passes":  true,
+        "verify":  [
+                       "scripts\\gate\\fe-typecheck.cmd",
+                       "scripts\\gate\\fe-test.cmd \"renderer|download-file\"",
+                       "scripts\\gate\\lab-ui.cmd load banner upload export"
+                   ]
+    },
+    {
+        "id":  6350,
+        "category":  "refactor(frontend)",
+        "repo":  "rwclab",
+        "lane":  "fe-form",
+        "model":  "heavy",
+        "dependsOn":  [
+                          6320
+                      ],
+        "files":  [
+                      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.html",
+                      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.ts",
+                      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.spec.ts",
+                      "app/frontend/src/app/app-modules/delta/components/base-platform/base-platform.component.ts",
+                      "app/frontend/src/app/app-modules/delta/components/base-platform/base-platform.component.spec.ts",
+                      "app/frontend/src/app/app-modules/delta/components/platform-model-list/platform-model-list.component.html",
+                      "app/frontend/src/app/app-modules/delta/components/platform-model-list/platform-model-list.component.ts",
+                      "app/frontend/src/app/app-modules/delta/components/platform-model-list/platform-model-list.component.spec.ts",
+                      "app/frontend/src/app/app-modules/common/print-list/print-list-item/**",
+                      "app/frontend/src/app/app-modules/common/patient-dialog/**",
+                      "app/frontend/src/app/app-modules/common/common.module.ts",
+                      "app/frontend/src/app/core/services/patient-helper.service.ts",
+                      "app/frontend/src/app/core/core.module.ts",
+                      "app/frontend/src/app/core/models/print-list/save-platform-job-input-model.ts",
+                      "app/frontend/src/app/core/services/print-list.service.ts",
+                      "app/frontend/src/app/core/services/print-list.service.spec.ts",
+                      "app/frontend/src/app/core/store/actions/print-list.actions.ts",
+                      "app/frontend/src/app/core/store/effects/print-list.effects.ts",
+                      "app/frontend/src/app/core/store/effects/print-list.effects.spec.ts",
+                      "app/frontend/src/app/core/store/reducers/print-list.reducers.ts",
+                      "app/frontend/src/app/core/store/reducers/print-list.reducers.spec.ts",
+                      "app/frontend/src/app/testing/**"
+                  ],
+        "description":  "refactor(frontend): delete the patient assignment on print setup - typeahead, add-new-patient dialog, per-item patient rename, patientId in the save payload",
+        "specRef":  "rwclab-board6-recon.md §5 (patient block); user 16.11.2026: \"това може да се махне, т.к вече няма пациенти\"",
+        "tddWorkflow":  true,
+        "notes":  "Delete for real (FE only; the backend `PlatformJobInputModel.PatientId` is optional and stays until the dental cut): platform-print-setup.component.html:12-25 (`f-typeahead name=\"patient\"` block + its `#rt` template) and ts:556-564 `onPatientSelected`, `searchPatients`/`patientLoseFocus` bindings; base-platform.component.ts:299-343 (`searchPatients`, `onPatientSelected`, the fake id-0 \"Add New Patient\" entry) + spec :255-275 (+ :203 `patientId: null` expectation -\u003e field gone); the per-item patient rename: platform-model-list.component.html:136-138, print-list-item.component.ts:192-196 / html:21-22 (delete the rename UI, keep the item component otherwise), `RenamePrintListItemAction` + effect + print-list.service.ts rename (PATCH api/print-list/{id}/rename, spec :89-93) if nothing else dispatches it (grep); `PatientDialogComponent` (app-modules/common/patient-dialog/**, declared in common.module.ts) and `PatientHelperService` (core/services/patient-helper.service.ts, registered core.module.ts:143, injected only by platform-setup/platform-model-list after 6320 - remove the injections); `patientId`/`patientName` from save-platform-job-input-model.ts:12-13 and the reducer reset :445-446 (+ spec); testing/ mocks that stub patient services (service-mocks.ts, delta-testbed.ts). KEEP `PatientService` (core/services/patient.service.ts) and patient-modal-v2 / patient-v2 / assign-patient (cloud-drive and treatment territory, not this task). After the deletion the Print Setup form shows: project name, build plate, settings.\nRED first: platform-print-setup spec - no element `f-typeahead[name=patient]` and no `general.assignPrintJobToPatient` text; base-platform spec: `searchPatients`/`onPatientSelected` no longer exist (remove their tests, add one that saveFile sends no patientId); platform-model-list spec: no patient rename control. GREEN after deletion. Orphaned i18n keys (list in the body for 6600): general.assignPrintJobToPatient, general.patientName (if unused elsewhere), general.createNewPatient, general.createNewPatientAndAssign (if the dialog was their only user).\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -\u003e import -\u003e plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
+        "steps":  [
+                      {
+                          "id":  "6350.1",
+                          "phase":  "RECON",
+                          "action":  "Read recon §5 patient part; grep `patientId|patientName|PatientHelperService|PatientDialogComponent|RenamePrintListItemAction|searchPatients` across src/app and list the users."
+                      },
+                      {
+                          "id":  "6350.2",
+                          "phase":  "RED",
+                          "action":  "Spec changes from the notes; scripts\\gate\\fe-test.cmd \"platform-print-setup|base-platform|platform-model-list|print-list-item\" - RED."
+                      },
+                      {
+                          "id":  "6350.3",
+                          "phase":  "GREEN",
+                          "action":  "Delete the listed code, fix modules/testing mocks; scripts\\gate\\fe-typecheck.cmd + scripts\\gate\\fe-test.cmd \"platform-print-setup|base-platform|platform-model-list|print-list\" GREEN; scripts\\gate\\fe-build.cmd ci."
+                      },
+                      {
+                          "id":  "6350.4",
+                          "phase":  "DONE",
+                          "action":  "Commit; body = deleted symbols + orphaned i18n keys."
+                      }
+                  ],
+        "passes":  true,
+        "verify":  [
+                       "scripts\\gate\\fe-typecheck.cmd",
+                       "scripts\\gate\\fe-test.cmd \"platform-print-setup|base-platform|platform-model-list|print-list\"",
+                       "scripts\\gate\\fe-build.cmd ci",
+                       "scripts\\gate\\lab-ui.cmd load banner upload"
+                   ]
+    },
+    {
+        "id":  6340,
+        "category":  "refactor(frontend)",
+        "repo":  "rwclab",
+        "lane":  "fe-form",
+        "model":  "heavy",
+        "dependsOn":  [
+                          6200
+                      ],
+        "files":  [
+                      "app/frontend/src/app/app-modules/delta/components/print-job-type/**",
+                      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.html",
+                      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.ts",
+                      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.spec.ts",
+                      "app/frontend/src/app/app-modules/delta/components/platform-model-list/platform-model-list.component.html",
+                      "app/frontend/src/app/app-modules/delta/components/platform-model-list/platform-model-list.component.ts",
+                      "app/frontend/src/app/app-modules/delta/components/platform-model-list/platform-model-list.component.spec.ts",
+                      "app/frontend/src/app/app-modules/delta/components/renderer-progress/**",
+                      "app/frontend/src/app/core/constants/renderer-progress.ts",
+                      "app/frontend/src/assets/images/logo-final.gif",
+                      "app/frontend/src/app/app-modules/delta/delta.module.ts",
+                      "app/frontend/src/app/core/store/states/print-list.states.ts",
+                      "app/frontend/src/app/core/store/states/print-list.states.spec.ts",
+                      "app/frontend/src/app/core/models/print-list/save-platform-job-input-model.ts",
+                      "app/frontend/src/app/core/helpers/common/appliance-type-helper.ts",
+                      "app/frontend/src/app/core/helpers/common/appliance-type-helper.spec.ts",
+                      "app/frontend/src/assets/images/print-job-types/**",
+                      "app/frontend/src/app/core/store/actions/noms/treatment-type.actions.ts",
+                      "app/frontend/src/app/core/store/effects/noms/treatment-type.effects.ts",
+                      "app/frontend/src/app/core/store/reducers/noms/treatment-type.reducers.ts",
+                      "app/frontend/src/app/core/store/states/noms/treatment-type.states.ts",
+                      "app/frontend/src/app/core/store/effects/index.ts",
+                      "app/frontend/src/app/core/store/reducers/index.ts",
+                      "app/frontend/src/app/core/store/states/index.ts",
+                      "app/frontend/src/app/core/store/effects/noms/noms.effects.spec.ts",
+                      "app/frontend/src/app/core/store/reducers/noms/noms.reducers.spec.ts",
+                      "app/frontend/src/app/app.module.ts",
+                      "app/frontend/src/app/components/app/app.component.ts",
+                      "app/frontend/src/app/components/app/app.component.spec.ts",
+                      "app/frontend/src/app/core/services/common/http-object.service.ts",
+                      "app/frontend/src/app/core/services/common/http-object.service.spec.ts",
+                      "scripts/gate/lab-ui-stages/20-banner.mjs",
+                      "scripts/gate/lab-ui-stages/30-upload.mjs"
+                  ],
+        "description":  "refactor(frontend): no Print Job Type picker - every project is \"Other Print\" (TreatmentType.Custom), dental branches and the dead renderer-progress component deleted",
+        "specRef":  "rwclab-board6-recon.md §5 (picker); user 16.11.2026: \"това ще може да се махне - реално всичко ще е other\"",
+        "tddWorkflow":  true,
+        "notes":  "Contract: `treatmentTypeId = TreatmentType.Custom` (100) and `treatmentApplianceType = TreatmentApplianceType.Unset` (0) on every new project, set in `initializeForInexistingPlatform` (platform-print-setup.component.ts:431-434) and as defaults of SavePlatformJobInputModel (:8-9); the backend already accepts them (seed row 100, SprModelCount 6, MapApplianceTypeId passes 100 through; lab-pipeline posts 100 since 6200). The selector `getArePrintSettingsValid` (print-list.states.ts:132-153) becomes `buildPlateId \u0026\u0026 hasValidOrientation` (+ spec :34-60: the \"null type -\u003e false\" case at :50-53 is replaced by \"no build plate -\u003e false\"); `getHavePrintSettingsUpdated` :113-114 stops comparing type/appliance; `isPrintButttonDisabled` in platform-setup.component.ts:371-386 compares `currentJob.treatmentTypeId !== model.treatmentTypeId` - that file belongs to the fe-setup lane: leave it (the comparison is always false with Custom everywhere) and say so.\nDelete for real: print-job-type/** (+ delta.module.ts:18,40), the picker and the appliance sub-picker in platform-print-setup.component.html:27-37 (and the `[hidden]`/`*ngIf` on :39/:47 that waited for a type), `treatmentTypeSelected`/`applianceTypeSelected`/`allowedTypes`/`filterApplianceTypes`/`betaApplianceTypes`/`treatmentTypes$` (ts:77-84, :140-152, :468-500), the dead branches: `isModelJobType`/`isCrownAndBridgeJobType`/`showCrownRaft` and html:105-147, SmileDesign/CrownAndBridge logic in `applyNewJobDefaults` (:504-526 -\u003e keep generateSupports=true), SPR import type handling (:326-334, :340-350, :370 - SPR metadata still carries printJobTypeId; ignore it and keep Custom: say so), `processModelChanges` aligner part (:549-553), FTUE type tooltips (:595-603), `applianceJobTypePrefix` (:385-387); `isCustomJobType` sections become unconditional (html:73-79 supports slider, :90-103 orientation input stays required). platform-model-list: raft block html:245-259 + `shouldSortFiles` ts:636-640 + `supportsLabel` ts:1154-1160 (static label). appliance-type-helper.ts + spec (delete the whole helper if the names/images were its only purpose; grep first) and assets/images/print-job-types/** (13 files). renderer-progress/** + core/constants/renderer-progress.ts + assets/images/logo-final.gif (component never placed in a template; its per-type timings are dead) + delta.module.ts:38. Treatment-type store: `TreatmentTypeActions.GetListOptions`/`GetApplianceTypeListOptions` dispatches in app.component.ts:251-252 and the noms/treatment-type store files + barrel/store.module entries + http-object.service.ts:42-43,62-63 - delete if the picker was their only consumer (grep `treatmentType` selectors across src/app; the BE endpoints `api/treatment-type/*` stay and be-smoke keeps calling them - dental cut is board 7). Keep `TreatmentType`/`TreatmentApplianceType` enums (payload) and `SprModelCount` behaviour on the backend.\nGate stages (module files from 6200): 20-banner.mjs asserted `.print-job-type-card` in the DOM - replace with the build-plate control (`f-button-group[name=buildPlate]`); 30-upload.mjs clicked the first card - remove the click, the rest (name + build plate + upload) unchanged.\nRED first: platform-print-setup spec :113-144/:169-235 rewritten: validity without any type field, a new project posts treatmentTypeId 100 / appliance 0; print-list.states.spec: new expression; app.component.spec: no treatment-type dispatch at login. GREEN after deletion. Orphaned i18n keys for 6600: general.selectPrintJobType, general.otherPrint, general.fixedRestorations, general.prosthetics, general.surgicalGuideAppliance, general.dentalModel and the appliance sub-type names - list exactly what is unreferenced after your change.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -\u003e import -\u003e plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
+        "steps":  [
+                      {
+                          "id":  "6340.1",
+                          "phase":  "RECON",
+                          "action":  "Read recon §5 picker part; grep `treatmentTypeId|treatmentApplianceType|TreatmentType\\.|isCustomJobType|getTreatmentTypes|print-job-type` across src/app; list consumers."
+                      },
+                      {
+                          "id":  "6340.2",
+                          "phase":  "RED",
+                          "action":  "Spec rewrites from the notes; scripts\\gate\\fe-test.cmd \"platform-print-setup|print-list.states|app.component\" - RED."
+                      },
+                      {
+                          "id":  "6340.3",
+                          "phase":  "GREEN",
+                          "action":  "Defaults + selector + deletions + store cleanup; scripts\\gate\\fe-typecheck.cmd + scripts\\gate\\fe-test.cmd \"platform-print-setup|print-list|platform-model-list|appliance-type|treatment-type|app.component|renderer-progress\" GREEN; scripts\\gate\\fe-build.cmd ci."
+                      },
+                      {
+                          "id":  "6340.4",
+                          "phase":  "GREEN",
+                          "action":  "Stages 20-banner/30-upload; scripts\\gate\\lab-ui.cmd load banner upload GREEN; scripts\\gate\\lab-pipeline.cmd create metadata."
+                      },
+                      {
+                          "id":  "6340.5",
+                          "phase":  "DONE",
+                          "action":  "Commit; body = contract, deleted symbols, orphaned i18n keys."
+                      }
+                  ],
+        "passes":  true,
+        "verify":  [
+                       "scripts\\gate\\fe-typecheck.cmd",
+                       "scripts\\gate\\fe-test.cmd \"platform-print-setup|print-list|platform-model-list|appliance-type|treatment-type|app.component\"",
+                       "scripts\\gate\\fe-build.cmd ci",
+                       "scripts\\gate\\lab-ui.cmd load banner upload",
+                       "scripts\\gate\\lab-pipeline.cmd create metadata"
+                   ]
+    },
+    {
+        "id":  6370,
+        "category":  "fix(frontend)",
+        "repo":  "rwclab",
+        "lane":  "fe-styles",
+        "model":  "easy",
+        "dependsOn":  [
+                          6200
+                      ],
+        "files":  [
+                      "app/frontend/src/app/app-modules/delta/components/base-platform/base-platform.component.scss",
+                      "app/frontend/src/app/app-modules/delta/components/platform-setup/platform-setup.component.scss",
+                      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.scss",
+                      "scripts/gate/lab-ui-stages/40-accordion.mjs"
+                  ],
+        "description":  "fix(frontend): accordion styles target the ng-bootstrap directive DOM (accordion-header/body instead of card-header/body)",
+        "specRef":  "rwclab-board6-recon.md §7 (diagnosis proven 16.11.2026)",
+        "tddWorkflow":  true,
+        "notes":  "Diagnosis (proven): board 2 commit 6d15ead moved the accordions to the ng-bootstrap directive API; ng-bootstrap 21 renders `accordion-item` / `accordion-header` / `accordion-collapse` / `accordion-body` host classes, the old `.card` / `.card-header` / `.card-body` DOM no longer exists, so the three stylesheets below style nothing and the six header `\u003cbutton class=\"w-100\"\u003e` elements (platform-model-list.component.html:163,227,278,392,440; platform-print-setup.component.html:52 - no ngbAccordionButton, no .btn) show the browser default button look: light-grey inset bars, black text, default-size icons, 16px chevron, no active-state chevron swap.\nRecipe (SCSS only, no template change): base-platform.component.scss:115-187 - `.card-header` -\u003e `.accordion-header`, `.card-body` -\u003e `.accordion-body` (three places incl. `\u0026.panel-active .accordion-header .icon.toggle-arrow::before`); platform-setup.component.scss:291-342 - same two renames in `.editing-panel-card`; platform-print-setup.component.scss:40-48 - `.card-body` -\u003e `.accordion-body`. Keep the `\u003e button` rules (they are what styles the header button). Global styles.scss/scss/ have no accordion rules; nothing else competes. Do not touch any .html/.ts (other lanes own them).\nRED first = the gate stage `scripts/gate/lab-ui-stages/40-accordion.mjs` (runs after upload, when the model list tab shows the editing accordion): for every `.accordion-header \u003e button` on the page assert computed `background-color` is `rgba(0, 0, 0, 0)` (transparent) and `border-style` is `none`, and that `.icon.toggle-arrow` computed `font-size` is `8px` inside `.settings-accordion` and `12px` inside `.editing-menu` (whichever accordions are visible in that state; at least one header must be found or the stage fails). Run `scripts\\gate\\lab-ui.cmd load banner upload accordion` -\u003e RED (default button look), then apply the SCSS -\u003e GREEN.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -\u003e import -\u003e plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
+        "steps":  [
+                      {
+                          "id":  "6370.1",
+                          "phase":  "RECON",
+                          "action":  "Read the three SCSS blocks and the six header templates; confirm the directive host classes in node_modules/@ng-bootstrap (fesm2022 accordion file)."
+                      },
+                      {
+                          "id":  "6370.2",
+                          "phase":  "RED",
+                          "action":  "Write lab-ui-stages/40-accordion.mjs; scripts\\gate\\lab-ui.cmd load banner upload accordion - RED."
+                      },
+                      {
+                          "id":  "6370.3",
+                          "phase":  "GREEN",
+                          "action":  "Rename the selectors; scripts\\gate\\fe-typecheck.cmd; scripts\\gate\\lab-ui.cmd load banner upload accordion GREEN."
+                      },
+                      {
+                          "id":  "6370.4",
+                          "phase":  "DONE",
+                          "action":  "Commit; body = the diagnosis in two lines."
+                      }
+                  ],
+        "passes":  true,
+        "verify":  [
+                       "scripts\\gate\\fe-typecheck.cmd",
+                       "scripts\\gate\\lab-ui.cmd load banner upload accordion"
+                   ]
+    },
+    {
+        "id":  6600,
+        "category":  "chore(frontend)",
+        "repo":  "rwclab",
+        "lane":  "fe-i18n",
+        "model":  "easy",
+        "dependsOn":  [
+                          6310,
+                          6330,
+                          6340,
+                          6350,
+                          6370
+                      ],
+        "files":  [
+                      "app/frontend/src/assets/i18n/**",
+                      "scripts/i18n-orphans.mjs"
+                  ],
+        "description":  "chore(frontend): delete the i18n keys orphaned by board 6 and every unused SprintRay-branded key",
+        "specRef":  "rwclab-board6-recon.md §4 (unused SprintRay keys); commit bodies of 6310/6320/6330/6340/6350 (their \"orphaned keys\" lists)",
+        "tddWorkflow":  false,
+        "notes":  "Recipe (easy): (1) write `scripts/i18n-orphans.mjs` (node, no deps): for each key path in en.json report whether the literal `\u0027\u003cpath\u003e\u0027` / `\"\u003cpath\u003e\"` or the tail segment inside a dynamic prefix is referenced under app/frontend/src/app (grep over .ts/.html); keys referenced only dynamically are UNKNOWN, not orphans - print them separately. (2) Delete from all five locale files: the keys listed as orphaned in the commit bodies of 6310, 6320, 6330, 6340, 6350 (read `git log --format=%B` on the integration branch), and the unused keys whose value contains \"SprintRay\" (en.json lines 23, 291, 316, 324, 376, 807, 1508-1515, 1882, 2014, 2050, 2055, 2175, 2345, 2348, 2408, 2432, 2441, 2444, 2452 at the time of the recon - re-run the script, do not trust the line numbers). (3) Only keys the script reports as UNREFERENCED (not UNKNOWN) may be deleted. (4) Keep the five files key-parity equal. (5) Body = the deleted key list and the UNKNOWN list.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -\u003e import -\u003e plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
+        "steps":  [
+                      {
+                          "id":  "6600.1",
+                          "phase":  "RECON",
+                          "action":  "Read the five commit bodies and en.json; write scripts/i18n-orphans.mjs and run it."
+                      },
+                      {
+                          "id":  "6600.2",
+                          "phase":  "GREEN",
+                          "action":  "Delete the listed + unreferenced SprintRay keys from all five files; scripts\\gate\\fe-typecheck.cmd; scripts\\gate\\fe-build.cmd ci; scripts\\gate\\no-external-hosts.cmd."
+                      },
+                      {
+                          "id":  "6600.3",
+                          "phase":  "DONE",
+                          "action":  "Commit."
+                      }
+                  ],
+        "passes":  true,
+        "verify":  [
+                       "scripts\\gate\\fe-typecheck.cmd",
+                       "scripts\\gate\\fe-build.cmd ci",
+                       "scripts\\gate\\no-external-hosts.cmd",
+                       "scripts\\gate\\lab-ui.cmd load"
+                   ]
+    },
+    {
+        "id":  6700,
+        "category":  "docs",
+        "repo":  "rwclab",
+        "lane":  "docs",
+        "model":  "easy",
+        "dependsOn":  [
+                          6000,
+                          6010,
+                          6600
+                      ],
+        "files":  [
+                      "README.md",
+                      "PLAN.md",
+                      "RENDERER-AUDIT.md",
+                      "scripts/gate/lab-ui.cmd"
+                  ],
+        "description":  "docs: one project at a time - previous projects, delete with S3 cleanup, STL export, RWC Lab brand, event wiring in one container",
+        "specRef":  "rwclab-board6-recon.md §0 (facts), §8 (stages); README sections touched by board 5 (5600)",
+        "tddWorkflow":  false,
+        "notes":  "Recipe (easy): README.md - the \"what the lab is now\" section: one active project, Previous projects panel, New/Open/Delete semantics (delete removes the S3 objects; the emulator is in-memory so files of older projects vanish on restart and the UI says so), Export STL (file named after the project, binary STL in platform coordinates), brand RWC Lab, the Print Job Type/patient fields gone (every project is Custom/Other); the gate list: lab-ui stages now live in scripts/gate/lab-ui-stages/ (list them with one line each), lab-pipeline has a delete stage; remove the \"/files/ screenshot URLs answer 404\" troubleshooting row (README.md:146) and the \"cannot do\" items that this board resolved. PLAN.md: board 6 summary + board 7 next (dental backend cut: TreatmentType/Patient/... tables and services; Hero-Forge direction). RENDERER-AUDIT.md: dated note that the printer/dental form fields are gone and the renderer exports STL. scripts/gate/lab-ui.cmd help text lists the stage directory. No code changes.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY: the bucket is re-created by infra/bootstrap.mjs on every start, nothing in S3 survives a restart), aws-http (plain HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd, be-test.cmd [filter], be-smoke.cmd [filter] (compose up + start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd (upload -\u003e import -\u003e plane cut through the emulator), lab-pipeline.cmd [create metadata logs edit ...] (REST pipeline through the backend, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; runs fe-build ci first, ~2 min; stages run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts (be-build/be-test), frontend in node:22-bookworm (fe-*). Never run npm/dotnet directly on the host for gates.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS (every client has the emulator endpoint); never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no dead i18n keys left behind \"for later\" - list the keys you orphaned in the commit body, task 6600 deletes them). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If the fix is outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you (the post-merge gate runs them).",
+        "steps":  [
+                      {
+                          "id":  "6700.1",
+                          "phase":  "RECON",
+                          "action":  "Read README/PLAN/RENDERER-AUDIT sections that mention screenshots, job types, patients, Add job, SprintRay, lab-ui stages; read the board-6 commit bodies."
+                      },
+                      {
+                          "id":  "6700.2",
+                          "phase":  "GREEN",
+                          "action":  "Edit the docs; run the full gate list below."
+                      },
+                      {
+                          "id":  "6700.3",
+                          "phase":  "DONE",
+                          "action":  "Commit."
+                      }
+                  ],
+        "passes":  true,
+        "verify":  [
+                       "scripts\\gate\\be-build.cmd",
+                       "scripts\\gate\\be-test.cmd",
+                       "scripts\\gate\\be-smoke.cmd",
+                       "scripts\\gate\\be-config-offline.cmd",
+                       "scripts\\gate\\compose-config.cmd",
+                       "scripts\\gate\\fe-typecheck.cmd",
+                       "scripts\\gate\\fe-test.cmd",
+                       "scripts\\gate\\fe-build.cmd ci",
+                       "scripts\\gate\\no-external-hosts.cmd",
+                       "scripts\\gate\\lab-e2e.cmd",
+                       "scripts\\gate\\lab-pipeline.cmd create metadata logs edit delete",
+                       "scripts\\gate\\lab-ui.cmd load banner upload accordion export projects"
+                   ]
+    }
 ]

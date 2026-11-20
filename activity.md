@@ -34,6 +34,305 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## 2026-11-20 - Task #6700 - docs: one project at a time
+
+**Repo:** rwclab (branch ralph/task-6700, commit 732ed2e)
+
+**What:** Documentation only, no code changes.
+- README.md: new section "What the lab is now (board 6)" covering one active project, Previous projects, New/Open/Delete semantics (delete removes the S3 objects, the emulator is in-memory so files of older projects vanish on restart and the UI says so), Export STL (<project title>.stl, binary, platform coordinates), RWC Lab brand, no Print Job Type or patient fields (every project is Custom/Other), event wiring in one container. The lab-ui row now describes scripts/gate/lab-ui-stages/ and a table lists the six stages (load, banner, upload, accordion, export, projects); lab-pipeline has the delete stage. Removed the "/files/ screenshot URLs answer 404" row and the job type mentions. The banner text and the NEXT-button troubleshooting row match the code, and a new troubleshooting row covers projects whose files are gone.
+- PLAN.md: board 6 summary, board 7 next (dental backend cut of the TreatmentType/Patient tables and services, Hero-Forge direction).
+- RENDERER-AUDIT.md: dated note that the printer/dental form fields are gone and the renderer exports STL.
+- scripts/gate/lab-ui.cmd: help text lists the stage directory.
+
+**Verification:** none run by the agent. Docs only; the verify gate list is left to the orchestrator's post-merge gate.
+
+**Orphaned i18n keys:** none.
+
+
+## Task 6600 - chore(frontend): delete the i18n keys orphaned by board 6 and every unused SprintRay-branded key
+
+- Wrote scripts/i18n-orphans.mjs (REFERENCED / UNKNOWN / UNREFERENCED; general./messages. keys reachable by English value via TranslateValuePipe count as UNKNOWN).
+- Deleted 72 keys from all five locale files (orphan lists of 6340/6350/6320 minus 3 kept, plus 25 unreferenced SprintRay-valued keys). Kept as UNKNOWN: general.otherPrint, general.type, general.assignPrintJobToPatient and 174 value-matched keys.
+- Gates: fe-typecheck, fe-build ci, no-external-hosts green. Commit cb4b521.
+- Note: locale files were already not key-parity equal (de 3 keys fewer than en before); not changed.
+
+
+## Task #6340 — refactor(frontend): no Print Job Type picker: every project is "Other Print" (TreatmentType.Custom); dental branches and the dead renderer-progress component deleted
+
+**Status:** ✅ done (retry 2, scope escalation) · **Repo:** rwclab · **Commit:** 4a4de85
+
+**What changed**
+- **Contract:** every new project sends `treatmentTypeId = 100` (Custom) and `treatmentApplianceType = 0` (Unset). These are the SavePlatformJobInputModel defaults, plus `generateSupports = true` in `initializeForInexistingPlatform`.
+- **Selectors:** `getArePrintSettingsValid` is now `buildPlateId && hasValidOrientation`. `getHavePrintSettingsUpdated` no longer compares the type or appliance.
+- **Default build plate:** a new project picks plate 1 by itself:
+  - when the plates arrive after the page has opened;
+  - one microtask after start-up. Picking it during the first change-detection pass flipped the Save buttons of `<platform-setup>`, and lab-ui `load` failed with NG0100.
+- **Deleted, print setup:**
+  - the picker and the appliance sub-picker (`print-job-type/**`), plus the `[hidden]` rules on the build plate and the accordion that waited for a type;
+  - the SmileDesign aligner block and `aligner-custom-orientation/**`;
+  - the CrownAndBridge raft block and its FTUE tooltip;
+  - all type and appliance handlers and getters;
+  - `isSprImportFull`: it needed an appliance type other than 0, so it was always false with Unset;
+  - the `isMultiPlatform` input.
+- **SPR import:** `printJobTypeId` in the SPR metadata is ignored, and the project stays Custom.
+- **Deleted, other components:**
+  - platform-model-list: the raft block, `shouldSortFiles` and `sortUploadedFiles`; `supportsLabel` became a static label;
+  - base-platform: `treatmentTypeId`, `applianceType`, `modelsOptions` and `modelOrientationOptions`;
+  - the constants `ModelsOptions` and `CustomOrientationId`.
+- **Deleted, helpers and assets:**
+  - `appliance-type-helper` and its spec;
+  - the 13 tile images in `print-job-types/` and `raft-support-wide.png`;
+  - `renderer-progress/**`, `core/constants/renderer-progress.ts` and `logo-final.gif`.
+- **Deleted, treatment-type store:**
+  - actions, effects, reducers and states, plus their barrel and app.module entries;
+  - the two dispatches at login;
+  - `TreatmentTypeService` and the `TreatmentTypeListOptions` models;
+  - `HttpObjectService.getApplianceTypeListOptions`;
+  - the matching cases in the noms specs.
+
+  The BE endpoints `api/treatment-type/*` stay.
+- **Gate:** `_ctx` now uses `PLATE` (the first build plate button) instead of `CARD` (`.print-job-type-card`).
+  - `20-banner` checks the plate button.
+  - `30-upload` no longer clicks a tile.
+  - `60-projects` expects the plate control back after New.
+
+**Left as is, on purpose**
+- `platform-setup.component.ts` `isPrintButttonDisabled` (fe-setup lane) still compares `treatmentTypeId`. It is always false now, because every project is Custom.
+- `infoBoxVisibility.showCrownRaftTooltip` is no longer read, but that slice is synced to localStorage. Removing it is a migration, so it needs its own step.
+
+**Files outside the original list (scope escalation)**
+- Gate scripts: `scripts/gate/lab-ui-stages/_ctx.mjs`, `60-projects.mjs` and `scripts/gate/lab-ui.mjs`.
+- Under `app/frontend/src/app`:
+  - `core/constants/index.ts`, `renderer-constants.spec.ts`, `model-orientation-setting.ts`, `models-settings.ts`;
+  - `platform-print-setup/aligner-custom-orientation/**`;
+  - `base-platform.component.ts` and its spec;
+  - `platform-setup.component.html`;
+  - `core/services/noms/index.ts`, `treatment-type.service.ts`, `core/core.module.ts`;
+  - `core/models/treatment/index.ts`, `treatment-type-list-options.ts`.
+- Asset: `assets/images/raft-support-wide.png`.
+
+**Orphaned i18n keys (for 6600)**
+- general.aligner, general.analyzingMesh, general.autoLayoutOnPlatform, general.base, general.baseMaterial, general.baseSupports, general.beta, general.bridge, general.clasps, general.creatingSupports, general.dentalModel, general.dentalModelType
+- general.dentureBase, general.fixedRestorations, general.hybrid, general.implantCrown, general.loading, general.modelAndRemovableDie, general.optimizingOrientation, general.otherPrint, general.ponticSites, general.printJobType, general.prosthetics, general.raftSupports
+- general.removableDie, general.selectPrintJobType, general.supportRaft, general.surgicalGuideAppliance, general.teeth, general.teethMaterial, general.trialSmile, general.tryIn, general.tryInMaterial, general.type, general.waxUpModel, messages.supportRaftTooltip
+
+**Verification**
+- RED first: 21 failures across the print-setup, print-list.states and app.component specs.
+- fe-typecheck: ✅. `tsc -p src/tsconfig.spec.json`: ✅.
+- fe-test on the touched areas (`platform-print-setup|print-list|platform-model-list|appliance-type|treatment-type|app.component|noms|http-object|renderer-constants|base-platform|platform-setup`): 13 suites, 354/354 ✅.
+- `fe-build ci` (inside lab-ui): ✅.
+- `lab-ui load banner upload`: PASS. `lab-ui load banner upload accordion export projects`: PASS.
+- `lab-pipeline create metadata`: OK.
+- The full jest suite was not run; the orchestrator's gate runs it after merge.
+
+
+## [2026-11-20 14:30] - Task #6350: refactor(frontend): delete the patient assignment on print setup - typeahead, add-new-patient dialog, per-item patient rename, patientId in the save payload
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** Retry 1 stopped on scope: removing PatientHelperService from the base-platform constructor also needs platform-setup.component.ts + spec. With the retry scope escalation those were edited. PatientDialogComponent is KEPT because cloud-drive assign-patient still opens it.
+
+**What was done:**
+- RED: print-setup spec (no f-typeahead[name=patient], no general.assignPrintJobToPatient, no onPatientSelected); base-platform spec (saveFile sends no patientId, no searchPatients/onPatientSelected/patientLoseFocus; the old patient tests were removed); model-list spec (no searchPatients/onPatientSelected, the template has no patientChange/searchPatients/editPatientNameAllowed). The gate went red.
+- GREEN: deleted the print-setup patient typeahead + onPatientSelected + patientId; base-platform searchPatients/onPatientSelected/searchedTerm/patientLoseFocus and the PatientService + PatientHelperService ctor params (in all 3 subclasses); the print-list-item rename UI (inputs/output/menu entry/typeahead/handlers/styles) and the model-list bindings; RenamePrintListItem* actions + RENAME_LIST_ITEM* types, the renameItem$ effect, PrintListService.renameListItem, PatientPrintListItem; PatientHelperService (file, barrel, core.module); SavePlatformJobInputModel.patientId/patientName + the reducer reset. FileInput.patientId is now optional.
+- Orphaned i18n keys (for 6600): general.assignPrintJobToPatient, general.patientName.
+
+**Verification:**
+- fe-typecheck → clean; tsc -p src/tsconfig.spec.json → clean
+- fe-test "platform-print-setup|base-platform|platform-model-list|print-list|platform-setup" → 8 suites, 310/310 pass
+- fe-build ci → OK
+- lab-ui load banner upload → left to the post-merge gate
+
+**Files modified (out of the task files, under scope escalation):** platform-setup.component.ts + spec, platform-print-setup.component.scss, print-list-item.component.scss, core/services/index.ts, core/models/inbox/file-input.ts, core/models/print-list/patient-print-list-item.ts (deleted)
+
+**Git commit:** `d43c4b6` — `refactor(frontend): delete the patient assignment on print setup - typeahead, add-new-patient dialog, per-item patient rename, patientId in the save payload`
+
+---
+
+
+## Task #6330 - feat(frontend): Export STL downloads a binary STL named after the project; lab-ui export stage
+
+**Status:** done - commit 517d70f
+
+**What changed**
+- `core/utils/download-file.ts`: `downloadFile(content: BlobPart, ...)`, since the STLExporter returns a DataView. New `safeFileName(name, fallback)`: each run of characters outside `[A-Za-z0-9._-]` becomes one `_`, leading/trailing `_`/`.` are trimmed, and the fallback is used when nothing is left.
+- `renderer.component.ts` `exportComposedSTLFile()`: the file is named `${safeFileName(currentJob?.title, 'platform')}.stl` (currentJob comes from `getCurrentPlatformJob`, which the renderer already selected) with MIME `model/stl`. Only visible meshes are exported, and with none visible nothing is downloaded (this also covers the initial store emission of 0). Ctrl/Cmd+E is unchanged.
+- Specs: renderer `Export STL` block (DataView of 84+50*24 bytes for 2 visible boxes plus 1 hidden, sanitized name, MIME; fallback `platform.stl`; no visible meshes means no call; initial emission; store counter and Ctrl+E). download-file: DataView input and safeFileName cases.
+- `scripts/gate/lab-ui-stages/50-export.mjs` (after upload, before projects): reads the title from the page, clicks the Export STL icon-btn and waits for `page.waitForEvent('download')`. It asserts suggestedFilename = sanitized title + `.stl` (and that it matches the upload's `lab-ui <date>` name), size 684 bytes, and that the file does not start with `solid`.
+
+**Verify**
+- `scripts\gate\fe-typecheck.cmd`: exit 0
+- `scripts\gate\fe-test.cmd "renderer|download-file"`: 20 suites / 360 tests passed (RED first: TS2305/TS2345 on the missing safeFileName and the string-only signature)
+- `scripts\gate\lab-ui.cmd load banner upload export`: PASS. The export stage downloaded `lab-ui_2026-11-20T11_17_21.stl`, 684 bytes, triangle count 12, on the first click, so the download event fires inside the emulator network namespace.
+- The full jest suite is left to the post-merge gate.
+
+**Notes**
+- No i18n keys orphaned.
+- The lab-ui run left its uploaded job in the shared DB, because the projects stage was not selected.
+- Copied the git-ignored workers/algorithms/vendor into the worktree for the stack. It was not committed.
+
+
+## Task #6320 - feat(frontend): one active project - "New" with a discard confirmation, "Previous projects" panel with open and delete, job list widgets and screenshot URLs removed
+
+**Date:** 2026-11-20 | **Repo:** rwclab | **Branch:** ralph/task-6320 | **Commit:** 69ad0bb
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+### What changed
+- Header bar of platform-setup is now [New] [Previous projects] [Import SPR]; the per-project menu has Rename and one Delete (`messages.deleteProjectForReal`). Export STL is unhidden in the footer next to Save Print Job.
+- **New** (`#newProject`, gtm class kept): with nothing unsaved there is no dialog. With unsaved manual edits or changed print settings it asks `messages.newProjectDiscardsChanges` first. On yes it dispatches ResetTempPlatformMetadata, ResetSelectedModelList, ResetCurrentPlatformJobModel and SetCurrentPlatformJobId(null). The previous project stays saved and listed.
+- **Previous projects**: new `PreviousProjectsComponent` (NgbModal through ModalService.open). It lists every job newest first with title, date, model count and status. The open project is marked Current. Open runs the same unsaved-changes confirm and then SetCurrentPlatformJobId(id). Delete asks for confirmation, then dispatches DeletePlatformJobAction. An empty list shows `general.noPreviousProjects`.
+- **Missing files**: when a model download of the open project fails (print-setup-page `fetchModel`), one toast `messages.projectFilesMissing` is shown, the editor is emptied and the stream completes without re-fetching.
+- `resetPlatformJob$` no longer auto-selects a job; null stays null. If the current job is deleted, or the list is empty, it dispatches ResetPrintSetupAction. This fixed a `new GroupJob().platformJobs.filter` TypeError that the lab-ui run exposed. RESET_PRINT_SETUP now clears `platformJobsTimers` (typo fixed).
+- Deleted the grouped-platform-jobs-pagination and grouped-platform-jobs-vertical-pagination components, the group tabs with the hover screenshot, delete-all, createNewJob/initNewMultiPlatformJob, and the move-to-new-group/new-job drop targets. Also deleted the actions/effects DeleteGroupJob*, DeleteAllPlatformJobs*, MovePrintListItemToNewPlatformJob*, SetCurrentGroupJobIsNew and SetCurrentGroupJobLastSelectedPlatformJobId, the service methods deleteGroupJob/deleteAll/moveToNewPlatformJob, and the environment keys platformScreenshotBucketUrl/printPreviewBucketUrl.
+- Gate: `lab-ui.mjs` fails the run (row "files") on any request to `/files/`. New stage `lab-ui-stages/60-projects.mjs`.
+
+### Verification
+- `scripts\gate\fe-typecheck.cmd` → clean
+- `scripts\gate\fe-test.cmd "platform-setup|previous-projects|print-list|platform-job|print-setup-page|environments"` → 15 suites, 343/343 pass (RED before: the new specs failed on the missing component and on the auto-select expectations)
+- `scripts\gate\fe-build.cmd ci` → 0 errors
+- lab-ui `load banner upload projects` → PASS, files row ok, 0 swallowed console errors. Only the browser step was run, against the live stack as it was: backend container from the task-6010 worktree. `compose up --build` from this worktree would have replaced another agent's running backend. The post-merge gate runs the full `lab-ui.cmd`.
+- The shared DB holds 4 jobs of other runs for the stub user, so "GET api/platform-job answers []" could not hold. The stage asserts that the deleted job is gone, and asserts [] plus the empty state only when no foreign job is left.
+- Full unit suite not run (left to the post-merge gate).
+
+### Orphaned i18n keys (task 6600)
+general.addFilesByDragAndDrop, general.deleteAllJobs, general.deleteCurrentPlatform, general.deleteGroupJob, general.deletePrintJob, messages.areYouSureDeletePlatformJob, messages.deleteAllPrintJobs, messages.deletePlatformJob, messages.groupJobNoAppropriatePlatform, messages.noAppropriatePlatforms, messages.removeAllPrintJobs, messages.removeGroupJob
+
+### Left outside the files scope (follow-up)
+- `shared/components/side-button/**` is now unused but still registered in `shared/components/index.ts:76,177` (not shared.module.ts), so it was not deleted.
+- `platform-setup.component.scss`: dead `.preview-*`, `.side-button` and `.nav-btn` rules remain.
+- `lab-ui-stages/10-load.mjs`: the `/files/` ignore remains (harmless now).
+- `testing/service-mocks.ts` still lists the three removed service methods.
+- The `lab-ui.cmd` usage comment does not name "projects".
+
+### Files modified
+- app/frontend/src/app/app-modules/delta/components/platform-setup/platform-setup.component.{html,ts,spec.ts}
+- app/frontend/src/app/app-modules/delta/components/previous-projects/** (new)
+- app/frontend/src/app/app-modules/delta/components/grouped-platform-jobs-pagination/** and grouped-platform-jobs-vertical-pagination/** (deleted)
+- app/frontend/src/app/app-modules/delta/components/renderer/renderer.component.html, delta.module.ts
+- app/frontend/src/app/app-modules/delta/components/print-setup-page/print-setup-page.component.{ts,spec.ts}
+- app/frontend/src/app/core/store/{actions,effects,reducers}/print-list.* (+ specs)
+- app/frontend/src/app/core/services/platform-job.service.{ts,spec.ts}
+- app/frontend/src/environments/environment.ts, environment.dev.ts, environments.spec.ts
+- scripts/gate/lab-ui.mjs, scripts/gate/lab-ui-stages/60-projects.mjs (new)
+
+**Git commit:** `69ad0bb` — `feat(frontend): one active project - "New" with a discard confirmation, "Previous projects" panel with open and delete, job list widgets and screenshot URLs removed`
+
+---
+
+
+## Task #6010 - feat(backend): deleting a platform job removes its S3 objects; delete-group-job and delete-all routes removed; lab-pipeline delete stage
+
+**Date:** 2026-11-20 | **Repo:** rwclab | **Branch:** ralph/task-6010 | **Commit:** bf4ab45
+
+### What changed
+- `IAwsS3Service` / `AwsS3Service.DeleteByPrefixAsync(prefix)`: paged ListObjectsV2 (ContinuationToken) plus DeleteObjects in batches of up to 1000 on the configured emulator bucket. It returns the deleted key count and throws on an empty or whitespace prefix, so it can never wipe the bucket.
+- `PlatformJobService.DeleteAsync`: loads the job with items, S3File, S3Folder and individual models, then calls EnsureExist (an unknown id is now a 400, not a NullReferenceException). It deletes S3 first, then sets the status to Deleted and saves. If S3 throws, the status is unchanged and the exception propagates (500). The key count is logged through the new `ILogger<PlatformJobService>` constructor dependency.
+- Prefixes deleted, in order: `delta/platform/{jobId}/`, `delta/platform-screenshot/{jobId}/`, then for each item by id: `delta/individual/{individualModelId}/` for every individual model, then the upload key `S3File.Key` (`inbox/{guid}{ext}`). The upload key is skipped when another non-deleted job's item has the same FileGUID, because a copied job reuses the same key.
+- Removed `DeleteGroupJobAsync` / `DeleteAllAsync` (service and interface) and the controller actions `{groupId}/delete-group-job` and `delete-all`. The FE still calls them (platform-job.service.ts and its spec); task 6320 removes those calls.
+- `scripts/gate/lab-pipeline.mjs`: new `delete` stage after `edit`. It presigns the shared .drc and the upload key (the `filename` returned by upload-link) and expects 200 on both. Then DELETE returns 2xx, GET api/platform-job no longer lists the id, and the same URLs return 404. `lab-pipeline.cmd` help text lists the stage. `be-smoke.mjs` never had the removed routes, so it is unchanged.
+
+### Tests
+- New `Tests/PlatformJob/DeleteCleanupTests.cs` (4): exact prefixes and order, status set only after S3 succeeds, S3 throws so the status stays and the error propagates, an upload shared with a live job is kept, unknown job.
+- `AwsS3ServiceTests` (+3 methods): paging over 3 pages and batches of 1000 or fewer (2500 keys), empty listing, empty prefix throws.
+- `PrinterRoutesGoneTests`: both bulk routes are gone; `DELETE {id}` and download-links are still served.
+
+### Verification
+- RED: be-test subset failed to compile (DeleteByPrefixAsync missing), as expected.
+- `be-build.cmd`: 0 errors.
+- `be-test.cmd "FullyQualifiedName~PlatformJob|FullyQualifiedName~AwsS3Service|FullyQualifiedName~RoutesGone"`: 68/68 passed.
+- `be-smoke.cmd`: 25 checks green (backend built from this worktree).
+- `lab-pipeline.cmd create metadata logs edit delete`: all PASS. The backend logged '4 S3 objects removed' (preprocessed, shared and cutted .drc plus the inbox .stl).
+- The full be-test suite (step 6010.3) was not run; it is left to the post-merge gate, per the orchestrator rule.
+
+### Notes
+- The recon §2 and task notes say the individual folder is keyed by the print-list item id. The worker (import.mjs) actually writes under a fresh randomUUID, which is stored as PrintListItemIndividualModel.IndividualModelId, so the implementation uses that id. Copy and duplicate also create new individual ids, so those folders are never shared.
+- No i18n keys were orphaned (backend-only change).
+
+
+## Task #6370 - fix(frontend): accordion styles target the ng-bootstrap directive DOM (accordion-header/body instead of card-header/body)
+- **Commit:** 47f3903
+- **What:** `.card-header` -> `.accordion-header`, `.card-body` -> `.accordion-body` in base-platform, platform-setup and platform-print-setup SCSS (selectors only, no template change). New lab-ui stage `scripts/gate/lab-ui-stages/40-accordion.mjs`: every visible `.accordion-header > button` must have a transparent background and border-style none, and `.icon.toggle-arrow` must be 8px in `.settings-accordion` and 12px in `.editing-menu`.
+- **Verify:** `fe-typecheck.cmd` green; `lab-ui.cmd load banner upload accordion` green (5 headers, all transparent/none/8px).
+- **Note:** I didn't run the RED phase (the stage against the unfixed SCSS), because that would have meant a second ~5 min build. The stage was only seen passing. In this run every visible header was in `.settings-accordion`, so the 12px `.editing-menu` branch wasn't exercised.
+
+
+### Task #6200 - refactor(gate): lab-ui stages become modules under scripts/gate/lab-ui-stages; lab-pipeline posts treatmentTypeId 100
+**Date:** 2026-11-20 | **Repo:** rwclab | **Commit:** 9464cc5
+
+**What changed:**
+- `scripts/gate/lab-ui-stages/_ctx.mjs` (new): `createContext(dist)` = collectors (pageErrors, ng0Errors, ignoredConsole, external, responses, sockets), mark/since/runtimeProblems, bannerState, clickOrForce, screenshot; shared constants (APP_ORIGIN, BACKEND, S3, BANNER, BACKDROP, CARD) + sleep/secs/short.
+- `10-load.mjs` (`fatal: true`), `20-banner.mjs`, `30-upload.mjs` (new): stage bodies moved as-is, each exports `{ name, description, run(ctx) }`; stages do not import Playwright.
+- `scripts/gate/lab-ui.mjs`: loader (`readdirSync` sorted, `/^\d\d-[a-z0-9-]+\.mjs$/`, validates name/run, duplicate names = exit 2), runs stages up to the last selected one, only selected ones can fail, a failed fatal stage skips the rest; the unknown-stage error lists every stage with its description; module contract documented in the header; per-stage header text moved into the module descriptions.
+- `scripts/gate/lab-ui.cmd`: README block (stage directory, run order, contract pointer).
+- `scripts/gate/lab-pipeline.mjs`: `treatmentTypeId: 100` (TreatmentType.Custom); no treatmentApplianceType sent (unchanged).
+
+**Verification:**
+- Baseline: lab-ui load 15.4 s / banner 0.0 s / upload 28.4 s PASS; lab-pipeline create/metadata/logs/edit PASS (5.4 s).
+- After: lab-ui load 10.7 s / banner 0.0 s / upload 26.0 s PASS, same assertions (load 22/22 2xx, banner ok, upload POST platform-job 200 + platform-metadata 200 + .drc 200 + 1 model); lab-pipeline PASS (5.3 s, treatmentTypeId 100 accepted).
+- Unknown stage -> exit 2 with the stage list (checked locally).
+
+**Gotchas:**
+- lab-ui banner/upload go red ('no .print-job-type-card in the DOM') when the stub user has ANY platform job in the shared rwc-pg-data DB (resetPlatformJob$ auto-selects it). 24 leftover jobs had to be soft-deleted (DELETE api/platform-job/{id}) before the baseline was green; each lab-ui/lab-pipeline run adds one more. Noted in the lab-ui.mjs header.
+- A first baseline run hung in the gate's Git Bash step and a second one hit a compose container-name conflict with a parallel agent's stack; both were environment issues, and the reruns were clean.
+
+
+## [2026-11-20] - Task #6000: refactor(backend): event subscriptions from the app container - singleton bus and handlers, no second BuildServiceProvider, hub shared by plain registration
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** AddEventSubscriptions resolved the 34 handlers from a throwaway `services.BuildServiceProvider()` root, so handler scopes saw different singletons than the app (board 4 had to share LocalRealtimeHub through a closure). EventBus kept its handlers in a static list, and Startup also built a third container for ILogService.
+
+**What was done:**
+- RED: new Tests/EventBus/EventBusWiringTests.cs. Subscribe/Publish failed with "Expected 1, Actual 2" because the static list leaked into the second provider. AddEventHandlers failed with "Cannot resolve scoped service ... from root provider".
+- GREEN: EventBus handler list is now an instance field. Unsubscribe deleted from IEventBus and EventBus (it compared with nameof(T), never matched, and had no callers). IEventBus and all 34 handlers are now AddSingleton. AddEventSubscriptions is replaced by UseEventSubscriptions(IApplicationBuilder), called from Configure right after UseLocalRealtimeIfEnabled. Both BuildServiceProvider calls are deleted: the one in AddEventSubscriptions, and the one in ConfigureApiBehaviorOptions, where ILogService now comes from HttpContext.RequestServices. LocalRealtimeHub is a plain AddSingleton.
+- LocalRealtimeRegistrationTests: the two-container test is replaced by Development_OneValidatedProvider_ResolvesHubPublisherAndEventBus (ValidateScopes + ValidateOnBuild). Added a UseEventSubscriptions test against a validated root.
+- git mv: PrintListItemAddedAddToPlatformJobEH.cs -> PrintListItemPreprocessedAddToPlatformJobEH.cs; "PrintListItemPatientChangedRegenerateSupportsEH .cs" -> no trailing space.
+
+**Verification:**
+- be-build → 0 errors
+- be-test "FullyQualifiedName~EventBus|FullyQualifiedName~LocalRealtime|FullyQualifiedName~RoutesGone" → 68/68 pass
+- be-smoke → 25 checks green (backend built from this worktree)
+- lab-pipeline create metadata logs → all PASS. WS got 4 platformJobLog frames + 1 userPlatformJobUpdate, so the handler → hub path works with one container. edit (info) also OK.
+- Full unit suite left to the post-merge gate.
+
+**Files modified:**
+- app/backend/SprintRay.EventBus/EventBus.cs
+- app/backend/SprintRay.EventBus/Interfaces/IEventBus.cs
+- app/backend/Web/Startup.cs
+- app/backend/Web/Infrastructure/Extensions/ServiceCollectionExtenstions.cs
+- app/backend/Web/Infrastructure/Extensions/LocalRealtimeServiceCollectionExtensions.cs
+- app/backend/Tests/EventBus/EventBusWiringTests.cs (new)
+- app/backend/Tests/LocalRealtime/LocalRealtimeRegistrationTests.cs
+- app/backend/ServiceLayer/EventHandlers/PrintList/PrintListItemPreprocessedAddToPlatformJobEH.cs (renamed)
+- app/backend/ServiceLayer/EventHandlers/PrintList/PrintListItemPatientChangedRegenerateSupportsEH.cs (renamed)
+
+**Git commit:** `0ee40d6` — `refactor(backend): event subscriptions from the app container - singleton bus and handlers, no second BuildServiceProvider, hub shared by plain registration`
+
+---
+
+
+## Task #6310 - feat(frontend): brand is "RWC Lab"
+
+- header.component.html: both icon-sprintray-logo spans replaced by span.navbar-brand-text 'RWC Lab'; scss rule replaced.
+- index.html: title 'RWC Lab', meta description 'Local 3D print-prep renderer lab'.
+- Deleted 6 unreferenced SprintRay logo assets (icomoon font untouched).
+- Added header spec test (RED: empty text; GREEN 12/12). no-external-hosts OK.
+- Commit f97e4b4.
+
+
+## Task #6300 - chore(frontend): i18n keys for the single-project flow and brand-neutral texts
+- Added general.{newProject,previousProjects,openProject,deleteProject,currentProject,noPreviousProjects} and messages.{newProjectDiscardsChanges,deleteProjectForReal,projectFilesMissing,notConnectedToBackend} to en/de/es/fr/it in English (no translators in the lab).
+- Changed messages.notConnectedToSprintRayCloud, messages.feedbackExperienceOne, general.cloudDriveWelcomeContent to brand-neutral English in all five locales. Nothing deleted (6600 does that).
+- Verified: all JSON parses; no i18n spec exists so none was run. Commit 7b8d8fa.
+
+
 ## Task #5600 - docs: build plates instead of printers and resins
 
 - **Repo:** rwclab (branch ralph/task-5600), commit c5f1a2c
@@ -5778,6 +6077,18 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
