@@ -138,7 +138,12 @@ if (listing) {
     for (const f of t.files) {
       if (/[*?]/.test(f)) {
         const re = new RegExp('^' + f.split('**').map((seg) => seg.split('*').map(esc).join('[^/]*')).join('.*') + '$');
-        if (!allArr.some((a) => re.test(a))) errors.push('task ' + t.id + ': files glob matches NOTHING in the tree (invented folder?): ' + f);
+        if (!allArr.some((a) => re.test(a))) {
+          const zone = f.replace(/\/?\*+.*$/, '');
+          const tail = zone.split('/').slice(-2).join('/');
+          if (zone && (created.includes(zone) || created.includes(tail))) warnings.push('task ' + t.id + ': new zone (named in steps/notes): ' + f);
+          else errors.push('task ' + t.id + ': files glob matches NOTHING in the tree and the zone is not named in steps/notes (invented folder?): ' + f);
+        }
       } else if (!all.has(f)) {
         if (created.includes(f.split('/').pop())) warnings.push('task ' + t.id + ': new file (named in steps/notes): ' + f);
         else errors.push('task ' + t.id + ': file does not exist in the tree and is not declared as created: ' + f);
