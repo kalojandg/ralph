@@ -34,6 +34,113 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+### Task 8410 — docs: Character tab, three.js 0.186, lab-ui character stage, packs bootstrap (2026-11-22)
+
+**Repo:** rwclab · **Commits:** 7976ad6, eb1528d
+
+**README.md:**
+- New section "The Character tab (board 8)": Actors 0.37.4 (MIT, lazy chunk), three.js 0.186.1 / @types/three / three-mesh-bvh 0.9.18, vendored three libs and three-stl-loader removed; the pack (544 MB, `rwc-packs` volume, `scripts\packs-bootstrap.cmd`, served by aws-http at `http://127.0.0.1:45284/packs/human/`, never in git); controls; Add to plate (binary STL in mm, feet at y = 0, no hair, `character-<race>-<outfit>.stl`, uploaded like a dropped file); not persisted yet (board 9); licence and CC-BY credits.
+- Gates: be-smoke 8 checks incl. the packs manifest; lab-ui 9 stages, new `character` stage row (timing still measured for the 8 earlier stages).
+- Local stack: packs bootstrap step; port 45284 row mentions `/packs/`.
+
+**PLAN.md:** Board 8 done 2026-11-22; Board 9 as the next line (character config in the project metadata, manifold union of garments, animation preview).
+
+**Retry fix:** the bootstrap path had lost its backslash (`scriptspacks-bootstrap.cmd`) and is now `scripts\packs-bootstrap.cmd`.
+
+**Verify:** `scripts\gate\no-external-hosts.cmd` OK. The default gate is left to the orchestrator.
+
+
+## Task #8310 - lab-ui character stage (retry 6)
+
+**Status:** done (commit 26657ee)
+
+**Gate failure:** `timeout (60.0 s): autoLayout result in GET api/local-realtime/platform-job-logs/<id>`.
+
+**Root cause:** the stage filtered log objects by `l.algorithm` / `l.status` / `l.errorCode`, but the local realtime catch-up returns the AppSync field names `ALGORITHM` / `STATUS` / `ERROR_CODE` (`app/backend/DTOs/Models/Local/LocalPlatformJobLog.cs`). Nothing ever matched. Also, the worker (`workers/algorithms/src/steps/platform-process.mjs`) emits `autoLayout` only when the message has `runAutoLayout && individualModelsUpdated`, so waiting for autoLayout specifically could time out even with the right keys.
+
+**Fix (`scripts/gate/lab-ui-stages/80-character.mjs`, step 4b):**
+- Poll until the latest `platformProcessing` log is terminal (not 102) and the log count has been stable for 3 s (60 s budget).
+- Trace the full `ALGORITHM:STATUS/ERROR_CODE` list.
+- `platformProcessing` >= 400 is a problem.
+- `autoLayout` when present: 200 passes. 400 `MODELS_DO_NOT_FIT_BUILD_PLATE` (life-size figure in mm on the 182x103 mm SLA plate) is expected, and its "Auto Layout Failed!" modal is dismissed. Anything else is a problem.
+- When absent, the stage notes "not requested".
+
+**Verify:** `node --check` and a module import pass. The lab-ui gate is left to the orchestrator.
+
+**Out of scope (earlier commit 6e0c147, kept):** platform-setup.component.html/.spec.ts, platform-model-list.component.ts/.spec.ts.
+
+
+### Task #8210 - Character tab (frontend)
+
+- **c0acf10**: `PlatformSetupTab.Character = 3` and a third drawer tab with `CharacterPanelComponent`, which only uses the `CharacterService` API. Controls: race and mix, body type, body and shape sliders, skin tone, hair and colour, outfit preset, pose clip and time. Add to plate bakes the STL, adds it to the store as a dropped file and switches to the Model list. i18n keys are in all 5 languages.
+- **a2ae743 (retry fix)**: the gate failed only on `core/enums/renderer-enums.spec.ts`, whose enum pin was stale (2 tabs). The pin is now `[1, 2, 3]` with length 3. This file was outside the task's files list (scope escalation).
+- **Verify:** `fe-test "renderer-enums|platform-setup"` 74/74 green. The earlier attempt ran character-panel and platform-setup specs, fe-typecheck, fe-build ci, no-external-hosts and i18n-orphans. The full fe-test is left to the gate.
+
+
+## Task #8110 - feat(frontend): CharacterService drives an Actors character in the renderer scene (2026-11-22)
+
+**Repo:** rwclab (branch ralph/task-8110) - **Commit:** 511c043
+
+**What was done**
+- `core/services/character/character-engine.ts` (new): the engine seam. EngineCharacter / EngineConfig / EngineCatalog / CharacterEngine are local structural types. `CHARACTER_ENGINE` is a root token whose default is `loadActorsEngine`, a dynamic `import('@actors/generator')` + `import('@actors/human')`. Specs supply a fake engine through the token.
+- `character.service.ts`: the 8005 stub replaced by the real service; the contract is unchanged.
+  - The pack URL is `environment.packsBaseUrl + 'human/manifest.json'`, loaded with `clipLibraries: false` and `{ anatomy: false, animation: null }`, then dressed in `casual`.
+  - The character sits in a `character` group scaled x1000 (metres to mm).
+  - After every change: settle (`update(1/60)` twice), then re-ground with a precise Box3 so the lowest point is at y = 0.
+  - Changes run one at a time and `busy$` is true while one is applied. `load()` is idempotent and rejects without `attach()`. A failed load sets state 'error' and `error$`, and the next call tries again.
+  - `detach()` removes the character from the scene and disposes it. `bakeStl()` works only when ready and leaves out hair, brows, lashes and beards.
+- `core/helpers/common/stl-bake.ts` (new, pure): `bakeStl(root, { exclude, reground })` uses `getVertexPosition` (skinning + morphs) and `matrixWorld`, and writes a binary STL with the 'rwclab character' header. Also `stlTriangleCount`.
+- `environment.ts` / `environment.dev.ts`: `packsBaseUrl: 'http://127.0.0.1:45284/packs/'`. `environments.spec.ts` now allows 127.0.0.1:45284 and pins this value.
+- `renderer.component.ts`: `inject(CharacterService)`; `attach(scene, renderer)` right after `initRendering`, and `detach()` in `ngOnDestroy` before `disposeAll`.
+
+**Tests / gates**
+- RED: `fe-test "character.service|stl-bake|renderer.component|environments"` failed (modules missing, 4 failing tests).
+- GREEN: the same pattern run passed 4 suites, 117 tests.
+- `fe-typecheck` OK.
+- `fe-build ci` OK. Lazy chunks: actors-generator 832 kB + 364 kB, actors-three-webgpu 193 kB. main.js has no Actors code (grep).
+- `no-external-hosts` OK.
+- I did not run the full fe-test suite; the orchestrator gate runs it after merge.
+
+**Notes**
+- `stl-bake` ignores the root's own `visible` flag, so a character hidden in the scene can still be exported. Hidden child meshes are still skipped.
+- `load()` resolves (it does not reject) on an engine failure, so the panel reads the error from `state$` / `error$`.
+
+
+## Task 8010 - three.js 0.125 -> 0.186.1 (retry 1: fe-smoke fix)
+
+**Status:** done
+**Commits:** f0eda72 (migration, previous attempt), b395698 (fix)
+
+### What changed in this retry
+- Root cause of the red fe-smoke: the environment cube faces (`assets/images/lighting/*.png`) are 2000x2000. Since r131 three converts a CubeTexture envMap on MeshStandardMaterial into a PMREM sized from the face size: a 1024 cube with a ~3k x 4k blur target. Headless SwiftShader spent ~145 s on that at the first draw.
+- New `app/frontend/src/app/core/services/renderer/environment-cube.ts`: `loadEnvironmentCube()` loads the same six faces and downscales them to `ENV_CUBE_FACE_SIZE` = 256 px in the loader's onLoad, before the first upload or PMREM pass. `RendererComponent.loadEnvironmentLighting()` and `PlatformHelperObjectsService._initEnvMap()` both use it, which removes the duplicated URL lists. envMap stays on every Standard material, so the lighting look is kept.
+- New spec `environment-cube.spec.ts` covers face order, downscale and passthrough.
+
+### Verification
+- fe-typecheck: green. Spec tsc (`tsconfig.spec.json`): green.
+- Targeted jest (environment-cube, platform-helper-objects, renderer.component): 3 suites, 103 tests, green.
+- fe-build ci: green (1 min 39 s on a warm cache).
+- fe-smoke: PASS. Canvas at 15.8 s, 19 s total, 0 errors (it was over 90 s and FAIL before).
+- Not run: the full jest suite and lab-ui (left to the gate).
+
+
+## Task 8020 - feat(infra): the Actors human pack in the docker volume rwc-packs, served by aws-http
+
+- **Done:** scriptspacks-bootstrap.cmd (idempotent download of packs/human from the Actors v0.37.4 archive into volume rwc-packs; second run 1.5 s); docker-compose.yml: aws-http mounts rwc-packs read-only, nginx location /packs/ with CORS + types, label bumped to 4-packs, volume with fixed name rwc-packs (without name: compose prefixes it rwc_rwc-packs and the bootstrap's volume is not the served one); local-stack.cmd, be-smoke.cmd, lab-ui.cmd call the bootstrap; be-smoke.mjs check GET packs/human/manifest.json (200, ACAO, units).
+- **Verify:** compose-config.cmd OK; packs-bootstrap.cmd twice (download, then present); be-smoke.cmd 8/8 green incl. manifest (units: meters); curl -sI base.bin -> 200 application/octet-stream. lab-ui.cmd not run (not listed in verify).
+- **Commit:** f5ecd8d. No files outside the task list.
+
+
+## Task 8005 - feat(frontend): the character contract
+
+- **Repo:** rwclab (lane fe-character)
+- **Done:** created character-look.ts (CharacterState, CharacterBody, CharacterLook, DEFAULT_CHARACTER_LOOK), character-catalog-view.ts (CharacterChoice, CharacterSliderChoice, CharacterCatalogView) and character.service.ts (providedIn-root stub with the full public API per the contract; 8110 fills it), plus character.service.spec.ts (6 tests).
+- **TDD:** RED = module not found; GREEN = `scripts\gate\fe-test.cmd character.service` 6/6 passed.
+- **Not run:** fe-typecheck and the full suite (GATE NOTE: 8010 is rewriting three.js in the shared node_modules volume; left to the orchestrator gate).
+- **Scope:** only the four files in `files`; no module, renderer or barrel touched.
+- **Commit:** f6ae43e
+
+
 ### Task #7540 - docs: build plates are a technology plus a typed size; the SLA bracket is a centred head under the plate; the lab-ui plate stage row
 
 **Status:** done (retry 1, continuation)
@@ -6406,6 +6513,13 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
+
+
 
 
 
