@@ -1,205 +1,209 @@
 ﻿[
-  {
-    "id": 7510,
-    "category": "feat(frontend)",
-    "repo": "rwclab",
-    "lane": "fe-ui",
-    "model": "heavy",
-    "dependsOn": [],
-    "files": [
-      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.ts",
-      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.html",
-      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.scss",
-      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.spec.ts",
-      "app/frontend/src/app/core/store/actions/build-plate.actions.ts",
-      "app/frontend/src/app/core/store/effects/build-plate.effects.ts",
-      "app/frontend/src/app/core/store/effects/build-plate.effects.spec.ts",
-      "app/frontend/src/app/core/store/reducers/build-plate.reducers.ts",
-      "app/frontend/src/app/core/store/reducers/build-plate.reducers.spec.ts",
-      "app/frontend/src/app/core/store/states/build-plate.states.ts",
-      "app/frontend/src/app/core/store/states/print-list.states.ts",
-      "app/frontend/src/app/core/store/states/print-list.states.spec.ts",
-      "app/frontend/src/app/core/services/build-plate.service.ts",
-      "app/frontend/src/app/core/services/build-plate.service.spec.ts",
-      "app/frontend/src/app/core/models/print-list/build-plate.ts",
-      "app/frontend/src/assets/i18n/en.json",
-      "app/frontend/src/assets/i18n/de.json",
-      "app/frontend/src/assets/i18n/es.json",
-      "app/frontend/src/assets/i18n/fr.json",
-      "app/frontend/src/assets/i18n/it.json"
-    ],
-    "description": "feat(frontend): the build plate is the technology plus a typed width, depth and height - the fields start at the technology preset, a committed size selects the matching plate or creates it (POST api/build-plate) and the renderer scales; the size list, Custom size, Add and the delete list are gone",
-    "specRef": "rwclab-structure.md «Board 7» (7320 paragraph: what this replaces); README.md \"Build plates\" (the POST contract, unchanged)",
-    "tddWorkflow": true,
-    "notes": "USER (22.11.2026, after testing board 7): \"трябва да се избере тип плоча и после да се напишат числови стойности, за да се скалира, не както е направено\" - pick SLA/FDM, then type the numbers and the plate scales. Chosen shape: no preset list, no \"Custom size\" option, no Add button, no custom-plate list with delete icons.\nFACTS (HEAD 15d48e5): platform-print-setup.component.html:12-48 = step 1 `f-button-group[name=\"technology\"]` (KEEP as is) + step 2 `f-button-group[name=\"buildPlate\"]` with plateOptions + CUSTOM_SIZE_OPTION, the `customPlates` list with `.delete-plate[data-plate-id]`, and the `customSizeOpen` block with f-inputs customWidth/customDepth/customHeight + `.plate-size-range` + `.add-plate`. Component: `technology`, `plateOptions`, `customPlates`, `customSizeOpen`, `customSize`, `plateChoice` get/set, `customSizeValid`, `showPlateSizeRangeError`, `onTechnologyChange()` (:218), `addPlate()` (:227 dispatches BuildPlateActions.CreateBuildPlate with awaitingCreatedPlate = true), `deletePlate()`, `selectCreatedPlate(id)` (:318, sets model.buildPlateId from store createdPlateId when awaitingCreatedPlate), `syncTechnologyWithPlate()` (:292), `refreshPlateOptions()` (:301), `selectDefaultBuildPlateForNewProject()` (:278), `onPlatformDetailsChange()` (:262 dispatches SetCurrentPlatformJobModelAction(model) - THAT is what redraws the renderer: renderer.component.ts:313-320 subscribes getCurrentPlatformJobModel and calls setPlatform(), which resolves the plate by model.buildPlateId; isSameBuildPlate compares id AND dimensions). NEXT button html:115 `[disabled]=\"!applianceForm.valid || !model.buildPlateId\"`. Save of an open project: platform-setup.component.html:80 `[disabled]=\"!arePrintSettingsValid\"` from print-list.states.ts:125 `getArePrintSettingsValid = Boolean(model?.buildPlateId)`. Store: build-plate.states.ts (plates, loaded, creating, createdPlateId; selectors getCreatingBuildPlate/getCreatedBuildPlateId; `platesOfTechnology`), actions Get/Create/Delete (+Success/Failure), effects CreateBuildPlate$ (service.create = POST api/build-plate; the server returns the EXISTING plate with 200 for a duplicate technology+shape+size, 201 for a new one, 400 outside 10..1000 mm) and DeleteBuildPlate$, reducers, build-plate.service.ts create/delete. Presets (SprintRayContext.cs:92-96): 1 SLA 182.4 x 102.6 x 200, 2 SLA 128 x 80 x 150, 3 FDM 220 x 220 x 250; `isPreset` true for them. i18n keys (en.json:952-962, 1861-1862; the same keys exist in de/es/fr/it): general.technology/sla/fdm/plateSize/customSize/widthMm/depthMm/heightMm/addPlate/deletePlate, messages.plateInUse/plateSizeRange. `scripts/i18n-orphans.mjs` lists orphaned keys.\nDO (template): step 1 technology unchanged. Step 2 (`*ngIf=\"technology\"`): three `f-input` number fields named `plateWidth`, `plateDepth`, `plateHeight` (labels general.widthMm/depthMm/heightMm, theme dark, same look as the old custom-size inputs), each with `[ngModelOptions]=\"{ updateOn: 'blur' }\"` so a size is COMMITTED when the field is left (Tab/Enter/click), not per keystroke (otherwise every intermediate value such as \"20\" while typing \"200\" would become a plate record); `.plate-size-range` error (messages.plateSizeRange) when a committed value is outside 10..1000; NO buildPlate button group, NO custom-plates list, NO Add button. NEXT: `[disabled]=\"!applianceForm.valid || !model.buildPlateId || !sizeValid || creatingPlate\"`.\nDO (component): state = `technology` + `size: { widthMm, depthMm, heightMm }`. `onTechnologyChange()`: size := the FIRST preset of that technology (platesOfTechnology(...)[0], isPreset) unless the open project's plate already has that technology (then its dimensions); then `commitSize()`. `commitSize()` (called by ngModelChange of each field, i.e. on blur, and after a technology change): if !sizeValid -> show the range error, do nothing else; else find a plate in `buildPlates` with the same technology, shape Rectangle and widthMm/depthMm/heightMm (compare as numbers) -> `model.buildPlateId = plate.id` + `onPlatformDetailsChange()` (renderer redraws, autoLayout flag as onBuildPlateChange does today); none -> `awaitingCreatedPlate = true` + dispatch CreateBuildPlate({ technology, widthMm, depthMm, heightMm, shape: 'Rectangle' }); keep `selectCreatedPlate(id)` exactly as the hand-over to model.buildPlateId + onPlatformDetailsChange() (the reducer already appends the created plate to `plates`, so the next commit of the same size finds it). Opening a project / a new project: `syncTechnologyWithPlate()` sets technology AND size from the selected plate (new project: plate 1 as today via selectDefaultBuildPlate). Delete: `plateChoice`, `plateOptions`, `customPlates`, `customSizeOpen`, `customSize`, `CUSTOM_SIZE_OPTION`, `addPlate()`, `deletePlate()`, `refreshPlateOptions()`, `unselectRemovedPlate()` if only the delete path used it.\nDO (store/service): delete the FE delete path, because nothing in the UI deletes a plate any more: actions DeleteBuildPlate/Success/Failure, effect DeleteBuildPlate$, reducer cases, `BuildPlateService.delete`, their specs. The BACKEND `DELETE api/build-plate/{id}` STAYS (lab-pipeline uses it; not in this task). `getArePrintSettingsValid` (print-list.states.ts:125) becomes `Boolean(model?.buildPlateId) && !creating` with `BuildPlateSelectors.getCreatingBuildPlate` as a second input, so the Save button of an open project waits for the POST (spec in print-list.states.spec.ts). Model: `BuildPlateInput` unchanged.\nDO (i18n, all five locale files): delete general.plateSize, general.customSize, general.addPlate, general.deletePlate, messages.plateInUse; keep technology/sla/fdm/widthMm/depthMm/heightMm/plateSizeRange. Run `node scripts/i18n-orphans.mjs` and list the orphans in the commit body.\nRED first (platform-print-setup.component.spec.ts, the existing plate tests are REWRITTEN, not kept: they assert the size group / Custom size / Add / delete that this task removes): (a) choosing FDM fills 220/220/250 and selects plate 3 (model.buildPlateId = 3, SetCurrentPlatformJobModelAction dispatched); (b) committing 200/150/180 with no such plate dispatches CreateBuildPlate with that body and, when createdPlateId arrives, model.buildPlateId is the new id and the model action is dispatched; (c) committing 128/80/150 on SLA selects plate 2 without any POST; (d) a value of 5 shows the range error and dispatches nothing; (e) an opened project with plate 3 shows FDM and 220/220/250; (f) no `.delete-plate`, no `[name=\"buildPlate\"]` in the DOM. Reducer/effect specs without delete. print-list.states.spec: valid is false while creating. Then GREEN: fe-typecheck, fe-test (pattern + full), fe-build ci, no-external-hosts. The lab-ui `plate` stage is rewritten by 7530 (it asserts the old flow and is red after this task by design; do not run it here).\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY), aws-http (HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data SHARED by every worktree), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start, LocalDatabaseBootstrap), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd (dotnet build Backend.sln), be-test.cmd [filter] (dotnet test Tests), be-smoke.cmd (compose up --build + the start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd, lab-pipeline.cmd [create metadata logs edit delete] (REST pipeline, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; fe-build ci first; stages load banner upload accordion export projects pending-form run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts, frontend in node:22-bookworm. Never run npm/dotnet directly on the host for gates. The full-stack gates (be-smoke, lab-pipeline, lab-ui) recreate the SHARED compose containers from your worktree: run them only where the task lists them.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS; never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no \"for later\"; i18n keys you orphan are listed in the commit body and deleted in the same task when they are in your files). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If a change is needed outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you.",
-    "steps": [
-      {
-        "id": "7510.1",
-        "phase": "RECON",
-        "action": "Read platform-print-setup.component.{html,ts,spec.ts} (the whole plate section and its tests), build-plate.{actions,effects,reducers,states,service}.ts + specs, print-list.states.ts:120-130, renderer.component.ts:300-322 and :537-545 (how a buildPlateId change redraws), the five i18n files, scripts/i18n-orphans.mjs."
-      },
-      {
-        "id": "7510.2",
-        "phase": "RED",
-        "action": "Rewrite the plate tests of platform-print-setup.component.spec.ts to the typed-size flow (a-f in notes), reducer/effect/service specs without the delete path, print-list.states.spec creating case; scripts\\gate\\fe-test.cmd \"platform-print-setup|build-plate|print-list.states\" - RED for the right reasons."
-      },
-      {
-        "id": "7510.3",
-        "phase": "GREEN",
-        "action": "Template + component + store + i18n as in notes; scripts\\gate\\fe-typecheck.cmd, scripts\\gate\\fe-test.cmd (pattern, then full), scripts\\gate\\fe-build.cmd ci, scripts\\gate\\no-external-hosts.cmd GREEN; node scripts/i18n-orphans.mjs clean for the deleted keys."
-      },
-      {
-        "id": "7510.4",
-        "phase": "DONE",
-        "action": "Commit (description verbatim); body: the new flow, the deleted symbols/keys, why the FE delete path is gone and the BE DELETE stays."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "scripts\\gate\\fe-typecheck.cmd",
-      "scripts\\gate\\fe-test.cmd",
-      "scripts\\gate\\fe-build.cmd ci",
-      "scripts\\gate\\no-external-hosts.cmd"
-    ]
-  },
-  {
-    "id": 7520,
-    "category": "fix(renderer)",
-    "repo": "rwclab",
-    "lane": "fe-renderer",
-    "model": "easy",
-    "dependsOn": [],
-    "files": [
-      "app/frontend/src/app/core/helpers/common/build-plate-geometry.ts",
-      "app/frontend/src/app/core/helpers/common/build-plate-geometry.spec.ts",
-      "app/frontend/src/app/core/services/renderer/platform-helper-objects.service.ts",
-      "app/frontend/src/app/core/services/renderer/platform-helper-objects.service.spec.ts"
-    ],
-    "description": "fix(renderer): the SLA mounting bracket is a centred head under the plate (the platform is used upside down, like a bed) instead of a vertical arm behind the back edge; FDM keeps no bracket",
-    "specRef": "rwclab-structure.md «Board 7» (7330 paragraph: what this corrects)",
-    "tddWorkflow": true,
-    "notes": "USER (22.11.2026, screenshot after board 7): the arm (40 % of the plate width, 8 mm thick, 0.6 x heightMm tall, behind the back edge) looked like a second plate at a right angle (\"защо има 2 под прав ъгъл?\"); the real SLA platform hangs from the Z mechanism with the models underneath, but the user keeps the plate at the bottom and uses it like an FDM bed, so: \"плочата може пак да си е отдолу, но тогава скобата за хващане трябва да е ОТДОЛУ\" - a centred mounting head UNDER the plate, nothing above the printing surface. FDM has no bracket (already null in code: the bracket the user saw on FDM was plate 1 (SLA) drawn while buildPlateId was null between the technology and size steps - fixed by 7510, not here).\nFACTS: build-plate-geometry.ts `bracketLayout(plate)` returns `{ arm, mount }` BracketParts (box size + centre) or null for non-Sla; constants bracketArmDepth 8, bracketGap 1, bracketMountHeight 20, bracketMountDepth 30; `plateBodyThickness` SLA 6 / FDM 10; the body mesh sits at y in [-thickness, 0] (platform-helper-objects.service.ts:172-186), the printing surface is y = 0. `_createBracket` (:189-210) builds a Group named \"bracket\" with children named after the layout keys (\"arm\", \"mount\"), material PlatformLook.bracket, a scene SIBLING of the plate group (never in the raycast group), hidden/shown with the plate in show() (:44-78). Specs: build-plate-geometry.spec.ts (bracket tests: behind the back edge, above y = 0, null for Fdm) and platform-helper-objects.service.spec.ts (children arm/mount, outside the footprint).\nDO: `bracketLayout` returns `{ head, stem }` for Sla, null otherwise. head = box centred at (0, -thickness - headHeight / 2, 0), width = depth = 0.3 x min(widthMm, depthMm) (Circle: 0.3 x diameter), height 20 mm; stem = box centred under the head at (0, -thickness - 20 - stemHeight / 2, 0), width = depth = 0.4 x head width, height 15 mm (the rod that goes to the mechanism). Both lie INSIDE the footprint in x/z and entirely BELOW the plate body (max y = -thickness). Rename the children to \"head\"/\"stem\", keep the group name \"bracket\", the material, the sibling placement and the show/hide logic. Delete the arm constants and the back-edge comment. Nothing changes for the printing surface, grid, walls or bounds.\nRED first: geometry spec - for Sla the layout has head and stem, both centred at x = 0, z = 0, both with max y <= -plateBodyThickness, both within +-widthMm/2 and +-depthMm/2, head 20 mm tall and stem under it; the old \"behind the back edge\" and \"above y = 0\" assertions are replaced; Fdm and no technology -> null. Service spec - the bracket group has children named head and stem, no arm; a Fdm plate has no bracket; the raycast group (`getCurrentPlatform`) does not contain the bracket. scripts\\gate\\fe-test.cmd \"build-plate-geometry|platform-helper-objects\" RED, then GREEN + fe-typecheck + the full fe-test.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY), aws-http (HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data SHARED by every worktree), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start, LocalDatabaseBootstrap), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd (dotnet build Backend.sln), be-test.cmd [filter] (dotnet test Tests), be-smoke.cmd (compose up --build + the start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd, lab-pipeline.cmd [create metadata logs edit delete] (REST pipeline, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; fe-build ci first; stages load banner upload accordion export projects pending-form run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts, frontend in node:22-bookworm. Never run npm/dotnet directly on the host for gates. The full-stack gates (be-smoke, lab-pipeline, lab-ui) recreate the SHARED compose containers from your worktree: run them only where the task lists them.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS; never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no \"for later\"; i18n keys you orphan are listed in the commit body and deleted in the same task when they are in your files). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If a change is needed outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you.",
-    "steps": [
-      {
-        "id": "7520.1",
-        "phase": "RECON",
-        "action": "Read build-plate-geometry.ts (bracketLayout + constants), platform-helper-objects.service.ts:40-78 and :157-211, both spec files (the bracket tests)."
-      },
-      {
-        "id": "7520.2",
-        "phase": "RED",
-        "action": "Replace the bracket tests in both specs with head/stem under the plate, centred, inside the footprint; null / no bracket for Fdm; scripts\\gate\\fe-test.cmd \"build-plate-geometry|platform-helper-objects\" - RED."
-      },
-      {
-        "id": "7520.3",
-        "phase": "GREEN",
-        "action": "bracketLayout head/stem + _createBracket children renamed; scripts\\gate\\fe-typecheck.cmd + scripts\\gate\\fe-test.cmd \"build-plate-geometry|platform-helper-objects\" + scripts\\gate\\fe-test.cmd (full) GREEN."
-      },
-      {
-        "id": "7520.4",
-        "phase": "DONE",
-        "action": "Commit (description verbatim); body: the user finding (two plates at a right angle, bracket must be under the plate), the new layout numbers."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "scripts\\gate\\fe-typecheck.cmd",
-      "scripts\\gate\\fe-test.cmd \"build-plate-geometry|platform-helper-objects\""
-    ]
-  },
-  {
-    "id": 7530,
-    "category": "test(gate)",
-    "repo": "rwclab",
-    "lane": "gate",
-    "model": "heavy",
-    "dependsOn": [
-      7510,
-      7520
-    ],
-    "files": [
-      "scripts/gate/lab-ui-stages/70-plate.mjs"
-    ],
-    "description": "test(gate): the lab-ui plate stage types the size - FDM starts at 220/220/250, a committed 200/150/180 creates the plate (POST api/build-plate) and the saved project reports it, SLA 128/80/150 selects the preset without a POST",
-    "specRef": "README.md \"lab-ui stages\" table (row plate, rewritten by 7540)",
-    "tddWorkflow": false,
-    "notes": "FACTS: scripts/gate/lab-ui-stages/70-plate.mjs (board 7, 290 lines) drives the OLD flow: `f-button-group[name=\"buildPlate\"]` Custom size, f-input customWidth/customDepth/customHeight, `.add-plate`, `.delete-plate[data-plate-id]`, DELETE 409 toast, Previous projects delete, DELETE 204. After 7510 none of those exist, so the stage is red by design until this task. Keep its helpers (stubToken copy, apiGet, boxStlAscii, until, chooseFdm, the New-project start, the upload and the print-details read) and the module contract ({ name, description, run(ctx), fatal? }, ctx fields in the header of scripts/gate/lab-ui.mjs; `_ctx.mjs` has BANNER/S3/secs/short). lab-ui.cmd header already lists `plate`; do not touch it.\nDO (new body of run): New -> technology FDM (`f-button-group[name=\"technology\"]` button /fdm/i) -> the three inputs `f-input[name=\"plateWidth\"] input`, `[name=\"plateDepth\"] input`, `[name=\"plateHeight\"] input` show 220 / 220 / 250 (the FDM preset; assert the values) -> fill 200, 150, 180 and commit each with Tab (updateOn blur) -> expect a POST api/build-plate with body { technology: \"Fdm\", widthMm: 200, depthMm: 150, heightMm: 180, shape: \"Rectangle\" } answering 201 (or 200 when a previous run left the plate) -> GET api/build-plate contains that plate -> NEXT -> upload box20.stl (as today) -> POST api/platform-job 200, 1 `app-platform-model-list print-list-item` -> GET api/platform-job/{id}/platform-metadata-print-details shows buildPlateWidthMm \"200\" (as today). Then the preset path: New (confirm as the existing code does) -> SLA -> inputs show 182.4 / 102.6 / 200 -> fill 128, 80, 150 with Tab -> NO POST api/build-plate within 3 s (count the requests) and the renderer canvas is still there. Also assert: no `.delete-plate`, no `[name=\"buildPlate\"]` in the DOM; a value 5 in plateWidth shows `.plate-size-range` and no POST; 0 pageerror / NG0 as today. Clean-up: delete the created project in Previous projects as the stage does today (the plate record stays: harmless, invisible). Update the `description` export to the new steps.\nVERIFY: scripts\\gate\\lab-ui.cmd plate (builds the app from your worktree and recreates the shared stack) - run it ONLY as the task verify at the end, once; then the full scripts\\gate\\lab-ui.cmd.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY), aws-http (HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data SHARED by every worktree), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start, LocalDatabaseBootstrap), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd (dotnet build Backend.sln), be-test.cmd [filter] (dotnet test Tests), be-smoke.cmd (compose up --build + the start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd, lab-pipeline.cmd [create metadata logs edit delete] (REST pipeline, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; fe-build ci first; stages load banner upload accordion export projects pending-form run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts, frontend in node:22-bookworm. Never run npm/dotnet directly on the host for gates. The full-stack gates (be-smoke, lab-pipeline, lab-ui) recreate the SHARED compose containers from your worktree: run them only where the task lists them.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS; never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no \"for later\"; i18n keys you orphan are listed in the commit body and deleted in the same task when they are in your files). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If a change is needed outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you.",
-    "steps": [
-      {
-        "id": "7530.1",
-        "phase": "RECON",
-        "action": "Read scripts/gate/lab-ui-stages/70-plate.mjs, 30-upload.mjs and 65-pending-form.mjs (helpers to reuse), the header of scripts/gate/lab-ui.mjs, the merged platform-print-setup.component.html (input names) from 7510."
-      },
-      {
-        "id": "7530.2",
-        "phase": "RED",
-        "action": "The old stage is red against the merged tree by construction (no buildPlate group); note it, no extra red run needed."
-      },
-      {
-        "id": "7530.3",
-        "phase": "GREEN",
-        "action": "Rewrite the stage body as in notes; scripts\\gate\\lab-ui.cmd plate GREEN, then scripts\\gate\\lab-ui.cmd (all stages) GREEN."
-      },
-      {
-        "id": "7530.4",
-        "phase": "DONE",
-        "action": "Commit (description verbatim); body: the new assertions and the timings."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "scripts\\gate\\lab-ui.cmd"
-    ]
-  },
-  {
-    "id": 7540,
-    "category": "docs",
-    "repo": "rwclab",
-    "lane": "docs",
-    "model": "easy",
-    "dependsOn": [
-      7530
-    ],
-    "files": [
-      "README.md",
-      "PLAN.md"
-    ],
-    "description": "docs: build plates are a technology plus a typed size; the SLA bracket is a centred head under the plate; the lab-ui plate stage row",
-    "specRef": "README.md:26, :124; PLAN.md:72",
-    "tddWorkflow": false,
-    "notes": "FACTS: README.md:26 describes the board-7 flow (two steps, preset or custom size saved as a new plate, unused custom plates deletable, SLA plate with a bracket at its back edge); README.md:124 is the `plate` row of the lab-ui stages table (Custom size, Add, DELETE 409/204); PLAN.md:72 mentions the same in Bulgarian. 7510/7520/7530 changed: the size is typed (fields start at the technology preset, commit on blur selects the matching plate or POSTs a new one; the FE has no delete; `DELETE api/build-plate/{id}` still exists and lab-pipeline still uses it), the SLA bracket is a centred head + stem under the plate, FDM has none, the stage flow is the one in the 7530 description.\nDO: rewrite those three places (and any other README/PLAN sentence that says \"Custom size\", \"Add\", \"delete icon\", \"back edge\", \"hanging\"); keep the \"Build plates\" contract section (POST/DELETE) as the server still has both. Nothing else changes. Then the full gate set as verify.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY), aws-http (HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data SHARED by every worktree), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start, LocalDatabaseBootstrap), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd (dotnet build Backend.sln), be-test.cmd [filter] (dotnet test Tests), be-smoke.cmd (compose up --build + the start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd, lab-pipeline.cmd [create metadata logs edit delete] (REST pipeline, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; fe-build ci first; stages load banner upload accordion export projects pending-form run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts, frontend in node:22-bookworm. Never run npm/dotnet directly on the host for gates. The full-stack gates (be-smoke, lab-pipeline, lab-ui) recreate the SHARED compose containers from your worktree: run them only where the task lists them.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS; never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no \"for later\"; i18n keys you orphan are listed in the commit body and deleted in the same task when they are in your files). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If a change is needed outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you.",
-    "steps": [
-      {
-        "id": "7540.1",
-        "phase": "RECON",
-        "action": "grep README.md and PLAN.md for Custom size, Add, delete, back edge, hanging, bracket; read the merged 7510/7520/7530 commit bodies."
-      },
-      {
-        "id": "7540.2",
-        "phase": "RED",
-        "action": "n/a (docs)."
-      },
-      {
-        "id": "7540.3",
-        "phase": "GREEN",
-        "action": "Rewrite the sentences; run the verify set."
-      },
-      {
-        "id": "7540.4",
-        "phase": "DONE",
-        "action": "Commit (description verbatim)."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "scripts\\gate\\fe-typecheck.cmd",
-      "scripts\\gate\\fe-test.cmd",
-      "scripts\\gate\\fe-build.cmd ci",
-      "scripts\\gate\\no-external-hosts.cmd",
-      "scripts\\gate\\be-build.cmd",
-      "scripts\\gate\\be-test.cmd",
-      "scripts\\gate\\lab-pipeline.cmd",
-      "scripts\\gate\\lab-ui.cmd"
-    ]
-  }
+    {
+        "id":  7510,
+        "category":  "feat(frontend)",
+        "repo":  "rwclab",
+        "lane":  "fe-ui",
+        "model":  "heavy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.ts",
+                      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.html",
+                      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.scss",
+                      "app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.spec.ts",
+                      "app/frontend/src/app/core/store/actions/build-plate.actions.ts",
+                      "app/frontend/src/app/core/store/effects/build-plate.effects.ts",
+                      "app/frontend/src/app/core/store/effects/build-plate.effects.spec.ts",
+                      "app/frontend/src/app/core/store/reducers/build-plate.reducers.ts",
+                      "app/frontend/src/app/core/store/reducers/build-plate.reducers.spec.ts",
+                      "app/frontend/src/app/core/store/states/build-plate.states.ts",
+                      "app/frontend/src/app/core/store/states/print-list.states.ts",
+                      "app/frontend/src/app/core/store/states/print-list.states.spec.ts",
+                      "app/frontend/src/app/core/services/build-plate.service.ts",
+                      "app/frontend/src/app/core/services/build-plate.service.spec.ts",
+                      "app/frontend/src/app/core/models/print-list/build-plate.ts",
+                      "app/frontend/src/assets/i18n/en.json",
+                      "app/frontend/src/assets/i18n/de.json",
+                      "app/frontend/src/assets/i18n/es.json",
+                      "app/frontend/src/assets/i18n/fr.json",
+                      "app/frontend/src/assets/i18n/it.json"
+                  ],
+        "description":  "feat(frontend): the build plate is the technology plus a typed width, depth and height - the fields start at the technology preset, a committed size selects the matching plate or creates it (POST api/build-plate) and the renderer scales; the size list, Custom size, Add and the delete list are gone",
+        "specRef":  "rwclab-structure.md «Board 7» (7320 paragraph: what this replaces); README.md \"Build plates\" (the POST contract, unchanged)",
+        "tddWorkflow":  true,
+        "notes":  "USER (22.11.2026, after testing board 7): \"трябва да се избере тип плоча и после да се напишат числови стойности, за да се скалира, не както е направено\" - pick SLA/FDM, then type the numbers and the plate scales. Chosen shape: no preset list, no \"Custom size\" option, no Add button, no custom-plate list with delete icons.\nFACTS (HEAD 15d48e5): platform-print-setup.component.html:12-48 = step 1 `f-button-group[name=\"technology\"]` (KEEP as is) + step 2 `f-button-group[name=\"buildPlate\"]` with plateOptions + CUSTOM_SIZE_OPTION, the `customPlates` list with `.delete-plate[data-plate-id]`, and the `customSizeOpen` block with f-inputs customWidth/customDepth/customHeight + `.plate-size-range` + `.add-plate`. Component: `technology`, `plateOptions`, `customPlates`, `customSizeOpen`, `customSize`, `plateChoice` get/set, `customSizeValid`, `showPlateSizeRangeError`, `onTechnologyChange()` (:218), `addPlate()` (:227 dispatches BuildPlateActions.CreateBuildPlate with awaitingCreatedPlate = true), `deletePlate()`, `selectCreatedPlate(id)` (:318, sets model.buildPlateId from store createdPlateId when awaitingCreatedPlate), `syncTechnologyWithPlate()` (:292), `refreshPlateOptions()` (:301), `selectDefaultBuildPlateForNewProject()` (:278), `onPlatformDetailsChange()` (:262 dispatches SetCurrentPlatformJobModelAction(model) - THAT is what redraws the renderer: renderer.component.ts:313-320 subscribes getCurrentPlatformJobModel and calls setPlatform(), which resolves the plate by model.buildPlateId; isSameBuildPlate compares id AND dimensions). NEXT button html:115 `[disabled]=\"!applianceForm.valid || !model.buildPlateId\"`. Save of an open project: platform-setup.component.html:80 `[disabled]=\"!arePrintSettingsValid\"` from print-list.states.ts:125 `getArePrintSettingsValid = Boolean(model?.buildPlateId)`. Store: build-plate.states.ts (plates, loaded, creating, createdPlateId; selectors getCreatingBuildPlate/getCreatedBuildPlateId; `platesOfTechnology`), actions Get/Create/Delete (+Success/Failure), effects CreateBuildPlate$ (service.create = POST api/build-plate; the server returns the EXISTING plate with 200 for a duplicate technology+shape+size, 201 for a new one, 400 outside 10..1000 mm) and DeleteBuildPlate$, reducers, build-plate.service.ts create/delete. Presets (SprintRayContext.cs:92-96): 1 SLA 182.4 x 102.6 x 200, 2 SLA 128 x 80 x 150, 3 FDM 220 x 220 x 250; `isPreset` true for them. i18n keys (en.json:952-962, 1861-1862; the same keys exist in de/es/fr/it): general.technology/sla/fdm/plateSize/customSize/widthMm/depthMm/heightMm/addPlate/deletePlate, messages.plateInUse/plateSizeRange. `scripts/i18n-orphans.mjs` lists orphaned keys.\nDO (template): step 1 technology unchanged. Step 2 (`*ngIf=\"technology\"`): three `f-input` number fields named `plateWidth`, `plateDepth`, `plateHeight` (labels general.widthMm/depthMm/heightMm, theme dark, same look as the old custom-size inputs), each with `[ngModelOptions]=\"{ updateOn: \u0027blur\u0027 }\"` so a size is COMMITTED when the field is left (Tab/Enter/click), not per keystroke (otherwise every intermediate value such as \"20\" while typing \"200\" would become a plate record); `.plate-size-range` error (messages.plateSizeRange) when a committed value is outside 10..1000; NO buildPlate button group, NO custom-plates list, NO Add button. NEXT: `[disabled]=\"!applianceForm.valid || !model.buildPlateId || !sizeValid || creatingPlate\"`.\nDO (component): state = `technology` + `size: { widthMm, depthMm, heightMm }`. `onTechnologyChange()`: size := the FIRST preset of that technology (platesOfTechnology(...)[0], isPreset) unless the open project\u0027s plate already has that technology (then its dimensions); then `commitSize()`. `commitSize()` (called by ngModelChange of each field, i.e. on blur, and after a technology change): if !sizeValid -\u003e show the range error, do nothing else; else find a plate in `buildPlates` with the same technology, shape Rectangle and widthMm/depthMm/heightMm (compare as numbers) -\u003e `model.buildPlateId = plate.id` + `onPlatformDetailsChange()` (renderer redraws, autoLayout flag as onBuildPlateChange does today); none -\u003e `awaitingCreatedPlate = true` + dispatch CreateBuildPlate({ technology, widthMm, depthMm, heightMm, shape: \u0027Rectangle\u0027 }); keep `selectCreatedPlate(id)` exactly as the hand-over to model.buildPlateId + onPlatformDetailsChange() (the reducer already appends the created plate to `plates`, so the next commit of the same size finds it). Opening a project / a new project: `syncTechnologyWithPlate()` sets technology AND size from the selected plate (new project: plate 1 as today via selectDefaultBuildPlate). Delete: `plateChoice`, `plateOptions`, `customPlates`, `customSizeOpen`, `customSize`, `CUSTOM_SIZE_OPTION`, `addPlate()`, `deletePlate()`, `refreshPlateOptions()`, `unselectRemovedPlate()` if only the delete path used it.\nDO (store/service): delete the FE delete path, because nothing in the UI deletes a plate any more: actions DeleteBuildPlate/Success/Failure, effect DeleteBuildPlate$, reducer cases, `BuildPlateService.delete`, their specs. The BACKEND `DELETE api/build-plate/{id}` STAYS (lab-pipeline uses it; not in this task). `getArePrintSettingsValid` (print-list.states.ts:125) becomes `Boolean(model?.buildPlateId) \u0026\u0026 !creating` with `BuildPlateSelectors.getCreatingBuildPlate` as a second input, so the Save button of an open project waits for the POST (spec in print-list.states.spec.ts). Model: `BuildPlateInput` unchanged.\nDO (i18n, all five locale files): delete general.plateSize, general.customSize, general.addPlate, general.deletePlate, messages.plateInUse; keep technology/sla/fdm/widthMm/depthMm/heightMm/plateSizeRange. Run `node scripts/i18n-orphans.mjs` and list the orphans in the commit body.\nRED first (platform-print-setup.component.spec.ts, the existing plate tests are REWRITTEN, not kept: they assert the size group / Custom size / Add / delete that this task removes): (a) choosing FDM fills 220/220/250 and selects plate 3 (model.buildPlateId = 3, SetCurrentPlatformJobModelAction dispatched); (b) committing 200/150/180 with no such plate dispatches CreateBuildPlate with that body and, when createdPlateId arrives, model.buildPlateId is the new id and the model action is dispatched; (c) committing 128/80/150 on SLA selects plate 2 without any POST; (d) a value of 5 shows the range error and dispatches nothing; (e) an opened project with plate 3 shows FDM and 220/220/250; (f) no `.delete-plate`, no `[name=\"buildPlate\"]` in the DOM. Reducer/effect specs without delete. print-list.states.spec: valid is false while creating. Then GREEN: fe-typecheck, fe-test (pattern + full), fe-build ci, no-external-hosts. The lab-ui `plate` stage is rewritten by 7530 (it asserts the old flow and is red after this task by design; do not run it here).\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY), aws-http (HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data SHARED by every worktree), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start, LocalDatabaseBootstrap), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd (dotnet build Backend.sln), be-test.cmd [filter] (dotnet test Tests), be-smoke.cmd (compose up --build + the start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd, lab-pipeline.cmd [create metadata logs edit delete] (REST pipeline, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; fe-build ci first; stages load banner upload accordion export projects pending-form run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts, frontend in node:22-bookworm. Never run npm/dotnet directly on the host for gates. The full-stack gates (be-smoke, lab-pipeline, lab-ui) recreate the SHARED compose containers from your worktree: run them only where the task lists them.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS; never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no \"for later\"; i18n keys you orphan are listed in the commit body and deleted in the same task when they are in your files). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If a change is needed outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you.",
+        "steps":  [
+                      {
+                          "id":  "7510.1",
+                          "phase":  "RECON",
+                          "action":  "Read platform-print-setup.component.{html,ts,spec.ts} (the whole plate section and its tests), build-plate.{actions,effects,reducers,states,service}.ts + specs, print-list.states.ts:120-130, renderer.component.ts:300-322 and :537-545 (how a buildPlateId change redraws), the five i18n files, scripts/i18n-orphans.mjs."
+                      },
+                      {
+                          "id":  "7510.2",
+                          "phase":  "RED",
+                          "action":  "Rewrite the plate tests of platform-print-setup.component.spec.ts to the typed-size flow (a-f in notes), reducer/effect/service specs without the delete path, print-list.states.spec creating case; scripts\\gate\\fe-test.cmd \"platform-print-setup|build-plate|print-list.states\" - RED for the right reasons."
+                      },
+                      {
+                          "id":  "7510.3",
+                          "phase":  "GREEN",
+                          "action":  "Template + component + store + i18n as in notes; scripts\\gate\\fe-typecheck.cmd, scripts\\gate\\fe-test.cmd (pattern, then full), scripts\\gate\\fe-build.cmd ci, scripts\\gate\\no-external-hosts.cmd GREEN; node scripts/i18n-orphans.mjs clean for the deleted keys."
+                      },
+                      {
+                          "id":  "7510.4",
+                          "phase":  "DONE",
+                          "action":  "Commit (description verbatim); body: the new flow, the deleted symbols/keys, why the FE delete path is gone and the BE DELETE stays."
+                      }
+                  ],
+        "passes":  false,
+        "verify":  [
+                       "scripts\\gate\\fe-typecheck.cmd",
+                       "scripts\\gate\\fe-test.cmd",
+                       "scripts\\gate\\fe-build.cmd ci",
+                       "scripts\\gate\\no-external-hosts.cmd"
+                   ]
+    },
+    {
+        "id":  7520,
+        "category":  "fix(renderer)",
+        "repo":  "rwclab",
+        "lane":  "fe-renderer",
+        "model":  "easy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "app/frontend/src/app/core/helpers/common/build-plate-geometry.ts",
+                      "app/frontend/src/app/core/helpers/common/build-plate-geometry.spec.ts",
+                      "app/frontend/src/app/core/services/renderer/platform-helper-objects.service.ts",
+                      "app/frontend/src/app/core/services/renderer/platform-helper-objects.service.spec.ts"
+                  ],
+        "description":  "fix(renderer): the SLA mounting bracket is a centred head under the plate (the platform is used upside down, like a bed) instead of a vertical arm behind the back edge; FDM keeps no bracket",
+        "specRef":  "rwclab-structure.md «Board 7» (7330 paragraph: what this corrects)",
+        "tddWorkflow":  true,
+        "notes":  "USER (22.11.2026, screenshot after board 7): the arm (40 % of the plate width, 8 mm thick, 0.6 x heightMm tall, behind the back edge) looked like a second plate at a right angle (\"защо има 2 под прав ъгъл?\"); the real SLA platform hangs from the Z mechanism with the models underneath, but the user keeps the plate at the bottom and uses it like an FDM bed, so: \"плочата може пак да си е отдолу, но тогава скобата за хващане трябва да е ОТДОЛУ\" - a centred mounting head UNDER the plate, nothing above the printing surface. FDM has no bracket (already null in code: the bracket the user saw on FDM was plate 1 (SLA) drawn while buildPlateId was null between the technology and size steps - fixed by 7510, not here).\nFACTS: build-plate-geometry.ts `bracketLayout(plate)` returns `{ arm, mount }` BracketParts (box size + centre) or null for non-Sla; constants bracketArmDepth 8, bracketGap 1, bracketMountHeight 20, bracketMountDepth 30; `plateBodyThickness` SLA 6 / FDM 10; the body mesh sits at y in [-thickness, 0] (platform-helper-objects.service.ts:172-186), the printing surface is y = 0. `_createBracket` (:189-210) builds a Group named \"bracket\" with children named after the layout keys (\"arm\", \"mount\"), material PlatformLook.bracket, a scene SIBLING of the plate group (never in the raycast group), hidden/shown with the plate in show() (:44-78). Specs: build-plate-geometry.spec.ts (bracket tests: behind the back edge, above y = 0, null for Fdm) and platform-helper-objects.service.spec.ts (children arm/mount, outside the footprint).\nDO: `bracketLayout` returns `{ head, stem }` for Sla, null otherwise. head = box centred at (0, -thickness - headHeight / 2, 0), width = depth = 0.3 x min(widthMm, depthMm) (Circle: 0.3 x diameter), height 20 mm; stem = box centred under the head at (0, -thickness - 20 - stemHeight / 2, 0), width = depth = 0.4 x head width, height 15 mm (the rod that goes to the mechanism). Both lie INSIDE the footprint in x/z and entirely BELOW the plate body (max y = -thickness). Rename the children to \"head\"/\"stem\", keep the group name \"bracket\", the material, the sibling placement and the show/hide logic. Delete the arm constants and the back-edge comment. Nothing changes for the printing surface, grid, walls or bounds.\nRED first: geometry spec - for Sla the layout has head and stem, both centred at x = 0, z = 0, both with max y \u003c= -plateBodyThickness, both within +-widthMm/2 and +-depthMm/2, head 20 mm tall and stem under it; the old \"behind the back edge\" and \"above y = 0\" assertions are replaced; Fdm and no technology -\u003e null. Service spec - the bracket group has children named head and stem, no arm; a Fdm plate has no bracket; the raycast group (`getCurrentPlatform`) does not contain the bracket. scripts\\gate\\fe-test.cmd \"build-plate-geometry|platform-helper-objects\" RED, then GREEN + fe-typecheck + the full fe-test.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY), aws-http (HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data SHARED by every worktree), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start, LocalDatabaseBootstrap), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd (dotnet build Backend.sln), be-test.cmd [filter] (dotnet test Tests), be-smoke.cmd (compose up --build + the start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd, lab-pipeline.cmd [create metadata logs edit delete] (REST pipeline, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; fe-build ci first; stages load banner upload accordion export projects pending-form run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts, frontend in node:22-bookworm. Never run npm/dotnet directly on the host for gates. The full-stack gates (be-smoke, lab-pipeline, lab-ui) recreate the SHARED compose containers from your worktree: run them only where the task lists them.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS; never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no \"for later\"; i18n keys you orphan are listed in the commit body and deleted in the same task when they are in your files). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If a change is needed outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you.",
+        "steps":  [
+                      {
+                          "id":  "7520.1",
+                          "phase":  "RECON",
+                          "action":  "Read build-plate-geometry.ts (bracketLayout + constants), platform-helper-objects.service.ts:40-78 and :157-211, both spec files (the bracket tests)."
+                      },
+                      {
+                          "id":  "7520.2",
+                          "phase":  "RED",
+                          "action":  "Replace the bracket tests in both specs with head/stem under the plate, centred, inside the footprint; null / no bracket for Fdm; scripts\\gate\\fe-test.cmd \"build-plate-geometry|platform-helper-objects\" - RED."
+                      },
+                      {
+                          "id":  "7520.3",
+                          "phase":  "GREEN",
+                          "action":  "bracketLayout head/stem + _createBracket children renamed; scripts\\gate\\fe-typecheck.cmd + scripts\\gate\\fe-test.cmd \"build-plate-geometry|platform-helper-objects\" + scripts\\gate\\fe-test.cmd (full) GREEN."
+                      },
+                      {
+                          "id":  "7520.4",
+                          "phase":  "DONE",
+                          "action":  "Commit (description verbatim); body: the user finding (two plates at a right angle, bracket must be under the plate), the new layout numbers."
+                      }
+                  ],
+        "passes":  true,
+        "verify":  [
+                       "scripts\\gate\\fe-typecheck.cmd",
+                       "scripts\\gate\\fe-test.cmd \"build-plate-geometry|platform-helper-objects\""
+                   ]
+    },
+    {
+        "id":  7530,
+        "category":  "test(gate)",
+        "repo":  "rwclab",
+        "lane":  "gate",
+        "model":  "heavy",
+        "dependsOn":  [
+                          7510,
+                          7520
+                      ],
+        "files":  [
+                      "scripts/gate/lab-ui-stages/70-plate.mjs"
+                  ],
+        "description":  "test(gate): the lab-ui plate stage types the size - FDM starts at 220/220/250, a committed 200/150/180 creates the plate (POST api/build-plate) and the saved project reports it, SLA 128/80/150 selects the preset without a POST",
+        "specRef":  "README.md \"lab-ui stages\" table (row plate, rewritten by 7540)",
+        "tddWorkflow":  false,
+        "notes":  "FACTS: scripts/gate/lab-ui-stages/70-plate.mjs (board 7, 290 lines) drives the OLD flow: `f-button-group[name=\"buildPlate\"]` Custom size, f-input customWidth/customDepth/customHeight, `.add-plate`, `.delete-plate[data-plate-id]`, DELETE 409 toast, Previous projects delete, DELETE 204. After 7510 none of those exist, so the stage is red by design until this task. Keep its helpers (stubToken copy, apiGet, boxStlAscii, until, chooseFdm, the New-project start, the upload and the print-details read) and the module contract ({ name, description, run(ctx), fatal? }, ctx fields in the header of scripts/gate/lab-ui.mjs; `_ctx.mjs` has BANNER/S3/secs/short). lab-ui.cmd header already lists `plate`; do not touch it.\nDO (new body of run): New -\u003e technology FDM (`f-button-group[name=\"technology\"]` button /fdm/i) -\u003e the three inputs `f-input[name=\"plateWidth\"] input`, `[name=\"plateDepth\"] input`, `[name=\"plateHeight\"] input` show 220 / 220 / 250 (the FDM preset; assert the values) -\u003e fill 200, 150, 180 and commit each with Tab (updateOn blur) -\u003e expect a POST api/build-plate with body { technology: \"Fdm\", widthMm: 200, depthMm: 150, heightMm: 180, shape: \"Rectangle\" } answering 201 (or 200 when a previous run left the plate) -\u003e GET api/build-plate contains that plate -\u003e NEXT -\u003e upload box20.stl (as today) -\u003e POST api/platform-job 200, 1 `app-platform-model-list print-list-item` -\u003e GET api/platform-job/{id}/platform-metadata-print-details shows buildPlateWidthMm \"200\" (as today). Then the preset path: New (confirm as the existing code does) -\u003e SLA -\u003e inputs show 182.4 / 102.6 / 200 -\u003e fill 128, 80, 150 with Tab -\u003e NO POST api/build-plate within 3 s (count the requests) and the renderer canvas is still there. Also assert: no `.delete-plate`, no `[name=\"buildPlate\"]` in the DOM; a value 5 in plateWidth shows `.plate-size-range` and no POST; 0 pageerror / NG0 as today. Clean-up: delete the created project in Previous projects as the stage does today (the plate record stays: harmless, invisible). Update the `description` export to the new steps.\nVERIFY: scripts\\gate\\lab-ui.cmd plate (builds the app from your worktree and recreates the shared stack) - run it ONLY as the task verify at the end, once; then the full scripts\\gate\\lab-ui.cmd.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY), aws-http (HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data SHARED by every worktree), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start, LocalDatabaseBootstrap), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd (dotnet build Backend.sln), be-test.cmd [filter] (dotnet test Tests), be-smoke.cmd (compose up --build + the start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd, lab-pipeline.cmd [create metadata logs edit delete] (REST pipeline, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; fe-build ci first; stages load banner upload accordion export projects pending-form run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts, frontend in node:22-bookworm. Never run npm/dotnet directly on the host for gates. The full-stack gates (be-smoke, lab-pipeline, lab-ui) recreate the SHARED compose containers from your worktree: run them only where the task lists them.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS; never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no \"for later\"; i18n keys you orphan are listed in the commit body and deleted in the same task when they are in your files). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If a change is needed outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you.",
+        "steps":  [
+                      {
+                          "id":  "7530.1",
+                          "phase":  "RECON",
+                          "action":  "Read scripts/gate/lab-ui-stages/70-plate.mjs, 30-upload.mjs and 65-pending-form.mjs (helpers to reuse), the header of scripts/gate/lab-ui.mjs, the merged platform-print-setup.component.html (input names) from 7510."
+                      },
+                      {
+                          "id":  "7530.2",
+                          "phase":  "RED",
+                          "action":  "The old stage is red against the merged tree by construction (no buildPlate group); note it, no extra red run needed."
+                      },
+                      {
+                          "id":  "7530.3",
+                          "phase":  "GREEN",
+                          "action":  "Rewrite the stage body as in notes; scripts\\gate\\lab-ui.cmd plate GREEN, then scripts\\gate\\lab-ui.cmd (all stages) GREEN."
+                      },
+                      {
+                          "id":  "7530.4",
+                          "phase":  "DONE",
+                          "action":  "Commit (description verbatim); body: the new assertions and the timings."
+                      }
+                  ],
+        "passes":  false,
+        "verify":  [
+                       "scripts\\gate\\lab-ui.cmd"
+                   ]
+    },
+    {
+        "id":  7540,
+        "category":  "docs",
+        "repo":  "rwclab",
+        "lane":  "docs",
+        "model":  "easy",
+        "dependsOn":  [
+                          7530
+                      ],
+        "files":  [
+                      "README.md",
+                      "PLAN.md"
+                  ],
+        "description":  "docs: build plates are a technology plus a typed size; the SLA bracket is a centred head under the plate; the lab-ui plate stage row",
+        "specRef":  "README.md:26, :124; PLAN.md:72",
+        "tddWorkflow":  false,
+        "notes":  "FACTS: README.md:26 describes the board-7 flow (two steps, preset or custom size saved as a new plate, unused custom plates deletable, SLA plate with a bracket at its back edge); README.md:124 is the `plate` row of the lab-ui stages table (Custom size, Add, DELETE 409/204); PLAN.md:72 mentions the same in Bulgarian. 7510/7520/7530 changed: the size is typed (fields start at the technology preset, commit on blur selects the matching plate or POSTs a new one; the FE has no delete; `DELETE api/build-plate/{id}` still exists and lab-pipeline still uses it), the SLA bracket is a centred head + stem under the plate, FDM has none, the stage flow is the one in the 7530 description.\nDO: rewrite those three places (and any other README/PLAN sentence that says \"Custom size\", \"Add\", \"delete icon\", \"back edge\", \"hanging\"); keep the \"Build plates\" contract section (POST/DELETE) as the server still has both. Nothing else changes. Then the full gate set as verify.\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY), aws-http (HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data SHARED by every worktree), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start, LocalDatabaseBootstrap), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd (dotnet build Backend.sln), be-test.cmd [filter] (dotnet test Tests), be-smoke.cmd (compose up --build + the start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd, lab-pipeline.cmd [create metadata logs edit delete] (REST pipeline, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; fe-build ci first; stages load banner upload accordion export projects pending-form run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts, frontend in node:22-bookworm. Never run npm/dotnet directly on the host for gates. The full-stack gates (be-smoke, lab-pipeline, lab-ui) recreate the SHARED compose containers from your worktree: run them only where the task lists them.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS; never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no \"for later\"; i18n keys you orphan are listed in the commit body and deleted in the same task when they are in your files). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If a change is needed outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you.",
+        "steps":  [
+                      {
+                          "id":  "7540.1",
+                          "phase":  "RECON",
+                          "action":  "grep README.md and PLAN.md for Custom size, Add, delete, back edge, hanging, bracket; read the merged 7510/7520/7530 commit bodies."
+                      },
+                      {
+                          "id":  "7540.2",
+                          "phase":  "RED",
+                          "action":  "n/a (docs)."
+                      },
+                      {
+                          "id":  "7540.3",
+                          "phase":  "GREEN",
+                          "action":  "Rewrite the sentences; run the verify set."
+                      },
+                      {
+                          "id":  "7540.4",
+                          "phase":  "DONE",
+                          "action":  "Commit (description verbatim)."
+                      }
+                  ],
+        "passes":  false,
+        "verify":  [
+                       "scripts\\gate\\fe-typecheck.cmd",
+                       "scripts\\gate\\fe-test.cmd",
+                       "scripts\\gate\\fe-build.cmd ci",
+                       "scripts\\gate\\no-external-hosts.cmd",
+                       "scripts\\gate\\be-build.cmd",
+                       "scripts\\gate\\be-test.cmd",
+                       "scripts\\gate\\lab-pipeline.cmd",
+                       "scripts\\gate\\lab-ui.cmd"
+                   ]
+    }
 ]

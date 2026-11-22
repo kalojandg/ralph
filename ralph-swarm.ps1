@@ -874,6 +874,23 @@ function Start-AgentForTask($task, $slot) {
     }
 }
 
+# GITNEXUS DIRT SELF-HEAL (22.11.2026): the finishing phase's `gitnexus analyze` rewrites the
+# counters in AGENTS.md/CLAUDE.md AND (re)generates .claude/skills/gitnexus/**/SKILL.md, detached,
+# after the push - so the NEXT board starts (or reaches its first merge) with a dirty main
+# checkout and every merge is skipped (board 7b, 22.11: task 7520 green on its branch, merge
+# skipped, 7530/7540 blocked). If the dirt is ONLY those files, commit them and go on; anything
+# else stays dirty and is reported by the caller. Returns the remaining porcelain lines.
+function Repair-GitnexusDirt($gitRoot) {
+    $dirt = @(& git -C $gitRoot status --porcelain 2>$null)
+    if ($dirt.Count -eq 0) { return @() }
+    $other = @($dirt | Where-Object { $_ -notmatch '^\s*(M|\?\?|A)\s+((AGENTS|CLAUDE)\.md|\.claude/skills/gitnexus/)' })
+    if ($other.Count -gt 0) { return $dirt }
+    & git -C $gitRoot add -- AGENTS.md CLAUDE.md .claude/skills/gitnexus 2>$null
+    & git -C $gitRoot commit -m "chore: gitnexus re-index headers and skills" --quiet 2>$null
+    Write-Host "[i] Repo at '$gitRoot': leftover gitnexus files auto-committed (headers / .claude/skills/gitnexus from a previous finish_index)" -ForegroundColor Cyan
+    return @(& git -C $gitRoot status --porcelain 2>$null)
+}
+
 function Set-TaskPassed($id) {
     # single-writer update of the shared board (only the orchestrator ever writes tasks.json)
     $tasks = Read-Tasks
@@ -916,7 +933,8 @@ function Complete-Agent($info) {
         # returns '' on git 2.21 -> every merge got skipped as "on '' expected 'main'").
         # Detached HEAD returns literal 'HEAD' which correctly fails the branch check.
         $cur = (& git -C $info.gitRoot rev-parse --abbrev-ref HEAD 2>$null)
-        $dirty = (& git -C $info.gitRoot status --porcelain 2>$null)
+        # gitnexus leftovers (headers / .claude/skills/gitnexus) are auto-committed first; anything else = dirty
+        $dirty = @(Repair-GitnexusDirt $info.gitRoot)
         if ($cur -ne $info.baseBranch) {
             Write-Host "[!] Task #$($t.id): main checkout is on '$cur' (expected '$($info.baseBranch)') - MERGE SKIPPED. Branch kept: $($info.branch)" -ForegroundColor Yellow
             $outcome = "merge_skipped"
@@ -1167,15 +1185,8 @@ foreach ($t0 in (Read-Tasks)) {
             # време) -> завареното мръсно дърво би SKIP-нало всички merges. Ако мръсотията е
             # САМО тези два файла - комитни ги и продължи; всичко друго си остава фатално
             # мръсно и се улавя от merge проверката както досега.
-            $dirt0 = @(& git -C $gr0 status --porcelain 2>$null)
-            if ($dirt0.Count -gt 0) {
-                $nonHeader = @($dirt0 | Where-Object { $_ -notmatch '^\s*M\s+(AGENTS|CLAUDE)\.md$' })
-                if ($nonHeader.Count -eq 0) {
-                    & git -C $gr0 add -- AGENTS.md CLAUDE.md 2>$null
-                    & git -C $gr0 commit -m "chore: gitnexus re-index headers" --quiet 2>$null
-                    Write-Host "[i] Repo at '$gr0': leftover gitnexus header changes auto-committed (from a previous finish_index)" -ForegroundColor Cyan
-                }
-            }
+            # (22.11.2026: also .claude/skills/gitnexus/** - see Repair-GitnexusDirt; used at merge time too)
+            Repair-GitnexusDirt $gr0 | Out-Null
             $script:startShas[$gr0] = (& git -C $gr0 rev-parse HEAD 2>$null)
         }
     }

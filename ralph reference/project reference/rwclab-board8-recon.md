@@ -111,3 +111,49 @@ Not chosen: FLAME / SMPL-X (research-only licences, PCA parameters without human
 2. Which races at first: the Actors ten, or human + elf + dwarf + orc.
 3. Hosting of the pack (git-ignored download vs committed assets).
 4. Clothes/hair: Actors has garments (CC0/CC-BY); printing a figure usually wants a costume. Scope for a later board.
+
+## 5. User decisions (22.11.2026 evening) and the spike results
+
+Decisions: **Actors** as the engine; **all 10 races**; **clothes and hair in the panel from the catalog** (STL = body + garments, hair
+excluded); the pack is **downloaded at bootstrap, git-ignored**; a spike first. Facts found the same evening: the lab is already on
+Angular 22 / TypeScript 6 / jest 30 (`app/frontend/package.json`), so ONLY three.js must move (0.125 -> 0.186).
+
+Spike (same evening, outside the lab, scratchpad `spike/`: `npm install three@0.186.1 https://github.com/ArndRosemeier/Actors/releases/download/v0.37.4/actors-generator-0.37.4.tgz`
+pulled `@actors/core|human|three|generator` 0.37.4 in 13 s; `web/index.html` = import map (three -> `node_modules/three/build/three.module.js`,
+`three/addons/` and `three/examples/jsm/` -> `node_modules/three/examples/jsm/`, `@actors/*` -> their `dist/index.js`); `server.mjs` static
+server on 8787; `run.mjs` = playwright-core 1.65.1 driving the host Chrome headless with `--use-gl=angle --use-angle=swiftshader`):
+
+- **Packs**: release asset `actors-packs-0.37.4.tar.gz` = 456.6 MB, contains `packs/{cat,chicken,cow,deer,dog,horse,human,squirrel}`;
+  `tar -xzf ... packs/human` alone = **544 MB unpacked** (`base.bin`, `clips/`, `garments/`, `hair/`, `manifest.json` 973 KB, `targets/`,
+  `textures/`). The lab's bootstrap script should download the archive once and extract only `packs/human` into a git-ignored folder
+  served by the Angular dev server / dist (`src/assets/packs/human` or an `assets` glob in angular.json).
+- **Load**: `Character.load({ pack: '/packs/human/manifest.json', renderer, clipLibraries: false })` = 2.1-2.4 s (first page load
+  9.2 s total incl. the module graph); `setRace('elf')` + a shape = **98 ms**, `wear('knight')` (10 garments) = 485 ms. 8 meshes
+  for a nude body (body, genitals-male, eyelashes, eyes, teeth, tongue, brows-eyebrow001, hair-long-waves), 18 dressed.
+- **API confirmed** (d.ts in `node_modules/@actors/generator/dist/character.d.ts`, `catalog.d.ts`): `character.object` (THREE.Object3D to
+  add to the scene), `character.actor.meshes: Map<name, SkinnedMesh>`, `character.catalog` (garments 226, outfits 95 presets incl. nude,
+  underwear, casual, knight, viking, wizard, elven-gown, ranger..., hair 66, animations 84, details 234), `character.config` keys:
+  race, race2, raceMix, raceSize, youth, body (HumanParams: gender, ageYears, muscle, weight, height...), details (raw MakeHuman
+  modifiers, e.g. `l-cheek-bones-incr`), shape (named sliders: fat fitness shoulders chest waist belly hips bottom legs thighs arms
+  neck head faceWidth fullness jaw cheekbones brow eyes nose noseWidth lips mouthWidth chin), skin/skinTone/skinColor, eyes/eyeColor/
+  eyeGlow/pupil, skinPattern, hair/hairColor/beard/stubble, horns/hornSize/hornColor, tusks, tail/tailLength, brows, outfit[]/
+  garmentColors, **anatomy** (false hides the genitals: set it for the lab), animation, expression, faceRig... `BODY_TYPES` ids: average
+  slim athletic muscular curvy hourglass pear inverted stocky heavy lanky petite. Methods: `set(patch)`, `setRace(id)`, `wear(outfitId)`,
+  `play(clip | null)` (null = bind pose), `seek(seconds)` + `paused = true` + `update(dt)` twice to freeze a pose from a clip,
+  `randomize()`, `exportGlb()`, `dispose()`.
+- **STL bake works**: own binary STL writer over every visible mesh except /hair|brow|lash|beard/ using `mesh.getVertexPosition(i, v)`
+  (applies skinning + morphs in three >= r151) and `matrixWorld`. Elf nude: **117,108 triangles, 5.86 MB, y 0.000..1.889 m**; dwarf
+  underwear: 115,912 tris, y 0..1.185 m; orc knight posed from `idle` t=1 s: 75,142 tris (garments hide body parts: the pack drops
+  covered body triangles), y -0.043..1.871 (root motion of the clip: re-ground the bake to min y = 0 before upload). Units are
+  **meters** (`manifest.units`), the lab is mm: scale x1000. No non-finite values. Files `spike/out/*.stl|png|json`.
+- **Rendering caveat**: in SwiftShader (headless) the dressed orc's boots/greaves render partially; the STL contains them. Check on
+  a real GPU: `node server.mjs` in the spike folder, then http://127.0.0.1:8787/?race=orc&outfit=knight&clip=idle&t=1 in Chrome.
+  The lab-ui gate runs headless too, so the `character` stage must assert the STL bytes and the request flow, not pixels.
+- One 404 on the first page load (favicon-class; the response listener saw none in the rerun). Pack files load lazily
+  (targets per slider, garments per outfit) from the same origin: fine for `no-external-hosts`.
+
+Board 8 shape (unchanged by the spike): wave 1 three.js upgrade (serial lane, gates between r150 / r163 / r186) in parallel with the
+pack bootstrap script + jest fixtures; wave 2 a `CharacterService` wrapping `Character.load` in the renderer scene (metres -> mm group
+scale, `anatomy: false`, `allow.races` = all 10); wave 3 the panel (race + mix, body type, shape sliders by group, details for the face,
+outfit preset + hair, pose = clip + time); wave 4 bake STL (re-grounded, x1000) -> existing upload path -> project; lab-ui stage
+`character`. Board 9: character config in the project metadata for re-editing; manifold union of garments.
