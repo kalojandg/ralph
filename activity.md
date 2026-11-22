@@ -34,6 +34,280 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #7700 - docs: renderer backend, build plates, gate list (2026-11-22)
+
+**Repo:** rwclab · **Commits:** b0595c1 (docs), 348ebdc (retry fix)
+
+- README: "What the lab is now (board 7)" and "Build plates" (GET/POST/DELETE contract) sections; gate table re-measured; lab-ui table has the pending-form and plate stages; removed dependency rows (Stripe, LaunchDarkly, 3Shape, Medit, FullContour).
+- RENDERER-AUDIT.md §4 dated note; PLAN.md board 7 summary; lab-pipeline.cmd header mentions the custom plate.
+- Retry: scripts/gate/lab-pipeline.mjs (outside files, scope escalation) - the delete stage now expects DELETE api/build-plate/{custom id} -> 204 (since #7320, Deleted jobs do not hold a plate); header comment updated. README lab-pipeline row and PLAN.md line updated to green.
+
+**Verification:** lab-pipeline green twice in a row (5 stages, 5.5 s pipeline, 12 s / 22 s wall; second run POST build-plate 201). Other gates green per the previous attempt (be-test 285/285, fe-test 1254, lab-ui 8 stages, be-smoke, fe-build ci). Full suites left to the orchestrator gate.
+
+
+## Task #7330 - feat(renderer): SLA plate = hanging metal platform with a back bracket, FDM = flat bed
+
+**Repo:** rwclab (worktree ralph/task-7330) · **Commit:** 54173c6 · **Status:** ✅ done
+
+### What changed
+- `build-plate-geometry.ts`: `plateBodyThickness(plate)` (SLA 6 / FDM 10 / none 6) and `bracketLayout(plate)`. For SLA only: an arm 0.4 x width wide, 8 mm deep, from y = -6 up to 0.6 x heightMm, front face 1 mm behind z = -depth/2. A mount block (0.6 x arm width, 20 high, 30 deep) sits on top. Circle plates use the same formula, so the arm is tangent to the back of the disc. `isSameBuildPlate` also compares `technology`. `DEFAULT_BUILD_PLATE.technology = 'Sla'`. `plateExtents` and `positionRangeFor` are unchanged, so the bounds do not depend on the technology.
+- `platform-helper-objects.service.ts`: the body thickness and material depend on the technology. The SLA bracket is its own group (`bracket` with `arm` + `mount`, userData platform/subtype) that `show()` adds next to the plate group. It is visible in the print-plate view only, hidden in the grid view and for other plates, and removed when the plate is rebuilt. `getCurrentPlatform` is still exactly [platform, plane], so the raycaster (renderer.component.ts:1828-1831) never hits the bracket.
+- `renderer-constants.ts`: new `PlatformLook` (neutral 0xcccccc 0.525/0, sla 0x8c939b 0.35/0.8, bracket 0x5d636a 0.4/0.7, fdm 0xe4e4e4 0.9/0). `RenderingColors` is untouched because `renderer-constants.spec.ts` (outside scope) pins its keys.
+
+### Tests
+- RED first: new specs in platform-helper-objects.service.spec.ts (10) and build-plate-geometry.spec.ts (6 + updated DEFAULT/isSame); the first run failed because the members did not exist yet.
+- GREEN: fe-typecheck ✅ · fe-test "platform-helper-objects|build-plate-geometry|renderer" 19 suites / 331 tests ✅ · fe-build ci ✅. The full unfiltered jest suite is left to the orchestrator gate.
+
+### Notes
+- Back = -z: the default camera sits at +z (100,150,250), and wall 0 "back" is at -depth/2.
+
+
+## Task #7320 - build plate in two steps (technology -> preset or custom size), custom plates deletable, lab-ui plate stage
+
+**Repo:** rwclab (frontend + backend fix on retry) | **Commits:** 0c89321 (frontend), 2d6319d (backend retry fix)
+
+### What was done
+- Two-step form in platform-print-setup: `technology` (Sla/Fdm), then `buildPlate` (presets first, then custom plates with a delete icon, then "Custom size" with customWidth/Depth/Height 10..1000 mm and Add plate). The new plate is selected and NEXT is enabled. Opening a project preselects its technology.
+- Model `technology`/`isPreset` (optional in TS, because 3 foreign specs build geometry-only plates); service create/delete; store Create/DeleteBuildPlate (409 -> `messages.plateInUse` toast), `getBuildPlatesByTechnology`.
+- i18n: the recon §6 keys in en/de/es/fr/it; orphaned `general.buildPlate` deleted.
+- lab-ui: 30-upload picks technology then plate; new 70-plate stage listed in lab-ui.cmd.
+- **Retry (scope escalation):** `BuildPlateService.DeleteAsync` ignores Deleted platform jobs when it checks whether a plate is in use. Their required FK `BuildPlateId` moves to the first preset of the same technology before the plate is deleted. Service tests updated: the stale Deleted DataRow is dropped; new tests cover only-Deleted jobs (204 + reassignment) and live + Deleted jobs (409, nothing moved). Controller doc comment updated.
+
+### Verification
+- be-test `FullyQualifiedName~BuildPlate`: 61/61 pass.
+- lab-ui (all stages): PASS. The plate stage gives POST 201, print details width "200", DELETE 409 while in use, then DELETE 204 after the project is deleted, and the plate leaves the list.
+- From attempt 1: fe-typecheck, spec tsc, jest subset (23 suites / 542 tests), fe-build ci all green. The full jest and be-test suites were left to the gate.
+
+### Out-of-scope files
+- app/backend/ServiceLayer/Services/PrintList/BuildPlateService.cs
+- app/backend/Tests/BuildPlate/BuildPlateServiceTests.cs
+- app/backend/Web/Controllers/PrintList/BuildPlateController.cs
+
+
+## Task 7150 - test(gate): lab-pipeline posts the trimmed platform-job body and asserts the trimmed print details; the backend gates and image match the cut backend
+
+**Repo:** rwclab · **Commit:** be89b55 · **Status:** done
+
+### Changes
+- `scripts/gate/lab-pipeline.mjs`: the create stage POSTs api/build-plate {Fdm, 200, 150, 180, Rectangle} -> 201, or 200 when an earlier run created it (the volume is shared). It checks name/technology/isPreset and that GET lists the plate, then creates the job on it. The platform-job body loses treatmentTypeId/patientId/patientName/label/sliceOffset and parameters.{isAligner,needRaft,isSprImport,noGrayScale}. The metadata stage asserts buildPlateName 'FDM 200 x 150 mm', buildPlateWidthMm 200 and no value for printJobTypeId/applianceTypeId/patientId. The delete stage asserts DELETE api/build-plate/{id} -> 409 (the Deleted job keeps the FK), and the plate is kept and reused.
+- `scripts/gate/be-smoke.mjs`: the list is still exact against the cut backend; the missing newline after ENDPOINTS is fixed. Build-plate POST/DELETE are not start-up calls, so lab-pipeline covers them.
+- `scripts/gate/be-test.cmd`: the stale IntegrationTest comment is updated. The Dockerfile, docker-entrypoint.sh and be-build.cmd reference no deleted project.
+
+### Verification
+- be-build 0 errors; be-test 283/283; be-image OK; be-smoke 7/7 green; lab-pipeline all 5 stages PASS (two runs: plate 201 created, then 200 reused).
+- RED was not observable: the dependencies were already merged and the new asserts passed at once.
+
+### Notes
+- PlatformMetadataViewModel still declares PrintJobTypeId/ApplianceTypeId (they serialize as null). Removing them is outside this task's files, so the gate asserts no value rather than no key.
+
+
+## Task #7140 - refactor(backend): 11 entities, migrations squashed into one Initial, dental columns and seeds gone
+
+**Repo:** rwclab · **Branch:** ralph/task-7140 · **Retry:** 2 (scope escalation)
+
+### What was done
+- `SprintRayContext` keeps 11 DbSets (PlatflormJob, PrintListItem, PrintListItemIndividualModel, BuildPlate, S3File, S3Folder, File, User, UserPreference, Role, UserRole) plus the kept fluent config, and adds `HasPostgresExtension("uuid-ossp")`. Every other entity class under `DTOs/Models` is deleted.
+- Dental columns and navs dropped from PlatformJob, PrintListItem, File, UserPreference, User, S3File and Role. `[NotMapped] IndividualModelCount` stays without the `.spr` branch, because the auto-layout checks in PlatformJobService and PlatformJobViewModel use it.
+- The 269 migrations and the snapshot are deleted. One `Initial` was scaffolded with dotnet-ef 10.0.15 via `scripts\gate\be-exec.cmd`, and the `BuildPlate` identity restart (`RESTART WITH 4`) was hand-added. 134 dead `Compile Remove` lines left the csproj. Dead SQL scripts and DataLayer helpers are deleted.
+- Seeds: 010 is now Role, User and UserRole only; 020, 030 and 050 are deleted; 040 is kept; 060 no longer sets DentalNotation.
+- Tests: MigrationSnapshotTests checks for one `_Initial`, exactly the 11 tables and no dental columns (RED, then GREEN). LocalDatabaseBootstrapTests checks the Initial migration for the uuid-ossp extension and the identity restart. Tests of deleted entities were removed.
+- README has a new "Database (local)" section: the squash, the one-time volume reset, the scaffold command.
+- Outside `files` (to compile, or because the gate log required it): DTO view and input models (UserPartnerToken, ExternalProvider/Scanner file input models, FileViewModel.AppointmentDate, preferences DentalNotation), the DentalNotation and FeedbackType enums, the `externalProviderId` parameter in FileService/IFileService, UserPreferenceService, and `scripts/gate/lab-pipeline.mjs`. The gate now picks the default plate by id 1, since 7020's list order puts the 128 mm plate first.
+
+### Verification
+- be-build: 0 errors
+- be-test, targeted (MigrationSnapshot, LocalDatabaseBootstrap, PlatformJob, FileService, Mapping, PrintList, BuildPlate, User, Platform): 154/154 green. Before the fix, the RED subset failed 13 of 41.
+- be-smoke: 7/7 green. The backend logged the unknown old ids once, rebuilt the schema, applied 1 migration, and the seeds inserted 3+1+1 rows.
+- lab-pipeline create metadata logs edit delete: all green.
+- The full be-test suite was not run; it is left to the orchestrator gate.
+
+
+## [2026-11-22 13:53] - Task #7130: refactor(backend): the DTOs, enums, configs, options, resources and appsettings sections that only the deleted code used are deleted; the dental DynamoDB table names leave the config
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** After 7110/7120 removed the non-renderer controllers, services and handlers, their DTOs, configs, options, resources and appsettings sections had no consumer left. The dental DynamoDB table names also stayed in the config.
+
+**What was done:**
+- RED: Tests/Config/AppSettingsSectionsTests.cs checks that neither appsettings.json nor appsettings.Development.json has a section of the deleted code (Stripe/Auth3Shape/AuthMedit/AuthFullContour/AICrown3Shape/RayWareCloud/Dashboard/AWSS3StripeFiles/AWSS3LogFiles/AWSKeyManagement/AWSSecretsManager/SeasonalEvents/DesignLabService/Settings/LaunchDarkly/AWSSES/Defaults) or a dental DynamoDB table. `be-test.cmd FullyQualifiedName~Config` failed 4/4 before the change.
+- GREEN: deleted 459 files with no remaining reference, using a reference count (comments and strings stripped, extension holders checked by member) repeated until nothing more dropped out, with be-build after each folder. Per folder: DTOs/ViewModels 216, InputModels 97, Enums 23, EventModels 19, Models 11 (the SprintRayContext entities stay for 7140), Contracts 3; Common/Configs 48, Options 21, Extensions 11, Helpers 2, Mapping 3, Enum 3, Resources 3 (EmailTemplateResource + ICustomLocalizer.GetEmail).
+- Trimmed the shared constants (Messages 178→28, EntityNames 39→6, NotificationEvents 36→9, PolicyNames 32→11, AwsS3Keys 24→11, …), Auth0Options (AuthenticationApi + ThirdPartyApi.Audience only), and resx + Designer files by hand (MessageResource 142→13, EntityNameResource 29→5, EnumResource 42→26, GraphQLResource → PlatformJobUpdateMutation only).
+- appsettings*.json: removed the deleted options' sections and the unread Auth0 keys. AWSDynamoDB:Tables keeps the two RWC metadata tables only. SQS keeps RaywareCloudPlatformProcess only, SNS TopicArns is empty, and DynamicPasswordGenerateAWS is gone. infra/resources.mjs: topics {}.
+
+**Verification:**
+- scripts\gate\be-build.cmd → 0 errors
+- scripts\gate\be-test.cmd → 275/275 pass
+- scripts\gate\be-config-offline.cmd → OK
+- scripts\gate\compose-config.cmd → exit 0
+
+**Notes:** Two things left for later tasks. (1) Input models still referenced only by entity `IMapFrom<>` declarations, and the constants/enums that only entities read, go with the entities in 7140. (2) `R.stripeSecret` stays in infra/resources.mjs because infra/bootstrap.mjs (outside this task's files) still reads it.
+
+**Files modified:**
+- app/backend/DTOs/** (369 deleted)
+- app/backend/Common/** (90 deleted; Configs, Options/Auth0Options, Localization, Resources, csproj trimmed)
+- app/backend/Web/appsettings.json, app/backend/Web/appsettings.Development.json
+- app/backend/Tests/Config/AppSettingsSectionsTests.cs (new)
+- infra/resources.mjs
+
+**Git commit:** `f422c13` — `refactor(backend): the DTOs, enums, configs, options, resources and appsettings sections that only the deleted code used are deleted; the dental DynamoDB table names leave the config`
+
+---
+
+
+## [2026-11-22 12:00] - Task #7310: refactor(frontend): the project model carries no dental fields - cloud drive, patients, SPR import, feedback, privacy and resin labels, appliance colours and the treatment enums, constants and helpers are deleted; items are titled by file name
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** The renderer's project model still carried the dental fields (treatment type, appliance type, slice offset, label, isAligner, isSprImport, noGrayScale), and the shell still contained the cloud drive, patients, SPR import/export, feedback, the privacy/terms and resin labels, per-appliance colours and the treatment enums/constants/models. The backend (7010) had already dropped the SPR, cloud-drive and file-delete routes.
+
+**What was done:**
+- RECON: backend PlatformJobInputModel has no treatment/slice fields; PlatformJobParameters still has NeedRaft, so the job-level needRaft stays. platform-image-upload-link is still a backend route, but spr-download-link is gone.
+- RED: new print-list-item.component.spec (title = file name), new save-platform-job-input-model.spec (exact save keys + parameter keys), platform-setup spec (no SPR button/mode, fallback model {id,title,buildPlateId,parameters}, date-only subtitle, build plate is the only move guard), platform-job.service spec (SPR/halloween/print-job-to-rwc calls gone), print-list.states spec (no sliceOffset/isAligner/noGrayScale rules), renderer-constants + printability-check specs (one colour, projectModel 0xffffff). 10 tests and 2 suites failed for the right reasons.
+- GREEN: trimmed the models and payload, the store RESET/compare/valid rules, and print-list-item / platform-setup / platform-print-setup / print-setup-page / platform-model-list / renderer / platform-file-download. "Save print job" now uploads the snapshot and closes, because the .spr download is gone. Deleted 207 files: 35 components, cloud-drive module, patient/feedback/notification templates, sub-type templates, 2d viewers, treatment enums/constants/models, S3FileService, the inbox and cloud-drive store slices, the halloween/cloud-drive flags and dead assets. Removed 435 i18n keys (the ones scripts/i18n-orphans.mjs reports as newly orphaned, plus 3 that only negative assertions still name; all listed in the commit body).
+- Gate stages: 65-pending-form posts the trimmed payload. 30-upload now asserts that the browser's POST api/platform-job body has exactly the save-model keys.
+- Surprises: the shared timer-button is NOT dead (the model list's upload countdown uses it), so it stays. Deleting S3FileService dropped jszip, whose typings had silently provided @types/node (require/NodeJS). The node typings are now referenced explicitly in traslation.service.ts.
+
+**Verification:**
+- fe-typecheck → clean. tsc -p src/tsconfig.spec.json → clean.
+- fe-test full → 95/95 suites, 1199 tests: the first full run had 4 stale expectations, which were fixed and re-run 5/5 suites, 163/163.
+- fe-build ci → OK. no-external-hosts → OK.
+- lab-ui (all 7 stages: load, banner, upload, accordion, export, projects, pending-form) → PASS. Upload trace: "save payload keys: buildPlateId,editModel,groupId,id,inboxFileIds,parameters,saveManualEditing,title".
+
+**Files modified:**
+- app/frontend/src/app/core/models/** (save model, parameters, platform-job, print-list-item, platform-metadata, model-info, model-mesh, base-model, file-input; treatment/patient/feedback/cloud-drive-v2 deleted)
+- app/frontend/src/app/core/{constants,enums,helpers,services,store}/** (renderer-constants projectModel, flags, inbox/cloud-drive slices, info-box notes, barrels)
+- app/frontend/src/app/app-modules/** (delta components, common module; cloud-drive and dental components deleted), app.module.ts, shared/models/form-file.ts
+- app/frontend/src/assets/i18n/*.json, app/frontend/src/assets/images (dead images)
+- scripts/gate/lab-ui-stages/30-upload.mjs, 65-pending-form.mjs
+
+**Git commit:** `b3f9edb` — `refactor(frontend): the project model carries no dental fields - cloud drive, patients, SPR import, feedback, privacy and resin labels, appliance colours and the treatment enums, constants and helpers are deleted; items are titled by file name`
+
+---
+
+
+## [2026-11-22 00:00] - Task #7120: refactor(backend): every service, interface, utility and DI registration off the renderer path is deleted; LocalAuth0Service and LocalRealtimeAppSyncService are the only auth and realtime implementations; the policies shrink to the ones the kept controllers use
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**What was done:**
+- RECON: the 7 kept controllers and the 7 handlers need only the keep set (7010 unhooked them). Policies used by the kept controllers: Doctor, RegistrationCompleted, FirstOrThirdParty, plus FirstParty as the default policy.
+- RED: added Tests/Extensions/ContainerValidationTests. It builds the full Startup collection through Program.CreateHostBuilder (Development, ValidateOnBuild + ValidateScopes), constructs every Web controller, resolves the handler-scope services, and checks that LocalAuth0Service and LocalRealtimeAppSyncService are the only implementations. Baseline on the old tree: the 2 container tests passed and the "only implementations" test failed (2 registrations each).
+- GREEN: deleted 240 files. ServiceLayer: 114 services, 104 interfaces, 7 utilities. Tests: 12 files (10 dental service tests, StripeExtensionsTest, OfflineExternalServicesTests). Web/Infrastructure: ApiKeyValidate, AppPermissionHandler, AppPermissionRequirement.
+- Startup: removed 16 options plus AwsAppSync, IDynamoDBClient<>, the Dashboard dynamo pair, StripeServiceFactory.UseApiBase and AddThirdPartyServices (LaunchDarkly). AddAwsServices: removed the Cognito, SES, SecretsManager and KMS clients. AutoMapper: removed the Auth0 token map.
+- AddLocalAuth0 and AddLocalRealtime/UseLocalRealtime are now unconditional.
+- The policies are trimmed to 4. The ServiceLayer csproj loses 9 unused packages.
+- Adapted LocalAuth0RegistrationTests, LocalRealtimeRegistrationTests and AutoMapperProfileTests.
+
+**Verification:**
+- be-build: 0 errors
+- be-test (Extensions, LocalRealtime, Mapping, Services, EventBus, PlatformJob): 144/144 pass. I did not run the unfiltered be-test; that is left to the gate.
+- be-config-offline: OK
+- be-smoke: 7/7 green. The backend was built from this worktree.
+
+**Files modified:**
+- app/backend/ServiceLayer/** (225 deleted, 4 edited)
+- app/backend/Web/Startup.cs
+- app/backend/Web/Infrastructure/Extensions/{ServiceCollectionExtenstions,AuthorizationOptionsExtensions,LocalAuthServiceCollectionExtensions,LocalRealtimeServiceCollectionExtensions}.cs
+- app/backend/Web/Infrastructure/Mapping/AutoMapperProfile.cs, LocalRealtime/*.cs (comments)
+- app/backend/Tests/** (12 deleted, 3 edited, ContainerValidationTests added)
+
+**Git commit:** `a0176ac` — `refactor(backend): every service, interface, utility and DI registration off the renderer path is deleted; LocalAuth0Service and LocalRealtimeAppSyncService are the only auth and realtime implementations; the policies shrink to the ones the kept controllers use`
+
+---
+
+
+## Task 7110 - refactor(backend): the 26 event handlers off the renderer path are deleted
+
+- Repo: rwclab, branch ralph/task-7110, commit eebaad7.
+- RED: EventBusWiringTests expected 7 handler names + 9 subscriptions -> 2 of 4 failed. GREEN: deleted 27 handler files (7 kept: 4 PlatformJob, 3 PrintList), 27 AddSingleton + 35 Subscribe lines, event classes ExternalSavesTreatmentAndFileEvent, PrintListItemPatientChangedEvent, PrintListItemPreprocessedEvent, UpdatedOfficeDeviceEvent. be-build: 0 errors; be-test EventBus: 4/4 passed.
+- Other event classes stay: their publishers are services deleted by 7120. PlatformJobModelTranslated.cs actually defines PlatformJobItemsUpdatedEvent (kept).
+- Board numbers 8 handlers / 10 subscriptions do not match the KEEP list (7 / 9); asserted 7 / 9. Full suite, e2e and full-stack gates left to the orchestrator gate.
+
+
+## Task #7400 - refactor(worker): the platform-process step no longer echoes printJobTypeId, applianceTypeId and patientId into the print details
+
+- Repo: rwclab (branch ralph/task-7400), commit c80d84b
+- RED: platform-process.test.mjs asserts PrintJobTypeId/ApplianceTypeId/PatientId are absent from printDetails and that a message without printJobTypeId/applianceTypeId/patients is processed; 3 failures.
+- GREEN: deleted the two echo lines in workers/algorithms/src/platform-process-logic.mjs (patientId was not echoed here); BuildPlate*, IsAligner, NeedRaft, PlatformOrientation, SliceOffset, NoGrayScale untouched. lab-pipeline.mjs does not assert the removed keys.
+- Verify: npm --prefix workers\algorithms test -> 34 pass, 0 fail.
+
+
+## Task #7300 - refactor(frontend): shell start-up calls only build-plate, preferences, platform-job
+
+**Repo:** rwclab (frontend) · **Commit:** 9c26e36 · **Status:** done
+
+**What changed**
+- Start-up REST is now: GET build-plate (AppComponent.init), GET platform-job (doctor) and GET users/{sub}/preferences (AuthEffects on LOGIN_SUCCESS, once instead of twice), plus the websocket. The stub token is unchanged.
+- Gone from start-up: the 4 dental list options, file/new, notification banner + has-unread, idle-period, DSO check, users/info, stripe exp-days, organization default + current, update-login-date, avatar.
+- Shell: no idle watch, no DSO modal, no `<exp-days-alert>` / `<notification-banner>`. Header: no avatar, no cloud-drive icon or opener.
+- Auth0Service: the real WebAuth path is gone (stub session or error). Logout = LOGOUT + clearState, with no reload, because /login dispatches LOGOUT on init and a reload there would loop. AuthGuard no longer redirects to an accounts site. `environment.appAccounts` and `environment.auth0` deleted.
+- AuthState cut down to what is still read; AuthService, RegAuthGuard, App/Stripe/Organization/ClinicSync/Picture/noms services and the app/picture/register/integration/template-treatment/noms store slices deleted, along with the models and enums they orphaned. 15 never-read feature flags removed (7 kept).
+- i18n: 15 orphaned keys removed from all 5 locales. The network banner now uses `messages.notConnectedToBackend`.
+
+**Left for 7310 / outside scope:** new-feature + halloween (and the new-version/training templates, notification slice, UserNotificationService, ItemService they need); smart-table (cloud-drive templates + login.module use it); PatientService; UserService.getUserProfile (patient-v2); info-box-visibility and inbox slices (delta); `styles/_layout.scss .notification-wrapper`; the angular-user-idle and auth0-js deps in package.json.
+
+**Verification**
+- RED first: app.component / auth.effects (new) / header specs failed with 18 failures on the old code (NullInjector / signature).
+- fe-typecheck green; spec tsc (`tsconfig.spec.json`) green.
+- fe-test, targeted: the 3 task specs 25/25; components, core store/services/guards/constants, environments, delta renderer/model-list/setup/print-setup-page, login, app.routing 605/605 (after one spec fix); app-modules/common, cloud-drive, shared, core *.service specs, smart-table 201/201. The full suite is left to the orchestrator gate.
+- fe-build ci: exit 0. fe-smoke: PASS. no-external-hosts: OK.
+
+
+## 2026-11-22 — Task #7100: refactor(backend) delete controllers without a consumer, IntegrationTest/Database/CodeDeploy, be-smoke trim, DB reset default
+
+- **What:** deleted 69 controller files under Web/Controllers (whole recon DELETE set, Users/* siblings, NomController, Inbox/ExternalProviderController); UserController trimmed to GET {userId}/preferences. Removed SprintRay.IntegrationTest from Backend.sln + folder, deleted app/backend/Database and CodeDeploy, dropped the 134 dead `Compile Remove="Migrations\..."` entries. be-smoke now asserts health, build-plate, platform-job, users/{sub}/preferences, local-realtime logs + WS + preflight (7 checks). docker-compose RWC_DB_RESET_ON_UNKNOWN_MIGRATIONS default -> true.
+- **Tests:** RED (8 failing) -> GREEN: PrinterRoutesGoneTests gone-list for printer-type + ShellRoute_IsGone + UserPreferencesRoute_IsStillServed. be-build OK, be-test 296/296, compose-config OK, be-smoke 7/7 green.
+- **Deviations / notes for the orchestrator:**
+  1. `api/file/new` is NOT asserted gone: the route is in Inbox/FileController.cs (task 7010's file). Add `[DataRow("api/file/new")]` to ShellRoute_IsGone after 7010 merges.
+  2. Inbox/ExternalProviderController.cs (outside the `files` globs, but in the recon DELETE list) was deleted: it derived from the deleted NomController and no longer compiled.
+  3. be-smoke GET api/platform-job returns 500 on a freshly recreated in-memory emulator until `npm run bootstrap` creates the Stripe secret (PlatformJobService -> TreatmentTypeService -> StripeService ctor reads it); green after bootstrap. Goes away when the service-cut tasks remove StripeService.
+
+
+## Task #7010 - refactor(backend): renderer path drops dental data (retry 2)
+
+**Date:** 2026-11-22
+**Repo:** rwclab
+**Commits:** e323a72 (refactor), 0e82715 (stale route test)
+
+### What changed
+- e323a72 (previous attempt, kept as-is): PlatformJobService, PrintListService and FileService drop their treatment, patient, feedback, feature-flag and SPR dependencies. New projects are hard-coded "Other Print" (TreatmentTypeId 100, appliance 0, marked // until 7140). The SPR, halloween, send-to-RWC, status-change, move-to-new, single download-link, print-list add/get/rename and cloud-drive/scanner/upload/confirm routes are removed, along with FileController.CloudDrive.cs and ExternalProviderController.cs. 30 new tests, written before the code.
+- 0e82715 (this retry, outside the files list): app/backend/Tests/Controllers/PrinterRoutesGoneTests.cs no longer expects api/platform-job/{platformjobid}/status-change to be served, and its doc comment is updated to match.
+
+### Verification
+- be-test filtered to PrinterRoutesGoneTests: 15/15 passed.
+- The previous attempt ran be-build (green) and the full be-test (320/321). The only failure was this assertion. The full suite is left to the gate.
+
+### Follow-ups
+- Some Inbox DTOs, ExternalProviderService and IntegrationFileService are still used outside this task. PrintListItemPatientChangedRegenerateSupportsEH is still registered, but nothing publishes its event any more.
+
+
+## Task #7020 - feat(backend): build plate technology (SLA/FDM) + preset flag; POST/DELETE api/build-plate
+
+**Date:** 2026-11-22 · **Repo:** rwclab · **Commit:** 33b9d70
+
+### What changed
+- New enums `BuildPlateTechnology { Sla = 1, Fdm = 2 }` and `BuildPlateDeleteOutcome` (DTOs/Enums); `BuildPlate` gains `Technology`, `IsPreset` and the reverse nav `PlatformJobs` (existing restrict FK, no schema change).
+- `BuildPlateViewModel` gains `technology` (StringEnumConverter, like `shape`) and `isPreset`; `ToPipelineMessage` (worker contract) unchanged.
+- `BuildPlateInputModel` (POST body). `BuildPlateService`: GET ordered by technology, isPreset desc, name; `CreateAsync` validates (each mm in [10, 1000], NaN rejected, defined enums, Circle needs width == depth -> ArgumentException = 400), generates `"{SLA|FDM} {W} x {D} mm"` ("0.#", invariant), returns an existing identical technology+size+shape row with Created = false; `DeleteAsync` -> NotFound / Preset / InUse (any PlatformJob status) / Deleted.
+- `BuildPlateController`: POST -> 201 / 200 (duplicate); DELETE `{id:int}` -> 204 / 404 / 409 `{messages:[...]}`.
+- HasData: 1 Sla "SLA 182 x 103 mm", 2 Sla "SLA 128 x 80 mm", 3 Fdm "FDM 220 x 220 mm", all presets, board-5 geometry kept.
+- Migration `20261122100736_BuildPlateTechnology` (dotnet-ef 10.0.15 in the sdk container, SprintRayWriteContext, snapshot regenerated); Up hand-edited: AddColumn defaults 1 / true, UpdateData x3, then the defaults dropped.
+
+### Tests
+- RED first (compile-level: missing types/actions), then GREEN.
+- `be-build.cmd`: 0 errors. `be-test.cmd "FullyQualifiedName~BuildPlate|RoutesGone|MigrationSnapshot|PlatformJob|PlatformProcess|AutoMapper"`: 122/122; task verify filter + LocalDatabaseBootstrap: 110/110. Full suite left to the gate.
+
+### Notes / follow-ups
+- With the contract ordering GET returns plate 2 (SLA 128 x 80) first. `scripts/gate/lab-pipeline.mjs:253-254,345` takes `plates[0]` and asserts `buildPlateWidthMm == "182.4"`, and the lab-ui stages pick the first plate button, so lab-pipeline's metadata check will now fail (plate 2 is 128 wide). That file is outside this task's scope; it needs a follow-up (pick id 1 / the 182.4 plate explicitly).
+- MigrationSnapshotTests :98-107 left as is (task 7140 rewrites it).
+
+
 ## 2026-11-20 - Task #6700 - docs: one project at a time
 
 **Repo:** rwclab (branch ralph/task-6700, commit 732ed2e)
@@ -6077,6 +6351,20 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
