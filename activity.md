@@ -34,6 +34,61 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+### Task #7540 - docs: build plates are a technology plus a typed size; the SLA bracket is a centred head under the plate; the lab-ui plate stage row
+
+**Status:** done (retry 1, continuation)
+**Commit:** a7f9f47
+
+- README.md:26: the typed-size flow. The fields start at the technology preset; a size committed on blur or Enter selects the matching plate or creates it with POST api/build-plate (#7510). The form has no size list and no delete, but the backend DELETE stays and lab-pipeline uses it. The SLA bracket is a centred head under the plate and FDM has no bracket (#7520).
+- README.md:124: the new lab-ui `plate` stage row. FDM starts at 220/220/250; 200/150/180 creates the plate and the saved project reports it; SLA 128/80/150 selects the preset without a POST; a width of 5 shows the range message.
+- PLAN.md:72: the same in Bulgarian.
+- The "Build plates" contract section (POST/DELETE) is unchanged.
+- Verify: no-external-hosts OK and fe-typecheck OK. The other gates are left to the orchestrator gate (docs-only change, code identical to the merged 7530).
+- Retry cause: the previous agent committed, then waited on a background gate and ended without writing the result file.
+
+
+### Task #7530 - test(gate): lab-ui plate stage for the typed plate size (retry)
+
+- **Gate failures fixed:** banner + projects (`_ctx.mjs` PLATE still pointed at the removed `f-button-group[name="buildPlate"]`, now `[name="technology"] button`; out-of-scope file, scope escalation) and plate (no POST of 200/150/180 because that Fdm plate already exists in the shared DB, created by lab-pipeline and earlier runs, and the form selects listed plates without a POST).
+- **70-plate.mjs:** reads GET api/build-plate before typing; plate absent -> POST with the exact body answered 201/200; present -> POST or plain select (3 s quiet); both paths then need the upload and print details buildPlateWidthMm "200". Every POST answered with something other than 201/200 is a problem. SLA preset no-POST, the width 5 range message and the clean-up are unchanged.
+- **Verify:** `scripts/gate/lab-ui.cmd` (all stages) PASS, 267 s; plate 63.8 s.
+- **Commit:** fce4f9d
+- **Out-of-scope files:** scripts/gate/lab-ui-stages/_ctx.mjs
+- **Note:** 30-upload.mjs / 65-pending-form.mjs still mention the old buildPlate group but tolerate its absence (green); worth a cleanup task.
+
+
+## [2026-11-22 17:16] - Task #7510: feat(frontend): the build plate is the technology plus a typed width, depth and height - the fields start at the technology preset, a committed size selects the matching plate or creates it (POST api/build-plate) and the renderer scales; the size list, Custom size, Add and the delete list are gone
+
+**Status:** ✅ Complete
+
+**TDD Phase:** RECON → RED → GREEN → DONE
+
+**Problem:** User feedback after board 7: pick SLA/FDM, then type numbers and the plate scales - no preset list, no Custom size, no Add, no delete list.
+
+**What was done:**
+- RED: rewrote the plate tests of platform-print-setup.component.spec.ts to the typed-size flow (a-f: FDM fills 220/220/250 + plate 3; committing 200/150/180 creates and selects the created id; 128/80/150 on SLA selects plate 2 without POST; 5/1001/''/abc show the range error and dispatch nothing; an opened plate-3 project shows FDM + 220/220/250; no size group/delete/Add in the DOM), plus typing-without-blur commits nothing, updateOn 'blur', NEXT disabled while creating. Reducer/effect/service specs assert the delete path is gone; print-list.states.spec: invalid while creating. fe-test pattern RED: 24 failures for the right reasons.
+- GREEN: component state = technology + size; onTechnologyChange() (selected plate's size if same technology, else first preset) then commitSize() (validate 10..1000 -> match technology+Rectangle+size -> select + onBuildPlateChange, else CreateBuildPlate; selectCreatedPlate ignores responses of older commits). Template: three f-input number fields plateWidth/plateDepth/plateHeight with updateOn blur (Enter blurs), .plate-size-range; NEXT also needs sizeValid and !creatingPlate. Deleted plateChoice/plateOptions/customPlates/customSizeOpen/customSize/CUSTOM_SIZE_OPTION/addPlate/deletePlate/refreshPlateOptions/unselectRemovedPlate and .custom-plates styles. FE delete path removed (actions, DeleteBuildPlate$ + ToastrService dep, reducer case, BuildPlateService.delete); BE DELETE stays. getArePrintSettingsValid = buildPlateId && !creating. i18n: deleted general.plateSize/customSize/addPlate/deletePlate, messages.plateInUse in all 5 locales.
+
+**Verification:**
+- fe-test "platform-print-setup|build-plate|print-list.states|platform-setup|renderer.component" → 8 suites, 209/209 pass
+- fe-typecheck → clean · fe-build ci → exit 0 · no-external-hosts → OK
+- node scripts/i18n-orphans.mjs → kept keys referenced, no new orphans
+- Full fe-test suite NOT run by the agent (left to the orchestrator gate). lab-ui `plate` stage is red by design until 7530 (not run).
+
+**Files modified:**
+- app/frontend/src/app/app-modules/delta/components/platform-print-setup/platform-print-setup.component.{ts,html,scss,spec.ts}
+- app/frontend/src/app/core/store/actions/build-plate.actions.ts
+- app/frontend/src/app/core/store/effects/build-plate.effects.ts (+ spec)
+- app/frontend/src/app/core/store/reducers/build-plate.reducers.ts (+ spec)
+- app/frontend/src/app/core/store/states/print-list.states.ts (+ spec)
+- app/frontend/src/app/core/services/build-plate.service.ts (+ spec)
+- app/frontend/src/assets/i18n/{en,de,es,fr,it}.json
+
+**Git commit:** `09072e1` — `feat(frontend): the build plate is the technology plus a typed width, depth and height - the fields start at the technology preset, a committed size selects the matching plate or creates it (POST api/build-plate) and the renderer scales; the size list, Custom size, Add and the delete list are gone`
+
+---
+
+
 ## Task #7700 - docs: renderer backend, build plates, gate list (2026-11-22)
 
 **Repo:** rwclab · **Commits:** b0595c1 (docs), 348ebdc (retry fix)
@@ -6351,6 +6406,9 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
 
 
 
