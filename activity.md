@@ -34,6 +34,50 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+### Task #8630 - test(gate): the lab-ui character stage reloads the page after customising - the look comes back from localStorage, Add to plate keeps it, Export STL clears it
+
+**Status:** done (retry 3, scope escalation)
+
+**Changes:**
+- `scripts/gate/lab-ui-stages/80-character.mjs` (3128be6, retry 1): after customising, checks the localStorage draft (v1, orc/knight/idle/poseTime 1); `page.reload` and confirms the panel restores the look; Add to plate keeps the draft, Export STL removes it; the draft is cleaned up on every exit path; actions 30 s, model-back wait 240 s.
+- `scripts/gate/lab-ui-stages/70-plate.mjs` (675dd90, OUT OF SCOPE via escalation): the plate stage failed 5/5 on `locator.press('Tab')` 5 s timeouts under SwiftShader; size fill/Tab -> 30 s (both sites), title fill -> 30 s, readSize inputValue -> 10 s.
+
+**Verification:**
+- `lab-ui.cmd character` exit 0 (retry 1, restored after reload in 108.5 s).
+- `lab-ui.cmd plate` exit 0 (retry 3): load/banner/upload/accordion/export/projects/pending-form/plate/files all ok, total 541 s.
+- The full `lab-ui.cmd` (all stages, about 15 min) is left to the orchestrator gate.
+
+**Notes:** retry 2 died while waiting on a detached gate run; this run killed that orphan (cmd + fe-build containers of this worktree) and ran the gate in the foreground. GitNexus detect_changes skipped: the index covers the main checkout (stale at 022c8db), and the commit touches only the one gate script.
+
+
+## Task 8640 - docs: the character look is kept in localStorage across reloads and cleared by Export STL (board 8c)
+
+- Date: 2026-11-23
+- Files: README.md, PLAN.md
+- README.md: replaced the 'Not persisted yet' bullet with 'Kept across reloads (board 8c)' and extended the gate bullet with the reload check.
+- PLAN.md: added '### Board 8c (2026-11-23)' in Bulgarian before 'Board 9 (следващ)', which is unchanged.
+- Verify: scripts\gate\no-external-hosts.cmd OK; grep 'Not persisted yet' in README.md = 0.
+- Commit: 9d9aa63
+
+
+## Task #8610 — the character look survives a reload (localStorage draft)
+
+**Date:** 2026-11-23
+**Repo:** rwclab · lane fe-character · TDD
+**Commit:** 2bcc9e8
+
+### What changed
+- New `core/models/character/character-draft.ts`: `CHARACTER_DRAFT_KEY = 'rwclab.character.draft'`, `CharacterDraft { version: 1, look, skin, savedAt }`.
+- New `CharacterDraftStore` (providedIn root): read() returns null for a missing, unparsable, non-object or wrong-version value; write() swallows a throwing storage; clear().
+- `CharacterService`: persist() after every applied change() (not on load or detach). doLoad() applies a readable draft after the default wear (setRace -> set -> wear -> play/seek/paused) before 'ready'. A bad draft is dropped (console.warn + clear), the default look stays, never 'error'. New clearDraft().
+- `RendererComponent.exportComposedSTLFile()`: clearDraft() right after downloadFile(). No meshes -> no download -> no clear.
+
+### Tests
+- RED: the 3 suites failed on the missing model/store and on clearDraft.
+- GREEN: fe-test "character|renderer.component" -> 4 suites, 138 tests passed. New: store spec 8 tests, service spec 9 tests, renderer spec 2 assertions extended.
+- fe-typecheck OK · fe-build ci OK · no-external-hosts OK. The full fe-test suite is left to the orchestrator gate.
+
+
 ### Task 8410 — docs: Character tab, three.js 0.186, lab-ui character stage, packs bootstrap (2026-11-22)
 
 **Repo:** rwclab · **Commits:** 7976ad6, eb1528d
@@ -6513,6 +6557,9 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
 
 
 
