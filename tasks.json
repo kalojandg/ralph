@@ -1,306 +1,308 @@
 ﻿[
-  {
-    "id": 9005,
-    "category": "feat",
-    "repo": "rwclab",
-    "lane": "contract",
-    "model": "heavy",
-    "dependsOn": [],
-    "files": [
-      "app/frontend/src/app/core/models/print-list/model-base.ts",
-      "app/frontend/src/app/core/models/print-list/model-base.spec.ts",
-      "app/frontend/src/app/core/models/print-list/index.ts",
-      "app/frontend/src/app/core/enums/platform-job-algorithm.enum.ts",
-      "app/frontend/src/app/core/enums/platform-job-operation.enum.ts",
-      "app/frontend/src/app/core/enums/editing-menu-tab.enum.ts",
-      "app/frontend/src/app/core/enums/renderer-enums.spec.ts",
-      "app/frontend/src/assets/i18n/en.json",
-      "app/frontend/src/assets/i18n/de.json",
-      "app/frontend/src/assets/i18n/es.json",
-      "app/frontend/src/assets/i18n/fr.json",
-      "app/frontend/src/assets/i18n/it.json",
-      "app/backend/DTOs/InputModels/PrintList/ModelEditParamsInputModel.cs",
-      "app/backend/DTOs/Enums/PlatformJobOperations.cs",
-      "workers/algorithms/src/base-logic.mjs",
-      "workers/algorithms/src/steps/base.mjs",
-      "workers/algorithms/test/base-logic.test.mjs"
-    ],
-    "description": "feat: the model base contract - ModelBase (FE model + BE input DTO), Base operation / tab / baseGeneration algorithm enums, i18n keys, and the pure worker base-logic (normalizeBase, autoDiameterMm, planBase) with a stub base step",
-    "specRef": "rwclab-structure.md «Board 9»; README.md «Pipeline (local)» step 4 (the edit chain this board extends)",
-    "tddWorkflow": true,
-    "notes": "WHY: 9110 (worker + infra), 9130 (backend) and 9210 (frontend) run IN PARALLEL against this contract; this task creates the shared types, enum members, i18n keys and the pure worker helpers so that none of them touches another lane's files. Nothing here changes behaviour: the FE does not send `base` yet (9210), the backend does not forward it yet (9130), the worker stub is not wired to any activity yet (9110).\nCONTRACT (binding for 9110 / 9130 / 9210 / 9310; extend, never rename). ONE base per model, stored on the model row and sent per model in the edit message.\nFE model, NEW FILE app/frontend/src/app/core/models/print-list/model-base.ts: export type BaseTextStyle = 'emboss' | 'deboss'; export interface ModelBase { shape: 'round'; diameterMm: number | null; heightMm: number; text: string; textStyle: BaseTextStyle; textSizeMm: number; textDepthMm: number } (diameterMm null = AUTO: the footprint of the model, max(width, depth) in mm + 2 * BASE_MARGIN_MM, rounded UP to 0.5 mm; text '' = plain disc); export const MODEL_BASE_DEFAULTS: ModelBase = { shape: 'round', diameterMm: null, heightMm: 3, text: '', textStyle: 'emboss', textSizeMm: 5, textDepthMm: 0.8 }; export const MODEL_BASE_LIMITS = { diameterMm: [10, 300], heightMm: [1, 10], textSizeMm: [2, 12], textDepthMm: [0.3, 2], textMaxLength: 16 } as const; export const BASE_SINK_MM = 0.4 (the figure sinks this deep into the disc top so the two shells fuse); export const BASE_MARGIN_MM = 3. Exported from the barrel app/frontend/src/app/core/models/print-list/index.ts (export * from './model-base'). JSDoc on every field with units.\nFE enums: app/frontend/src/app/core/enums/platform-job-algorithm.enum.ts gets BaseGeneration = \"baseGeneration\" (the job log ALGORITHM the worker publishes); app/frontend/src/app/core/enums/platform-job-operation.enum.ts gets Base = 10; app/frontend/src/app/core/enums/editing-menu-tab.enum.ts gets Base = 10. app/frontend/src/app/core/enums/renderer-enums.spec.ts PINS every member of these enums (characterization) and must be updated in the same commit (add the three members to the expected objects).\nBE: app/backend/DTOs/InputModels/PrintList/ModelEditParamsInputModel.cs gets `public ModelBase Base { get; set; }` (null = no base / remove the base) and a new class in the same file: `public class ModelBase { public string Shape { get; set; } public double? DiameterMm { get; set; } public double HeightMm { get; set; } public string Text { get; set; } public string TextStyle { get; set; } public double TextSizeMm { get; set; } public double TextDepthMm { get; set; } }` (same JSON contract as the FE interface, camelCase on the wire like Annotation). app/backend/DTOs/Enums/PlatformJobOperations.cs gets `[Display(Name = \"base\")] Base = 10`.\nWorker: the edit message (SetEditPlatformParameters) carries `base` per model (9130 adds it; the FE sends `base: s.base ?? null`). NEW FILE workers/algorithms/src/base-logic.mjs (PURE, NO imports, host-tested): export const BASE_SINK_MM = 0.4, BASE_MARGIN_MM = 3, BASE_LIMITS (same numbers as MODEL_BASE_LIMITS), BASE_DEFAULTS; export function normalizeBase(raw) -> null when raw is null/undefined, otherwise the validated base: shape must be 'round' (else BadRequest), textStyle 'emboss' | 'deboss' (default emboss), text trimmed and cut to 16 chars, numbers clamped into BASE_LIMITS, diameterMm null or a number; export function autoDiameterMm(widthMm, depthMm) -> Math.ceil((Math.max(widthMm, depthMm) + 2 * BASE_MARGIN_MM) * 2) / 2; export function planBase(models) -> [{ individualId, base: normalizeBase(m.base) }] (BadRequest on a missing individualId); export function textPolygons(shapes, extractPoints) is NOT here (it needs three) - see 9110. NEW FILE workers/algorithms/src/steps/base.mjs: export async function baseStep(input, ws) - in 9005 a stub that throws Object.assign(new Error('base step not implemented yet (task 9110)'), { code: 'InternalServerError' }). NEW FILE workers/algorithms/test/base-logic.test.mjs: node:test over normalizeBase / autoDiameterMm / planBase.\nJob logs (worker -> SNS -> callback-bridge -> backend -> WebSocket platformJobLog): a NEW algorithm name `baseGeneration` (STATUS 200 with individualIds = the models whose base was added, replaced or removed; 400/500 with errorCode on failure). The edit chain ends with ONE `platformProcessing` 200 published by the Base state (no longer by the PlaneCut state).\ni18n (all five files app/frontend/src/assets/i18n/en.json, app/frontend/src/assets/i18n/de.json, app/frontend/src/assets/i18n/es.json, app/frontend/src/assets/i18n/fr.json, app/frontend/src/assets/i18n/it.json, same keys, translated): general.base \"Base\", general.baseText \"Text on the base\", general.baseTextStyle \"Text imprint\", general.baseDiameter \"Diameter (mm)\", general.baseDiameterAuto \"auto (fits the model)\", general.baseHeight \"Height (mm)\", general.baseTextSize \"Text size (mm)\", general.baseTextDepth \"Text depth (mm)\", general.applyBase \"Apply base\", general.removeBase \"Remove base\", messages.baseReady \"Base ready\", messages.baseFailed \"Base failed\".\nDO: write model-base.ts exactly as in the contract; export it from the barrel; add the enum members; update renderer-enums.spec.ts (it pins the values: add `BaseGeneration: 'baseGeneration'` to the PlatformJobAlgorithm object and the `Base` members to the operation / tab objects if they are pinned there too - read the spec first); add the i18n keys to the five files in the SAME position (alphabetical inside \"general\" / \"messages\" like the neighbours; the five files must have the same key set - app/frontend has scripts/i18n-orphans.mjs, read its header for how keys are checked); add the BE DTO class + property + enum member (build with scripts\\gate\\be-build.cmd); write base-logic.mjs (pure, no imports, same style as edit-logic.mjs) with the node:test file; write the steps/base.mjs stub (imports nothing from aws.mjs yet, 3 lines).\nRED first: model-base.spec.ts (defaults and limits as in the contract: MODEL_BASE_DEFAULTS.heightMm 3, textStyle emboss, diameterMm null; limits textMaxLength 16) and base-logic.test.mjs (normalizeBase(null) -> null; normalizeBase({ shape: 'round', text: '  Grim Tusk the Mighty  ', heightMm: 99, textStyle: 'deboss' }) -> text 'Grim Tusk the Mi' (16 chars), heightMm 10 (clamped), textStyle deboss, diameterMm null, textSizeMm 5, textDepthMm 0.8; shape 'square' -> BadRequest; autoDiameterMm(31.2, 20) -> 37.5; planBase([{ individualId: 'a', base: null }, { individualId: 'b', base: { shape: 'round' } }]) -> [{ individualId: 'a', base: null }, { individualId: 'b', base: BASE_DEFAULTS-shaped }]; planBase([{}]) -> BadRequest). Run: scripts\\gate\\fe-test.cmd model-base (RED: module missing), node --test workers/algorithms/test (RED), then GREEN for both plus scripts\\gate\\fe-test.cmd renderer-enums (GREEN after the spec update) and scripts\\gate\\be-build.cmd.\n\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY), aws-http (HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data SHARED by every worktree), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start, LocalDatabaseBootstrap), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd (dotnet build Backend.sln), be-test.cmd [filter] (dotnet test Tests), be-smoke.cmd (compose up --build + the start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd, lab-pipeline.cmd [create metadata logs edit delete] (REST pipeline, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; fe-build ci first; stages load banner upload accordion export projects pending-form plate character run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts, frontend in node:22-bookworm. Never run npm/dotnet directly on the host for gates. The full-stack gates (be-smoke, lab-pipeline, lab-ui) recreate the SHARED compose containers from your worktree: run them only where the task lists them.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS; never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no \"for later\"; i18n keys you orphan are listed in the commit body and deleted in the same task when they are in your files). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If a change is needed outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you.",
-    "steps": [
-      {
-        "id": "9005.1",
-        "phase": "RECON",
-        "action": "Read app/frontend/src/app/core/models/print-list/platform-metadata.ts (Annotation class, the style), app/frontend/src/app/core/enums/renderer-enums.spec.ts (what it pins), workers/algorithms/src/edit-logic.mjs + test/input.test.mjs (pure-module style), app/backend/DTOs/InputModels/PrintList/ModelEditParamsInputModel.cs (Annotation class = the pattern for ModelBase), app/frontend/src/assets/i18n/en.json around \"label\" / \"labelImprint\" (where the new general.* keys go) and \"messages\". Write nothing outside the task files."
-      },
-      {
-        "id": "9005.2",
-        "phase": "RED",
-        "action": "Write model-base.spec.ts and workers/algorithms/test/base-logic.test.mjs per notes; scripts\\gate\\fe-test.cmd model-base RED, node --test workers/algorithms/test RED."
-      },
-      {
-        "id": "9005.3",
-        "phase": "GREEN",
-        "action": "Write model-base.ts (+ barrel export), the enum members (+ renderer-enums.spec.ts expectations), the five i18n files, the BE DTO + enum member, base-logic.mjs and the steps/base.mjs stub. GREEN: scripts\\gate\\fe-test.cmd model-base; scripts\\gate\\fe-test.cmd renderer-enums; node --test workers/algorithms/test; scripts\\gate\\be-build.cmd."
-      },
-      {
-        "id": "9005.4",
-        "phase": "DONE",
-        "action": "Commit (description verbatim); body: the contract summary and which task fills each side (9110 worker, 9130 backend, 9210 frontend)."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "scripts\\gate\\fe-test.cmd model-base",
-      "scripts\\gate\\fe-test.cmd renderer-enums",
-      "node --test workers/algorithms/test",
-      "scripts\\gate\\be-build.cmd"
-    ]
-  },
-  {
-    "id": 9110,
-    "category": "feat(worker)",
-    "repo": "rwclab",
-    "lane": "worker",
-    "model": "heavy",
-    "dependsOn": [
-      9005
-    ],
-    "files": [
-      "workers/algorithms/package.json",
-      "workers/algorithms/package-lock.json",
-      "workers/algorithms/src/**",
-      "workers/algorithms/test/**",
-      "infra/resources.mjs",
-      "infra/bootstrap.mjs"
-    ],
-    "description": "feat(worker): the Base pipeline step - activity rwc-base-local after PlaneCut in EditPlatformJobLocal, a round manifold-3d base with embossed / debossed text merged under the model, baseGeneration + platformProcessing logs",
-    "specRef": "rwclab-structure.md «Board 9»; README.md «Pipeline (local)» step 4, «How the flow maps to the original RayWare Cloud»",
-    "tddWorkflow": true,
-    "notes": "WHY: the base is a pipeline algorithm like plane cut (Step Functions -> Activity -> this worker), not a browser-side trick: the user asked for the SprintRay shape (lambdas / step functions + a job log when done). The emulator cannot run manifold-3d as a Lambda (its Lambda runtime has no WebAssembly - probed 27.11.2026), so the step is a Lambda-shaped module (baseStep(input, ws) -> output) behind an Activity, exactly like import and plane-cut.\nPROBED 27.11.2026 against the running emulator (keep it this way): a state machine { PlaneCut: Task(activity A, ResultPath: null, Next: \"Base\"), Base: Task(activity B, End) } runs both top-level Activities in order and the Base task receives the ORIGINAL execution input unchanged (ResultPath null discards the PlaneCut output), execution SUCCEEDED. Map/Parallel are still not allowed around Activities (aws-emulator/README.md).\nINFRA (infra/resources.mjs): R.activities.base = \"rwc-base-local\"; definitions.editPlatformJob becomes StartAt PlaneCut, States: PlaneCut { Type Task, Resource arn.activity(R.activities.planeCut), TimeoutSeconds 300, ResultPath: null, Next: \"Base\" }, Base { Type Task, Resource arn.activity(R.activities.base), TimeoutSeconds 600, End: true }; update the Comment (\"Renderer Confirm -> per-model edit operations: plane cut / transform, then the base. Original RWC: plane-cut / line-cut / ... -> generate-support -> merge-job\"). infra/bootstrap.mjs needs no code change (activities() and stateMachines() loop over R; UpdateStateMachine picks up the new definition) - only its header comment (\"import / plane-cut / base activities\"). Do NOT run the bootstrap or docker compose yourself: 9310 brings the stack up with the new definition.\nWORKER WIRING: workers/algorithms/src/worker.mjs HANDLERS gets `[process.env.RWC_ACTIVITY_BASE || \"rwc-base-local\"]: { algorithm: \"baseGeneration\", fn: baseStep }` (import from ./steps/base.mjs). On a thrown error worker.mjs already publishes `<algorithm> <status>` + SendTaskFailure; the base step itself publishes platformProcessing 500 in its catch like plane-cut.mjs does.\nDEPENDENCIES (workers/algorithms/package.json, you are the only task touching it): three \"0.131.3\" -> \"0.186.1\" (the worker uses Matrix4 / Quaternion only; FontLoader comes from three/examples/jsm/loaders/FontLoader.js) and add \"manifold-3d\": \"^3.5.5\". Regenerate package-lock.json with npm (node 24 on the host is fine for the lock; the image is node:24-bookworm-slim deps + amazonlinux runtime, WASM works there). Copy the font: NEW FILE workers/algorithms/fonts/helvetiker_regular.typeface.json = app/frontend/src/assets/fonts/helvetiker_regular.typeface.json (byte copy; the Dockerfile COPYs src only - add `COPY fonts ./fonts` to workers/algorithms/Dockerfile... NOTE the Dockerfile is NOT in your files list: put the font under workers/algorithms/src/fonts/helvetiker_regular.typeface.json instead, which the existing `COPY src ./src` ships, and read it relative to import.meta.url).\nALGORITHM (workers/algorithms/src/steps/base.mjs, port the probe): input = the edit message { platformId, models: [{ individualId, position, rotation, scale, base, ... }] } (base = the contract object or null/undefined). plan = planBase(input.models) (base-logic.mjs). For EACH model, meta = GetItem RWC_INDIVIDUAL_METADATA_LOCAL (ConsistentRead), existing = meta.STL.Base ? JSON.parse(meta.STL.Base) : null (STL.Base is a JSON STRING: every STL attribute the backend reads is a string). Cases: (a) base null and no existing -> noop. (b) base null and existing -> REMOVE: download delta/individual/{id}/original/{id}.drc, upload it as shared/{id}.drc, DynamoDB UpdateItem REMOVE STL.Base + set STL.Position y = -(bounds of that drc).min[1] * scale.y and LastModified; delete original/{id}.drc (add `remove(key)` = DeleteObjectCommand to aws.mjs). (c) base given -> BUILD: source = existing ? original/{id}.drc : shared/{id}.drc; if !existing, copy shared -> original first (the un-based mesh is kept once so a later text change rebuilds from it; a plane cut after a base drops it, see below). Decode the source with draco3d in JS (add `drcMesh(file)` to mesh.mjs next to drcBounds: positions Float32Array + indices Uint32Array via decoder.GetTrianglesUInt32Array). Apply the model ROTATION to the positions (three Quaternion from the RWC w,x,y,z string, like initMatrix in plane-cut.mjs, no translation, no scale) so the footprint is measured in the pose the user sees; bounds b in LOCAL units. The renderer applies STL.Scale to the whole .drc, so every mm value is converted to local units by the scale component: sc = scale string or \"1,1,1\"; x/z lengths / sc[0], heights / sc[1]. Footprint widthMm = (b.max.x - b.min.x) * sc[0], depthMm = (b.max.z - b.min.z) * sc[2]; diameterMm = base.diameterMm ?? autoDiameterMm(widthMm, depthMm); centre cx, cz = footprint centre (local). Disc: top at yTop = b.min.y + BASE_SINK_MM / sc[1], bottom at yTop - base.heightMm / sc[1], radius diameterMm / 2 / sc[0]. Build the base in manifold-3d (Z up, mm): const wasm = await Module(); wasm.setup() ONCE per process (module-level promise); disc = Manifold.cylinder(heightMm, diameterMm / 2, -1, 96, false). Text (only when base.text !== ''): font = new FontLoader().parse(JSON of the typeface file), shapes = font.generateShapes(base.text, base.textSizeMm), for each shape p = shape.extractPoints(4): outer = p.shape as [x, y] pairs - REVERSE it when its signed area is negative (three emits clockwise outers), holes = p.holes - REVERSE each when its area is positive (manifold fills positive outers, negative holes; wrong orientation = EMPTY extrude, probed); text = Manifold.extrude(polys, base.textDepthMm) translated so the glyph bbox is centred in X and its Y bbox spans [-(R - BASE_MARGIN_MM), -(R - BASE_MARGIN_MM - glyphHeight)] (front edge; R = diameterMm / 2), Z = heightMm for emboss (sits on the top face) or heightMm - textDepthMm for deboss; result = emboss ? disc.add(text) : disc.subtract(text); if the glyph bbox does not fit (glyph width > diameter - 2 * margin, or height > R) throw BadRequest 'BASE_TEXT_DOES_NOT_FIT'. mesh = result.getMesh() (numProp 3; triVerts index vertProperties). Map manifold (Z up, Y = front/back) to the model frame (Y up, the default camera sits at +Z: renderer.component.ts camera.position.set(0, 0, 250)): (x, y, z) -> (x, z, -y) is a proper rotation (orientation kept) that puts the manifold -Y text edge at world +Z = towards the camera and the glyph \"up\" away from the viewer, so the plaque reads correctly from the front; then scale by (1 / sc[0], 1 / sc[1], 1 / sc[2]) and translate to (cx, yTop - heightMm / sc[1], cz) (disc bottom at that Y). Concatenate model triangles + base triangles (one index buffer; no boolean with the model) -> write a BINARY little-endian PLY (add plyWrite(file, positions, indices) to mesh.mjs) -> `center` (MeshTransformer -c, as import does) -> dracoEncode -> b2 = drcBounds -> upload shared/{id}.drc and based/{id}.drc; UpdateItem: STL.Position = \"x,-b2.min[1]*sc[1],z\" (keep x/z of the stored Position), STL.Rotation = \"1,0,0,0\" (the rotation is baked, like plane cut), STL.Base = JSON.stringify(normalized base), LastModified. Return per model { individualId, action: 'base' | 'removeBase' | 'noop', diameterMm?, bounds? }.\nLOGS: after all models: if any action was base/removeBase -> publishAlgorithmDone({ algorithm: \"baseGeneration\", platformId, status: 200, individualIds: [those] }); then ALWAYS publishAlgorithmDone({ algorithm: \"platformProcessing\", platformId, status: 200, individualIds: all }) - this is the final log of the whole edit chain now (the renderer loader waits for it). Failure: catch -> platformProcessing 500 with errorCode (like plane-cut.mjs) and rethrow (worker.mjs publishes baseGeneration <status> + SendTaskFailure). BadRequest codes: BASE_TEXT_DOES_NOT_FIT, and whatever normalizeBase throws.\nPLANE-CUT CHANGES (workers/algorithms/src/steps/plane-cut.mjs + workers/algorithms/src/edit-logic.mjs, same lane): finalLogs(plan) returns [\"planeCut\"] when something was cut, else [] - the PlaneCut state no longer publishes platformProcessing (the Base state does, once, at the end of the chain); update edit-logic tests accordingly (platform-process.test.mjs / a new edit-logic test if finalLogs is tested there). cutOne: when meta.STL.Base exists, after the cut REMOVE STL.Base and delete original/{id}.drc (the cut mesh is the new un-based mesh; the Base state in the same execution rebuilds the base from it when the message carries `base`, so the user sees cut + base after one Confirm). planEdit: pass `base` through untouched (not in UNSUPPORTED). Header comments of plane-cut.mjs / edit-logic.mjs updated.\nTESTS: workers/algorithms/test/base-logic.test.mjs exists (9005) - extend if planBase changes. NEW FILE workers/algorithms/test/base-geometry.test.mjs (node:test; this one IMPORTS manifold-3d, three and the step's pure geometry helpers - put the geometry (buildBase({ diameterMm, heightMm, text, textStyle, textSizeMm, textDepthMm }, fontJson) -> { positions, indices, volume, genus } and the frame mapping / concat helpers) in NEW FILE workers/algorithms/src/base-geometry.mjs so the test does not need AWS): emboss volume > plain disc volume > deboss volume for \"ORC\"; genus 0 for all three; a clockwise polygon input to the orientation helper is reversed; the mapped base lies below y = yTop and inside the radius around (cx, cz); concat keeps model indices and offsets base indices; BASE_TEXT_DOES_NOT_FIT for a 16-char text at textSizeMm 12 on a 20 mm disc. The host has node 24; the verify installs the worker deps on the host (node_modules is gitignored) before node --test.\nRED first: write base-geometry.test.mjs + the edit-logic/finalLogs expectation change; npm --prefix workers/algorithms install; node --test workers/algorithms/test RED; then GREEN. No docker, no bootstrap, no compose from this task (9310 runs the stack gates).\n\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY), aws-http (HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data SHARED by every worktree), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start, LocalDatabaseBootstrap), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd (dotnet build Backend.sln), be-test.cmd [filter] (dotnet test Tests), be-smoke.cmd (compose up --build + the start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd, lab-pipeline.cmd [create metadata logs edit delete] (REST pipeline, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; fe-build ci first; stages load banner upload accordion export projects pending-form plate character run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts, frontend in node:22-bookworm. Never run npm/dotnet directly on the host for gates. The full-stack gates (be-smoke, lab-pipeline, lab-ui) recreate the SHARED compose containers from your worktree: run them only where the task lists them.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS; never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no \"for later\"; i18n keys you orphan are listed in the commit body and deleted in the same task when they are in your files). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If a change is needed outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you.",
-    "steps": [
-      {
-        "id": "9110.1",
-        "phase": "RECON",
-        "action": "Read workers/algorithms/src/steps/plane-cut.mjs (cutOne = the per-model pipeline to mirror: GetItem, download, transform, upload, UpdateItem), workers/algorithms/src/mesh.mjs (drcBounds = the draco3d decode pattern), workers/algorithms/src/aws.mjs, workers/algorithms/src/worker.mjs (HANDLERS), workers/algorithms/src/edit-logic.mjs (+ its tests), infra/resources.mjs, workers/algorithms/src/base-logic.mjs + steps/base.mjs (9005 stubs), aws-emulator/README.md (what the emulator supports). Note the camera in app/frontend/src/app/app-modules/delta/components/renderer/renderer.component.ts (position.set(0, 0, 250))."
-      },
-      {
-        "id": "9110.2",
-        "phase": "RED",
-        "action": "package.json deps (three 0.186.1, manifold-3d), npm --prefix workers/algorithms install; write test/base-geometry.test.mjs and the finalLogs expectation change; node --test workers/algorithms/test RED."
-      },
-      {
-        "id": "9110.3",
-        "phase": "GREEN",
-        "action": "Write src/base-geometry.mjs, src/steps/base.mjs, mesh.mjs (drcMesh, plyWrite), aws.mjs (remove), worker.mjs (HANDLERS), plane-cut.mjs + edit-logic.mjs changes, infra/resources.mjs (activity + chain), the font under src/fonts/; node --test workers/algorithms/test GREEN."
-      },
-      {
-        "id": "9110.4",
-        "phase": "DONE",
-        "action": "Commit (description verbatim); body: the chain, the S3 keys (original/ based/), STL.Base, the log order, the probe facts."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "npm --prefix workers/algorithms install --no-audit --no-fund",
-      "node --test workers/algorithms/test",
-      "git checkout -- workers/algorithms/package-lock.json"
-    ]
-  },
-  {
-    "id": 9130,
-    "category": "feat(backend)",
-    "repo": "rwclab",
-    "lane": "be",
-    "model": "easy",
-    "dependsOn": [
-      9005
-    ],
-    "files": [
-      "app/backend/ServiceLayer/Services/PrintList/PlatformJobService.cs",
-      "app/backend/DTOs/Models/DynamoDb/PlatformMetadata.cs",
-      "app/backend/DTOs/ViewModels/Printer/PlatformMetadataViewModel.cs",
-      "app/backend/Tests/PlatformJob/PlatformProcessMessageTests.cs"
-    ],
-    "description": "feat(backend): the edit message carries each model's base, and the platform metadata returns the stored STL.Base",
-    "specRef": "rwclab-structure.md «Board 9»; README.md «Pipeline (local)» step 4",
-    "tddWorkflow": true,
-    "notes": "WHY: the backend is a pass-through for the base: the FE sends `base` per model in POST api/platform-job/{id}/edit (9210), SetEditPlatformParameters must put it into the Step Functions input the worker reads (9110), and the worker stores the applied base as the STRING attribute STL.Base in RWC_INDIVIDUAL_METADATA_LOCAL, which GET api/platform-job/{id}/platform-metadata must return so the FE shows the current base after a reload.\nDO (3 edits + tests): (1) PlatformJobService.SetEditPlatformParameters (around line 842-890): add `base = p.Base,` to the per-model anonymous object (next to `annotation = p.Annotation`); Newtonsoft serializes the ModelBase DTO (9005) camelCase like the rest of the message (check the serializer settings the method uses; the existing keys are camelCase because the anonymous object members are lower-case - so name the member `base`). (2) DTOs/Models/DynamoDb/PlatformMetadata.cs class StlMetadata (line ~113): `public string Base { get; set; }` (STRING: every STL attribute is a string, .NET DynamoDBContext throws on a mismatched type; the worker writes JSON text). Check ICloneable Clone() copies it if it copies members explicitly. (3) DTOs/ViewModels/Printer/PlatformMetadataViewModel.cs class StlMetadataViewModel (IMapFrom<StlMetadata>, AutoMapper by name): `public string Base { get; set; }` -> JSON `base` (string or null) in the metadata response.\nRED first (Tests/PlatformJob/PlatformProcessMessageTests.cs, same style as SetEditPlatformParameters_CarriesTheBuildPlate...): an edit model whose param has Base = new ModelBase { Shape = \"round\", DiameterMm = null, HeightMm = 3, Text = \"ORC\", TextStyle = \"emboss\", TextSizeMm = 5, TextDepthMm = 0.8 } -> JObject message models[0].base.text == \"ORC\", models[0].base.shape == \"round\", models[0].base.diameterMm is null (JTokenType.Null), models[0].base.heightMm == 3; and a param with Base null -> models[0].base is JTokenType.Null (present, null). scripts\\gate\\be-test.cmd PlatformProcessMessage RED, then GREEN; scripts\\gate\\be-build.cmd.\n\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY), aws-http (HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data SHARED by every worktree), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start, LocalDatabaseBootstrap), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd (dotnet build Backend.sln), be-test.cmd [filter] (dotnet test Tests), be-smoke.cmd (compose up --build + the start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd, lab-pipeline.cmd [create metadata logs edit delete] (REST pipeline, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; fe-build ci first; stages load banner upload accordion export projects pending-form plate character run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts, frontend in node:22-bookworm. Never run npm/dotnet directly on the host for gates. The full-stack gates (be-smoke, lab-pipeline, lab-ui) recreate the SHARED compose containers from your worktree: run them only where the task lists them.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS; never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no \"for later\"; i18n keys you orphan are listed in the commit body and deleted in the same task when they are in your files). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If a change is needed outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you.",
-    "steps": [
-      {
-        "id": "9130.1",
-        "phase": "RECON",
-        "action": "Read PlatformJobService.cs SetEditPlatformParameters (842-900), DTOs/Models/DynamoDb/PlatformMetadata.cs StlMetadata, DTOs/ViewModels/Printer/PlatformMetadataViewModel.cs StlMetadataViewModel, Tests/PlatformJob/PlatformProcessMessageTests.cs, and the 9005 DTO ModelBase in ModelEditParamsInputModel.cs."
-      },
-      {
-        "id": "9130.2",
-        "phase": "RED",
-        "action": "Add the two tests to PlatformProcessMessageTests.cs; scripts\\gate\\be-test.cmd PlatformProcessMessage RED."
-      },
-      {
-        "id": "9130.3",
-        "phase": "GREEN",
-        "action": "The three edits; scripts\\gate\\be-build.cmd; scripts\\gate\\be-test.cmd PlatformProcessMessage GREEN."
-      },
-      {
-        "id": "9130.4",
-        "phase": "DONE",
-        "action": "Commit (description verbatim)."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "scripts\\gate\\be-test.cmd PlatformProcessMessage"
-    ]
-  },
-  {
-    "id": 9210,
-    "category": "feat(frontend)",
-    "repo": "rwclab",
-    "lane": "fe",
-    "model": "heavy",
-    "dependsOn": [
-      9005
-    ],
-    "files": [
-      "app/frontend/src/app/core/models/print-list/platform-metadata.ts",
-      "app/frontend/src/app/core/models/print-list/platform-metadata.spec.ts",
-      "app/frontend/src/app/core/utils/**",
-      "app/frontend/src/app/app-modules/delta/components/platform-model-list/**",
-      "app/frontend/src/app/app-modules/delta/components/platform-setup/**",
-      "app/frontend/src/app/app-modules/delta/components/renderer/**",
-      "app/frontend/src/app/core/store/**",
-      "app/frontend/src/assets/i18n/en.json",
-      "app/frontend/src/assets/i18n/de.json",
-      "app/frontend/src/assets/i18n/es.json",
-      "app/frontend/src/assets/i18n/fr.json",
-      "app/frontend/src/assets/i18n/it.json"
-    ],
-    "description": "feat(frontend): the Base tab in the model list - round base with text (emboss / deboss), diameter / height / text size / depth, Apply and Remove through the edit pipeline, and a Base ready toast on the baseGeneration log",
-    "specRef": "rwclab-structure.md «Board 9»; README.md «The standalone RayWare app»",
-    "tddWorkflow": true,
-    "notes": "WHY: the user builds miniatures; a figure needs a printable base. The Label tab (SprintRay annotation on the model surface) stays as it is (a no-op locally, do not delete it); the NEW accordion \"Base\" (general.base) comes right after it in platform-model-list.component.html (the `[ngbAccordionItem]=\"EditingMenuTab.Base.toString()\"` item, same markup pattern as the Label item at lines ~357-400) and drives the per-model `base` of the contract (9005: ModelBase in core/models/print-list/model-base.ts).\nDATA: app/frontend/src/app/core/models/print-list/platform-metadata.ts PlatformMetadataSTL gets `base: ModelBase | null = null`; the PlatformMetadata constructor sets `stl.base = oldStl.base ? JSON.parse(oldStl.base) : null` (the backend returns STL.Base as a JSON STRING; guard a parse error -> null). app/frontend/src/app/core/utils/platform-job-utils.ts mapToEditModel adds `base: s.base ?? null` to every param (the worker treats null as \"no base / remove\").\nPANEL (platform-model-list.component.ts/html/scss): the Base accordion header button gets class `base-tab`; body: <f-input name=\"baseText\" [maxLength]=\"16\"> bound to selectedModelTempMetadata.base.text (label general.baseText); <f-button-group name=\"baseTextStyle\" [source]=\"baseTextStyleOptions\"> with options { id: 'emboss', name: general.emboss, imagePath: the existing annotation-types/emboss.png } and deboss alike (reuse the annotationOptions images), label general.baseTextStyle; <f-input name=\"baseDiameter\" type number> bound to base.diameterMm with placeholder general.baseDiameterAuto (empty = auto), label general.baseDiameter; three f-number-slider: baseHeight (MODEL_BASE_LIMITS.heightMm, step 0.5), baseTextSize (textSizeMm limits, step 0.5), baseTextDepth (textDepthMm limits, step 0.1), labels from i18n; buttons: <icon-btn class \"base-apply\"> general.applyBase and <icon-btn class \"base-remove\"> general.removeBase (remove enabled only when the SAVED model metadata (selectedModelMetadata.base) is non-null). Opening the Base tab for a model with no base puts { ...MODEL_BASE_DEFAULTS } into selectedModelTempMetadata.base (temp only). Apply = commit the temp base into the temp metadata (SetTempModelMetadataAction, the pattern used for annotation / planeCut), set the operation to PlatformJobOperation.Base (editingMenuChanged / getMenuTab: add the Base case -> EditingMenuTab.Base) and trigger the same confirm path the plane cut uses (saveManualEditing() -> EditPlatformJobAction -> mapToEditModel -> POST .../edit); Remove = temp base null + the same confirm. Only the SELECTED model gets a base; others keep theirs (mapToEditModel sends each model's own base). Do not add a 3D preview in this task: the renderer reloads the .drc with the base when the platformProcessing log arrives (as after a plane cut).\nNOTIFICATION (platform-setup.component.ts processLatestAlgorithmLog): BEFORE the early return on algorithm !== AutoLayout/PlatformProcessing add: if (log.algorithm === PlatformJobAlgorithm.BaseGeneration) { if (isNew) { success -> this.toastrService.success(translate('messages.baseReady')); error status -> this.toastrService.error(translate('messages.baseFailed') + (log.errorCode ? ': ' + log.errorCode : '')) } return }. ToastrService = the app wrapper in app/frontend/src/app/core/services/common/toaster.service.ts (see api.service.ts for the import and the call shape); inject it in the component constructor (update the spec providers with a mock). The loader: the chain still ends with platformProcessing 200, so the existing loader / reload logic needs no change.\nRENDERER: PlatformJobOperation.Base must not fall into the annotation branches of renderer.component.ts (they check === PlatformJobOperation.Annotation, fine); check any switch over PlatformJobOperation / EditingMenuTab in the renderer and the model list for exhaustive handling (TypeScript may flag a missing case) and add the Base case where needed. Store: if a reducer whitelists operations or tabs, add Base.\nSPECS (RED first): platform-job-utils.spec.ts (a model with base -> param.base equals it; without -> null); platform-metadata.spec.ts (NEW FILE if none exists: a response stl with base '{\"shape\":\"round\",...}' string -> parsed object; missing -> null; broken JSON -> null); platform-model-list.component.spec.ts (the Base accordion renders `.base-tab`; opening it on a model without base shows the defaults (height 3, emboss); Apply dispatches the edit path with base.text; Remove disabled without a saved base); platform-setup.component.spec.ts (a baseGeneration 200 log calls toastr success with messages.baseReady; a 500 log calls error; a non-new log does not toast). Run scripts\\gate\\fe-test.cmd platform-model-list, scripts\\gate\\fe-test.cmd platform-setup.component, scripts\\gate\\fe-test.cmd platform-job-utils, scripts\\gate\\fe-test.cmd platform-metadata; then scripts\\gate\\fe-typecheck.cmd. New i18n keys you need beyond the contract go into all five files.\n\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY), aws-http (HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data SHARED by every worktree), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start, LocalDatabaseBootstrap), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd (dotnet build Backend.sln), be-test.cmd [filter] (dotnet test Tests), be-smoke.cmd (compose up --build + the start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd, lab-pipeline.cmd [create metadata logs edit delete] (REST pipeline, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; fe-build ci first; stages load banner upload accordion export projects pending-form plate character run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts, frontend in node:22-bookworm. Never run npm/dotnet directly on the host for gates. The full-stack gates (be-smoke, lab-pipeline, lab-ui) recreate the SHARED compose containers from your worktree: run them only where the task lists them.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS; never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no \"for later\"; i18n keys you orphan are listed in the commit body and deleted in the same task when they are in your files). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If a change is needed outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you.",
-    "steps": [
-      {
-        "id": "9210.1",
-        "phase": "RECON",
-        "action": "Read platform-model-list.component.{ts,html} (Label accordion ~357-400, annotation handling ~240-280, editingMenuChanged 822+, saveManualEditing 913+, getMenuTab ~470), platform-setup.component.ts processLatestAlgorithmLog (~745-790) + its spec providers, core/utils/platform-job-utils.ts, core/models/print-list/platform-metadata.ts constructor, core/services/common/toaster.service.ts, the 9005 model-base.ts and enums."
-      },
-      {
-        "id": "9210.2",
-        "phase": "RED",
-        "action": "Write/extend the four specs per notes; the pattern runs are RED."
-      },
-      {
-        "id": "9210.3",
-        "phase": "GREEN",
-        "action": "Data (platform-metadata.ts, mapToEditModel), the Base accordion + handlers, the toast; pattern runs GREEN; scripts\\gate\\fe-typecheck.cmd GREEN."
-      },
-      {
-        "id": "9210.4",
-        "phase": "DONE",
-        "action": "Commit (description verbatim); body: selectors for the gate (.base-tab, input[name=baseText], .base-apply, .base-remove), the confirm path reused, the toast."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "scripts\\gate\\fe-test.cmd platform-model-list",
-      "scripts\\gate\\fe-test.cmd platform-setup.component",
-      "scripts\\gate\\fe-test.cmd platform-job-utils"
-    ]
-  },
-  {
-    "id": 9310,
-    "category": "test(gate)",
-    "repo": "rwclab",
-    "lane": "gate",
-    "model": "heavy",
-    "dependsOn": [
-      9110,
-      9130,
-      9210
-    ],
-    "files": [
-      "scripts/gate/lab-pipeline.mjs",
-      "scripts/gate/lab-pipeline.cmd",
-      "scripts/gate/lab-ui-stages/75-base.mjs",
-      "scripts/gate/lab-ui-stages/30-upload.mjs",
-      "scripts/gate/lab-ui-stages/_ctx.mjs"
-    ],
-    "description": "test(gate): lab-pipeline stage base (edit with a base -> baseGeneration + platformProcessing, STL.Base in the metadata, a bigger .drc, then removal) and lab-ui stage base (Base tab -> Apply -> edit POST with the base -> Base ready toast)",
-    "specRef": "rwclab-structure.md «Board 9»; README.md «Gate commands»",
-    "tddWorkflow": true,
-    "notes": "WHY: the base is a full-stack feature (FE panel -> backend edit -> Step Functions chain -> worker -> SNS -> bridge -> WebSocket -> FE toast); \"ready for merge\" means the real path is proven end to end (REST, no browser) AND through the built app in the headless browser. This task runs the full-stack gates (lab-pipeline.cmd, lab-ui.cmd) - they rebuild and recreate the shared compose stack from your worktree, which is allowed HERE (the only task of this board that does it). Run `scripts\\gate\\lab-pipeline.cmd` first: it builds the worker image with the new deps and the bootstrap updates EditPlatformJobLocal to the two-state chain; the existing `edit` stage must stay green (planeCut 200 + platformProcessing 200, now published by the Base state).\nLAB-PIPELINE (scripts/gate/lab-pipeline.mjs): STAGES = [create, metadata, logs, edit, base, delete]. stageEdit additionally records ctx.editDrcBytes (the presigned GET byte count it already measures). NEW stageBase(): (1) POST api/platform-job/{id}/edit with the same editModel as stageEdit but operation 10 (Base), planeCut false, params[0].base = { shape: \"round\", diameterMm: null, heightMm: 3, text: \"ORC\", textStyle: \"emboss\", textSizeMm: 5, textDepthMm: 0.8 }; wait (same polling as edit, EDIT_TIMEOUT_MS) for NEW logs baseGeneration 200 AND platformProcessing 200, and assert NO new planeCut log; (2) GET platform-metadata: models.stl[0].base is a string whose JSON.parse has text \"ORC\", shape \"round\", heightMm 3, and a numeric diameterMm (the worker stores the normalized base; auto diameter for the 20 mm box = autoDiameterMm(20, 20) = 26); (3) presigned GET of shared/{id}.drc: 200 and bytes > ctx.editDrcBytes (the base adds triangles); (4) POST edit again with base null -> baseGeneration 200 + platformProcessing 200; metadata base null or absent; the .drc bytes are back within 1 % of ctx.editDrcBytes (the original/ copy was restored). Print each check as the other stages do (ok/FAIL lines, fail() with a hint naming the worker step). Update the header comment (stage list, what base does) and the results comment at the bottom with the measured run. scripts/gate/lab-pipeline.cmd: add `base` to its stage list / usage text if it has one.\nLAB-UI (NEW FILE scripts/gate/lab-ui-stages/75-base.mjs, name 'base', runs after plate and before character; a stage never imports Playwright, it gets ctx.page): starts its own project like 70-plate / 80-character do (New -> Print Job Name -> technology -> size -> NEXT), uploads the 20 mm box through the <f-file> input exactly as 30-upload does (export boxStlAscii from 30-upload.mjs or move it to _ctx.mjs - both are in your files), waits for 1 model item (app-platform-model-list print-list-item) and its .drc GET, clicks the model item to select it, opens the Base accordion (button.base-tab), fills input[name=\"baseText\"] with \"ORC\" (type + blur/Tab: f-input commits on blur), clicks .base-apply; then within 120 s: a POST api/platform-job/{id}/edit whose JSON body params[0].base.text === \"ORC\" (use page.waitForRequest with a predicate reading request.postDataJSON()), the WebSocket frame or catch-up log baseGeneration 200 for this job (GET api/local-realtime/platform-job-logs/{id} as 80-character's helpers do), the success toast with the en text of messages.baseReady (\"Base ready\") visible, and a GET platform-metadata 200 after the log; 0 pageerror / NG0, no banner, no external hosts (ctx collectors, like the other stages). done(): DELETE api/platform-job/{id} for the project it created (the stage must not leave lab-ui projects behind: the emulator keeps 64 MiB per bucket). Description string = what it checks. Run `scripts\\gate\\lab-ui.cmd base` (runs the stages up to base: load banner upload accordion export projects pending-form plate base) and then the FULL `scripts\\gate\\lab-ui.cmd` once (character included, 10+ min) to prove the ordering did not break the later stage.\nRED first: write stageBase and 75-base.mjs; before the implementation is merged they would be red - here everything IS merged (dependsOn), so RED = run the new stage against the stack BEFORE your fixes to its selectors/expectations only if something is wrong; the honest RED for this task is the first run that fails on a real defect. Record the measured timings in the file comments as the other stages do. If the chain, the worker, the backend or the panel has a defect, STOP and report file + line + evidence (the orchestrator widens the scope); do not patch outside scripts/gate.\n\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY), aws-http (HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data SHARED by every worktree), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start, LocalDatabaseBootstrap), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd (dotnet build Backend.sln), be-test.cmd [filter] (dotnet test Tests), be-smoke.cmd (compose up --build + the start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd, lab-pipeline.cmd [create metadata logs edit delete] (REST pipeline, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; fe-build ci first; stages load banner upload accordion export projects pending-form plate character run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts, frontend in node:22-bookworm. Never run npm/dotnet directly on the host for gates. The full-stack gates (be-smoke, lab-pipeline, lab-ui) recreate the SHARED compose containers from your worktree: run them only where the task lists them.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS; never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no \"for later\"; i18n keys you orphan are listed in the commit body and deleted in the same task when they are in your files). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If a change is needed outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you.",
-    "steps": [
-      {
-        "id": "9310.1",
-        "phase": "RECON",
-        "action": "Read scripts/gate/lab-pipeline.mjs (stageEdit, helpers api/must/fetchLogs/hasLog/logSummary, ctx), scripts/gate/lab-ui.mjs (stage loading, ctx), lab-ui-stages/_ctx.mjs, 30-upload.mjs (boxStlAscii + the upload flow), 70-plate.mjs and 80-character.mjs (New project flow, log helpers, done() clean-up), the merged 9110 step (log order), 9210 commit (selectors), 9130 (metadata base string)."
-      },
-      {
-        "id": "9310.2",
-        "phase": "RED",
-        "action": "Write stageBase + 75-base.mjs per notes; run scripts\\gate\\lab-pipeline.cmd (all stages) and scripts\\gate\\lab-ui.cmd base; read the output."
-      },
-      {
-        "id": "9310.3",
-        "phase": "GREEN",
-        "action": "Fix the gate code until lab-pipeline.cmd is green (create metadata logs edit base delete) and lab-ui.cmd base is green; then the full scripts\\gate\\lab-ui.cmd once; record timings in the comments."
-      },
-      {
-        "id": "9310.4",
-        "phase": "DONE",
-        "action": "Commit (description verbatim); body: measured timings and the request/log evidence the stages assert."
-      }
-    ],
-    "passes": false
-  },
-  {
-    "id": 9410,
-    "category": "docs",
-    "repo": "rwclab",
-    "lane": "docs",
-    "model": "easy",
-    "dependsOn": [
-      9110,
-      9130,
-      9210
-    ],
-    "files": [
-      "README.md",
-      "PLAN.md"
-    ],
-    "description": "docs: board 9 - the Base pipeline step (chain PlaneCut -> Base, manifold-3d disc with embossed / debossed text, baseGeneration log, STL.Base, original/ and based/ keys) in README and PLAN",
-    "specRef": "rwclab-structure.md «Board 9»",
-    "tddWorkflow": false,
-    "notes": "WHY: the README is the manual of the lab; every board ends with its documentation. Write from the MERGED code of 9110 / 9130 / 9210 (git log -p on the integration branch), not from this note.\nREADME.md: (1) «Pipeline (local)» step 4 \"Edit\" -> mention that the chain is now PlaneCut -> Base and that platformProcessing 200 is published once, by the Base state; add step 5 \"Base (board 9)\": the Base tab, what the worker builds (round disc from manifold-3d, auto diameter = footprint + 2 x 3 mm, height, text on the front of the top face extruded (emboss, union) or cut in (deboss, difference), the figure sunk 0.4 mm into the disc, NO boolean with the figure - two closed shells in one .drc, which slicers print as one body), the S3 keys original/{id}.drc (the un-based mesh, kept for rebuilds; dropped by a plane cut) and based/{id}.drc, STL.Base (JSON string), the `baseGeneration` log and the \"Base ready\" toast, removal (Remove base restores original/). (2) «Gate commands» table: lab-pipeline stages gain `base`; lab-ui stages gain `base` (75) between plate and character with what it checks; timings from the 9310 commit. (3) «How the flow maps to the original RayWare Cloud» diagram: under \"Confirm changes\" add `└─ Activity rwc-base-local ◀── algorithms-worker (manifold-3d: disc ∪/− text, merged under the figure)`, and a bullet in the differences list: the base is a lab algorithm (SprintRay had raft + supports; the lab has a printable base and no supports yet), it runs as an Activity because the emulator Lambda has no WebAssembly (probed 27.11.2026). (4) «What the lab cannot do yet»: annotation on the model surface still a no-op; the base is the local alternative; supports still none. (5) Worker dependencies: three 0.186.1 + manifold-3d in workers/algorithms; the font ships in src/fonts. (6) Troubleshooting: BASE_TEXT_DOES_NOT_FIT (text wider than the disc minus margins).\nPLAN.md: a «Board 9» note after the board 8c one: what was decided (Activity not Lambda and why; shells not booleaned; manifold-3d), what shipped, and \"Board 10: manifold union of the character (garments, hair, beard as a volume) with the same library; supports; the look in the project metadata\".\nVerify: scripts\\gate\\no-external-hosts.cmd (docs-only task; the default fe-typecheck is the merge gate).\n\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY), aws-http (HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data SHARED by every worktree), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start, LocalDatabaseBootstrap), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd (dotnet build Backend.sln), be-test.cmd [filter] (dotnet test Tests), be-smoke.cmd (compose up --build + the start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd, lab-pipeline.cmd [create metadata logs edit delete] (REST pipeline, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; fe-build ci first; stages load banner upload accordion export projects pending-form plate character run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts, frontend in node:22-bookworm. Never run npm/dotnet directly on the host for gates. The full-stack gates (be-smoke, lab-pipeline, lab-ui) recreate the SHARED compose containers from your worktree: run them only where the task lists them.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS; never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no \"for later\"; i18n keys you orphan are listed in the commit body and deleted in the same task when they are in your files). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If a change is needed outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you.",
-    "steps": [
-      {
-        "id": "9410.1",
-        "phase": "RECON",
-        "action": "Read README.md («Pipeline (local)», «Gate commands», «How the flow maps», «What the lab cannot do yet», «Troubleshooting»), PLAN.md (the Board 8c note), and the merged 9110 / 9130 / 9210 commits (git log -3 -p --stat on the integration branch)."
-      },
-      {
-        "id": "9410.2",
-        "phase": "RED",
-        "action": "Not applicable (docs). Check that \"rwc-base-local\" does not occur in README.md yet."
-      },
-      {
-        "id": "9410.3",
-        "phase": "GREEN",
-        "action": "Edit README.md and PLAN.md as in notes; \"rwc-base-local\" must occur in README.md afterwards (grep)."
-      },
-      {
-        "id": "9410.4",
-        "phase": "DONE",
-        "action": "Commit (description verbatim). Verify: scripts\\gate\\no-external-hosts.cmd."
-      }
-    ],
-    "passes": false,
-    "verify": [
-      "scripts\\gate\\no-external-hosts.cmd"
-    ]
-  }
+    {
+        "id":  9005,
+        "category":  "feat",
+        "repo":  "rwclab",
+        "lane":  "contract",
+        "model":  "heavy",
+        "dependsOn":  [
+
+                      ],
+        "files":  [
+                      "app/frontend/src/app/core/models/print-list/model-base.ts",
+                      "app/frontend/src/app/core/models/print-list/model-base.spec.ts",
+                      "app/frontend/src/app/core/models/print-list/index.ts",
+                      "app/frontend/src/app/core/enums/platform-job-algorithm.enum.ts",
+                      "app/frontend/src/app/core/enums/platform-job-operation.enum.ts",
+                      "app/frontend/src/app/core/enums/editing-menu-tab.enum.ts",
+                      "app/frontend/src/app/core/enums/renderer-enums.spec.ts",
+                      "app/frontend/src/assets/i18n/en.json",
+                      "app/frontend/src/assets/i18n/de.json",
+                      "app/frontend/src/assets/i18n/es.json",
+                      "app/frontend/src/assets/i18n/fr.json",
+                      "app/frontend/src/assets/i18n/it.json",
+                      "app/backend/DTOs/InputModels/PrintList/ModelEditParamsInputModel.cs",
+                      "app/backend/DTOs/Enums/PlatformJobOperations.cs",
+                      "workers/algorithms/src/base-logic.mjs",
+                      "workers/algorithms/src/steps/base.mjs",
+                      "workers/algorithms/test/base-logic.test.mjs"
+                  ],
+        "description":  "feat: the model base contract - ModelBase (FE model + BE input DTO), Base operation / tab / baseGeneration algorithm enums, i18n keys, and the pure worker base-logic (normalizeBase, autoDiameterMm, planBase) with a stub base step",
+        "specRef":  "rwclab-structure.md «Board 9»; README.md «Pipeline (local)» step 4 (the edit chain this board extends)",
+        "tddWorkflow":  true,
+        "notes":  "WHY: 9110 (worker + infra), 9130 (backend) and 9210 (frontend) run IN PARALLEL against this contract; this task creates the shared types, enum members, i18n keys and the pure worker helpers so that none of them touches another lane\u0027s files. Nothing here changes behaviour: the FE does not send `base` yet (9210), the backend does not forward it yet (9130), the worker stub is not wired to any activity yet (9110).\nCONTRACT (binding for 9110 / 9130 / 9210 / 9310; extend, never rename). ONE base per model, stored on the model row and sent per model in the edit message.\nFE model, NEW FILE app/frontend/src/app/core/models/print-list/model-base.ts: export type BaseTextStyle = \u0027emboss\u0027 | \u0027deboss\u0027; export interface ModelBase { shape: \u0027round\u0027; diameterMm: number | null; heightMm: number; text: string; textStyle: BaseTextStyle; textSizeMm: number; textDepthMm: number } (diameterMm null = AUTO: the footprint of the model, max(width, depth) in mm + 2 * BASE_MARGIN_MM, rounded UP to 0.5 mm; text \u0027\u0027 = plain disc); export const MODEL_BASE_DEFAULTS: ModelBase = { shape: \u0027round\u0027, diameterMm: null, heightMm: 3, text: \u0027\u0027, textStyle: \u0027emboss\u0027, textSizeMm: 5, textDepthMm: 0.8 }; export const MODEL_BASE_LIMITS = { diameterMm: [10, 300], heightMm: [1, 10], textSizeMm: [2, 12], textDepthMm: [0.3, 2], textMaxLength: 16 } as const; export const BASE_SINK_MM = 0.4 (the figure sinks this deep into the disc top so the two shells fuse); export const BASE_MARGIN_MM = 3. Exported from the barrel app/frontend/src/app/core/models/print-list/index.ts (export * from \u0027./model-base\u0027). JSDoc on every field with units.\nFE enums: app/frontend/src/app/core/enums/platform-job-algorithm.enum.ts gets BaseGeneration = \"baseGeneration\" (the job log ALGORITHM the worker publishes); app/frontend/src/app/core/enums/platform-job-operation.enum.ts gets Base = 10; app/frontend/src/app/core/enums/editing-menu-tab.enum.ts gets Base = 10. app/frontend/src/app/core/enums/renderer-enums.spec.ts PINS every member of these enums (characterization) and must be updated in the same commit (add the three members to the expected objects).\nBE: app/backend/DTOs/InputModels/PrintList/ModelEditParamsInputModel.cs gets `public ModelBase Base { get; set; }` (null = no base / remove the base) and a new class in the same file: `public class ModelBase { public string Shape { get; set; } public double? DiameterMm { get; set; } public double HeightMm { get; set; } public string Text { get; set; } public string TextStyle { get; set; } public double TextSizeMm { get; set; } public double TextDepthMm { get; set; } }` (same JSON contract as the FE interface, camelCase on the wire like Annotation). app/backend/DTOs/Enums/PlatformJobOperations.cs gets `[Display(Name = \"base\")] Base = 10`.\nWorker: the edit message (SetEditPlatformParameters) carries `base` per model (9130 adds it; the FE sends `base: s.base ?? null`). NEW FILE workers/algorithms/src/base-logic.mjs (PURE, NO imports, host-tested): export const BASE_SINK_MM = 0.4, BASE_MARGIN_MM = 3, BASE_LIMITS (same numbers as MODEL_BASE_LIMITS), BASE_DEFAULTS; export function normalizeBase(raw) -\u003e null when raw is null/undefined, otherwise the validated base: shape must be \u0027round\u0027 (else BadRequest), textStyle \u0027emboss\u0027 | \u0027deboss\u0027 (default emboss), text trimmed and cut to 16 chars, numbers clamped into BASE_LIMITS, diameterMm null or a number; export function autoDiameterMm(widthMm, depthMm) -\u003e Math.ceil((Math.max(widthMm, depthMm) + 2 * BASE_MARGIN_MM) * 2) / 2; export function planBase(models) -\u003e [{ individualId, base: normalizeBase(m.base) }] (BadRequest on a missing individualId); export function textPolygons(shapes, extractPoints) is NOT here (it needs three) - see 9110. NEW FILE workers/algorithms/src/steps/base.mjs: export async function baseStep(input, ws) - in 9005 a stub that throws Object.assign(new Error(\u0027base step not implemented yet (task 9110)\u0027), { code: \u0027InternalServerError\u0027 }). NEW FILE workers/algorithms/test/base-logic.test.mjs: node:test over normalizeBase / autoDiameterMm / planBase.\nJob logs (worker -\u003e SNS -\u003e callback-bridge -\u003e backend -\u003e WebSocket platformJobLog): a NEW algorithm name `baseGeneration` (STATUS 200 with individualIds = the models whose base was added, replaced or removed; 400/500 with errorCode on failure). The edit chain ends with ONE `platformProcessing` 200 published by the Base state (no longer by the PlaneCut state).\ni18n (all five files app/frontend/src/assets/i18n/en.json, app/frontend/src/assets/i18n/de.json, app/frontend/src/assets/i18n/es.json, app/frontend/src/assets/i18n/fr.json, app/frontend/src/assets/i18n/it.json, same keys, translated): general.base \"Base\", general.baseText \"Text on the base\", general.baseTextStyle \"Text imprint\", general.baseDiameter \"Diameter (mm)\", general.baseDiameterAuto \"auto (fits the model)\", general.baseHeight \"Height (mm)\", general.baseTextSize \"Text size (mm)\", general.baseTextDepth \"Text depth (mm)\", general.applyBase \"Apply base\", general.removeBase \"Remove base\", messages.baseReady \"Base ready\", messages.baseFailed \"Base failed\".\nDO: write model-base.ts exactly as in the contract; export it from the barrel; add the enum members; update renderer-enums.spec.ts (it pins the values: add `BaseGeneration: \u0027baseGeneration\u0027` to the PlatformJobAlgorithm object and the `Base` members to the operation / tab objects if they are pinned there too - read the spec first); add the i18n keys to the five files in the SAME position (alphabetical inside \"general\" / \"messages\" like the neighbours; the five files must have the same key set - app/frontend has scripts/i18n-orphans.mjs, read its header for how keys are checked); add the BE DTO class + property + enum member (build with scripts\\gate\\be-build.cmd); write base-logic.mjs (pure, no imports, same style as edit-logic.mjs) with the node:test file; write the steps/base.mjs stub (imports nothing from aws.mjs yet, 3 lines).\nRED first: model-base.spec.ts (defaults and limits as in the contract: MODEL_BASE_DEFAULTS.heightMm 3, textStyle emboss, diameterMm null; limits textMaxLength 16) and base-logic.test.mjs (normalizeBase(null) -\u003e null; normalizeBase({ shape: \u0027round\u0027, text: \u0027  Grim Tusk the Mighty  \u0027, heightMm: 99, textStyle: \u0027deboss\u0027 }) -\u003e text \u0027Grim Tusk the Mi\u0027 (16 chars), heightMm 10 (clamped), textStyle deboss, diameterMm null, textSizeMm 5, textDepthMm 0.8; shape \u0027square\u0027 -\u003e BadRequest; autoDiameterMm(31.2, 20) -\u003e 37.5; planBase([{ individualId: \u0027a\u0027, base: null }, { individualId: \u0027b\u0027, base: { shape: \u0027round\u0027 } }]) -\u003e [{ individualId: \u0027a\u0027, base: null }, { individualId: \u0027b\u0027, base: BASE_DEFAULTS-shaped }]; planBase([{}]) -\u003e BadRequest). Run: scripts\\gate\\fe-test.cmd model-base (RED: module missing), node --test workers/algorithms/test (RED), then GREEN for both plus scripts\\gate\\fe-test.cmd renderer-enums (GREEN after the spec update) and scripts\\gate\\be-build.cmd.\n\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY), aws-http (HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data SHARED by every worktree), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start, LocalDatabaseBootstrap), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd (dotnet build Backend.sln), be-test.cmd [filter] (dotnet test Tests), be-smoke.cmd (compose up --build + the start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd, lab-pipeline.cmd [create metadata logs edit delete] (REST pipeline, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; fe-build ci first; stages load banner upload accordion export projects pending-form plate character run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts, frontend in node:22-bookworm. Never run npm/dotnet directly on the host for gates. The full-stack gates (be-smoke, lab-pipeline, lab-ui) recreate the SHARED compose containers from your worktree: run them only where the task lists them.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS; never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no \"for later\"; i18n keys you orphan are listed in the commit body and deleted in the same task when they are in your files). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If a change is needed outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you.",
+        "steps":  [
+                      {
+                          "id":  "9005.1",
+                          "phase":  "RECON",
+                          "action":  "Read app/frontend/src/app/core/models/print-list/platform-metadata.ts (Annotation class, the style), app/frontend/src/app/core/enums/renderer-enums.spec.ts (what it pins), workers/algorithms/src/edit-logic.mjs + test/input.test.mjs (pure-module style), app/backend/DTOs/InputModels/PrintList/ModelEditParamsInputModel.cs (Annotation class = the pattern for ModelBase), app/frontend/src/assets/i18n/en.json around \"label\" / \"labelImprint\" (where the new general.* keys go) and \"messages\". Write nothing outside the task files."
+                      },
+                      {
+                          "id":  "9005.2",
+                          "phase":  "RED",
+                          "action":  "Write model-base.spec.ts and workers/algorithms/test/base-logic.test.mjs per notes; scripts\\gate\\fe-test.cmd model-base RED, node --test workers/algorithms/test RED."
+                      },
+                      {
+                          "id":  "9005.3",
+                          "phase":  "GREEN",
+                          "action":  "Write model-base.ts (+ barrel export), the enum members (+ renderer-enums.spec.ts expectations), the five i18n files, the BE DTO + enum member, base-logic.mjs and the steps/base.mjs stub. GREEN: scripts\\gate\\fe-test.cmd model-base; scripts\\gate\\fe-test.cmd renderer-enums; node --test workers/algorithms/test; scripts\\gate\\be-build.cmd."
+                      },
+                      {
+                          "id":  "9005.4",
+                          "phase":  "DONE",
+                          "action":  "Commit (description verbatim); body: the contract summary and which task fills each side (9110 worker, 9130 backend, 9210 frontend)."
+                      }
+                  ],
+        "passes":  true,
+        "verify":  [
+                       "scripts\\gate\\fe-test.cmd model-base",
+                       "scripts\\gate\\fe-test.cmd renderer-enums",
+                       "node --test workers/algorithms/test",
+                       "scripts\\gate\\be-build.cmd"
+                   ]
+    },
+    {
+        "id":  9110,
+        "category":  "feat(worker)",
+        "repo":  "rwclab",
+        "lane":  "worker",
+        "model":  "heavy",
+        "dependsOn":  [
+                          9005
+                      ],
+        "files":  [
+                      "workers/algorithms/package.json",
+                      "workers/algorithms/package-lock.json",
+                      "workers/algorithms/src/**",
+                      "workers/algorithms/test/**",
+                      "infra/resources.mjs",
+                      "infra/bootstrap.mjs"
+                  ],
+        "description":  "feat(worker): the Base pipeline step - activity rwc-base-local after PlaneCut in EditPlatformJobLocal, a round manifold-3d base with embossed / debossed text merged under the model, baseGeneration + platformProcessing logs",
+        "specRef":  "rwclab-structure.md «Board 9»; README.md «Pipeline (local)» step 4, «How the flow maps to the original RayWare Cloud»",
+        "tddWorkflow":  true,
+        "notes":  "WHY: the base is a pipeline algorithm like plane cut (Step Functions -\u003e Activity -\u003e this worker), not a browser-side trick: the user asked for the SprintRay shape (lambdas / step functions + a job log when done). The emulator cannot run manifold-3d as a Lambda (its Lambda runtime has no WebAssembly - probed 27.11.2026), so the step is a Lambda-shaped module (baseStep(input, ws) -\u003e output) behind an Activity, exactly like import and plane-cut.\nPROBED 27.11.2026 against the running emulator (keep it this way): a state machine { PlaneCut: Task(activity A, ResultPath: null, Next: \"Base\"), Base: Task(activity B, End) } runs both top-level Activities in order and the Base task receives the ORIGINAL execution input unchanged (ResultPath null discards the PlaneCut output), execution SUCCEEDED. Map/Parallel are still not allowed around Activities (aws-emulator/README.md).\nINFRA (infra/resources.mjs): R.activities.base = \"rwc-base-local\"; definitions.editPlatformJob becomes StartAt PlaneCut, States: PlaneCut { Type Task, Resource arn.activity(R.activities.planeCut), TimeoutSeconds 300, ResultPath: null, Next: \"Base\" }, Base { Type Task, Resource arn.activity(R.activities.base), TimeoutSeconds 600, End: true }; update the Comment (\"Renderer Confirm -\u003e per-model edit operations: plane cut / transform, then the base. Original RWC: plane-cut / line-cut / ... -\u003e generate-support -\u003e merge-job\"). infra/bootstrap.mjs needs no code change (activities() and stateMachines() loop over R; UpdateStateMachine picks up the new definition) - only its header comment (\"import / plane-cut / base activities\"). Do NOT run the bootstrap or docker compose yourself: 9310 brings the stack up with the new definition.\nWORKER WIRING: workers/algorithms/src/worker.mjs HANDLERS gets `[process.env.RWC_ACTIVITY_BASE || \"rwc-base-local\"]: { algorithm: \"baseGeneration\", fn: baseStep }` (import from ./steps/base.mjs). On a thrown error worker.mjs already publishes `\u003calgorithm\u003e \u003cstatus\u003e` + SendTaskFailure; the base step itself publishes platformProcessing 500 in its catch like plane-cut.mjs does.\nDEPENDENCIES (workers/algorithms/package.json, you are the only task touching it): three \"0.131.3\" -\u003e \"0.186.1\" (the worker uses Matrix4 / Quaternion only; FontLoader comes from three/examples/jsm/loaders/FontLoader.js) and add \"manifold-3d\": \"^3.5.5\". Regenerate package-lock.json with npm (node 24 on the host is fine for the lock; the image is node:24-bookworm-slim deps + amazonlinux runtime, WASM works there). Copy the font: NEW FILE workers/algorithms/fonts/helvetiker_regular.typeface.json = app/frontend/src/assets/fonts/helvetiker_regular.typeface.json (byte copy; the Dockerfile COPYs src only - add `COPY fonts ./fonts` to workers/algorithms/Dockerfile... NOTE the Dockerfile is NOT in your files list: put the font under workers/algorithms/src/fonts/helvetiker_regular.typeface.json instead, which the existing `COPY src ./src` ships, and read it relative to import.meta.url).\nALGORITHM (workers/algorithms/src/steps/base.mjs, port the probe): input = the edit message { platformId, models: [{ individualId, position, rotation, scale, base, ... }] } (base = the contract object or null/undefined). plan = planBase(input.models) (base-logic.mjs). For EACH model, meta = GetItem RWC_INDIVIDUAL_METADATA_LOCAL (ConsistentRead), existing = meta.STL.Base ? JSON.parse(meta.STL.Base) : null (STL.Base is a JSON STRING: every STL attribute the backend reads is a string). Cases: (a) base null and no existing -\u003e noop. (b) base null and existing -\u003e REMOVE: download delta/individual/{id}/original/{id}.drc, upload it as shared/{id}.drc, DynamoDB UpdateItem REMOVE STL.Base + set STL.Position y = -(bounds of that drc).min[1] * scale.y and LastModified; delete original/{id}.drc (add `remove(key)` = DeleteObjectCommand to aws.mjs). (c) base given -\u003e BUILD: source = existing ? original/{id}.drc : shared/{id}.drc; if !existing, copy shared -\u003e original first (the un-based mesh is kept once so a later text change rebuilds from it; a plane cut after a base drops it, see below). Decode the source with draco3d in JS (add `drcMesh(file)` to mesh.mjs next to drcBounds: positions Float32Array + indices Uint32Array via decoder.GetTrianglesUInt32Array). Apply the model ROTATION to the positions (three Quaternion from the RWC w,x,y,z string, like initMatrix in plane-cut.mjs, no translation, no scale) so the footprint is measured in the pose the user sees; bounds b in LOCAL units. The renderer applies STL.Scale to the whole .drc, so every mm value is converted to local units by the scale component: sc = scale string or \"1,1,1\"; x/z lengths / sc[0], heights / sc[1]. Footprint widthMm = (b.max.x - b.min.x) * sc[0], depthMm = (b.max.z - b.min.z) * sc[2]; diameterMm = base.diameterMm ?? autoDiameterMm(widthMm, depthMm); centre cx, cz = footprint centre (local). Disc: top at yTop = b.min.y + BASE_SINK_MM / sc[1], bottom at yTop - base.heightMm / sc[1], radius diameterMm / 2 / sc[0]. Build the base in manifold-3d (Z up, mm): const wasm = await Module(); wasm.setup() ONCE per process (module-level promise); disc = Manifold.cylinder(heightMm, diameterMm / 2, -1, 96, false). Text (only when base.text !== \u0027\u0027): font = new FontLoader().parse(JSON of the typeface file), shapes = font.generateShapes(base.text, base.textSizeMm), for each shape p = shape.extractPoints(4): outer = p.shape as [x, y] pairs - REVERSE it when its signed area is negative (three emits clockwise outers), holes = p.holes - REVERSE each when its area is positive (manifold fills positive outers, negative holes; wrong orientation = EMPTY extrude, probed); text = Manifold.extrude(polys, base.textDepthMm) translated so the glyph bbox is centred in X and its Y bbox spans [-(R - BASE_MARGIN_MM), -(R - BASE_MARGIN_MM - glyphHeight)] (front edge; R = diameterMm / 2), Z = heightMm for emboss (sits on the top face) or heightMm - textDepthMm for deboss; result = emboss ? disc.add(text) : disc.subtract(text); if the glyph bbox does not fit (glyph width \u003e diameter - 2 * margin, or height \u003e R) throw BadRequest \u0027BASE_TEXT_DOES_NOT_FIT\u0027. mesh = result.getMesh() (numProp 3; triVerts index vertProperties). Map manifold (Z up, Y = front/back) to the model frame (Y up, the default camera sits at +Z: renderer.component.ts camera.position.set(0, 0, 250)): (x, y, z) -\u003e (x, z, -y) is a proper rotation (orientation kept) that puts the manifold -Y text edge at world +Z = towards the camera and the glyph \"up\" away from the viewer, so the plaque reads correctly from the front; then scale by (1 / sc[0], 1 / sc[1], 1 / sc[2]) and translate to (cx, yTop - heightMm / sc[1], cz) (disc bottom at that Y). Concatenate model triangles + base triangles (one index buffer; no boolean with the model) -\u003e write a BINARY little-endian PLY (add plyWrite(file, positions, indices) to mesh.mjs) -\u003e `center` (MeshTransformer -c, as import does) -\u003e dracoEncode -\u003e b2 = drcBounds -\u003e upload shared/{id}.drc and based/{id}.drc; UpdateItem: STL.Position = \"x,-b2.min[1]*sc[1],z\" (keep x/z of the stored Position), STL.Rotation = \"1,0,0,0\" (the rotation is baked, like plane cut), STL.Base = JSON.stringify(normalized base), LastModified. Return per model { individualId, action: \u0027base\u0027 | \u0027removeBase\u0027 | \u0027noop\u0027, diameterMm?, bounds? }.\nLOGS: after all models: if any action was base/removeBase -\u003e publishAlgorithmDone({ algorithm: \"baseGeneration\", platformId, status: 200, individualIds: [those] }); then ALWAYS publishAlgorithmDone({ algorithm: \"platformProcessing\", platformId, status: 200, individualIds: all }) - this is the final log of the whole edit chain now (the renderer loader waits for it). Failure: catch -\u003e platformProcessing 500 with errorCode (like plane-cut.mjs) and rethrow (worker.mjs publishes baseGeneration \u003cstatus\u003e + SendTaskFailure). BadRequest codes: BASE_TEXT_DOES_NOT_FIT, and whatever normalizeBase throws.\nPLANE-CUT CHANGES (workers/algorithms/src/steps/plane-cut.mjs + workers/algorithms/src/edit-logic.mjs, same lane): finalLogs(plan) returns [\"planeCut\"] when something was cut, else [] - the PlaneCut state no longer publishes platformProcessing (the Base state does, once, at the end of the chain); update edit-logic tests accordingly (platform-process.test.mjs / a new edit-logic test if finalLogs is tested there). cutOne: when meta.STL.Base exists, after the cut REMOVE STL.Base and delete original/{id}.drc (the cut mesh is the new un-based mesh; the Base state in the same execution rebuilds the base from it when the message carries `base`, so the user sees cut + base after one Confirm). planEdit: pass `base` through untouched (not in UNSUPPORTED). Header comments of plane-cut.mjs / edit-logic.mjs updated.\nTESTS: workers/algorithms/test/base-logic.test.mjs exists (9005) - extend if planBase changes. NEW FILE workers/algorithms/test/base-geometry.test.mjs (node:test; this one IMPORTS manifold-3d, three and the step\u0027s pure geometry helpers - put the geometry (buildBase({ diameterMm, heightMm, text, textStyle, textSizeMm, textDepthMm }, fontJson) -\u003e { positions, indices, volume, genus } and the frame mapping / concat helpers) in NEW FILE workers/algorithms/src/base-geometry.mjs so the test does not need AWS): emboss volume \u003e plain disc volume \u003e deboss volume for \"ORC\"; genus 0 for all three; a clockwise polygon input to the orientation helper is reversed; the mapped base lies below y = yTop and inside the radius around (cx, cz); concat keeps model indices and offsets base indices; BASE_TEXT_DOES_NOT_FIT for a 16-char text at textSizeMm 12 on a 20 mm disc. The host has node 24; the verify installs the worker deps on the host (node_modules is gitignored) before node --test.\nRED first: write base-geometry.test.mjs + the edit-logic/finalLogs expectation change; npm --prefix workers/algorithms install; node --test workers/algorithms/test RED; then GREEN. No docker, no bootstrap, no compose from this task (9310 runs the stack gates).\n\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY), aws-http (HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data SHARED by every worktree), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start, LocalDatabaseBootstrap), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd (dotnet build Backend.sln), be-test.cmd [filter] (dotnet test Tests), be-smoke.cmd (compose up --build + the start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd, lab-pipeline.cmd [create metadata logs edit delete] (REST pipeline, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; fe-build ci first; stages load banner upload accordion export projects pending-form plate character run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts, frontend in node:22-bookworm. Never run npm/dotnet directly on the host for gates. The full-stack gates (be-smoke, lab-pipeline, lab-ui) recreate the SHARED compose containers from your worktree: run them only where the task lists them.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS; never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no \"for later\"; i18n keys you orphan are listed in the commit body and deleted in the same task when they are in your files). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If a change is needed outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you.",
+        "steps":  [
+                      {
+                          "id":  "9110.1",
+                          "phase":  "RECON",
+                          "action":  "Read workers/algorithms/src/steps/plane-cut.mjs (cutOne = the per-model pipeline to mirror: GetItem, download, transform, upload, UpdateItem), workers/algorithms/src/mesh.mjs (drcBounds = the draco3d decode pattern), workers/algorithms/src/aws.mjs, workers/algorithms/src/worker.mjs (HANDLERS), workers/algorithms/src/edit-logic.mjs (+ its tests), infra/resources.mjs, workers/algorithms/src/base-logic.mjs + steps/base.mjs (9005 stubs), aws-emulator/README.md (what the emulator supports). Note the camera in app/frontend/src/app/app-modules/delta/components/renderer/renderer.component.ts (position.set(0, 0, 250))."
+                      },
+                      {
+                          "id":  "9110.2",
+                          "phase":  "RED",
+                          "action":  "package.json deps (three 0.186.1, manifold-3d), npm --prefix workers/algorithms install; write test/base-geometry.test.mjs and the finalLogs expectation change; node --test workers/algorithms/test RED."
+                      },
+                      {
+                          "id":  "9110.3",
+                          "phase":  "GREEN",
+                          "action":  "Write src/base-geometry.mjs, src/steps/base.mjs, mesh.mjs (drcMesh, plyWrite), aws.mjs (remove), worker.mjs (HANDLERS), plane-cut.mjs + edit-logic.mjs changes, infra/resources.mjs (activity + chain), the font under src/fonts/; node --test workers/algorithms/test GREEN."
+                      },
+                      {
+                          "id":  "9110.4",
+                          "phase":  "DONE",
+                          "action":  "Commit (description verbatim); body: the chain, the S3 keys (original/ based/), STL.Base, the log order, the probe facts."
+                      }
+                  ],
+        "passes":  true,
+        "verify":  [
+                       "npm --prefix workers/algorithms install --no-audit --no-fund",
+                       "node --test workers/algorithms/test",
+                       "git checkout -- workers/algorithms/package-lock.json"
+                   ]
+    },
+    {
+        "id":  9130,
+        "category":  "feat(backend)",
+        "repo":  "rwclab",
+        "lane":  "be",
+        "model":  "easy",
+        "dependsOn":  [
+                          9005
+                      ],
+        "files":  [
+                      "app/backend/ServiceLayer/Services/PrintList/PlatformJobService.cs",
+                      "app/backend/DTOs/Models/DynamoDb/PlatformMetadata.cs",
+                      "app/backend/DTOs/ViewModels/Printer/PlatformMetadataViewModel.cs",
+                      "app/backend/Tests/PlatformJob/PlatformProcessMessageTests.cs"
+                  ],
+        "description":  "feat(backend): the edit message carries each model\u0027s base, and the platform metadata returns the stored STL.Base",
+        "specRef":  "rwclab-structure.md «Board 9»; README.md «Pipeline (local)» step 4",
+        "tddWorkflow":  true,
+        "notes":  "WHY: the backend is a pass-through for the base: the FE sends `base` per model in POST api/platform-job/{id}/edit (9210), SetEditPlatformParameters must put it into the Step Functions input the worker reads (9110), and the worker stores the applied base as the STRING attribute STL.Base in RWC_INDIVIDUAL_METADATA_LOCAL, which GET api/platform-job/{id}/platform-metadata must return so the FE shows the current base after a reload.\nDO (3 edits + tests): (1) PlatformJobService.SetEditPlatformParameters (around line 842-890): add `base = p.Base,` to the per-model anonymous object (next to `annotation = p.Annotation`); Newtonsoft serializes the ModelBase DTO (9005) camelCase like the rest of the message (check the serializer settings the method uses; the existing keys are camelCase because the anonymous object members are lower-case - so name the member `base`). (2) DTOs/Models/DynamoDb/PlatformMetadata.cs class StlMetadata (line ~113): `public string Base { get; set; }` (STRING: every STL attribute is a string, .NET DynamoDBContext throws on a mismatched type; the worker writes JSON text). Check ICloneable Clone() copies it if it copies members explicitly. (3) DTOs/ViewModels/Printer/PlatformMetadataViewModel.cs class StlMetadataViewModel (IMapFrom\u003cStlMetadata\u003e, AutoMapper by name): `public string Base { get; set; }` -\u003e JSON `base` (string or null) in the metadata response.\nRED first (Tests/PlatformJob/PlatformProcessMessageTests.cs, same style as SetEditPlatformParameters_CarriesTheBuildPlate...): an edit model whose param has Base = new ModelBase { Shape = \"round\", DiameterMm = null, HeightMm = 3, Text = \"ORC\", TextStyle = \"emboss\", TextSizeMm = 5, TextDepthMm = 0.8 } -\u003e JObject message models[0].base.text == \"ORC\", models[0].base.shape == \"round\", models[0].base.diameterMm is null (JTokenType.Null), models[0].base.heightMm == 3; and a param with Base null -\u003e models[0].base is JTokenType.Null (present, null). scripts\\gate\\be-test.cmd PlatformProcessMessage RED, then GREEN; scripts\\gate\\be-build.cmd.\n\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY), aws-http (HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data SHARED by every worktree), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start, LocalDatabaseBootstrap), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd (dotnet build Backend.sln), be-test.cmd [filter] (dotnet test Tests), be-smoke.cmd (compose up --build + the start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd, lab-pipeline.cmd [create metadata logs edit delete] (REST pipeline, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; fe-build ci first; stages load banner upload accordion export projects pending-form plate character run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts, frontend in node:22-bookworm. Never run npm/dotnet directly on the host for gates. The full-stack gates (be-smoke, lab-pipeline, lab-ui) recreate the SHARED compose containers from your worktree: run them only where the task lists them.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS; never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no \"for later\"; i18n keys you orphan are listed in the commit body and deleted in the same task when they are in your files). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If a change is needed outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you.",
+        "steps":  [
+                      {
+                          "id":  "9130.1",
+                          "phase":  "RECON",
+                          "action":  "Read PlatformJobService.cs SetEditPlatformParameters (842-900), DTOs/Models/DynamoDb/PlatformMetadata.cs StlMetadata, DTOs/ViewModels/Printer/PlatformMetadataViewModel.cs StlMetadataViewModel, Tests/PlatformJob/PlatformProcessMessageTests.cs, and the 9005 DTO ModelBase in ModelEditParamsInputModel.cs."
+                      },
+                      {
+                          "id":  "9130.2",
+                          "phase":  "RED",
+                          "action":  "Add the two tests to PlatformProcessMessageTests.cs; scripts\\gate\\be-test.cmd PlatformProcessMessage RED."
+                      },
+                      {
+                          "id":  "9130.3",
+                          "phase":  "GREEN",
+                          "action":  "The three edits; scripts\\gate\\be-build.cmd; scripts\\gate\\be-test.cmd PlatformProcessMessage GREEN."
+                      },
+                      {
+                          "id":  "9130.4",
+                          "phase":  "DONE",
+                          "action":  "Commit (description verbatim)."
+                      }
+                  ],
+        "passes":  true,
+        "verify":  [
+                       "scripts\\gate\\be-test.cmd PlatformProcessMessage"
+                   ]
+    },
+    {
+        "id":  9210,
+        "category":  "feat(frontend)",
+        "repo":  "rwclab",
+        "lane":  "fe",
+        "model":  "heavy",
+        "dependsOn":  [
+                          9005
+                      ],
+        "files":  [
+                      "app/frontend/src/app/core/models/print-list/platform-metadata.ts",
+                      "app/frontend/src/app/core/models/print-list/platform-metadata.spec.ts",
+                      "app/frontend/src/app/core/utils/**",
+                      "app/frontend/src/app/app-modules/delta/components/platform-model-list/**",
+                      "app/frontend/src/app/app-modules/delta/components/platform-setup/**",
+                      "app/frontend/src/app/app-modules/delta/components/renderer/**",
+                      "app/frontend/src/app/core/store/**",
+                      "app/frontend/src/assets/i18n/en.json",
+                      "app/frontend/src/assets/i18n/de.json",
+                      "app/frontend/src/assets/i18n/es.json",
+                      "app/frontend/src/assets/i18n/fr.json",
+                      "app/frontend/src/assets/i18n/it.json"
+                  ],
+        "description":  "feat(frontend): the Base tab in the model list - round base with text (emboss / deboss), diameter / height / text size / depth, Apply and Remove through the edit pipeline, and a Base ready toast on the baseGeneration log",
+        "specRef":  "rwclab-structure.md «Board 9»; README.md «The standalone RayWare app»",
+        "tddWorkflow":  true,
+        "notes":  "WHY: the user builds miniatures; a figure needs a printable base. The Label tab (SprintRay annotation on the model surface) stays as it is (a no-op locally, do not delete it); the NEW accordion \"Base\" (general.base) comes right after it in platform-model-list.component.html (the `[ngbAccordionItem]=\"EditingMenuTab.Base.toString()\"` item, same markup pattern as the Label item at lines ~357-400) and drives the per-model `base` of the contract (9005: ModelBase in core/models/print-list/model-base.ts).\nDATA: app/frontend/src/app/core/models/print-list/platform-metadata.ts PlatformMetadataSTL gets `base: ModelBase | null = null`; the PlatformMetadata constructor sets `stl.base = oldStl.base ? JSON.parse(oldStl.base) : null` (the backend returns STL.Base as a JSON STRING; guard a parse error -\u003e null). app/frontend/src/app/core/utils/platform-job-utils.ts mapToEditModel adds `base: s.base ?? null` to every param (the worker treats null as \"no base / remove\").\nPANEL (platform-model-list.component.ts/html/scss): the Base accordion header button gets class `base-tab`; body: \u003cf-input name=\"baseText\" [maxLength]=\"16\"\u003e bound to selectedModelTempMetadata.base.text (label general.baseText); \u003cf-button-group name=\"baseTextStyle\" [source]=\"baseTextStyleOptions\"\u003e with options { id: \u0027emboss\u0027, name: general.emboss, imagePath: the existing annotation-types/emboss.png } and deboss alike (reuse the annotationOptions images), label general.baseTextStyle; \u003cf-input name=\"baseDiameter\" type number\u003e bound to base.diameterMm with placeholder general.baseDiameterAuto (empty = auto), label general.baseDiameter; three f-number-slider: baseHeight (MODEL_BASE_LIMITS.heightMm, step 0.5), baseTextSize (textSizeMm limits, step 0.5), baseTextDepth (textDepthMm limits, step 0.1), labels from i18n; buttons: \u003cicon-btn class \"base-apply\"\u003e general.applyBase and \u003cicon-btn class \"base-remove\"\u003e general.removeBase (remove enabled only when the SAVED model metadata (selectedModelMetadata.base) is non-null). Opening the Base tab for a model with no base puts { ...MODEL_BASE_DEFAULTS } into selectedModelTempMetadata.base (temp only). Apply = commit the temp base into the temp metadata (SetTempModelMetadataAction, the pattern used for annotation / planeCut), set the operation to PlatformJobOperation.Base (editingMenuChanged / getMenuTab: add the Base case -\u003e EditingMenuTab.Base) and trigger the same confirm path the plane cut uses (saveManualEditing() -\u003e EditPlatformJobAction -\u003e mapToEditModel -\u003e POST .../edit); Remove = temp base null + the same confirm. Only the SELECTED model gets a base; others keep theirs (mapToEditModel sends each model\u0027s own base). Do not add a 3D preview in this task: the renderer reloads the .drc with the base when the platformProcessing log arrives (as after a plane cut).\nNOTIFICATION (platform-setup.component.ts processLatestAlgorithmLog): BEFORE the early return on algorithm !== AutoLayout/PlatformProcessing add: if (log.algorithm === PlatformJobAlgorithm.BaseGeneration) { if (isNew) { success -\u003e this.toastrService.success(translate(\u0027messages.baseReady\u0027)); error status -\u003e this.toastrService.error(translate(\u0027messages.baseFailed\u0027) + (log.errorCode ? \u0027: \u0027 + log.errorCode : \u0027\u0027)) } return }. ToastrService = the app wrapper in app/frontend/src/app/core/services/common/toaster.service.ts (see api.service.ts for the import and the call shape); inject it in the component constructor (update the spec providers with a mock). The loader: the chain still ends with platformProcessing 200, so the existing loader / reload logic needs no change.\nRENDERER: PlatformJobOperation.Base must not fall into the annotation branches of renderer.component.ts (they check === PlatformJobOperation.Annotation, fine); check any switch over PlatformJobOperation / EditingMenuTab in the renderer and the model list for exhaustive handling (TypeScript may flag a missing case) and add the Base case where needed. Store: if a reducer whitelists operations or tabs, add Base.\nSPECS (RED first): platform-job-utils.spec.ts (a model with base -\u003e param.base equals it; without -\u003e null); platform-metadata.spec.ts (NEW FILE if none exists: a response stl with base \u0027{\"shape\":\"round\",...}\u0027 string -\u003e parsed object; missing -\u003e null; broken JSON -\u003e null); platform-model-list.component.spec.ts (the Base accordion renders `.base-tab`; opening it on a model without base shows the defaults (height 3, emboss); Apply dispatches the edit path with base.text; Remove disabled without a saved base); platform-setup.component.spec.ts (a baseGeneration 200 log calls toastr success with messages.baseReady; a 500 log calls error; a non-new log does not toast). Run scripts\\gate\\fe-test.cmd platform-model-list, scripts\\gate\\fe-test.cmd platform-setup.component, scripts\\gate\\fe-test.cmd platform-job-utils, scripts\\gate\\fe-test.cmd platform-metadata; then scripts\\gate\\fe-typecheck.cmd. New i18n keys you need beyond the contract go into all five files.\n\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY), aws-http (HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data SHARED by every worktree), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start, LocalDatabaseBootstrap), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd (dotnet build Backend.sln), be-test.cmd [filter] (dotnet test Tests), be-smoke.cmd (compose up --build + the start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd, lab-pipeline.cmd [create metadata logs edit delete] (REST pipeline, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; fe-build ci first; stages load banner upload accordion export projects pending-form plate character run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts, frontend in node:22-bookworm. Never run npm/dotnet directly on the host for gates. The full-stack gates (be-smoke, lab-pipeline, lab-ui) recreate the SHARED compose containers from your worktree: run them only where the task lists them.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS; never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no \"for later\"; i18n keys you orphan are listed in the commit body and deleted in the same task when they are in your files). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If a change is needed outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you.",
+        "steps":  [
+                      {
+                          "id":  "9210.1",
+                          "phase":  "RECON",
+                          "action":  "Read platform-model-list.component.{ts,html} (Label accordion ~357-400, annotation handling ~240-280, editingMenuChanged 822+, saveManualEditing 913+, getMenuTab ~470), platform-setup.component.ts processLatestAlgorithmLog (~745-790) + its spec providers, core/utils/platform-job-utils.ts, core/models/print-list/platform-metadata.ts constructor, core/services/common/toaster.service.ts, the 9005 model-base.ts and enums."
+                      },
+                      {
+                          "id":  "9210.2",
+                          "phase":  "RED",
+                          "action":  "Write/extend the four specs per notes; the pattern runs are RED."
+                      },
+                      {
+                          "id":  "9210.3",
+                          "phase":  "GREEN",
+                          "action":  "Data (platform-metadata.ts, mapToEditModel), the Base accordion + handlers, the toast; pattern runs GREEN; scripts\\gate\\fe-typecheck.cmd GREEN."
+                      },
+                      {
+                          "id":  "9210.4",
+                          "phase":  "DONE",
+                          "action":  "Commit (description verbatim); body: selectors for the gate (.base-tab, input[name=baseText], .base-apply, .base-remove), the confirm path reused, the toast."
+                      }
+                  ],
+        "passes":  true,
+        "verify":  [
+                       "scripts\\gate\\fe-test.cmd platform-model-list",
+                       "scripts\\gate\\fe-test.cmd platform-setup.component",
+                       "scripts\\gate\\fe-test.cmd platform-job-utils"
+                   ]
+    },
+    {
+        "id":  9310,
+        "category":  "test(gate)",
+        "repo":  "rwclab",
+        "lane":  "gate",
+        "model":  "heavy",
+        "dependsOn":  [
+                          9110,
+                          9130,
+                          9210
+                      ],
+        "files":  [
+                      "scripts/gate/lab-pipeline.mjs",
+                      "scripts/gate/lab-pipeline.cmd",
+                      "scripts/gate/lab-ui-stages/75-base.mjs",
+                      "scripts/gate/lab-ui-stages/30-upload.mjs",
+                      "scripts/gate/lab-ui-stages/_ctx.mjs"
+                  ],
+        "description":  "test(gate): lab-pipeline stage base (edit with a base -\u003e baseGeneration + platformProcessing, STL.Base in the metadata, a bigger .drc, then removal) and lab-ui stage base (Base tab -\u003e Apply -\u003e edit POST with the base -\u003e Base ready toast)",
+        "specRef":  "rwclab-structure.md «Board 9»; README.md «Gate commands»",
+        "tddWorkflow":  true,
+        "notes":  "WHY: the base is a full-stack feature (FE panel -\u003e backend edit -\u003e Step Functions chain -\u003e worker -\u003e SNS -\u003e bridge -\u003e WebSocket -\u003e FE toast); \"ready for merge\" means the real path is proven end to end (REST, no browser) AND through the built app in the headless browser. This task runs the full-stack gates (lab-pipeline.cmd, lab-ui.cmd) - they rebuild and recreate the shared compose stack from your worktree, which is allowed HERE (the only task of this board that does it). Run `scripts\\gate\\lab-pipeline.cmd` first: it builds the worker image with the new deps and the bootstrap updates EditPlatformJobLocal to the two-state chain; the existing `edit` stage must stay green (planeCut 200 + platformProcessing 200, now published by the Base state).\nLAB-PIPELINE (scripts/gate/lab-pipeline.mjs): STAGES = [create, metadata, logs, edit, base, delete]. stageEdit additionally records ctx.editDrcBytes (the presigned GET byte count it already measures). NEW stageBase(): (1) POST api/platform-job/{id}/edit with the same editModel as stageEdit but operation 10 (Base), planeCut false, params[0].base = { shape: \"round\", diameterMm: null, heightMm: 3, text: \"ORC\", textStyle: \"emboss\", textSizeMm: 5, textDepthMm: 0.8 }; wait (same polling as edit, EDIT_TIMEOUT_MS) for NEW logs baseGeneration 200 AND platformProcessing 200, and assert NO new planeCut log; (2) GET platform-metadata: models.stl[0].base is a string whose JSON.parse has text \"ORC\", shape \"round\", heightMm 3, and a numeric diameterMm (the worker stores the normalized base; auto diameter for the 20 mm box = autoDiameterMm(20, 20) = 26); (3) presigned GET of shared/{id}.drc: 200 and bytes \u003e ctx.editDrcBytes (the base adds triangles); (4) POST edit again with base null -\u003e baseGeneration 200 + platformProcessing 200; metadata base null or absent; the .drc bytes are back within 1 % of ctx.editDrcBytes (the original/ copy was restored). Print each check as the other stages do (ok/FAIL lines, fail() with a hint naming the worker step). Update the header comment (stage list, what base does) and the results comment at the bottom with the measured run. scripts/gate/lab-pipeline.cmd: add `base` to its stage list / usage text if it has one.\nLAB-UI (NEW FILE scripts/gate/lab-ui-stages/75-base.mjs, name \u0027base\u0027, runs after plate and before character; a stage never imports Playwright, it gets ctx.page): starts its own project like 70-plate / 80-character do (New -\u003e Print Job Name -\u003e technology -\u003e size -\u003e NEXT), uploads the 20 mm box through the \u003cf-file\u003e input exactly as 30-upload does (export boxStlAscii from 30-upload.mjs or move it to _ctx.mjs - both are in your files), waits for 1 model item (app-platform-model-list print-list-item) and its .drc GET, clicks the model item to select it, opens the Base accordion (button.base-tab), fills input[name=\"baseText\"] with \"ORC\" (type + blur/Tab: f-input commits on blur), clicks .base-apply; then within 120 s: a POST api/platform-job/{id}/edit whose JSON body params[0].base.text === \"ORC\" (use page.waitForRequest with a predicate reading request.postDataJSON()), the WebSocket frame or catch-up log baseGeneration 200 for this job (GET api/local-realtime/platform-job-logs/{id} as 80-character\u0027s helpers do), the success toast with the en text of messages.baseReady (\"Base ready\") visible, and a GET platform-metadata 200 after the log; 0 pageerror / NG0, no banner, no external hosts (ctx collectors, like the other stages). done(): DELETE api/platform-job/{id} for the project it created (the stage must not leave lab-ui projects behind: the emulator keeps 64 MiB per bucket). Description string = what it checks. Run `scripts\\gate\\lab-ui.cmd base` (runs the stages up to base: load banner upload accordion export projects pending-form plate base) and then the FULL `scripts\\gate\\lab-ui.cmd` once (character included, 10+ min) to prove the ordering did not break the later stage.\nRED first: write stageBase and 75-base.mjs; before the implementation is merged they would be red - here everything IS merged (dependsOn), so RED = run the new stage against the stack BEFORE your fixes to its selectors/expectations only if something is wrong; the honest RED for this task is the first run that fails on a real defect. Record the measured timings in the file comments as the other stages do. If the chain, the worker, the backend or the panel has a defect, STOP and report file + line + evidence (the orchestrator widens the scope); do not patch outside scripts/gate.\n\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY), aws-http (HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data SHARED by every worktree), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start, LocalDatabaseBootstrap), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd (dotnet build Backend.sln), be-test.cmd [filter] (dotnet test Tests), be-smoke.cmd (compose up --build + the start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd, lab-pipeline.cmd [create metadata logs edit delete] (REST pipeline, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; fe-build ci first; stages load banner upload accordion export projects pending-form plate character run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts, frontend in node:22-bookworm. Never run npm/dotnet directly on the host for gates. The full-stack gates (be-smoke, lab-pipeline, lab-ui) recreate the SHARED compose containers from your worktree: run them only where the task lists them.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS; never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no \"for later\"; i18n keys you orphan are listed in the commit body and deleted in the same task when they are in your files). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If a change is needed outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you.",
+        "steps":  [
+                      {
+                          "id":  "9310.1",
+                          "phase":  "RECON",
+                          "action":  "Read scripts/gate/lab-pipeline.mjs (stageEdit, helpers api/must/fetchLogs/hasLog/logSummary, ctx), scripts/gate/lab-ui.mjs (stage loading, ctx), lab-ui-stages/_ctx.mjs, 30-upload.mjs (boxStlAscii + the upload flow), 70-plate.mjs and 80-character.mjs (New project flow, log helpers, done() clean-up), the merged 9110 step (log order), 9210 commit (selectors), 9130 (metadata base string)."
+                      },
+                      {
+                          "id":  "9310.2",
+                          "phase":  "RED",
+                          "action":  "Write stageBase + 75-base.mjs per notes; run scripts\\gate\\lab-pipeline.cmd (all stages) and scripts\\gate\\lab-ui.cmd base; read the output."
+                      },
+                      {
+                          "id":  "9310.3",
+                          "phase":  "GREEN",
+                          "action":  "Fix the gate code until lab-pipeline.cmd is green (create metadata logs edit base delete) and lab-ui.cmd base is green; then the full scripts\\gate\\lab-ui.cmd once; record timings in the comments."
+                      },
+                      {
+                          "id":  "9310.4",
+                          "phase":  "DONE",
+                          "action":  "Commit (description verbatim); body: measured timings and the request/log evidence the stages assert."
+                      }
+                  ],
+        "passes":  true
+    },
+    {
+        "id":  9410,
+        "category":  "docs",
+        "repo":  "rwclab",
+        "lane":  "docs",
+        "model":  "easy",
+        "dependsOn":  [
+                          9110,
+                          9130,
+                          9210
+                      ],
+        "files":  [
+                      "README.md",
+                      "PLAN.md"
+                  ],
+        "description":  "docs: board 9 - the Base pipeline step (chain PlaneCut -\u003e Base, manifold-3d disc with embossed / debossed text, baseGeneration log, STL.Base, original/ and based/ keys) in README and PLAN",
+        "specRef":  "rwclab-structure.md «Board 9»",
+        "tddWorkflow":  false,
+        "notes":  "WHY: the README is the manual of the lab; every board ends with its documentation. Write from the MERGED code of 9110 / 9130 / 9210 (git log -p on the integration branch), not from this note.\nREADME.md: (1) «Pipeline (local)» step 4 \"Edit\" -\u003e mention that the chain is now PlaneCut -\u003e Base and that platformProcessing 200 is published once, by the Base state; add step 5 \"Base (board 9)\": the Base tab, what the worker builds (round disc from manifold-3d, auto diameter = footprint + 2 x 3 mm, height, text on the front of the top face extruded (emboss, union) or cut in (deboss, difference), the figure sunk 0.4 mm into the disc, NO boolean with the figure - two closed shells in one .drc, which slicers print as one body), the S3 keys original/{id}.drc (the un-based mesh, kept for rebuilds; dropped by a plane cut) and based/{id}.drc, STL.Base (JSON string), the `baseGeneration` log and the \"Base ready\" toast, removal (Remove base restores original/). (2) «Gate commands» table: lab-pipeline stages gain `base`; lab-ui stages gain `base` (75) between plate and character with what it checks; timings from the 9310 commit. (3) «How the flow maps to the original RayWare Cloud» diagram: under \"Confirm changes\" add `└─ Activity rwc-base-local ◀── algorithms-worker (manifold-3d: disc ∪/− text, merged under the figure)`, and a bullet in the differences list: the base is a lab algorithm (SprintRay had raft + supports; the lab has a printable base and no supports yet), it runs as an Activity because the emulator Lambda has no WebAssembly (probed 27.11.2026). (4) «What the lab cannot do yet»: annotation on the model surface still a no-op; the base is the local alternative; supports still none. (5) Worker dependencies: three 0.186.1 + manifold-3d in workers/algorithms; the font ships in src/fonts. (6) Troubleshooting: BASE_TEXT_DOES_NOT_FIT (text wider than the disc minus margins).\nPLAN.md: a «Board 9» note after the board 8c one: what was decided (Activity not Lambda and why; shells not booleaned; manifold-3d), what shipped, and \"Board 10: manifold union of the character (garments, hair, beard as a volume) with the same library; supports; the look in the project metadata\".\nVerify: scripts\\gate\\no-external-hosts.cmd (docs-only task; the default fe-typecheck is the merge gate).\n\nLocal stack: `docker compose` project rwc = aws-emulator (https 127.0.0.1:9297, IN-MEMORY), aws-http (HTTP 45284 proxy), postgres:16 (45283, user/db sprintray, trust, volume rwc-pg-data SHARED by every worktree), backend .NET 10 (http://localhost:45281, Development, migrate+seed on start, LocalDatabaseBootstrap), algorithms-worker, callback-bridge. Gates (repo root, cmd): scripts\\gate\\be-build.cmd (dotnet build Backend.sln), be-test.cmd [filter] (dotnet test Tests), be-smoke.cmd (compose up --build + the start-up REST calls, leaves the stack up), fe-typecheck.cmd, fe-test.cmd [jest pattern], fe-build.cmd ci, no-external-hosts.cmd, be-config-offline.cmd, compose-config.cmd, lab-e2e.cmd, lab-pipeline.cmd [create metadata logs edit delete] (REST pipeline, no browser), lab-ui.cmd [stage ...] (built app in headless Chromium against the live stack; fe-build ci first; stages load banner upload accordion export projects pending-form plate character run in order, only the selected ones can fail). Backend build/test run in Docker sdk:10.0 via the gate scripts, frontend in node:22-bookworm. Never run npm/dotnet directly on the host for gates. The full-stack gates (be-smoke, lab-pipeline, lab-ui) recreate the SHARED compose containers from your worktree: run them only where the task lists them.\nRED LINES (rwclab-structure.md): never touch Design-Service/; no secrets in git; never real AWS; never commit workers/algorithms/vendor/; frontend talks only to localhost; do not break npm run e2e; delete for real (no commented-out code, no dead routes, no \"for later\"; i18n keys you orphan are listed in the commit body and deleted in the same task when they are in your files). FORBIDDEN for agents: ng serve, dotnet run, docker compose up of long-running servers outside the gate scripts. Run gates ONLY via scripts\\gate\\*.cmd from the repo root (cmd /c). Stay inside the task `files` zones. If a change is needed outside them, STOP and report the exact file + line in the result summary (the orchestrator widens the scope on retry); never silently edit outside. Commit message = the task description verbatim (first line), body = what/why. One commit per task. Verify commands are listed per task; the ones not listed are NOT run by you.",
+        "steps":  [
+                      {
+                          "id":  "9410.1",
+                          "phase":  "RECON",
+                          "action":  "Read README.md («Pipeline (local)», «Gate commands», «How the flow maps», «What the lab cannot do yet», «Troubleshooting»), PLAN.md (the Board 8c note), and the merged 9110 / 9130 / 9210 commits (git log -3 -p --stat on the integration branch)."
+                      },
+                      {
+                          "id":  "9410.2",
+                          "phase":  "RED",
+                          "action":  "Not applicable (docs). Check that \"rwc-base-local\" does not occur in README.md yet."
+                      },
+                      {
+                          "id":  "9410.3",
+                          "phase":  "GREEN",
+                          "action":  "Edit README.md and PLAN.md as in notes; \"rwc-base-local\" must occur in README.md afterwards (grep)."
+                      },
+                      {
+                          "id":  "9410.4",
+                          "phase":  "DONE",
+                          "action":  "Commit (description verbatim). Verify: scripts\\gate\\no-external-hosts.cmd."
+                      }
+                  ],
+        "passes":  true,
+        "verify":  [
+                       "scripts\\gate\\no-external-hosts.cmd"
+                   ]
+    }
 ]

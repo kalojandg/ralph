@@ -34,6 +34,95 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## Task #9310 — test(gate): lab-pipeline stage base + lab-ui stage base (2026-11-27)
+
+**Repo:** rwclab · **Branch:** ralph/task-9310 · **Commit:** 1cf7557
+
+**What:**
+- `scripts/gate/lab-pipeline.mjs`: STAGES = create metadata logs edit **base** delete. New helpers `editModelFor()` (mapToEditModel wire format incl. `base`), `editAndWait()`, `sharedDrc()`, `workerBuiltDiameter()`; edit records `ctx.editDrcBytes` and the cut model's metadata. `stageBase`: operation 10 + base {round, auto, 3, "ORC", emboss, 5, 0.8} -> new baseGeneration 200 + platformProcessing 200, no planeCut -> STL.Base JSON string in the metadata (text/shape/height/style) -> worker log "built: 26 mm" -> bigger .drc -> base null -> logs again, base null, .drc back (1 % / 32 B). Header + measured comment updated; `lab-pipeline.cmd` usage lists base.
+- New `scripts/gate/lab-ui-stages/75-base.mjs` (after plate, before character): New -> technology -> NEXT -> box20.stl -> model item -> `button.base-tab` -> baseText "ORC" + Tab -> `button.base-apply` -> POST edit with params[0].base.text "ORC" (waitForRequest + postDataJSON), baseGeneration 200 in the catch-up logs, "Base ready" toast, platform-metadata 200 after the log TIMESTAMP; clean-up through Previous projects (REST DELETE fallback). `boxStlAscii` moved to `_ctx.mjs` (30-upload imports it).
+
+**RED runs (gate code only):** cutHeight null -> 400 (double in PlatformEditInputModel); STL.Base diameterMm is null for auto (worker stores the normalized request, steps/base.mjs:86) -> tested as is, 26 mm asserted from the worker log; restored .drc 185 vs 182 B (re-encoded original/) -> 1 % or 32 B.
+
+**Verify:**
+- `scripts\gate\lab-pipeline.cmd` -> exit 0 (create 2.3 s, metadata 0.1, logs 0.0, edit 2.3, base 4.8, delete 0.5; total 10.1 s after health)
+- `scripts\gate\lab-ui.cmd base` -> PASS (total 595 s; base 75.5 s; toast 5.2 s after Apply)
+- full lab-ui (browser step of lab-ui.cmd on the same dist/stack, named container, waited in the foreground) -> PASS, all 11 rows ok; base 74.9 s, character 493.3 s, browser 860 s
+
+**Notes:** no code outside scripts/gate touched. lab-ui.cmd / lab-ui.mjs header stage lists (not in files) still omit "base" (docs task 9410 or a follow-up).
+
+
+## Task #9410 - docs: board 9 - the Base pipeline step
+
+- **Repo:** rwclab (branch ralph/task-9410), commit 1586701.
+- **What:** README.md: Pipeline step 4 now describes the PlaneCut -> Base chain (platformProcessing 200 published once, by Base) and a new step 5 (Base tab, manifold-3d disc, AUTO diameter = footprint + 2 x 3 mm, emboss/deboss text, figure sunk 0.4 mm, no boolean with the figure, original/ and based/ S3 keys, STL.Base, baseGeneration log, Base ready toast, removal); gate table (lab-pipeline base, lab-ui base stage 75, stage count 10); flow diagram gets rwc-base-local; differences list explains Activity-not-Lambda (no WebAssembly in the emulator Lambda, probed 27.11.2026); cannot-do-yet notes annotation no-op and no supports; Worker dependencies (three 0.186.1, manifold-3d ^3.5.5, font in src/fonts); troubleshooting BASE_TEXT_DOES_NOT_FIT. PLAN.md: Board 9 note replaces the placeholder, plus a Board 10 outlook.
+- **Verify:** scripts\gate\no-external-hosts.cmd green (docs-only task).
+- **Notes:** timings for the base gate stages come with 9310 (not merged when this ran). Removal does not delete the old based/ key (the code only deletes original/ and STL.Base); documented as it is.
+
+
+## Task #9130 - feat(backend): the edit message carries each model's base, and the platform metadata returns the stored STL.Base
+
+- Repo: rwclab (lane be), commit 5570f09 on ralph/task-9130.
+- RED: two tests in PlatformProcessMessageTests.cs (base carried; null base sends explicit null) failed 2/2.
+- GREEN: PlatformJobService.SetEditPlatformParameters adds `base` per model. The method serializes with default Newtonsoft settings (PascalCase), so ModelBase is projected into a camelCase anonymous object (shape, diameterMm, heightMm, text, textStyle, textSizeMm, textDepthMm), null when absent. StlMetadata.Base and StlMetadataViewModel.Base added as string (AutoMapper by name; Clone is MemberwiseClone so it is copied).
+- Verify: scripts\gate\be-test.cmd PlatformProcessMessage 8/8 passed; scripts\gate\be-build.cmd 0 errors.
+- No orphaned i18n keys. gitnexus analyze not run (forbidden).
+
+
+## Task #9210 — feat(frontend): the Base tab in the model list (board 9)
+
+**Date:** 2026-11-27 · **Repo:** rwclab (fe) · **Commit:** 3016b12
+
+**What:**
+- `PlatformMetadataSTL.base: ModelBase | null = null`; the constructor parses the backend's `STL.Base` JSON string (missing / broken -> null; an object is taken as is).
+- `mapToEditModel` sends `base: s.base ?? null` per model.
+- Model list: a new accordion item `EditingMenuTab.Base` right after Label (Label left as is): `.base-tab` header, `f-input[name=baseText]` (max 16), emboss/deboss `f-button-group[name=baseTextStyle]` (label imprint images), `f-input[name=baseDiameter]` number (empty = auto), height / text size / text depth sliders on MODEL_BASE_LIMITS, `.base-apply` / `.base-remove` (Remove only with a SAVED base). Operation Base -> tab Base; the tab on a model without a base shows MODEL_BASE_DEFAULTS (temp copy only). Apply/Remove = SetTempModelMetadata -> SetCurrentPlatformJobOperation(Base) -> saveManualEditing() -> EditPlatformJobAction (the plane cut confirm path).
+- platform-setup `processLatestAlgorithmLog`: a new baseGeneration 200 -> toastr success `messages.baseReady`; >= 400 -> error `messages.baseFailed[: code]`; catch-up logs never toast; ToastrService injected.
+- Renderer / store: no change needed (only === checks, no whitelists). No new i18n keys.
+
+**Tests:** RED first, then GREEN: fe-test platform-model-list (85), platform-setup.component, platform-job-utils, platform-metadata (new spec) all green; fe-typecheck green. Not run by me (left to the gate): full suite, fe-build ci (templates are not typechecked by fe-typecheck), lab-ui.
+
+**Gate note (9310):** f-input gives its inner <input> a GUID name, so the text field selector is `f-input[name="baseText"] input`, not `input[name=baseText]`.
+
+
+## Task 9110 — feat(worker): the Base pipeline step (rwclab, lane worker)
+
+**Date:** 2026-11-27 · **Commit:** 46c7286 · **Status:** ✅ done
+
+**What changed**
+- `infra/resources.mjs`: activity `rwc-base-local`; `EditPlatformJobLocal` = PlaneCut (ResultPath null, Next Base) -> Base (600 s). `infra/bootstrap.mjs`: header comment only.
+- `workers/algorithms/src/base-geometry.mjs` (new): manifold-3d disc + three FontLoader text (font in `src/fonts/helvetiker_regular.typeface.json`, byte copy of the FE asset), outer/hole orientation, `BASE_TEXT_DOES_NOT_FIT`, frame map (x,y,z)->(x,z,-y)/scale+offset, concat, rotation, disc placement.
+- `src/steps/base.mjs`: noop / removeBase / base per model; S3 `original/`, `based/`, `shared/`; `STL.Base` JSON string; logs baseGeneration 200 (if changed) + platformProcessing 200 (always); platformProcessing <status> on failure.
+- `mesh.mjs`: `drcMesh`, `plyWrite`; `aws.mjs`: `remove`; `worker.mjs`: HANDLERS `rwc-base-local` -> baseGeneration.
+- `plane-cut.mjs` / `edit-logic.mjs`: finalLogs -> ["planeCut"] | []; a cut drops STL.Base + original/.
+- `package.json`: three 0.186.1, manifold-3d ^3.5.5; lock regenerated (npm 11, host node 24).
+
+**Deviation from the notes:** original/{id}.drc is written as the un-based mesh WITH the model rotation baked in (not a byte copy of shared), because the build sets STL.Rotation to 1,0,0,0 — a byte copy would lose the pose on removal. Rotation/scale are read from DynamoDB (PlaneCut already stored them / baked a cut).
+
+**Tests:** `npm --prefix workers/algorithms install` + `node --test workers/algorithms/test` → 56/56 green (new `test/base-geometry.test.mjs`: emboss 3788.7 > disc 3767.2 > deboss 3745.7 mm³, genus 0; orientation; frame map; concat; rotation; placement; PLY->draco->drcMesh round-trip; finalLogs/base passthrough in platform-process.test.mjs). No docker/bootstrap/compose (9310 runs the stack gates); the S3/DynamoDB path of base.mjs is untested until then.
+
+
+## Task 9005 - model base contract (retry: gate fix)
+
+**Status:** done
+**Commits:** 6c6fc6a (contract), 94fb22f (gate fix)
+
+### What
+- 6c6fc6a: ModelBase FE model + barrel export, BE ModelBase DTO + PlatformJobOperations.Base, enum members (BaseGeneration, operation Base = 10, tab Base = 10) + renderer-enums.spec update, 12 i18n keys in all five languages, the pure workers/algorithms/src/base-logic.mjs + node:test file, the steps/base.mjs stub.
+- 94fb22f: the post-merge gate ran `node --test workers/algorithms/test` and on Node 24 it failed with MODULE_NOT_FOUND, because a bare directory argument is loaded as a module. Added workers/algorithms/test/package.json (main -> ../run-tests.mjs) and workers/algorithms/run-tests.mjs, which imports every test/*.test.mjs. These are out-of-scope files, touched under scope escalation.
+
+### Verify
+- node --test workers/algorithms/test: 45/45, exit 0
+- node --test workers/algorithms/test/*.test.mjs: 45/45
+- npm --prefix workers/algorithms test: 45/45, no duplicates
+- fe-test model-base 5/5, fe-test renderer-enums 9/9, be-build 0 errors (previous attempt, code unchanged since)
+- Full suites and e2e left to the orchestrator gate.
+
+### Notes
+- Board verify strings should use the glob form for node --test.
+- The five i18n files already had different key sets before this task (de, es, fr, it); this task did not change that.
+
+
 ### Task #8630 - test(gate): the lab-ui character stage reloads the page after customising - the look comes back from localStorage, Add to plate keeps it, Export STL clears it
 
 **Status:** done (retry 3, scope escalation)
@@ -6557,6 +6646,12 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
+
 
 
 
