@@ -34,6 +34,63 @@
 
 <!-- Записите започват под тази линия — най-новият веднага след нея. -->
 
+## 2026-11-27 — Task 10310 (rwclab, gate): board 10 gates
+
+**Commit:** 930eb5d on ralph/task-10310
+**Files:** scripts/gate/lab-pipeline.mjs, scripts/gate/lab-ui-stages/{_ctx,65-pending-form,70-plate,75-base}.mjs, scripts/gate/lab-ui.mjs, scripts/gate/lab-ui.cmd
+
+**What:**
+- lab-pipeline base: AUTO_DIAMETER_MM 39 (text band); step 1 asserts "union" (workerBuildMode); workerCutHeight matches its own "cut at <c>" (rec. #1); editModelFor {scale, rotation} overrides; step 6 BaseScale cut (cutHeight 20, scale 2,2,2 -> knife 7.4, logged height 10 - 7.4 = 2.6; the old formula gives 1.3); step 7 quarter turn -> rebuild (rotation 1,0,0,0) -> removal centred at x 0 z 0; mojibake comment fixed.
+- lab-ui: stubToken() shared from _ctx.mjs (3 copies deleted); 75-base proves the dirty draft (base-dirty), the confirmation modal ("Base Not saved") and Don't save ("ORC" again, 0 POST edit); headers list base.
+
+**RED found:** "concat (NotManifold)". The cause was the gate's own box fixture, wound inside-out: PlaneCutter --fill left the cut open (14 tris). With outward winding the cut is capped (20 tris, genus 0, volume 6000). The winding is fixed in lab-pipeline.mjs and _ctx.mjs. scripts/e2e.mjs boxStl() has the same winding and is outside this scope. The contract's "height 7.4" was the knife height, not the logged height.
+
+**Verify:** lab-pipeline.cmd (all stages) exit 0, 27.5 s. Worker log: built 39 mm ... union; cut at 20 -> height 2.600; rebuilt ... union; base removed: center x 0.000 z 0.000. lab-ui base PASS (browser 407 s, stage 118.4 s). Full lab-ui PASS (browser 887.6 s, base 115.3 s, character 479.8 s). gitnexus detect_changes did not run: the index belongs to the main checkout, so it cannot see this worktree.
+
+
+## Task #10410 - docs: board 10
+
+- README.md: step 5 now describes the single manifold body (union, `concat (NotManifold)` fallback), the text band (glyph height + 1 mm; ORC 39 mm vs 26 mm), BASE_TEXT_UNSUPPORTED_CHARS, centered original/, the BaseScale cut, the kept Base draft with `base-dirty` and the save / don't save modal; stubToken bullet; gate rows for lab-pipeline base and lab-ui base.
+- PLAN.md: Board 10 marked done (Bulgarian), Board 11 (supports, character look in metadata, 3D base preview) added.
+- Verify: scripts\gate\no-external-hosts.cmd OK.
+
+
+## Task #10210 - feat(frontend): an unapplied Base draft is kept while the model stays selected, marks Apply as dirty, and asks "save / don't save" before another tab opens
+
+**Repo:** rwclab (app/frontend) · **Commit:** 6e1595b · **Status:** done
+
+### What
+- `platform-model-list.component.ts`: `baseDraftModelId` + `baseDraftSeed`; `get baseDraftDirty` (draft vs temp base or MODEL_BASE_DEFAULTS after `normalizeBase`, the same normalisation `applyBase` now uses); `ensureBaseDraft` keeps an edited, still-dirty draft of the same model (id taken from the temp metadata `individualId`, because on a re-selection that emission arrives before the selection subscription), otherwise re-seeds; `editingMenuChanged` with a dirty draft on Base -> `confirmBaseChange(next)` (modal operation Base; Save = applyBase, Don't save = drop; then SetCurrentPlatformJobOperation(next); dismiss = nothing).
+- `.html`: the Apply icon-btn cssClass interpolates `base-dirty` (lands on the `<button>`: `button.base-apply.base-dirty`); `.scss`: `$color-primary` border/text via `icon-btn::ng-deep`.
+- `platform-manual-changes-confirmation.component.ts`: operationNames + `{ Base, 'general.base' }`.
+- Specs: (a) dirty text survives a same-model emission, (b) another model re-seeds, (c) a clean draft takes the emitted base, normalisation, (d) modal Base / no switch before the answer / Save path / Don't save, clean leave without modal, (e) base-dirty class on the rendered icon-btn button while dirty, gone after Apply + store echo; modal title name.
+
+### Verify
+- `scripts\gate\fe-test.cmd platform-model-list`: 99/99 green (RED first: missing baseDraftDirty).
+- `scripts\gate\fe-typecheck.cmd`: exit 0. Full FE suite: left to the merge gate.
+- gitnexus detect_changes: the index points at the main checkout and does not see the worktree (0 changes); scope checked with git: 5 files, all inside `files`.
+
+### Notes
+- After a failed Apply, `saveManualEditing` resets the selection, so the draft is re-seeded when the model is selected again (out of scope: store).
+
+
+## Task #10110 - feat(worker): base = manifold union with the figure, text band in the auto diameter, BASE_TEXT_UNSUPPORTED_CHARS, centered original/
+
+**Status:** done · **Commit:** c77945a · **Tests:** npm --prefix workers/algorithms test - 68/68 pass
+
+- base-geometry.mjs: textExtentMm, unsupportedChars, TEXT_GAP_MM, textBandMm, discPlacement(b, sc, base, band), toManifold (Mesh.merge + ManifoldError/status -> null), unionWithDisc (union or concat + reason); header updated.
+- steps/base.mjs: font loaded before discPlacement, band, unionWithDisc, original/ centered before draco (review c3 #3), logs ", union" / ", concat (<reason>)" and "base removed: center x z", output union flag.
+- Tests (a)-(f): ORC 14.25 x 5.335; Ж€ unsupported; band 6.33 -> 39 / 0 -> 26; box 8000 genus 0, open box null; union 11442.73 mm3 (text survives); open box -> concat NotManifold.
+- Full lab gates (lab-pipeline / lab-ui) left to the orchestrator; gate numbers 26 -> 39 belong to 10310.
+
+
+## Task #10120 - fix(worker): the plane cut of a based model measures the disc through STL.BaseScale, not through the scale of the message
+- Added pure `figureCutLocal(cutHeight, storedBase, scale, baseScale)` to workers/algorithms/src/base-logic.mjs: cutHeight / scaleY(scale) - (heightMm - BASE_SINK_MM) / scaleY(baseScale ?? scale); scaleY accepts "x,y,z", a 3-array or a number (missing = 1). figureCutHeightMm kept.
+- steps/plane-cut.mjs cutOne (based branch) now uses it with the message scale and meta.STL.BaseScale; nothing else changed.
+- TDD: new test failed first (missing export), then green: 63/63 worker tests. Example 20 mm cut, scale 2,2,2, BaseScale 1,1,1 -> 7.4 (was 8.7); equal scales -> 8.7. package-lock.json restored.
+- Commit c55d763. Gates (lab-pipeline) belong to task 10310.
+
+
 ## Task #9310 — test(gate): lab-pipeline stage base + lab-ui stage base (2026-11-27)
 
 **Repo:** rwclab · **Branch:** ralph/task-9310 · **Commit:** 1cf7557
@@ -6646,6 +6703,11 @@ The earlier attempt failed the verify gate on critical-path → 'Long rest fully
 **Git commit:** `806dadb` — `refactor: extract inline CSS from index.html into styles.css`
 
 ---
+
+
+
+
+
 
 
 
