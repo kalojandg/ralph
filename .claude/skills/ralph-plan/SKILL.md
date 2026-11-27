@@ -142,6 +142,9 @@ smoke/e2e, т.е. smoke гейтът се строи ПРЕДИ fix-а (съща
 - **Per-task `verify` масив** за междинните таскове: прицелен subset `["npm test -- <spec-filter> critical-path"]` (playwright филтрира по подниз). БЕЗ `npm ci`, ако таскът не пипа package.json.
 - ⛔ Специалните знаци във `verify` (`| ( ) & < > "`): виж правилото в §3а по-долу („Как се
   изпълнява гейтът") — то е ЕДНО и важи без изключения; не го преоткривай.
+- ⛔ **`node --test <папка>` НЕ се пише във verify** (27.11.2026, rwclab 9005: verify revert на зелен
+  код). На Node ≥ 22 голата папка се зарежда като модул → `MODULE_NOT_FOUND` на всеки checkout.
+  Пиши glob формата `node --test <папка>/*.test.mjs` (Git bash го разгъва) или `npm --prefix <пакет> test`.
 - **Финалният таск на всяка lane — БЕЗ verify override** → пълният repo гейт е задната мрежа.
 - Във филтъра само спекове, които СЪЩЕСТВУВАТ след таска (изтрит спек във филтъра = playwright error = фалшиво червено).
 - Провери, че пълният suite се събира в `swarm.verify_timeout_min` (мери с baseline; виж /ralph-setup).
